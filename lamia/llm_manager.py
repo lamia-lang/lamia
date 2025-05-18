@@ -15,37 +15,6 @@ from .adapters.llm.local import OllamaAdapter
 from .adapters.llm.base import BaseLLMAdapter, LLMResponse
 from .config_manager import ConfigManager
 
-# Popular model lists for reference
-OPENAI_MODELS = {
-    "gpt-4-turbo-preview": "Most capable GPT-4 model, best for complex tasks",
-    "gpt-4": "High capability, more expensive than 3.5",
-    "gpt-3.5-turbo": "Good balance of capability and cost",
-    "gpt-3.5-turbo-16k": "Same as 3.5 but with 16k context",
-}
-
-ANTHROPIC_MODELS = {
-    "claude-3-opus-20240229": "Most capable Claude model, best for complex tasks",
-    "claude-3-sonnet-20240229": "Balanced performance and speed",
-    "claude-3-haiku-20240307": "Fastest, most cost-effective Claude model",
-    "claude-2.1": "Previous generation Claude",
-}
-
-def get_openai_models() -> Dict[str, str]:
-    """Get list of recommended OpenAI models with descriptions."""
-    try:
-        # Could also fetch from API, but requires API key and network call
-        return OPENAI_MODELS
-    except Exception:
-        return {}
-
-def get_anthropic_models() -> Dict[str, str]:
-    """Get list of recommended Anthropic models with descriptions."""
-    try:
-        # Could also fetch from API, but requires API key and network call
-        return ANTHROPIC_MODELS
-    except Exception:
-        return {}
-
 def check_api_key(model_type: str) -> str:
     """
     Get and validate API key from environment variables.
@@ -170,77 +139,74 @@ def ensure_ollama_model_pulled(model_name: str) -> bool:
 
 def create_adapter_from_config(config_manager: ConfigManager) -> BaseLLMAdapter:
     """Create an adapter instance based on the active configuration."""
-    default_model = config_manager.get_default_model()
-    model_config = config_manager.get_model_config(default_model)
+    default_provider = config_manager.get_default_model()  # Actually the provider
+    provider_config = config_manager.get_model_config(default_provider)
 
-    if default_model == "openai":
-        model_name = model_config.get('model')
+    if default_provider == "openai":
+        model_name = provider_config.get('default_model')
         if not model_name:
-            models = get_openai_models()
+            available_models = provider_config.get('models', [])
             print("\nAvailable OpenAI models:")
-            for name, desc in models.items():
-                print(f"- {name}: {desc}")
+            for m in available_models:
+                if isinstance(m, str):
+                    print(f"- {m}")
+                elif isinstance(m, dict):
+                    print(f"- {m.get('name')}")
             raise RuntimeError(
-                "\nPlease specify one of the above models in config.yaml under openai.model"
+                "\nPlease specify one of the above models in config.yaml under openai.default_model"
             )
-            
         return OpenAIAdapter(
             api_key=check_api_key('openai'),
             model=model_name
         )
-    elif default_model == "anthropic":
-        model_name = model_config.get('model')
+    elif default_provider == "anthropic":
+        model_name = provider_config.get('default_model')
         if not model_name:
-            models = get_anthropic_models()
+            available_models = provider_config.get('models', [])
             print("\nAvailable Anthropic models:")
-            for name, desc in models.items():
-                print(f"- {name}: {desc}")
+            for m in available_models:
+                if isinstance(m, str):
+                    print(f"- {m}")
+                elif isinstance(m, dict):
+                    print(f"- {m.get('name')}")
             raise RuntimeError(
-                "\nPlease specify one of the above models in config.yaml under anthropic.model"
+                "\nPlease specify one of the above models in config.yaml under anthropic.default_model"
             )
-            
         return AnthropicAdapter(
             api_key=check_api_key('anthropic'),
             model=model_name
         )
-    elif default_model == "ollama":
+    elif default_provider == "ollama":
         # Ensure Ollama is running
         if not start_ollama_service():
             raise RuntimeError("Failed to start Ollama service")
-            
-        # Get model name from config or list available models
-        model_name = model_config.get('model')
+        model_name = provider_config.get('default_model')
         if not model_name:
-            available_models = list_available_ollama_models()
-            if not available_models:
-                raise RuntimeError(
-                    "No Ollama model specified in config and no models available locally.\n"
-                    "Please either:\n"
-                    "1. Specify a model in config.yaml\n"
-                    "2. Pull a model using 'ollama pull <model>'\n"
-                    "Popular models: llama2, mistral, codellama, phi"
-                )
-            print(f"Available Ollama models: {', '.join(available_models)}")
+            available_models = provider_config.get('models', [])
+            print("Available Ollama models:")
+            for m in available_models:
+                if isinstance(m, str):
+                    print(f"- {m}")
+                elif isinstance(m, dict):
+                    print(f"- {m.get('name')}")
             raise RuntimeError(
-                "Please specify one of the available models in config.yaml under ollama.model"
+                "Please specify one of the available models in config.yaml under ollama.default_model"
             )
-            
         if not ensure_ollama_model_pulled(model_name):
             raise RuntimeError(f"Failed to pull Ollama model: {model_name}")
-            
         return OllamaAdapter(
             model=model_name,
-            base_url=model_config.get('base_url', 'http://localhost:11434'),
-            context_size=model_config.get('context_size'),
-            num_ctx=model_config.get('num_ctx'),
-            num_gpu=model_config.get('num_gpu'),
-            num_thread=model_config.get('num_thread'),
-            repeat_penalty=model_config.get('repeat_penalty'),
-            top_k=model_config.get('top_k'),
-            top_p=model_config.get('top_p')
+            base_url=provider_config.get('base_url', 'http://localhost:11434'),
+            context_size=provider_config.get('context_size'),
+            num_ctx=provider_config.get('num_ctx'),
+            num_gpu=provider_config.get('num_gpu'),
+            num_thread=provider_config.get('num_thread'),
+            repeat_penalty=provider_config.get('repeat_penalty'),
+            top_k=provider_config.get('top_k'),
+            top_p=provider_config.get('top_p')
         )
     else:
-        raise ValueError(f"Unsupported model type: {default_model}")
+        raise ValueError(f"Unsupported model type: {default_provider}")
 
 async def generate_response(prompt: str, config_path: str = None) -> LLMResponse:
     """

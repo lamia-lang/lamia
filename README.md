@@ -1,6 +1,6 @@
                     ╭──────────────────────╮
                     │        LAMIA         │
-                    │    ⚡ LLM Engine ⚡   │
+                    │    ⚡ LLM Engine ⚡    │
                     ╰──────────────────────╯
            🔮 Language Model Interface Automation
 

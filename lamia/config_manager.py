@@ -62,4 +62,4 @@ class ConfigManager:
 
     def get_default_model(self) -> str:
         """Get the default model name from config."""
-        return self.config.get('default_model', 'openai') 
+        return self.config.get('default_model') 
