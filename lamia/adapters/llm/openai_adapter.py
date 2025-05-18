@@ -1,0 +1,86 @@
+from typing import Optional, Dict, Any
+import aiohttp
+import json
+
+from .base import BaseLLMAdapter, LLMResponse, lazy_import
+
+class OpenAIAdapter(BaseLLMAdapter):
+    """OpenAI API adapter with SDK support and HTTP fallback."""
+    
+    API_URL = "https://api.openai.com/v1/chat/completions"
+    
+    def __init__(self, api_key: str, model: str = "gpt-3.5-turbo"):
+        self.api_key = api_key
+        self.model = model
+        self.client = None
+        self.session = None
+        self._use_sdk = True  # Will be set to False if import fails
+        
+    @lazy_import("openai")
+    async def __aenter__(self):
+        """Initialize client - will try SDK first, fallback to HTTP."""
+        if self._use_sdk:
+            self.client = openai.AsyncOpenAI(api_key=self.api_key)
+        else:
+            self.session = aiohttp.ClientSession(
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+            )
+        return self
+        
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._use_sdk and self.client:
+            await self.client.close()
+        elif self.session:
+            await self.session.close()
+    
+    @lazy_import("openai")
+    async def generate(self, 
+                      prompt: str, 
+                      temperature: float = 0.7, 
+                      max_tokens: int = 1000) -> LLMResponse:
+        """Generate a response using OpenAI's API."""
+        if self._use_sdk:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            return LLMResponse(
+                text=response.choices[0].message.content,
+                model=self.model,
+                usage={
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens
+                }
+            )
+        else:
+            # HTTP fallback
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+            
+            try:
+                async with self.session.post(self.API_URL, json=payload) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise RuntimeError(f"OpenAI API error: {error_text}")
+                        
+                    data = await response.json()
+                    
+                    return LLMResponse(
+                        text=data["choices"][0]["message"]["content"],
+                        model=self.model,
+                        usage=data.get("usage", {})
+                    )
+                    
+            except aiohttp.ClientError as e:
+                raise RuntimeError(f"Failed to communicate with OpenAI API: {str(e)}") 
