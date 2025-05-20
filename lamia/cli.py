@@ -4,12 +4,11 @@ import os
 import readline  # For better input handling (command history)
 from typing import Optional
 import ast
-from lamia.adapters.llm.validation.validators import HTMLValidator
 import argparse
 
-from .llm_manager import generate_response
+from lamia.engine import LamiaEngine
 
-async def interactive_mode():
+async def interactive_mode(engine: LamiaEngine):
     """Run Lamia in interactive mode, processing user prompts."""
     print("\nLamia Interactive Mode")
     print("Enter your prompts (type 'END' on a new line to finish, Ctrl+C to quit or cancel, type STOP to cancel a prompt before sending, 'exit' to quit)")
@@ -31,12 +30,6 @@ async def interactive_mode():
             if user_input.strip().upper() == 'STOP':
                 print("Prompt cancelled.")
                 continue
-            
-            # Check for validator command
-            validate_html = False
-            if user_input.lower().endswith('validate:html'):
-                validate_html = True
-                user_input = user_input[:-(len('validate:html'))].rstrip()
             original_prompt = user_input  # Save for retry if needed
             
             # Check for exit commands
@@ -50,48 +43,27 @@ async def interactive_mode():
             # Try to evaluate as a Python expression or code
             if run_python_code(user_input, mode='interactive'):
                 continue  # Skip LLM call if Python code executed
-            
-            # Generate and print response
+                
+            # Generate and print response using LamiaEngine
             print("\nThinking... 🤔")
-            response = await generate_response(user_input)
+            response = await engine.generate(user_input)
             
             print("\n🔮 Response:")
             print("----------------------------------------")
             print(response.text)
             print("----------------------------------------")
             print(f"Model: {response.model}")
-            if response.usage:
+            if hasattr(response, 'usage') and response.usage:
                 print(f"Tokens used: {response.usage}")
-            
-            # If requested, validate as HTML
-            if validate_html:
-                validator = HTMLValidator()
-                validation_result = await validator.validate(response.text)
-                print("\n🛡️ HTML Validation Result:")
+            # If validation info is present in response, print it
+            if hasattr(response, 'validation_result') and response.validation_result is not None:
+                print("\n🛡️ Validation Result:")
                 print("----------------------------------------")
-                if validation_result.is_valid:
-                    print("✅ Valid HTML!")
+                if response.validation_result.get('is_valid', False):
+                    print("✅ Valid output!")
                 else:
-                    print(f"❌ Invalid HTML: {validation_result.error_message}")
-                    print("----------------------------------------")
-                    # Retry with correction prompt
-                    correction = "Please correct your output to be valid HTML."
-                    retry_prompt = f"{original_prompt}\n{correction}"
-                    print("\nRetrying with correction prompt...")
-                    retry_response = await generate_response(retry_prompt)
-                    print("\n🔄 Retry Response:")
-                    print("----------------------------------------")
-                    print(retry_response.text)
-                    print("----------------------------------------")
-                    retry_validation = await validator.validate(retry_response.text)
-                    print("\n🛡️ Retry HTML Validation Result:")
-                    print("----------------------------------------")
-                    if retry_validation.is_valid:
-                        print("✅ Valid HTML after retry!")
-                    else:
-                        print(f"❌ Still invalid HTML: {retry_validation.error_message}")
-                    print("----------------------------------------")
-                
+                    print(f"❌ Invalid output: {response.validation_result.get('error_message', 'Unknown error')}")
+                print("----------------------------------------")
         except KeyboardInterrupt:
             print("\n\nGoodbye! 👋")
             break
@@ -141,32 +113,63 @@ def main():
     parser = argparse.ArgumentParser(description="Lamia CLI")
     parser.add_argument('filename', nargs='?', help='Prompt file to read from (if not provided, runs in interactive mode)')
     parser.add_argument('--file', '-f', type=str, help='Read prompt from a file instead of interactive mode')
+    parser.add_argument('--config', '-c', type=str, help='Path to config file (optional)')
     args = parser.parse_args()
 
     prompt_file = args.filename or args.file
-    if prompt_file:
-        # Read prompt from file and try to execute as Python code first
+    config_path = args.config
+
+    async def run():
+        engine = LamiaEngine(config_path)
         try:
-            with open(prompt_file, 'r') as f:
-                prompt = f.read()
-            if run_python_code(prompt, mode='file', show_banner=False):
-                sys.exit(0)
-            # If not Python, send to LLM
-            response = asyncio.run(generate_response(prompt))
-            print(response.text)
+            engine_started = await engine.start()
         except Exception as e:
-            print(f"Error reading file or generating response: {e}", file=sys.stderr)
+            print(f"❌ Error: Failed to start the Lamia engine: {e}", file=sys.stderr)
+            print("Check your config.yaml and logs for details.", file=sys.stderr)
+            await engine.stop()
             sys.exit(1)
-        sys.exit(0)
-    # Otherwise, run interactive mode
-    try:
-        asyncio.run(interactive_mode())
-    except KeyboardInterrupt:
-        print("\nGoodbye! 👋")
-        sys.exit(0)
-    except Exception as e:
-        print(f"Fatal error: {str(e)}", file=sys.stderr)
-        sys.exit(1)
+        if not engine_started:
+            print("❌ Error: Failed to start the Lamia engine. Check your configuration and logs.", file=sys.stderr)
+            await engine.stop()
+            sys.exit(1)
+        try:
+            if prompt_file:
+                # Read prompt from file and try to execute as Python code first
+                try:
+                    with open(prompt_file, 'r') as f:
+                        prompt = f.read()
+                    if run_python_code(prompt, mode='file', show_banner=False):
+                        await engine.stop()
+                        sys.exit(0)
+                    # If not Python, send to engine
+                    response = await engine.generate(prompt)
+                    print(response.text)
+                    if hasattr(response, 'validation_result') and response.validation_result is not None:
+                        print("\n🛡️ Validation Result:")
+                        print("----------------------------------------")
+                        if response.validation_result.get('is_valid', False):
+                            print("✅ Valid output!")
+                        else:
+                            print(f"❌ Invalid output: {response.validation_result.get('error_message', 'Unknown error')}")
+                        print("----------------------------------------")
+                except Exception as e:
+                    print(f"Error reading file or generating response: {e}", file=sys.stderr)
+                    await engine.stop()
+                    sys.exit(1)
+                await engine.stop()
+                sys.exit(0)
+            # Otherwise, run interactive mode
+            await interactive_mode(engine)
+        except KeyboardInterrupt:
+            print("\nGoodbye! 👋")
+            sys.exit(0)
+        except Exception as e:
+            print(f"Fatal error: {str(e)}", file=sys.stderr)
+            sys.exit(1)
+        finally:
+            await engine.stop()
+
+    asyncio.run(run())
 
 if __name__ == "__main__":
     main() 

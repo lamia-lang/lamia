@@ -9,10 +9,10 @@ from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
 
-from .adapters.llm.openai_adapter import OpenAIAdapter
-from .adapters.llm.anthropic_adapter import AnthropicAdapter
-from .adapters.llm.local import OllamaAdapter
-from .adapters.llm.base import BaseLLMAdapter, LLMResponse
+from lamia.adapters.llm.openai_adapter import OpenAIAdapter
+from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter
+from lamia.adapters.llm.local import OllamaAdapter
+from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from .config_manager import ConfigManager
 
 def check_api_key(model_type: str) -> str:
@@ -137,12 +137,17 @@ def ensure_ollama_model_pulled(model_name: str) -> bool:
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Failed to check/pull Ollama model: {str(e)}")
 
-def create_adapter_from_config(config_manager: ConfigManager) -> BaseLLMAdapter:
-    """Create an adapter instance based on the active configuration."""
-    default_provider = config_manager.get_default_model()  # Actually the provider
-    provider_config = config_manager.get_model_config(default_provider)
+def is_local_model_provider(provider_name: str) -> bool:
+    """Return True if the provider is a local engine (like Ollama)."""
+    # Add new local providers here as needed
+    return provider_name in {"ollama"}
 
-    if default_provider == "openai":
+def create_adapter_from_config(config_manager: ConfigManager, override_model: str = None) -> BaseLLMAdapter:
+    """Create an adapter instance based on the active configuration. Local engines are not started here."""
+    provider_name = override_model or config_manager.get_default_model()
+    provider_config = config_manager.get_model_config(provider_name)
+
+    if provider_name == "openai":
         model_name = provider_config.get('default_model')
         if not model_name:
             available_models = provider_config.get('models', [])
@@ -159,7 +164,7 @@ def create_adapter_from_config(config_manager: ConfigManager) -> BaseLLMAdapter:
             api_key=check_api_key('openai'),
             model=model_name
         )
-    elif default_provider == "anthropic":
+    elif provider_name == "anthropic":
         model_name = provider_config.get('default_model')
         if not model_name:
             available_models = provider_config.get('models', [])
@@ -176,37 +181,37 @@ def create_adapter_from_config(config_manager: ConfigManager) -> BaseLLMAdapter:
             api_key=check_api_key('anthropic'),
             model=model_name
         )
-    elif default_provider == "ollama":
-        # Ensure Ollama is running
-        if not start_ollama_service():
-            raise RuntimeError("Failed to start Ollama service")
+    elif is_local_model_provider(provider_name):
+        # Do NOT start the local engine or pull the model here; defer to adapter.initialize()
         model_name = provider_config.get('default_model')
         if not model_name:
             available_models = provider_config.get('models', [])
-            print("Available Ollama models:")
+            print(f"Available {provider_name} models:")
             for m in available_models:
                 if isinstance(m, str):
                     print(f"- {m}")
                 elif isinstance(m, dict):
                     print(f"- {m.get('name')}")
             raise RuntimeError(
-                "Please specify one of the available models in config.yaml under ollama.default_model"
+                f"Please specify one of the available models in config.yaml under {provider_name}.default_model"
             )
-        if not ensure_ollama_model_pulled(model_name):
-            raise RuntimeError(f"Failed to pull Ollama model: {model_name}")
-        return OllamaAdapter(
-            model=model_name,
-            base_url=provider_config.get('base_url', 'http://localhost:11434'),
-            context_size=provider_config.get('context_size'),
-            num_ctx=provider_config.get('num_ctx'),
-            num_gpu=provider_config.get('num_gpu'),
-            num_thread=provider_config.get('num_thread'),
-            repeat_penalty=provider_config.get('repeat_penalty'),
-            top_k=provider_config.get('top_k'),
-            top_p=provider_config.get('top_p')
-        )
+        # For Ollama, use OllamaAdapter; for future local providers, add here
+        if provider_name == "ollama":
+            return OllamaAdapter(
+                model=model_name,
+                base_url=provider_config.get('base_url', 'http://localhost:11434'),
+                context_size=provider_config.get('context_size'),
+                num_ctx=provider_config.get('num_ctx'),
+                num_gpu=provider_config.get('num_gpu'),
+                num_thread=provider_config.get('num_thread'),
+                repeat_penalty=provider_config.get('repeat_penalty'),
+                top_k=provider_config.get('top_k'),
+                top_p=provider_config.get('top_p')
+            )
+        # Add more local adapters here as needed
+        raise ValueError(f"Unsupported local model provider: {provider_name}")
     else:
-        raise ValueError(f"Unsupported model type: {default_provider}")
+        raise ValueError(f"Unsupported model type: {provider_name}")
 
 async def generate_response(prompt: str, config_path: str = None) -> LLMResponse:
     """

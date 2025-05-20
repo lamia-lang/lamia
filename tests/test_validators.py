@@ -1,5 +1,5 @@
 import pytest
-from adapters.llm.validation.custom_loader import load_validator
+from lamia.adapters.llm.validation.custom_loader import load_validator
 from examples.custom_validators.code_validator import CodeValidator
 from examples.custom_validators.sentiment_validator import validate_sentiment
 

@@ -3,7 +3,7 @@ import inspect
 from pathlib import Path
 from typing import Type, Optional
 
-from .base import BaseValidator
+from lamia.adapters.llm.validation.base import BaseValidator, ValidationResult
 
 def load_validator_from_file(file_path: str) -> Optional[Type[BaseValidator]]:
     """Load a custom validator class from a Python file.

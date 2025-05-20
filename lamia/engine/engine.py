@@ -4,20 +4,20 @@ import logging
 from pathlib import Path
 
 from .config_manager import ConfigManager
-from .llm_manager import create_adapter_from_config
-from adapters.llm.base import LLMResponse
-from adapters.llm.validation.base import BaseValidator
-from adapters.llm.validation.validators import (
+from .llm_manager import create_adapter_from_config, is_local_model_provider
+from lamia.adapters.llm.base import LLMResponse
+from lamia.adapters.llm.validation.base import BaseValidator
+from lamia.adapters.llm.validation.validators import (
     HTMLValidator,
     JSONValidator,
     RegexValidator,
     LengthValidator
 )
-from adapters.llm.validation.custom_loader import (
+from lamia.adapters.llm.validation.custom_loader import (
     load_validator_from_file,
     load_validator_from_function
 )
-from adapters.llm.validation.strategy import ValidationStrategy, RetryConfig
+from lamia.adapters.llm.validation.strategy import ValidationStrategy, RetryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -75,9 +75,9 @@ class LamiaEngine:
         registry = self.BUILTIN_VALIDATORS.copy()
         
         # Add custom validators from config
-        validation_config = self.config_manager.config.validation
-        if validation_config.validators:
-            for validator_config in validation_config.validators:
+        validation_config = self.config_manager.config.get('validation', {})
+        if validation_config.get('validators'):
+            for validator_config in validation_config['validators']:
                 if validator_config.get("type") in ["custom_file", "custom_function"]:
                     try:
                         validator_class = self._load_custom_validator(validator_config)
@@ -90,12 +90,12 @@ class LamiaEngine:
     
     def _setup_validation(self):
         """Set up the validation strategy if enabled in config."""
-        validation_config = self.config_manager.config.validation
-        if validation_config.enabled:
+        validation_config = self.config_manager.config.get('validation', {})
+        if validation_config.get('enabled'):
             retry_config = RetryConfig(
-                max_retries=validation_config.max_retries,
-                fallback_models=validation_config.fallback_models,
-                validators=validation_config.validators
+                max_retries=validation_config.get('max_retries'),
+                fallback_models=validation_config.get('fallback_models'),
+                validators=validation_config.get('validators')
             )
             self.validation_strategy = ValidationStrategy(
                 config=retry_config,
@@ -107,23 +107,21 @@ class LamiaEngine:
             logger.info("Validation strategy disabled")
     
     async def start(self):
-        """Start the Lamia engine."""
+        """Start the Lamia engine. Only initialize the adapter if the default model is not a local provider."""
         try:
-            config = self.config_manager.get_active_model_config()
-            model_name = self.config_manager.config.default_model
-            
+            model_name = self.config_manager.get_default_model()
+            config = self.config_manager.get_model_config(model_name)
             logger.info(f"Starting Lamia with {model_name} model")
             logger.info(f"Using configuration from: {self.config_manager.config_path}")
-            
-            self.adapter = create_adapter_from_config(self.config_manager)
-            await self.adapter.initialize()
-            
+            if not is_local_model_provider(model_name):
+                self.adapter = create_adapter_from_config(self.config_manager)
+                await self.adapter.initialize()
+            else:
+                self.adapter = None  # Will be lazily initialized in generate()
             # Set up validation if enabled
             self._setup_validation()
-            
             logger.info("Engine started successfully")
             return True
-            
         except Exception as e:
             logger.error(f"Failed to start engine: {str(e)}")
             return False
@@ -154,15 +152,15 @@ class LamiaEngine:
         Returns:
             LLMResponse containing the generated text and metadata
         """
-        if not self.adapter:
-            raise RuntimeError("Engine not started. Call start() first.")
-        
-        config = self.config_manager.get_active_model_config()
-        
+        model_name = self.config_manager.get_default_model()
+        config = self.config_manager.get_model_config(model_name)
         # Use config values if not overridden
-        temperature = temperature if temperature is not None else config.temperature
-        max_tokens = max_tokens if max_tokens is not None else config.max_tokens
-        
+        temperature = temperature if temperature is not None else config.get('temperature')
+        max_tokens = max_tokens if max_tokens is not None else config.get('max_tokens')
+        # Lazily initialize the adapter if needed (for local models)
+        if self.adapter is None:
+            self.adapter = create_adapter_from_config(self.config_manager)
+            await self.adapter.initialize()
         # If validation is enabled, use the validation strategy
         if self.validation_strategy:
             return await self.validation_strategy.execute_with_retries(
@@ -175,7 +173,6 @@ class LamiaEngine:
                 temperature=temperature,
                 max_tokens=max_tokens
             )
-        
         # Otherwise, just generate normally
         return await self.adapter.generate(
             prompt,

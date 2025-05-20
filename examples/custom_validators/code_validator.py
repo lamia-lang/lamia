@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any
 import ast
 
-from adapters.llm.validation.base import BaseValidator, ValidationResult
+from lamia.adapters.llm.validation.base import BaseValidator, ValidationResult
 
 class CodeValidator(BaseValidator):
     """Validates if the response is valid code in the specified language."""
