@@ -7,6 +7,7 @@ import ast
 import argparse
 
 from lamia.engine import LamiaEngine
+from lamia.engine.llm_manager import MissingAPIKeysError
 
 async def interactive_mode(engine: LamiaEngine):
     """Run Lamia in interactive mode, processing user prompts."""
@@ -123,6 +124,10 @@ def main():
         engine = LamiaEngine(config_path)
         try:
             engine_started = await engine.start()
+        except MissingAPIKeysError as e:
+            print(str(e), file=sys.stderr)
+            await engine.stop()
+            sys.exit(1)
         except Exception as e:
             print(f"❌ Error: Failed to start the Lamia engine: {e}", file=sys.stderr)
             print("Check your config.yaml and logs for details.", file=sys.stderr)

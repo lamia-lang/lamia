@@ -15,6 +15,16 @@ from lamia.adapters.llm.local import OllamaAdapter
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from .config_manager import ConfigManager
 
+class MissingAPIKeysError(Exception):
+    """Raised when one or more required API keys are missing for LLM engines."""
+    def __init__(self, missing):
+        self.missing = missing
+        message = ("\n❌ The following engines are missing required API keys:\n" +
+                   "\n".join([f"- {engine}: missing {env_var}" for engine, env_var in missing]) +
+                   "\n\nPlease provide the missing API keys as environment variables or in your .env file.\n" +
+                   "Alternatively, remove these engines from your default or fallback_models in config.yaml.")
+        super().__init__(message)
+
 def check_api_key(model_type: str) -> str:
     """
     Get and validate API key from environment variables.
@@ -106,7 +116,7 @@ def start_ollama_service() -> bool:
         return False
     except FileNotFoundError:
         print("\n❌ Ollama is not installed. Please install it first: https://ollama.ai/download")
-        return False
+        raise RuntimeError("Ollama is not installed")
     except Exception as e:
         print(f"\n❌ Failed to start Ollama service: {str(e)}")
         return False
@@ -142,8 +152,27 @@ def is_local_model_provider(provider_name: str) -> bool:
     # Add new local providers here as needed
     return provider_name in {"ollama"}
 
+def check_all_required_api_keys(config_manager: ConfigManager):
+    """
+    Check that all required API keys for default and fallback engines are present.
+    If any are missing, raise MissingAPIKeysError.
+    """
+    config = config_manager.get_config()
+    default_model = config.get('default_model')
+    fallback_models = config.get('validation', {}).get('fallback_models', [])
+    required_engines = set([default_model] + fallback_models)
+    missing = []
+    for engine in required_engines:
+        if engine in ('openai', 'anthropic'):
+            env_var = 'OPENAI_API_KEY' if engine == 'openai' else 'ANTHROPIC_API_KEY'
+            if not os.getenv(env_var):
+                missing.append((engine, env_var))
+    if missing:
+        raise MissingAPIKeysError(missing)
+
 def create_adapter_from_config(config_manager: ConfigManager, override_model: str = None) -> BaseLLMAdapter:
     """Create an adapter instance based on the active configuration. Local engines are not started here."""
+    check_all_required_api_keys(config_manager)
     provider_name = override_model or config_manager.get_default_model()
     provider_config = config_manager.get_model_config(provider_name)
 

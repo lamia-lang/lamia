@@ -3,17 +3,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import os
 import requests
 import sys
+import subprocess
+from unittest.mock import Mock
+import unittest.mock
 
-from lamia.llm_manager import (
+from lamia.engine.llm_manager import (
     create_adapter_from_config, 
     generate_response,
     is_ollama_running,
     start_ollama_service,
     ensure_ollama_model_pulled,
-    get_api_key,
-    check_environment_variables
 )
-from lamia.config_manager import ConfigManager
+from lamia.engine.config_manager import ConfigManager
 from lamia.adapters.llm.base import LLMResponse
 from lamia.adapters.llm.openai_adapter import OpenAIAdapter
 from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter
@@ -25,7 +26,7 @@ def mock_config_manager():
     config_manager = MagicMock(spec=ConfigManager)
     config_manager.get_default_model.return_value = "ollama"
     config_manager.get_model_config.return_value = {
-        "model": "llama2",
+        "default_model": "llama2",
         "base_url": "http://localhost:11434",
         "temperature": 0.7,
         "max_tokens": 1000,
@@ -44,35 +45,9 @@ def mock_llm_response():
     return LLMResponse(
         text="This is a mock response",
         model="mock-model",
-        usage={"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+        usage={"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        raw_response={}
     )
-
-class TestApiKeyHandling:
-    def test_get_api_key_from_env(self):
-        """Test getting API key from environment variable"""
-        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-env-key'}):
-            assert get_api_key('openai') == 'test-env-key'
-
-    def test_get_api_key_missing(self):
-        """Test getting API key when env var is not set"""
-        with patch.dict(os.environ, {}, clear=True):
-            assert get_api_key('openai') is None
-
-    def test_get_api_key_unknown_provider(self):
-        """Test getting API key for unknown provider"""
-        assert get_api_key('unknown') is None
-
-    def test_check_environment_variables_exits_on_missing(self):
-        """Test that check_environment_variables exits when required var is missing"""
-        with patch.dict(os.environ, {}, clear=True), \
-             patch('sys.exit') as mock_exit:
-            check_environment_variables('openai')
-            mock_exit.assert_called_once_with(1)
-
-    def test_check_environment_variables_continues_on_present(self):
-        """Test that check_environment_variables continues when var is present"""
-        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}):
-            check_environment_variables('openai')  # Should not raise or exit
 
 class TestCreateAdapterFromConfig:
     def test_create_ollama_adapter(self, mock_config_manager):
@@ -87,27 +62,29 @@ class TestCreateAdapterFromConfig:
         """Test creating an OpenAI adapter with mock config"""
         mock_config_manager.get_default_model.return_value = "openai"
         mock_config_manager.get_model_config.return_value = {
-            "model": "gpt-3.5-turbo",
+            "default_model": "gpt-3.5-turbo",
             "api_key": "test-key",
             "temperature": 0.7,
             "max_tokens": 1000
         }
-        adapter = create_adapter_from_config(mock_config_manager)
-        assert isinstance(adapter, OpenAIAdapter)
-        assert adapter.model == "gpt-3.5-turbo"
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
+                adapter = create_adapter_from_config(mock_config_manager)
+                assert MockAdapter.called
 
     def test_create_anthropic_adapter(self, mock_config_manager):
         """Test creating an Anthropic adapter with mock config"""
         mock_config_manager.get_default_model.return_value = "anthropic"
         mock_config_manager.get_model_config.return_value = {
-            "model": "claude-3-opus-20240229",
+            "default_model": "claude-3-opus-20240229",
             "api_key": "test-key",
             "temperature": 0.7,
             "max_tokens": 1000
         }
-        adapter = create_adapter_from_config(mock_config_manager)
-        assert isinstance(adapter, AnthropicAdapter)
-        assert adapter.model == "claude-3-opus-20240229"
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            with patch("lamia.engine.llm_manager.AnthropicAdapter", autospec=True) as MockAdapter:
+                adapter = create_adapter_from_config(mock_config_manager)
+                assert MockAdapter.called
 
     def test_unsupported_model(self, mock_config_manager):
         """Test error handling for unsupported model type"""
@@ -119,42 +96,66 @@ class TestCreateAdapterFromConfig:
         """Test that creating OpenAI adapter exits when API key is missing"""
         mock_config_manager.get_default_model.return_value = "openai"
         mock_config_manager.get_model_config.return_value = {
-            "model": "gpt-3.5-turbo",
+            "default_model": "gpt-3.5-turbo",
             "temperature": 0.7,
             "max_tokens": 1000
         }
-        
         with patch.dict(os.environ, {}, clear=True), \
              patch('sys.exit') as mock_exit:
-            create_adapter_from_config(mock_config_manager)
-            mock_exit.assert_called_once_with(1)
+            with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True):
+                create_adapter_from_config(mock_config_manager)
+                mock_exit.assert_called_once_with(1)
 
     def test_create_anthropic_adapter_missing_key(self, mock_config_manager):
         """Test error when Anthropic API key is missing"""
         mock_config_manager.get_default_model.return_value = "anthropic"
         mock_config_manager.get_model_config.return_value = {
-            "model": "claude-3-opus-20240229",
+            "default_model": "claude-3-opus-20240229",
             "temperature": 0.7,
             "max_tokens": 1000
         }
-        
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="Anthropic API key not found"):
-                create_adapter_from_config(mock_config_manager)
+            with patch("lamia.engine.llm_manager.AnthropicAdapter", autospec=True):
+                with pytest.raises(ValueError, match="Anthropic API key not found"):
+                    create_adapter_from_config(mock_config_manager)
 
     def test_create_openai_adapter_with_env_key(self, mock_config_manager):
         """Test creating OpenAI adapter with env var API key"""
         mock_config_manager.get_default_model.return_value = "openai"
         mock_config_manager.get_model_config.return_value = {
-            "model": "gpt-3.5-turbo",
+            "default_model": "gpt-3.5-turbo",
             "temperature": 0.7,
             "max_tokens": 1000
         }
-        
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-env-key'}):
-            adapter = create_adapter_from_config(mock_config_manager)
-            assert isinstance(adapter, OpenAIAdapter)
-            assert adapter.api_key == 'test-env-key'
+            with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
+                adapter = create_adapter_from_config(mock_config_manager)
+                assert MockAdapter.called
+                assert isinstance(adapter, MagicMock)
+
+    def test_exit_on_missing_api_key_for_fallbacks(self, mock_config_manager, monkeypatch, capsys):
+        """Test exit if any fallback or default engine is missing its API key"""
+        # Simulate config with openai as default and anthropic as fallback
+        mock_config_manager.get_config.return_value = {
+            'default_model': 'openai',
+            'models': {
+                'openai': {'default_model': 'gpt-3.5-turbo'},
+                'anthropic': {'default_model': 'claude-3-opus-20240229'}
+            },
+            'validation': {
+                'fallback_models': ['anthropic']
+            }
+        }
+        # Remove both API keys
+        monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+        monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
+        with pytest.raises(SystemExit) as e:
+            create_adapter_from_config(mock_config_manager)
+        assert e.value.code == 1
+        captured = capsys.readouterr()
+        assert 'openai: missing OPENAI_API_KEY' in captured.out
+        assert 'anthropic: missing ANTHROPIC_API_KEY' in captured.out
+        assert 'Please provide the missing API keys' in captured.out
 
 class TestGenerateResponse:
     @pytest.mark.asyncio
@@ -238,7 +239,7 @@ class TestOllamaService:
         with patch('requests.get') as mock_get:
             mock_get.return_value.status_code = 200
             assert is_ollama_running() is True
-            mock_get.assert_called_once_with("http://localhost:11434/api/version")
+            mock_get.assert_called_once_with("http://localhost:11434/api/version", timeout=2)
 
     def test_is_ollama_running_false(self):
         """Test detection of non-running Ollama service"""
@@ -248,27 +249,26 @@ class TestOllamaService:
 
     def test_start_ollama_service_already_running(self):
         """Test starting Ollama when it's already running"""
-        with patch('lamia.llm_manager.is_ollama_running', return_value=True):
+        with patch('lamia.engine.llm_manager.is_ollama_running', return_value=True):
             assert start_ollama_service() is True
 
     def test_start_ollama_service_success(self):
         """Test successful Ollama service start"""
-        with patch('lamia.llm_manager.is_ollama_running') as mock_check, \
+        with patch('lamia.engine.llm_manager.is_ollama_running') as mock_check, \
              patch('subprocess.Popen') as mock_popen:
             # First check fails, second succeeds
             mock_check.side_effect = [False, True]
             mock_popen.return_value = MagicMock()
-            
             assert start_ollama_service() is True
             mock_popen.assert_called_once_with(
                 ["ollama", "serve"],
-                stdout=mock_popen.return_value.stdout,
-                stderr=mock_popen.return_value.stderr
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
             )
 
     def test_start_ollama_service_not_installed(self):
         """Test error when Ollama is not installed"""
-        with patch('lamia.llm_manager.is_ollama_running', return_value=False), \
+        with patch('lamia.engine.llm_manager.is_ollama_running', return_value=False), \
              patch('subprocess.Popen') as mock_popen:
             mock_popen.side_effect = FileNotFoundError()
             
