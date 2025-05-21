@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RetryConfig:
     """Configuration for retry strategy."""
-    max_retries: int = 3
+    max_retries: int = 1
     fallback_models: List[str] = None  # List of model names to try if primary fails
     validators: List[Dict[str, Any]] = None  # List of validator configs
 
