@@ -14,7 +14,7 @@ def validate_sentiment(response: str, **kwargs) -> Dict[str, Any]:
         Dict containing validation results with keys:
         - is_valid: bool indicating if validation passed
         - error_message: str explanation if validation failed
-        - validation_data: Optional dict with additional data
+        - hint: str with a suggestion for the LLM
     """
     # List of positive and negative words (simplified example)
     positive_words = {'good', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic'}
@@ -33,9 +33,5 @@ def validate_sentiment(response: str, **kwargs) -> Dict[str, Any]:
     return {
         "is_valid": is_valid,
         "error_message": None if is_valid else "Response has more negative than positive sentiment",
-        "validation_data": {
-            "positive_count": pos_count,
-            "negative_count": neg_count,
-            "analyzed_text": response
-        }
+        "hint": "Please use more positive words in your response."
     } 

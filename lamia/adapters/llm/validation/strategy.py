@@ -39,10 +39,14 @@ class ValidationStrategy:
             return validators
             
         for validator_config in self.config.validators:
-            validator_type = validator_config.pop("type")
+            validator_type = validator_config.get("type")
+            strict = validator_config.get("strict", True)
+            config_copy = validator_config.copy()
+            config_copy.pop("type", None)
+            config_copy.pop("strict", None)
             if validator_type in self.validator_registry:
                 validator_class = self.validator_registry[validator_type]
-                validators.append(validator_class(**validator_config))
+                validators.append(validator_class(strict=strict, **config_copy))
             else:
                 logger.warning(f"Unknown validator type: {validator_type}")
                 
@@ -89,11 +93,20 @@ class ValidationStrategy:
         attempts = 0
         errors = []
         current_adapter = primary_adapter
+        # Aggregate initial hints from all validators
+        initial_hints = [v.initial_hint for v in self.validators if hasattr(v, 'initial_hint')]
+        initial_hint_text = "\n".join(initial_hints)
+        if initial_hint_text:
+            current_prompt = f"{initial_hint_text}\n\n{prompt}"
+        else:
+            current_prompt = prompt
         
         while attempts < self.config.max_retries:
             attempts += 1
             try:
-                response = await current_adapter.generate(prompt, **kwargs)
+                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{getattr(current_adapter, 'model', 'unknown')}':\n{current_prompt}")
+                response = await current_adapter.generate(current_prompt, **kwargs)
+                logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{getattr(current_adapter, 'model', 'unknown')}':\n{response.text}")
                 
                 # Validate the response
                 validation_result = await self.validate_response(response.text)
@@ -105,6 +118,16 @@ class ValidationStrategy:
                     f"{validation_result.error_message}"
                 )
                 errors.append(validation_result.error_message)
+
+                # Construct retry prompt based on context memory
+                if current_adapter.has_context_memory:
+                    # Only send the validation issue and hint
+                    retry_message = f"The previous response had an issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again."
+                    current_prompt = retry_message
+                else:
+                    # Resend the original prompt plus the validation issue and hint
+                    retry_message = f"Previous response failed validation. Issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again.\n\nOriginal prompt:\n{prompt}"
+                    current_prompt = retry_message
                 
                 # Try fallback model if available
                 if (self.config.fallback_models and 
@@ -112,7 +135,12 @@ class ValidationStrategy:
                     fallback_model = self.config.fallback_models[attempts - 1]
                     logger.info(f"Trying fallback model: {fallback_model}")
                     current_adapter = create_adapter_fn(fallback_model)
-                    
+                    # Reset prompt for new adapter, with initial hints
+                    if initial_hint_text:
+                        current_prompt = f"{initial_hint_text}\n\n{prompt}"
+                    else:
+                        current_prompt = prompt
+                
             except Exception as e:
                 logger.error(f"Attempt {attempts} failed with error: {str(e)}")
                 errors.append(str(e))

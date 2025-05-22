@@ -22,7 +22,7 @@ class ConfigManager:
     def _get_default_config_path(self) -> str:
         """Get the default path to the config file."""
         # Config is now in the root directory
-        return os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.yaml')
+        return os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'config.yaml')
 
     def load_config(self) -> None:
         """Load configuration from the YAML file."""
@@ -62,4 +62,20 @@ class ConfigManager:
 
     def get_default_model(self) -> str:
         """Get the default model name from config."""
-        return self.config.get('default_model') 
+        return self.config.get('default_model')
+
+    def get_has_context_memory(self, provider: str, model_name: str) -> Optional[bool]:
+        """
+        Get has_context_memory override for a specific provider and model name from config.
+        Returns None if not set.
+        """
+        models_config = self.config.get('models', {})
+        provider_config = models_config.get(provider, {})
+        models_list = provider_config.get('models', [])
+        for entry in models_list:
+            if isinstance(entry, dict) and entry.get('name') == model_name:
+                return entry.get('has_context_memory')
+            elif isinstance(entry, str) and entry == model_name:
+                # No override, just a string
+                return None
+        return None 

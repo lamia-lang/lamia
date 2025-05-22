@@ -7,60 +7,54 @@ class CodeValidator(BaseValidator):
     """Validates if the response is valid code in the specified language."""
     
     def __init__(self, language: str = "python", strict: bool = True):
-        """Initialize the code validator.
-        
-        Args:
-            language: Programming language to validate ("python" supported for now)
-            strict: Whether to perform strict validation
-        """
+        super().__init__(strict=strict)
         self.language = language.lower()
-        self.strict = strict
     
     @property
     def name(self) -> str:
         return f"code_{self.language}"
 
-    async def validate(self, response: str, **kwargs) -> ValidationResult:
-        """Validate if the response is valid code."""
+    @property
+    def initial_hint(self) -> str:
+        return "Please return only valid Python code, with no explanation or extra text."
+
+    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+        # Strict: only accept pure code
         if self.language == "python":
-            return await self._validate_python(response)
+            try:
+                ast.parse(response)
+                return ValidationResult(is_valid=True)
+            except Exception as e:
+                return ValidationResult(
+                    is_valid=False,
+                    error_message=f"Code parsing failed: {str(e)}",
+                    hint=self.initial_hint
+                )
         else:
             return ValidationResult(
                 is_valid=False,
-                error_message=f"Unsupported language: {self.language}"
+                error_message=f"Unsupported language: {self.language}",
+                hint=self.initial_hint
             )
-    
-    async def _validate_python(self, code: str) -> ValidationResult:
-        """Validate Python code."""
-        try:
-            # Try parsing the code
-            ast.parse(code)
-            
-            if self.strict:
-                # Additional checks in strict mode
-                if "import" not in code and "def" not in code:
-                    return ValidationResult(
-                        is_valid=False,
-                        error_message="Strict mode: Code should contain functions or imports",
-                        validation_data={"code": code}
-                    )
-            
-            return ValidationResult(is_valid=True)
-            
-        except SyntaxError as e:
+
+    async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
+        # Forgiving: extract first code block (e.g., from markdown) and validate
+        import re
+        if self.language == "python":
+            match = re.search(r'```(?:python)?\n([\s\S]+?)```', response)
+            code = match.group(1) if match else response
+            try:
+                ast.parse(code)
+                return ValidationResult(is_valid=True)
+            except Exception as e:
+                return ValidationResult(
+                    is_valid=False,
+                    error_message=f"Code parsing failed: {str(e)}",
+                    hint=self.initial_hint
+                )
+        else:
             return ValidationResult(
                 is_valid=False,
-                error_message=f"Python syntax error: {str(e)}",
-                validation_data={
-                    "error_type": "syntax",
-                    "line": e.lineno,
-                    "offset": e.offset,
-                    "code": code
-                }
-            )
-        except Exception as e:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Validation error: {str(e)}",
-                validation_data={"code": code}
+                error_message=f"Unsupported language: {self.language}",
+                hint=self.initial_hint
             ) 

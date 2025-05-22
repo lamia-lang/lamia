@@ -11,12 +11,13 @@ class AnthropicAdapter(BaseLLMAdapter):
     API_URL = "https://api.anthropic.com/v1/messages"
     API_VERSION = "2023-06-01"
     
-    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
+    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229", has_context_memory: bool = None):
         self.api_key = api_key
         self.model = model
         self.client = None
         self.session = None
         self._use_sdk = False
+        self._has_context_memory = has_context_memory
         
     async def __aenter__(self):
         # Try to import Anthropic SDK
@@ -106,4 +107,11 @@ class AnthropicAdapter(BaseLLMAdapter):
                 )
                 
         except aiohttp.ClientError as e:
-            raise RuntimeError(f"Failed to communicate with Anthropic API: {str(e)}") 
+            raise RuntimeError(f"Failed to communicate with Anthropic API: {str(e)}")
+
+    @property
+    def has_context_memory(self) -> bool:
+        if self._has_context_memory is not None:
+            return self._has_context_memory
+        # All Anthropic chat models (Claude, etc.) have context memory
+        return True 

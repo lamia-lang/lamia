@@ -65,9 +65,10 @@ models:
 validation:
   enabled: true
   max_retries: 3
-  fallback_models: ["anthropic", "openai"]  # Models to try if primary fails
+  #fallback_models: ["anthropic", "openai"]  # Models to try if primary fails
   validators:
-    - type: "html"      # HTML validation
+    - type: "html"
+      strict: false      # HTML validation
     # - type: "json"    # JSON validation
     # - type: "regex"   # Regex validation
     # - type: "length"  # Length validation

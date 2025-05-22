@@ -50,30 +50,6 @@ with_combined_validators = Lamia(
 )
 
 answer = with_combined_validators.run("Say hello world!")
-
-### Minimal Example
-
-```python
-from lamia import Lamia
-
-# Option 1: Set API keys as environment variables (recommended)
-# import os
-# os.environ["OPENAI_API_KEY"] = "sk-..."
-# os.environ["ANTHROPIC_API_KEY"] = "sk-ant..."
-
-# Option 2: Pass API keys directly (leanest for scripts)
-lamia = Lamia("openai", "ollama", api_keys={"openai": "sk-...", "anthropic": "sk-ant..."})
-
-answer = lamia.run("Explain quantum computing in simple terms.")
-print(answer)
-
-
-with_temperature_and_max_tokens = Lamia("openai", api_keys={"openai": "sk-..."})
-answer = with_temperature_and_max_tokens.run(
-    "Write a creative story about a robot.",
-    temperature=0.9,   # More creative
-    max_tokens=500     # Limit response length
-)
 ```
 
 ## Exception: MissingAPIKeysError

@@ -128,6 +128,39 @@ Use Ctrl+C or type 'exit' to quit the interactive session.
 
 Lamia includes a robust validation system to ensure LLM outputs meet specific criteria.
 
+### Strict vs. Forgiving Validation
+
+Each validator supports a `strict` flag, which controls how strictly the output is validated:
+- `strict: true` (default): Only accepts pure, valid output (e.g., only the HTML, JSON, or pattern match, with no extra text).
+- `strict: false`: Accepts output that contains a valid block (e.g., a valid HTML or JSON block within a longer response).
+
+If the `strict` flag is omitted, strict validation is used by default.
+
+**Example config:**
+```yaml
+validation:
+  enabled: true
+  validators:
+    - type: "html"
+      strict: true
+    - type: "json"
+    - type: "regex"
+      pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+      strict: true
+```
+
+**Example code:**
+```python
+lamia = Lamia(
+    ...,
+    validators=[
+        {"type": "html"},
+        {"type": "json", "strict": False},
+        {"type": "regex", "pattern": r"^\\d{4}-\\d{2}-\\d{2}$", "strict": True}
+    ]
+)
+```
+
 ### Built-in Validators
 
 - **HTML Validator**: Ensures output is valid HTML markup
@@ -149,19 +182,37 @@ Lamia includes a robust validation system to ensure LLM outputs meet specific cr
 
 The `examples/custom_validators/` directory contains example implementations.
 
+## Model Configuration
 
+You can configure each model in your `config.yaml`. For advanced control, you can specify whether a model supports context memory (chat history) using the `has_context_memory` property. This affects how Lamia handles retries and prompt construction for validation.
 
+Example:
 
+```yaml
+models:
+  ollama:
+    enabled: true
+    default_model: neural-chat
+    models:
+      - name: neural-chat
+        has_context_memory: true
+      - name: llama2
+        has_context_memory: false
+  openai:
+    enabled: true
+    default_model: gpt-3.5-turbo
+    models:
+      - gpt-3.5-turbo  # has_context_memory will be inferred as true
+      - text-davinci-003
+        has_context_memory: false  # override if needed
+```
 
-
-
-
-
-
-
-
-
-
+**Note:**
+- If `has_context_memory` is not set for a model, Lamia will use adapter-specific logic to infer whether the model supports context memory:
+  - **OpenAI:** Most `gpt-*` and `*turbo*` models are chat-based and support context memory. Legacy completion models (e.g., `text-davinci-003`) are stateless.
+  - **Anthropic:** All Claude models are chat-based and support context memory.
+  - **Ollama:** If the model name contains `chat` or `instruct`, context memory is assumed; otherwise, it is not.
+- You can always override the default by specifying `has_context_memory` in your config.
 
 ## License
 

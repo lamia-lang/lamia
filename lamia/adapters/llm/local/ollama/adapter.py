@@ -11,7 +11,11 @@ from ...base import BaseLLMAdapter, LLMResponse
 logger = logging.getLogger(__name__)
 
 class OllamaAdapter(BaseLLMAdapter):
-    """Adapter for local Ollama models."""
+    """Adapter for local Ollama models.
+    
+    The has_context_memory property infers context memory from the model name (if it contains 'chat' or 'instruct', returns True),
+    but can be overridden by passing has_context_memory in model_params.
+    """
     
     def __init__(
         self,
@@ -34,22 +38,22 @@ class OllamaAdapter(BaseLLMAdapter):
         self.model_params = model_params
         self.session = None
 
-    def is_ollama_running() -> bool:
+    def is_ollama_running(self) -> bool:
         try:
-            response = requests.get("http://localhost:11434/api/version", timeout=2)
+            response = requests.get(f"{self.base_url}/api/version", timeout=2)
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
 
-    def start_ollama_service() -> bool:
-        if is_ollama_running():
+    def start_ollama_service(self) -> bool:
+        if self.is_ollama_running():
             logger.info("✓ Ollama service is running")
             return True
         logger.info("Starting Ollama service...")
         try:
             subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             for i in range(30):
-                if is_ollama_running():
+                if self.is_ollama_running():
                     logger.info("✓ Ollama service started successfully")
                     return True
                 time.sleep(1)
@@ -62,12 +66,12 @@ class OllamaAdapter(BaseLLMAdapter):
             logger.error(f"Failed to start Ollama service: {str(e)}")
             return False
 
-    def ensure_ollama_model_pulled(model_name: str) -> bool:
+    def ensure_ollama_model_pulled(self, model_name: str) -> bool:
         try:
-            response = requests.get(f"http://localhost:11434/api/show", json={"name": model_name})
+            response = requests.get(f"{self.base_url}/api/show", json={"name": model_name})
             if response.status_code == 200:
                 return True
-            pull_response = requests.post(f"http://localhost:11434/api/pull", json={"name": model_name})
+            pull_response = requests.post(f"{self.base_url}/api/pull", json={"name": model_name})
             return pull_response.status_code == 200
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to check/pull Ollama model: {str(e)}")
@@ -76,10 +80,10 @@ class OllamaAdapter(BaseLLMAdapter):
     async def initialize(self) -> None:
         """Initialize the aiohttp session and verify model availability. Start Ollama service and pull model if needed."""
         # Start Ollama service if not running
-        if not start_ollama_service():
+        if not self.start_ollama_service():
             raise RuntimeError("Failed to start Ollama service")
         # Ensure model is pulled
-        if not ensure_ollama_model_pulled(self.model):
+        if not self.ensure_ollama_model_pulled(self.model):
             raise RuntimeError(f"Failed to pull Ollama model: {self.model}")
         self.session = aiohttp.ClientSession()
         # Check if model is available (API check)
@@ -167,4 +171,15 @@ class OllamaAdapter(BaseLLMAdapter):
         """Close the aiohttp session."""
         if self.session:
             await self.session.close()
-            self.session = None 
+            self.session = None
+
+    @property
+    def has_context_memory(self) -> bool:
+        # Allow explicit override
+        if 'has_context_memory' in self.model_params:
+            return bool(self.model_params['has_context_memory'])
+        # Infer from model name
+        model_name = self.model.lower()
+        if any(x in model_name for x in ["chat", "instruct"]):
+            return True
+        return False 

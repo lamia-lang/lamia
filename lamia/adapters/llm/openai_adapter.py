@@ -9,12 +9,13 @@ class OpenAIAdapter(BaseLLMAdapter):
     
     API_URL = "https://api.openai.com/v1/chat/completions"
     
-    def __init__(self, api_key: str, model: str = "gpt-3.5-turbo"):
+    def __init__(self, api_key: str, model: str = "gpt-3.5-turbo", has_context_memory: bool = None):
         self.api_key = api_key
         self.model = model
         self.client = None
         self.session = None
         self._use_sdk = True  # Will be set to False if import fails
+        self._has_context_memory = has_context_memory
         
     @lazy_import("openai")
     async def __aenter__(self):
@@ -83,4 +84,15 @@ class OpenAIAdapter(BaseLLMAdapter):
                     )
                     
             except aiohttp.ClientError as e:
-                raise RuntimeError(f"Failed to communicate with OpenAI API: {str(e)}") 
+                raise RuntimeError(f"Failed to communicate with OpenAI API: {str(e)}")
+
+    @property
+    def has_context_memory(self) -> bool:
+        if self._has_context_memory is not None:
+            return self._has_context_memory
+        # Infer from model name: chat models (gpt-*, turbo, etc.) have context memory
+        chat_prefixes = ("gpt-", "text-davinci-003", "text-davinci-002")
+        if self.model.startswith(chat_prefixes) or "turbo" in self.model:
+            return True
+        # Legacy completion models (e.g., text-davinci-003) are stateless
+        return False 

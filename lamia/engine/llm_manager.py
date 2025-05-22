@@ -170,77 +170,66 @@ def check_all_required_api_keys(config_manager: ConfigManager):
     if missing:
         raise MissingAPIKeysError(missing)
 
+def validate_retries_config(retries, used_models):
+    """
+    retries: dict, e.g. {"ollama": 2, "ollama:neural-chat": 1}
+    used_models: set, e.g. {"openai", "ollama:llama2", "ollama:neural-chat"}
+    """
+    for key in retries:
+        if key not in used_models:
+            raise ValueError(
+                f"Retry policy specified for unused model or provider '{key}'. "
+                "Check your retries config and fallback models."
+            )
+
 def create_adapter_from_config(config_manager: ConfigManager, override_model: str = None) -> BaseLLMAdapter:
     """Create an adapter instance based on the active configuration. Local engines are not started here."""
     check_all_required_api_keys(config_manager)
     provider_name = override_model or config_manager.get_default_model()
     provider_config = config_manager.get_model_config(provider_name)
 
+    # Determine the model name
+    model_name = provider_config.get('default_model')
+    if not model_name:
+        available_models = provider_config.get('models', [])
+        print(f"\nAvailable {provider_name.capitalize()} models:")
+        for m in available_models:
+            if isinstance(m, str):
+                print(f"- {m}")
+            elif isinstance(m, dict):
+                print(f"- {m.get('name')}")
+        raise RuntimeError(
+            f"\nPlease specify one of the above models in config.yaml under {provider_name}.default_model"
+        )
+
+    # Extract has_context_memory from config if present
+    has_context_memory = config_manager.get_has_context_memory(provider_name, model_name)
+
     if provider_name == "openai":
-        model_name = provider_config.get('default_model')
-        if not model_name:
-            available_models = provider_config.get('models', [])
-            print("\nAvailable OpenAI models:")
-            for m in available_models:
-                if isinstance(m, str):
-                    print(f"- {m}")
-                elif isinstance(m, dict):
-                    print(f"- {m.get('name')}")
-            raise RuntimeError(
-                "\nPlease specify one of the above models in config.yaml under openai.default_model"
-            )
         return OpenAIAdapter(
             api_key=check_api_key('openai'),
-            model=model_name
+            model=model_name,
+            has_context_memory=has_context_memory
         )
     elif provider_name == "anthropic":
-        model_name = provider_config.get('default_model')
-        if not model_name:
-            available_models = provider_config.get('models', [])
-            print("\nAvailable Anthropic models:")
-            for m in available_models:
-                if isinstance(m, str):
-                    print(f"- {m}")
-                elif isinstance(m, dict):
-                    print(f"- {m.get('name')}")
-            raise RuntimeError(
-                "\nPlease specify one of the above models in config.yaml under anthropic.default_model"
-            )
         return AnthropicAdapter(
             api_key=check_api_key('anthropic'),
-            model=model_name
+            model=model_name,
+            has_context_memory=has_context_memory
         )
-    elif is_local_model_provider(provider_name):
-        # Do NOT start the local engine or pull the model here; defer to adapter.initialize()
-        model_name = provider_config.get('default_model')
-        if not model_name:
-            available_models = provider_config.get('models', [])
-            print(f"Available {provider_name} models:")
-            for m in available_models:
-                if isinstance(m, str):
-                    print(f"- {m}")
-                elif isinstance(m, dict):
-                    print(f"- {m.get('name')}")
-            raise RuntimeError(
-                f"Please specify one of the available models in config.yaml under {provider_name}.default_model"
-            )
-        # For Ollama, use OllamaAdapter; for future local providers, add here
-        if provider_name == "ollama":
-            return OllamaAdapter(
-                model=model_name,
-                base_url=provider_config.get('base_url', 'http://localhost:11434'),
-                context_size=provider_config.get('context_size'),
-                num_ctx=provider_config.get('num_ctx'),
-                num_gpu=provider_config.get('num_gpu'),
-                num_thread=provider_config.get('num_thread'),
-                repeat_penalty=provider_config.get('repeat_penalty'),
-                top_k=provider_config.get('top_k'),
-                top_p=provider_config.get('top_p')
-            )
-        # Add more local adapters here as needed
-        raise ValueError(f"Unsupported local model provider: {provider_name}")
+    elif provider_name == "ollama":
+        # Pass all extra config values as configs
+        configs = provider_config.copy()
+        configs.pop('default_model', None)
+        configs.pop('enabled', None)
+        configs.pop('models', None)
+        return OllamaAdapter(
+            model_path=model_name,
+            has_context_memory=has_context_memory,
+            configs=configs
+        )
     else:
-        raise ValueError(f"Unsupported model type: {provider_name}")
+        raise ValueError(f"Unknown provider: {provider_name}")
 
 async def generate_response(prompt: str, config_path: str = None) -> LLMResponse:
     """
