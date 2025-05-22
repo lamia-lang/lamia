@@ -4,6 +4,6 @@ Currently supports:
 - Ollama (https://ollama.ai)
 """
 
-from .ollama.adapter import OllamaAdapter
+from .ollama_adapter import OllamaAdapter
 
 __all__ = ['OllamaAdapter'] 

@@ -12,22 +12,28 @@ from lamia.engine.llm_manager import MissingAPIKeysError
 async def interactive_mode(engine: LamiaEngine):
     """Run Lamia in interactive mode, processing user prompts."""
     print("\nLamia Interactive Mode")
-    print("Enter your prompts (type 'END' on a new line to finish, Ctrl+C to quit or cancel, type STOP to cancel a prompt before sending, 'exit' to quit)")
+    print("Enter your prompts (type 'SEND' on a new line to finish, type CANCEL to discard current input, Ctrl+C to quit, type STOP to interrupt a running prompt, 'exit' to quit)")
     print("----------------------------------------")
+
+    prompt_str = "\n🤖 > (SEND=submit, CANCEL=discard, STOP=interrupt)\n> "
 
     while True:
         try:
-            # Multiline input: keep reading until 'END' is entered on a new line
+            # Multiline input: keep reading until 'SEND' is entered on a new line
             lines = []
-            print("\n🤖 > (type 'END' on a new line to finish)")
             while True:
-                line = input()
-                if line.strip() == "END":
+                line = input(prompt_str if not lines else "> ")
+                if line.strip() == "SEND":
                     break
+                if line.strip().upper() == "CANCEL":
+                    print("Prompt cancelled. Start typing a new prompt.")
+                    lines = []
+                    # Show the prompt again for a new input
+                    continue
                 lines.append(line)
             user_input = "\n".join(lines).strip()
             
-            # Support STOP keyword to cancel prompt
+            # Support STOP keyword to cancel prompt (before sending)
             if user_input.strip().upper() == 'STOP':
                 print("Prompt cancelled.")
                 continue

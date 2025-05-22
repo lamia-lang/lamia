@@ -6,7 +6,7 @@ import subprocess
 import requests
 import time
 
-from ...base import BaseLLMAdapter, LLMResponse
+from ..base import BaseLLMAdapter, LLMResponse
 
 logger = logging.getLogger(__name__)
 

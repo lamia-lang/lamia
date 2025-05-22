@@ -49,7 +49,7 @@ class HTMLValidator(BaseValidator):
         html_block = match.group(1)
         try:
             ET.fromstring(html_block)
-            return ValidationResult(is_valid=True)
+            return ValidationResult(is_valid=True, validated_text=html_block)
         except ET.ParseError as e:
             return ValidationResult(
                 is_valid=False,
@@ -107,7 +107,7 @@ class JSONValidator(BaseValidator):
         json_block = match.group(0)
         try:
             json.loads(json_block)
-            return ValidationResult(is_valid=True)
+            return ValidationResult(is_valid=True, validated_text=json_block)
         except json.JSONDecodeError as e:
             return ValidationResult(
                 is_valid=False,
@@ -152,8 +152,9 @@ class RegexValidator(BaseValidator):
 
     async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
         # Forgiving: accept if any substring matches the pattern
-        if self.pattern.search(response):
-            return ValidationResult(is_valid=True)
+        match = self.pattern.search(response)
+        if match:
+            return ValidationResult(is_valid=True, validated_text=match.group(0))
         return ValidationResult(
             is_valid=False,
             error_message=f"Response does not contain a match for pattern: {self.pattern.pattern}",
@@ -235,4 +236,4 @@ class LengthValidator(BaseValidator):
                 error_message=f"Response too long: {length} > {self.max_length}",
                 hint=self.initial_hint
             )
-        return ValidationResult(is_valid=True) 
+        return ValidationResult(is_valid=True, validated_text=response) 

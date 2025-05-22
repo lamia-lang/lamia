@@ -66,8 +66,10 @@ class ValidationStrategy:
             if not result.is_valid:
                 logger.info(f"Validation failed for {validator.name}: {result.error_message}")
                 return result
-                
-        return ValidationResult(is_valid=True)
+            # If a validator provides validated_text, propagate it for next validator
+            if result.validated_text is not None:
+                response = result.validated_text
+        return ValidationResult(is_valid=True, validated_text=response)
 
     async def execute_with_retries(
         self,
@@ -111,6 +113,9 @@ class ValidationStrategy:
                 # Validate the response
                 validation_result = await self.validate_response(response.text)
                 if validation_result.is_valid:
+                    # If validated_text is present, return a new LLMResponse with it
+                    if validation_result.validated_text is not None:
+                        return type(response)(**{**response.__dict__, 'text': validation_result.validated_text})
                     return response
                 
                 logger.warning(

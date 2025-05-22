@@ -4,10 +4,18 @@ from dataclasses import dataclass
 
 @dataclass
 class ValidationResult:
-    """Result of a validation check."""
+    """Result of a validation check.
+    
+    Attributes:
+        is_valid: Whether the response is valid.
+        error_message: Error message if invalid.
+        hint: Optional hint for fixing the response.
+        validated_text: Sanitized/validated part of the response (if available).
+    """
     is_valid: bool
     error_message: Optional[str] = None
     hint: Optional[str] = None
+    validated_text: Optional[str] = None
 
 class BaseValidator(ABC):
     """Base class for response validators.

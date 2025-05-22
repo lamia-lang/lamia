@@ -71,4 +71,5 @@ validation:
       strict: false      # HTML validation
     # - type: "json"    # JSON validation
     # - type: "regex"   # Regex validation
-    # - type: "length"  # Length validation
+    - type: "length"  # Length validation
+      min_length: 100
