@@ -167,6 +167,125 @@ lamia = Lamia(
 - **JSON Validator**: Validates JSON structure and syntax
 - **Regex Validator**: Matches output against custom regex patterns
 - **Length Validator**: Enforces minimum and maximum length constraints
+- **Atomic Type Validator**: Ensures output is a valid atomic type (integer, float, bool, or string)
+
+### Atomic Type Validator
+
+The `atomic_type` validator allows you to validate that the LLM output is a valid integer, float, boolean, or string. This is useful for enforcing that the response is a single value of a specific type.
+
+#### Usage from config.yaml
+
+```yaml
+validators:
+  - type: "atomic_type"
+    atomic_type: "integer"  # or "float", "bool", "string"
+    strict: true  # Optional, default is true
+```
+
+#### Usage from Python code
+
+```python
+from lamia.adapters.llm.validation.validators import AtomicTypeValidator
+
+lamia = Lamia(
+    ...,
+    validators=[AtomicTypeValidator(atomic_type="integer")]
+)
+```
+
+#### How it works
+- In strict mode, the response must be exactly the specified type (e.g., only an integer, with no extra text).
+- In forgiving mode (`strict: false`), the response is valid if it contains exactly one value of the specified type.
+- If there are multiple values of the type in the response, validation fails.
+
+#### Examples
+
+**Valid integer:**
+```
+42
+```
+
+**Valid float:**
+```
+3.1415
+```
+
+**Valid boolean:**
+```
+true
+```
+
+**Valid string:**
+```
+hello world
+```
+
+**Invalid (multiple values):**
+```
+42 and 43
+```
+
+### HTML Structure Validator
+
+The `html_structure` validator allows you to validate the structure of HTML output using a Pydantic model. This is useful for ensuring that generated HTML matches a specific tag and nesting structure.
+
+#### Usage from config.yaml
+
+Define your Pydantic models in a `models/` folder (or any importable module):
+
+```python
+# models/html_structure.py
+from pydantic import BaseModel
+
+class Body(BaseModel):
+    h1: str
+
+class HtmlStructure(BaseModel):
+    title: str
+    body: Body
+```
+
+Reference the top-level model in your config using the short class name (imported from `models`):
+
+```yaml
+validators:
+  - type: "html_structure"
+    model: HtmlStructure  # Will be imported from the models folder
+```
+
+You can also use a full dotted path to a model in any package:
+
+```yaml
+validators:
+  - type: "html_structure"
+    model: myapp.models.html_structure.HtmlStructure
+```
+
+#### Usage from Python code
+
+You can pass any model class from your Python path when constructing Lamia:
+
+```python
+from myapp.models.html_structure import HtmlStructure
+from lamia.adapters.llm.validation.validators import HTMLStructureValidator
+
+lamia = Lamia(
+    ...,
+    validators=[HTMLStructureValidator(model=HtmlStructure)]
+)
+```
+
+#### How it works
+- The validator parses the HTML, maps tags to model fields (recursively), and validates the result using Pydantic.
+- If you specify a string for `model`, it will be dynamically imported from the `models` module (by default), or from a full dotted path if provided.
+- You can also provide a schema dict for quick prototyping.
+
+#### Example
+Given this HTML:
+```html
+<html><head><title>My Title</title></head><body><h1>Header</h1></body></html>
+```
+And the model above, validation will pass if the structure matches.
 
 ## Development
 

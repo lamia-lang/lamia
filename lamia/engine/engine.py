@@ -2,35 +2,25 @@ import asyncio
 from typing import Optional, Dict, Type, Any
 import logging
 from pathlib import Path
+import importlib
+import pkgutil
+import inspect
 
 from .config_manager import ConfigManager
 from .llm_manager import create_adapter_from_config, is_local_model_provider
 from lamia.adapters.llm.base import LLMResponse
 from lamia.adapters.llm.validation.base import BaseValidator
-from lamia.adapters.llm.validation.validators import (
-    HTMLValidator,
-    JSONValidator,
-    RegexValidator,
-    LengthValidator
-)
 from lamia.adapters.llm.validation.custom_loader import (
     load_validator_from_file,
     load_validator_from_function
 )
 from lamia.adapters.llm.validation.strategy import ValidationStrategy, RetryConfig
+from lamia.adapters.llm.validation import validators as validators_pkg
 
 logger = logging.getLogger(__name__)
 
 class LamiaEngine:
     """Main engine for Lamia that handles runtime configuration and execution."""
-    
-    # Registry of built-in validators
-    BUILTIN_VALIDATORS: Dict[str, Type[BaseValidator]] = {
-        "html": HTMLValidator,
-        "json": JSONValidator,
-        "regex": RegexValidator,
-        "length": LengthValidator,
-    }
     
     def __init__(self, config_path: Optional[str] = None):
         """Initialize the Lamia engine.
@@ -45,10 +35,12 @@ class LamiaEngine:
     
     def _setup_logging(self):
         """Configure logging for the engine."""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        # Only configure logging if it hasn't been configured yet
+        if not logging.getLogger().hasHandlers():
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
     
     def _load_custom_validator(self, validator_config: dict) -> Optional[Type[BaseValidator]]:
         """Load a custom validator from file or function."""
@@ -70,22 +62,46 @@ class LamiaEngine:
             
         return None
     
-    def _get_validator_registry(self) -> Dict[str, Type[BaseValidator]]:
-        """Get combined registry of built-in and custom validators."""
-        registry = self.BUILTIN_VALIDATORS.copy()
-        
-        # Add custom validators from config
+    def _get_validator_registry(self) -> Dict[str, BaseValidator]:
+        """Preload all validators in the validators folder and use the one matching the user-requested short name."""
+        # Discover all validator classes in the validators folder
+        validator_class_map = {}
+        package_path = validators_pkg.__path__
+        for _, module_name, _ in pkgutil.iter_modules(package_path):
+            if module_name.startswith('__'):
+                continue
+            module = importlib.import_module(f"lamia.adapters.llm.validation.validators.{module_name}")
+            for name, cls in inspect.getmembers(module, inspect.isclass):
+                # Only consider classes defined in this module (not imports)
+                if (
+                    cls.__module__ == module.__name__ and
+                    issubclass(cls, BaseValidator) and
+                    hasattr(cls, 'name') and
+                    callable(getattr(cls, 'name'))
+                ):
+                    validator_class_map[cls.name()] = cls
+
+        registry = {}
         validation_config = self.config_manager.config.get('validation', {})
         if validation_config.get('validators'):
             for validator_config in validation_config['validators']:
-                if validator_config.get("type") in ["custom_file", "custom_function"]:
+                vtype = validator_config.get("type")
+                strict = validator_config.get("strict", True)
+                config_copy = validator_config.copy()
+                config_copy.pop("type", None)
+                config_copy.pop("strict", None)
+                if vtype in validator_class_map:
+                    cls = validator_class_map[vtype]
+                    registry[cls.name()] = cls
+                elif vtype in ["custom_file", "custom_function"]:
                     try:
                         validator_class = self._load_custom_validator(validator_config)
                         if validator_class:
-                            registry[validator_class.name] = validator_class
+                            registry[validator_class.name()] = validator_class
                     except Exception as e:
                         logger.error(f"Error loading custom validator: {str(e)}")
-        
+                else:
+                    raise ValueError(f"Unknown validator type: {vtype}")
         return registry
     
     def _setup_validation(self):
@@ -123,7 +139,7 @@ class LamiaEngine:
             logger.info("Engine started successfully")
             return True
         except Exception as e:
-            logger.error(f"Failed to start engine: {str(e)}")
+            logger.error(f"Failed to start engine: {e}")
             return False
     
     async def stop(self):

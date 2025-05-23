@@ -5,6 +5,7 @@ import readline  # For better input handling (command history)
 from typing import Optional
 import ast
 import argparse
+import select
 
 from lamia.engine import LamiaEngine
 from lamia.engine.llm_manager import MissingAPIKeysError
@@ -15,7 +16,10 @@ async def interactive_mode(engine: LamiaEngine):
     print("Enter your prompts (type 'SEND' on a new line to finish, type CANCEL to discard current input, Ctrl+C to quit, type STOP to interrupt a running prompt, 'exit' to quit)")
     print("----------------------------------------")
 
-    prompt_str = "\n🤖 > (SEND=submit, CANCEL=discard, STOP=interrupt)\n> "
+    prompt_str = "\n🤖 > (SEND=submit, CANCEL=discard, STOP=interrupt, Command/Ctrl C or EXIT=quit)\n> "
+
+    running_task = None
+    loop = asyncio.get_event_loop()
 
     while True:
         try:
@@ -30,47 +34,56 @@ async def interactive_mode(engine: LamiaEngine):
                     lines = []
                     # Show the prompt again for a new input
                     continue
+                # Check for exit commands
+                if line.lower() in ['exit', 'quit', ':q']:
+                    print("\nGoodbye! 👋")
+                    exit(0)
                 lines.append(line)
             user_input = "\n".join(lines).strip()
-            
-            # Support STOP keyword to cancel prompt (before sending)
-            if user_input.strip().upper() == 'STOP':
-                print("Prompt cancelled.")
-                continue
-            original_prompt = user_input  # Save for retry if needed
-            
-            # Check for exit commands
-            if user_input.lower() in ['exit', 'quit', ':q']:
-                print("\nGoodbye! 👋")
-                break
-                
+
             if not user_input:
+                print("Prompt is empty. Start typing a new prompt.")
                 continue
-                
+
             # Try to evaluate as a Python expression or code
             if run_python_code(user_input, mode='interactive'):
                 continue  # Skip LLM call if Python code executed
-                
+
             # Generate and print response using LamiaEngine
-            print("\nThinking... 🤔")
-            response = await engine.generate(user_input)
-            
-            print("\n🔮 Response:")
-            print("----------------------------------------")
-            print(response.text)
-            print("----------------------------------------")
-            print(f"Model: {response.model}")
-            if hasattr(response, 'usage') and response.usage:
-                print(f"Tokens used: {response.usage}")
-            # If validation info is present in response, print it
-            if hasattr(response, 'validation_result') and response.validation_result is not None:
-                print("\n🛡️ Validation Result:")
+            print("\nThinking... 🤔 (type STOP to interrupt)")
+            running_task = asyncio.create_task(engine.generate(user_input))
+            while not running_task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(running_task), timeout=0.2)
+                except asyncio.TimeoutError:
+                    # Check for STOP command from user
+                    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                        stop_input = sys.stdin.readline().strip()
+                        if stop_input.upper() == 'STOP':
+                            running_task.cancel()
+                            print("Prompt interrupted by user (STOP). Start typing a new prompt.")
+                            break
+                        elif user_input.lower() in ['exit', 'quit', ':q']:
+                            print("\nGoodbye! 👋")
+                            break
+            if running_task.done() and not running_task.cancelled():
+                response = running_task.result()
+                print("\n🔮 Response:")
                 print("----------------------------------------")
-                if response.validation_result.get('is_valid', False):
-                    print("✅ Valid output!")
-                else:
-                    print(f"❌ Invalid output: {response.validation_result.get('error_message', 'Unknown error')}")
+                print(response.text)
                 print("----------------------------------------")
+                print(f"Model: {response.model}")
+                if hasattr(response, 'usage') and response.usage:
+                    print(f"Tokens used: {response.usage}")
+                # If validation info is present in response, print it
+                if hasattr(response, 'validation_result') and response.validation_result is not None:
+                    print("\n🛡️ Validation Result:")
+                    print("----------------------------------------")
+                    if response.validation_result.get('is_valid', False):
+                        print("✅ Valid output!")
+                    else:
+                        print(f"❌ Invalid output: {response.validation_result.get('error_message', 'Unknown error')}")
+                    print("----------------------------------------")
         except KeyboardInterrupt:
             print("\n\nGoodbye! 👋")
             break

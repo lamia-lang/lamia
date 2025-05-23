@@ -73,3 +73,5 @@ validation:
     # - type: "regex"   # Regex validation
     - type: "length"  # Length validation
       min_length: 100
+    - type: "html_structure"  # HTML structure validation
+      model: HtmlStructure

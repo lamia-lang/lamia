@@ -1,11 +1,18 @@
 from typing import List, Optional, Dict, Any, Type
 from dataclasses import dataclass
 import logging
+import sys
 
 from ..base import BaseLLMAdapter, LLMResponse
 from .base import BaseValidator, ValidationResult
 
 logger = logging.getLogger(__name__)
+
+def grey_text(text: str) -> str:
+    # Only colorize if output is a TTY (terminal)
+    if sys.stdout.isatty():
+        return f"\033[90m{text}\033[0m"
+    return text
 
 @dataclass
 class RetryConfig:
@@ -48,8 +55,13 @@ class ValidationStrategy:
                 validator_class = self.validator_registry[validator_type]
                 validators.append(validator_class(strict=strict, **config_copy))
             else:
-                logger.warning(f"Unknown validator type: {validator_type}")
-                
+                raise ValueError(f"Unknown validator type: {validator_type}")
+        
+        # Check for duplicate validator names
+        names = [v.name for v in validators]
+        duplicates = set([name for name in names if names.count(name) > 1])
+        if duplicates:
+            raise ValueError(f"Duplicate validator name(s) detected: {', '.join(duplicates)}")
         return validators
 
     async def validate_response(self, response: str) -> ValidationResult:
@@ -106,7 +118,7 @@ class ValidationStrategy:
         while attempts < self.config.max_retries:
             attempts += 1
             try:
-                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{getattr(current_adapter, 'model', 'unknown')}':\n{current_prompt}")
+                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{getattr(current_adapter, 'model', 'unknown')}':\n{grey_text(current_prompt)}")
                 response = await current_adapter.generate(current_prompt, **kwargs)
                 logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{getattr(current_adapter, 'model', 'unknown')}':\n{response.text}")
                 
