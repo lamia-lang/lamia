@@ -15,15 +15,6 @@ class RegexValidator(BaseValidator):
     def name(cls) -> str:
         return "regex"
 
-    async def validate(self, response: str, **kwargs) -> ValidationResult:
-        if self.pattern.search(response):
-            return ValidationResult(is_valid=True)
-        return ValidationResult(
-            is_valid=False,
-            error_message=f"Response does not match pattern: {self.pattern.pattern}",
-            hint=f"Please ensure the response matches the required pattern: {self.pattern.pattern}"
-        )
-
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         if self.pattern.fullmatch(response.strip()):
             return ValidationResult(is_valid=True)
@@ -33,7 +24,7 @@ class RegexValidator(BaseValidator):
             hint=self.initial_hint
         )
 
-    async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         match = self.pattern.search(response)
         if match:
             return ValidationResult(is_valid=True, validated_text=match.group(0))

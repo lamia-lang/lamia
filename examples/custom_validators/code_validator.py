@@ -37,7 +37,7 @@ class CodeValidator(BaseValidator):
                 hint=self.initial_hint
             )
 
-    async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         # Forgiving: extract first code block (e.g., from markdown) and validate
         import re
         if self.language == "python":

@@ -5,6 +5,7 @@ import sys
 
 from ..base import BaseLLMAdapter, LLMResponse
 from .base import BaseValidator, ValidationResult
+from .validators import CONFLICTING_VALIDATOR_GROUPS
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,6 @@ class ValidationStrategy:
         validators = []
         if not self.config.validators:
             return validators
-            
         for validator_config in self.config.validators:
             validator_type = validator_config.get("type")
             strict = validator_config.get("strict", True)
@@ -56,13 +56,38 @@ class ValidationStrategy:
                 validators.append(validator_class(strict=strict, **config_copy))
             else:
                 raise ValueError(f"Unknown validator type: {validator_type}")
-        
         # Check for duplicate validator names
         names = [v.name for v in validators]
         duplicates = set([name for name in names if names.count(name) > 1])
         if duplicates:
             raise ValueError(f"Duplicate validator name(s) detected: {', '.join(duplicates)}")
-        return validators
+        # Conflict detection: only one file type group can be present
+        present_groups = []
+        for group in CONFLICTING_VALIDATOR_GROUPS:
+            if any(type(v) in group for v in validators):
+                present_groups.append(group)
+        if len(present_groups) > 1:
+            # List the file types (by class names) that are conflicting
+            group_names = [', '.join(sorted(cls.__name__ for cls in group)) for group in present_groups]
+            raise ValueError(
+                f"Conflicting file type validators detected: {group_names}. "
+                "Only validators from one file type group can be used together."
+            )
+        # Split into context-aware and non-context-aware, preserving config order within each group
+        context_aware = []
+        non_context_aware = []
+        for v in validators:
+            cls = v.__class__
+            has_validate = cls.validate is not BaseValidator.validate
+            has_strict = cls.validate_strict is not BaseValidator.validate_strict
+            has_perm = cls.validate_permissive is not BaseValidator.validate_permissive
+            if not has_validate and (has_strict and has_perm):
+                context_aware.append(v)
+            elif has_validate and not (has_strict or has_perm):
+                non_context_aware.append(v)
+            else:
+                raise TypeError(f"Validator {v.name} must implement either only validate() or both validate_strict() and validate_permissive().")
+        return context_aware + non_context_aware
 
     async def validate_response(self, response: str) -> ValidationResult:
         """Validate a response against all configured validators.

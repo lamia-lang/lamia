@@ -56,7 +56,7 @@ class ObjectValidator(BaseValidator):
                 hint=self.initial_hint
             )
 
-    async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         match = re.search(r'({[\s\S]*})', response)
         if not match:
             return ValidationResult(

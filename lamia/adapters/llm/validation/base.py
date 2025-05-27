@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 from dataclasses import dataclass
+import inspect
 
 @dataclass
 class ValidationResult:
@@ -20,27 +21,36 @@ class ValidationResult:
 class BaseValidator(ABC):
     """Base class for response validators.
     
-    Subclasses should implement both validate_strict (forgiving) and validate_restrictive (strict) methods.
+    Subclasses should implement both validate_strict (forgiving) and validate_permissive (strict) methods.
     The __call__ method dispatches to the correct method based on the strict flag.
     """
     def __init__(self, strict: bool = True):
         self.strict = strict
+        cls = self.__class__
+        has_validate = cls.validate is not BaseValidator.validate
+        has_strict = cls.validate_strict is not BaseValidator.validate_strict
+        has_perm = cls.validate_permissive is not BaseValidator.validate_permissive
+        if has_validate and (has_strict or has_perm):
+            raise TypeError("Implement either validate() OR validate_strict/validate_permissive, not both.")
+        if not (has_validate or (has_strict and has_perm)):
+            raise TypeError("Must implement either validate() or both validate_strict and validate_permissive.")
 
     async def validate(self, response: str, **kwargs) -> ValidationResult:
+        cls = self.__class__
+        # If validate is overridden, use it
+        if cls.validate is not BaseValidator.validate:
+            raise NotImplementedError("BaseValidator.validate should not be called directly if overridden.")
+        # Otherwise, dispatch to strict/permissive
         if self.strict:
             return await self.validate_strict(response, **kwargs)
         else:
-            return await self.validate_restrictive(response, **kwargs)
+            return await self.validate_permissive(response, **kwargs)
 
-    @abstractmethod
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        """Strict validation (default mode)."""
-        pass
+        raise NotImplementedError("Implement validate_strict for context-aware validators.")
 
-    @abstractmethod
-    async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
-        """Forgiving (non-strict) validation mode."""
-        pass
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+        raise NotImplementedError("Implement validate_permissive for context-aware validators.")
 
     @property
     @abstractmethod

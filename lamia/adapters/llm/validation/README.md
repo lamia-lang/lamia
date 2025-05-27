@@ -36,21 +36,44 @@ You can combine any number of built-in or custom validators this way.
 
 You can create custom validators as either classes (subclassing `BaseValidator`) or as standalone functions.
 
-### Strict and Forgiving Validation
+### Context-Aware vs Non-Context-Aware Validators
 
-Each validator supports a `strict` flag (set in config or code). If omitted, strict mode is used by default.
-- `strict: true` (default): Only accepts pure, valid output (e.g., only the code, with no extra text).
-- `strict: false`: Accepts output that contains a valid block (e.g., a valid code block within a longer response).
+There are two styles of validators you can implement:
 
-**You must implement `validate_strict` (required) and may implement `validate_restrictive` (optional) in your custom validator.**
+#### 1. Non-Context-Aware Validators
+- **Implement only the `validate()` method.**
+- These validators check the response as-is and do not "clean" or extract content.
+- Example: SentimentValidator (see below).
 
-### Class-based Example
+**Example:**
+```python
+from lamia.adapters.llm.validation.base import BaseValidator, ValidationResult
 
-Create a file, e.g., `examples/custom_validators/code_validator.py`:
+class SimpleSentimentValidator(BaseValidator):
+    @property
+    def name(self) -> str:
+        return "sentiment"
 
+    @property
+    def initial_hint(self) -> str:
+        return "Please ensure the response is positive."
+
+    async def validate(self, response: str, **kwargs) -> ValidationResult:
+        if "good" in response.lower() or "great" in response.lower():
+            return ValidationResult(is_valid=True)
+        return ValidationResult(is_valid=False, error_message="Response is not positive.")
+```
+
+#### 2. Context-Aware Validators
+- **Implement both `validate_strict()` and `validate_permissive()` methods.**
+- These validators extract or "clean" the relevant content in permissive mode, passing it to subsequent validators.
+- Example: CodeValidator (see below).
+
+**Example:**
 ```python
 from lamia.adapters.llm.validation.base import BaseValidator, ValidationResult
 import ast
+import re
 
 class CodeValidator(BaseValidator):
     @property
@@ -62,7 +85,6 @@ class CodeValidator(BaseValidator):
         return "Please return only valid Python code, with no explanation or extra text."
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        # Strict: only accept pure code
         try:
             ast.parse(response)
             return ValidationResult(is_valid=True)
@@ -73,14 +95,12 @@ class CodeValidator(BaseValidator):
                 hint=self.initial_hint
             )
 
-    async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
-        # Forgiving: extract first code block (e.g., from markdown) and validate
-        import re
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         match = re.search(r'```(?:python)?\n([\s\S]+?)```', response)
         code = match.group(1) if match else response
         try:
             ast.parse(code)
-            return ValidationResult(is_valid=True)
+            return ValidationResult(is_valid=True, validated_text=code)
         except Exception as e:
             return ValidationResult(
                 is_valid=False,
@@ -89,26 +109,18 @@ class CodeValidator(BaseValidator):
             )
 ```
 
-### Function-based Example
+**Important:**
+- Do **not** implement both `validate()` and `validate_strict`/`validate_permissive` in the same class.
+- If you implement only `validate()`, your validator is non-context-aware.
+- If you implement both `validate_strict()` and `validate_permissive()`, your validator is context-aware.
 
-Create a function, e.g., `examples/custom_validators/sentiment_validator.py`:
+---
 
-```python
-def validate_sentiment(response: str, **kwargs):
-    # Fake validation: succeed if 'good' is in the response, fail otherwise
-    if 'good' in response.lower():
-        return {
-            "is_valid": True,
-            "error_message": None,
-            "hint": "Response contains 'good'"
-        }
-    else:
-        return {
-            "is_valid": False,
-            "error_message": "Response does not contain 'good'",
-            "hint": "Please include the word 'good' in the response."
-        }
-```
+### Strict and Forgiving Validation
+
+Each validator supports a `strict` flag (set in config or code). If omitted, strict mode is used by default.
+- `strict: true` (default): Only accepts pure, valid output (e.g., only the code, with no extra text).
+- `strict: false`: Accepts output that contains a valid block (e.g., a valid code block within a longer response).
 
 ---
 

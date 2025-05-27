@@ -43,7 +43,7 @@ class AtomicTypeValidator(BaseValidator):
             hint=self.initial_hint
         )
 
-    async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         t = self._type_map.get(self.atomic_type)
         if t is None:
             return ValidationResult(

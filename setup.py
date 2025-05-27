@@ -8,9 +8,14 @@ setup(
         # Core dependencies
         "python-dotenv>=0.19.0",
         "requests>=2.25.0",     # For Ollama API and service checks
-        "aiohttp>=3.8.0",      # For async HTTP requests to OpenAI/Anthropic
+        "aiohttp>=3.9.0",      # For async HTTP requests to OpenAI/Anthropic
         "pyyaml>=6.0.0",       # For config file parsing
         "typing-extensions>=4.0.0",  # For enhanced type hints
+        "openai>=1.12.0",      # For OpenAI GPT models
+        "anthropic>=0.18.1",   # For Anthropic Claude models
+        "pydantic>=2.0.0",     # For config validation and object validation
+        "beautifulsoup4>=4.12.0",  # For HTML structure validation
+        "mistune>=3.0.0",        # For Markdown parsing
     ],
     entry_points={
         'console_scripts': [

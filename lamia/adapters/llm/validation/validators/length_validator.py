@@ -37,36 +37,4 @@ class LengthValidator(BaseValidator):
                 error_message=f"Response too long: {length} > {self.max_length}",
                 hint=f"Please ensure the response is no more than {self.max_length} characters long."
             )
-        return ValidationResult(is_valid=True)
-
-    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        length = len(response)
-        if self.min_length and length < self.min_length:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Response too short: {length} < {self.min_length}",
-                hint=self.initial_hint
-            )
-        if self.max_length and length > self.max_length:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Response too long: {length} > {self.max_length}",
-                hint=self.initial_hint
-            )
-        return ValidationResult(is_valid=True)
-
-    async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
-        length = len(response)
-        if self.min_length and length < self.min_length:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Response too short: {length} < {self.min_length}",
-                hint=self.initial_hint
-            )
-        if self.max_length and length > self.max_length:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Response too long: {length} > {self.max_length}",
-                hint=self.initial_hint
-            )
-        return ValidationResult(is_valid=True, validated_text=response) 
+        return ValidationResult(is_valid=True) 

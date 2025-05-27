@@ -1,56 +1,24 @@
 import re
 import json
 from ..base import BaseValidator, ValidationResult
+from .file_structure_validators.json_structure_validator import JSONStructureValidator
 
 class JSONValidator(BaseValidator):
-    """Validates if the response is valid JSON."""
+    """Validates if the response is valid JSON (well-formed, not structure-checked)."""
+    def __init__(self, strict: bool = True):
+        super().__init__(strict=strict)
+        self._delegate = JSONStructureValidator(model=None, strict=strict)
+
     @classmethod
     def name(cls) -> str:
         return "json"
 
     @property
     def initial_hint(self) -> str:
-        return "Please return only valid JSON, with no explanation or extra text. The response must be a single JSON object or array."
-
-    async def validate(self, response: str, **kwargs) -> ValidationResult:
-        try:
-            json.loads(response)
-            return ValidationResult(is_valid=True)
-        except json.JSONDecodeError as e:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Invalid JSON: {str(e)}",
-                hint="Please ensure the response is valid JSON. All keys and string values must be in double quotes, and the structure must be correct."
-            )
+        return self._delegate.initial_hint
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        stripped = response.strip()
-        try:
-            json.loads(stripped)
-            return ValidationResult(is_valid=True)
-        except json.JSONDecodeError as e:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Invalid JSON: {str(e)}",
-                hint=self.initial_hint
-            )
+        return await self._delegate.validate_strict(response, **kwargs)
 
-    async def validate_restrictive(self, response: str, **kwargs) -> ValidationResult:
-        stripped = response.strip()
-        match = re.search(r'({[\s\S]*})|\[([\s\S]*)\]', stripped)
-        if not match:
-            return ValidationResult(
-                is_valid=False,
-                error_message="No valid JSON object or array found.",
-                hint=self.initial_hint
-            )
-        json_block = match.group(0)
-        try:
-            json.loads(json_block)
-            return ValidationResult(is_valid=True, validated_text=json_block)
-        except json.JSONDecodeError as e:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Invalid JSON: {str(e)}",
-                hint=self.initial_hint
-            ) 
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+        return await self._delegate.validate_permissive(response, **kwargs) 
