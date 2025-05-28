@@ -109,7 +109,57 @@ class HTMLStructureValidator(DocumentStructureValidator):
         return tree.find_all(key)
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        return await super().validate_strict(response, **kwargs)
+        try:
+            tree = self.parse(response)
+        except Exception as e:
+            return ValidationResult(
+                is_valid=False,
+                error_message=f"Invalid file: {e}",
+                hint=self.initial_hint
+            )
+        # If the root has an <html> element, start validation from there
+        html_elem = self.find_element(tree, "html")
+        if html_elem is not None:
+            tree = html_elem
+        else:
+            return ValidationResult(
+                is_valid=False,
+                error_message="No <html> tag found",
+                hint=self.initial_hint
+            )
+        valid, err = self.validate_strict_recursive(tree, self.model)
+        if not valid:
+            return ValidationResult(
+                is_valid=False,
+                error_message=f"Strict validation failed: {err}",
+                hint=self.initial_hint
+            )
+        return ValidationResult(is_valid=True)
 
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
-        return await super().validate_permissive(response, **kwargs) 
+        try:
+            tree = self.parse(response)
+        except Exception as e:
+            return ValidationResult(
+                is_valid=False,
+                error_message=f"Invalid file: {e}",
+                hint=self.initial_hint
+            )
+        # If the root has an <html> element, start validation from there
+        html_elem = self.find_element(tree, "html")
+        if html_elem is not None:
+            tree = html_elem
+        else:
+            return ValidationResult(
+                is_valid=False,
+                error_message="No <html> tag found",
+                hint=self.initial_hint
+            )
+        valid, err = self.validate_permissive_recursive(tree, self.model)
+        if not valid:
+            return ValidationResult(
+                is_valid=False,
+                error_message=f"Permissive validation failed: {err}",
+                hint=self.initial_hint
+            )
+        return ValidationResult(is_valid=True) 

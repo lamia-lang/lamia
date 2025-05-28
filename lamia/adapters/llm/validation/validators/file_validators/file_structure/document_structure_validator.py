@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from ....base import BaseValidator, ValidationResult
+import typing
 
 class DocumentStructureValidator(BaseValidator, ABC):
     def __init__(self, model, strict=True):
@@ -47,6 +48,9 @@ class DocumentStructureValidator(BaseValidator, ABC):
             elem = self.find_element(tree, field)
             if elem is None:
                 return False, f"Missing <{field}> as direct child."
+            # Support Any and object types: accept any content
+            if submodel is typing.Any or submodel is object:
+                continue
             if hasattr(submodel, "model_fields"):
                 valid, err = self.validate_strict_recursive(elem, submodel)
                 if not valid:
@@ -69,6 +73,9 @@ class DocumentStructureValidator(BaseValidator, ABC):
             elems = self.find_all(tree, field)
             if not elems:
                 return False, f"Missing <{field}> tag/field anywhere in document."
+            # Support Any and object types: accept any content
+            if submodel is typing.Any or submodel is object:
+                continue
             if hasattr(submodel, "model_fields"):
                 found_valid = False
                 for elem in elems:
