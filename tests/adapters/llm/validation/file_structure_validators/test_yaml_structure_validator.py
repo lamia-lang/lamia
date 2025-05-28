@@ -1,6 +1,6 @@
 import pytest
 from pydantic import BaseModel
-from lamia.adapters.llm.validation.validators.file_structure_validators import YAMLStructureValidator
+from lamia.adapters.llm.validation.validators.file_validators import YAMLStructureValidator
 
 class SimpleModel(BaseModel):
     title: str

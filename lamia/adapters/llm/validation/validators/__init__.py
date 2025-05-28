@@ -1,11 +1,17 @@
-from .html_validator import HTMLValidator
-from .json_validator import JSONValidator
 from .regex_validator import RegexValidator
 from .length_validator import LengthValidator
 from .atomic_type_validator import AtomicTypeValidator
 from .object_validator import ObjectValidator
-from .file_structure_validators import (
-    DocumentStructureValidator,
+from .file_validators import (
+    HTMLValidator,
+    JSONValidator,
+    YAMLValidator,
+    XMLValidator,
+    MarkdownValidator,
+    CSVValidator,
+)
+
+from .file_validators import (
     HTMLStructureValidator,
     JSONStructureValidator,
     YAMLStructureValidator,
@@ -15,19 +21,22 @@ from .file_structure_validators import (
 )
 
 __all__ = [
-    "HTMLValidator",
-    "JSONValidator",
     "RegexValidator",
     "LengthValidator",
     "AtomicTypeValidator",
     "ObjectValidator",
-    "DocumentStructureValidator",
     "HTMLStructureValidator",
     "JSONStructureValidator",
     "YAMLStructureValidator",
     "XMLStructureValidator",
     "MarkdownStructureValidator",
     "CSVStructureValidator",
+    "HTMLValidator",
+    "JSONValidator",
+    "YAMLValidator",
+    "XMLValidator",
+    "MarkdownValidator",
+    "CSVValidator",
 ] 
 
 # Group all validators by file type for conflict detection

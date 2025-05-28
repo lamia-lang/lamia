@@ -3,7 +3,7 @@ import io
 import importlib
 from pydantic import BaseModel, create_model, ValidationError
 from .document_structure_validator import DocumentStructureValidator
-from ...base import ValidationResult
+from ....base import ValidationResult
 
 def import_model_from_path(path: str, default_module: str = "models"):
     if "." in path:

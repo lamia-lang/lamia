@@ -1,6 +1,6 @@
 import pytest
 from pydantic import BaseModel
-from lamia.adapters.llm.validation.validators.file_structure_validators import HTMLStructureValidator
+from lamia.adapters.llm.validation.validators.file_validators import HTMLStructureValidator
 
 class SimpleModel(BaseModel):
     title: str

@@ -1,17 +1,15 @@
-import re
-import json
-from ..base import BaseValidator, ValidationResult
-from .file_structure_validators.json_structure_validator import JSONStructureValidator
+from ...base import BaseValidator, ValidationResult
+from .file_structure.yaml_structure_validator import YAMLStructureValidator
 
-class JSONValidator(BaseValidator):
-    """Validates if the response is valid JSON (well-formed, not structure-checked)."""
+class YAMLValidator(BaseValidator):
+    """Validates if the response is valid HTML (well-formed, not structure-checked)."""
     def __init__(self, strict: bool = True):
         super().__init__(strict=strict)
-        self._delegate = JSONStructureValidator(model=None, strict=strict)
+        self._delegate = YAMLStructureValidator(model=None, strict=strict)
 
     @classmethod
     def name(cls) -> str:
-        return "json"
+        return "yaml"
 
     @property
     def initial_hint(self) -> str:

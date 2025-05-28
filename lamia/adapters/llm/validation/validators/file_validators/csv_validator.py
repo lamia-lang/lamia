@@ -1,17 +1,15 @@
-import re
-import xml.etree.ElementTree as ET
-from ..base import BaseValidator, ValidationResult
-from .file_structure_validators.html_structure_validator import HTMLStructureValidator
+from ...base import BaseValidator, ValidationResult
+from .file_structure.csv_structure_validator import CSVStructureValidator
 
-class HTMLValidator(BaseValidator):
-    """Validates if the response is valid HTML (well-formed, not structure-checked)."""
+class CSVValidator(BaseValidator):  
+    """Validates if the response is valid CSV (well-formed, not structure-checked)."""
     def __init__(self, strict: bool = True):
         super().__init__(strict=strict)
-        self._delegate = HTMLStructureValidator(model=None, strict=strict)
+        self._delegate = CSVStructureValidator(model=None, strict=strict)
 
     @classmethod
     def name(cls) -> str:
-        return "html"
+        return "csv"
 
     @property
     def initial_hint(self) -> str:

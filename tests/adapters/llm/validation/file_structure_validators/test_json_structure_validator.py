@@ -1,6 +1,6 @@
 import pytest
 from pydantic import BaseModel
-from lamia.adapters.llm.validation.validators.file_structure_validators import JSONStructureValidator
+from lamia.adapters.llm.validation.validators.file_validators import JSONStructureValidator
 
 class SimpleModel(BaseModel):
     title: str

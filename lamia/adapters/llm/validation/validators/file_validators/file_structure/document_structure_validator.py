@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from ..base import BaseValidator, ValidationResult
+from ....base import BaseValidator, ValidationResult
 
 class DocumentStructureValidator(BaseValidator, ABC):
     def __init__(self, model, strict=True):
@@ -81,7 +81,14 @@ class DocumentStructureValidator(BaseValidator, ABC):
         return True, None
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        tree = self.parse(response)
+        try:
+            tree = self.parse(response)
+        except Exception as e:
+            return ValidationResult(
+                is_valid=False,
+                error_message=f"Invalid file: {e}",
+                hint=self.initial_hint
+            )
         valid, err = self.validate_strict_recursive(tree, self.model)
         if not valid:
             return ValidationResult(
@@ -92,7 +99,14 @@ class DocumentStructureValidator(BaseValidator, ABC):
         return ValidationResult(is_valid=True)
 
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
-        tree = self.parse(response)
+        try:
+            tree = self.parse(response)
+        except Exception as e:
+            return ValidationResult(
+                is_valid=False,
+                error_message=f"Invalid file: {e}",
+                hint=self.initial_hint
+            )
         valid, err = self.validate_permissive_recursive(tree, self.model)
         if not valid:
             return ValidationResult(
