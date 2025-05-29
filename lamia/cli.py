@@ -6,6 +6,7 @@ from typing import Optional
 import ast
 import argparse
 import select
+import yaml
 
 from lamia.engine import LamiaEngine
 from lamia.engine.llm_manager import MissingAPIKeysError
@@ -139,8 +140,16 @@ def main():
     prompt_file = args.filename or args.file
     config_path = args.config
 
+    config_dict = None
+    if config_path:
+        with open(config_path, 'r') as f:
+            config_dict = yaml.safe_load(f)
+    else:
+        print("❌ Error: --config is required for CLI operation.", file=sys.stderr)
+        sys.exit(1)
+
     async def run():
-        engine = LamiaEngine(config_path)
+        engine = LamiaEngine(config_dict)
         try:
             engine_started = await engine.start()
         except MissingAPIKeysError as e:

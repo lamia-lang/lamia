@@ -1,38 +1,35 @@
 import os
-import yaml
 from typing import Dict, Any, Optional
+import yaml
 
 class ConfigManager:
     """
     Manages configuration settings for the Lamia project.
-    Handles loading and accessing configuration from config.yaml.
+    Handles loading and accessing configuration from a config dict.
+    On initialization, enriches api_keys from environment variables if missing in the dict.
+    After initialization, all lookups are from the dict only.
     """
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config: Dict[str, Any]):
         """
         Initialize the config manager.
         
         Args:
-            config_path: Optional path to config file. If None, uses default location.
+            config: Configuration dictionary.
         """
-        self.config_path = config_path or self._get_default_config_path()
-        self.config: Dict[str, Any] = {}
-        self.load_config()
+        if not isinstance(config, dict):
+            raise ValueError("ConfigManager expects a config dict.")
+        # Enrich api_keys from env if missing
+        api_keys = config.get('api_keys', {}).copy() if config.get('api_keys') else {}
+        for provider, env_var in {'openai': 'OPENAI_API_KEY', 'anthropic': 'ANTHROPIC_API_KEY'}.items():
+            if provider not in api_keys and os.getenv(env_var):
+                api_keys[provider] = os.getenv(env_var)
+        config['api_keys'] = api_keys
+        self.config: Dict[str, Any] = config
 
-    def _get_default_config_path(self) -> str:
-        """Get the default path to the config file."""
-        # Config is now in the root directory
-        return os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'config.yaml')
-
-    def load_config(self) -> None:
-        """Load configuration from the YAML file."""
-        try:
-            with open(self.config_path, 'r') as f:
-                self.config = yaml.safe_load(f)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Config file not found at {self.config_path}")
-        except yaml.YAMLError as e:
-            raise ValueError(f"Error parsing config file: {e}")
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]):
+        return cls(config_dict)
 
     def get_config(self) -> Dict[str, Any]:
         """Get the entire configuration dictionary."""
@@ -79,3 +76,8 @@ class ConfigManager:
                 # No override, just a string
                 return None
         return None 
+
+    def get_api_key(self, provider: str) -> Optional[str]:
+        # Only return from the dict, never from the environment
+        api_keys = self.config.get('api_keys', {})
+        return api_keys.get(provider) 

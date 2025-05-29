@@ -25,38 +25,32 @@ class MissingAPIKeysError(Exception):
                    "Alternatively, remove these engines from your default or fallback_models in config.yaml.")
         super().__init__(message)
 
-def check_api_key(model_type: str) -> str:
+def check_api_key(model_type: str, config_manager: ConfigManager) -> Optional[str]:
     """
-    Get and validate API key from environment variables.
-    Exits with error if required variables are missing.
-    
-    Args:
-        model_type: The type of model being used ('openai' or 'anthropic')
-        
-    Returns:
-        str: The API key if found
-        
-    Raises:
-        SystemExit: If the required API key is not found
+    Get and validate API key from config_manager config.
+    Returns the API key if found, otherwise raises MissingAPIKeysError.
+    If a 'lamia' API key is present in config, use it to proxy non-local APIs.
     """
     env_vars = {
         'openai': 'OPENAI_API_KEY',
-        'anthropic': 'ANTHROPIC_API_KEY'
+        'anthropic': 'ANTHROPIC_API_KEY',
+        'lamia': 'LAMIA_API_KEY'
     }
-    
-    if model_type not in env_vars:
-        return None
-        
-    env_var = env_vars[model_type]
-    api_key = os.getenv(env_var)
-    
+    config = config_manager.get_config()
+    # Proxy logic: if 'lamia' API key is present, use it for non-local APIs
+    if model_type in ('openai', 'anthropic'):
+        lamia_api_key = config.get('api_keys', {}).get('lamia')
+        print("api_key:",lamia_api_key)
+        if lamia_api_key:
+            return lamia_api_key
+    # Otherwise, get the specific API key
+    api_key = config.get('api_keys', {}).get(model_type)
     if not api_key:
-        print(f"Error: {env_var} environment variable is not set")
-        print(f"Please set it using: export {env_var}=your-api-key")
-        print("You can also add it to your .env file")
-        print(f"{env_var}=your-api-key")
-        sys.exit(1)
-        
+        # For backward compatibility, try env var as fallback
+        env_var = env_vars.get(model_type)
+        api_key = os.getenv(env_var) if env_var else None
+    if not api_key:
+        raise MissingAPIKeysError([(model_type, env_vars.get(model_type, 'API_KEY'))])
     return api_key
 
 def is_ollama_running() -> bool:
@@ -164,8 +158,8 @@ def check_all_required_api_keys(config_manager: ConfigManager):
     missing = []
     for engine in required_engines:
         if engine in ('openai', 'anthropic'):
-            env_var = 'OPENAI_API_KEY' if engine == 'openai' else 'ANTHROPIC_API_KEY'
-            if not os.getenv(env_var):
+            if not config_manager.get_api_key(engine):
+                env_var = 'OPENAI_API_KEY' if engine == 'openai' else 'ANTHROPIC_API_KEY'
                 missing.append((engine, env_var))
     if missing:
         raise MissingAPIKeysError(missing)
@@ -207,13 +201,13 @@ def create_adapter_from_config(config_manager: ConfigManager, override_model: st
 
     if provider_name == "openai":
         return OpenAIAdapter(
-            api_key=check_api_key('openai'),
+            api_key=check_api_key('openai', config_manager),
             model=model_name,
             has_context_memory=has_context_memory
         )
     elif provider_name == "anthropic":
         return AnthropicAdapter(
-            api_key=check_api_key('anthropic'),
+            api_key=check_api_key('anthropic', config_manager),
             model=model_name,
             has_context_memory=has_context_memory
         )

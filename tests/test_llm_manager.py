@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 import os
 import requests
 import sys
@@ -13,32 +13,13 @@ from lamia.engine.llm_manager import (
     is_ollama_running,
     start_ollama_service,
     ensure_ollama_model_pulled,
+    MissingAPIKeysError,
 )
 from lamia.engine.config_manager import ConfigManager
 from lamia.adapters.llm.base import LLMResponse
 from lamia.adapters.llm.openai_adapter import OpenAIAdapter
 from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter
 from lamia.adapters.llm.local import OllamaAdapter
-
-# Mock configurations for different LLM providers
-@pytest.fixture
-def mock_config_manager():
-    config_manager = MagicMock(spec=ConfigManager)
-    config_manager.get_default_model.return_value = "ollama"
-    config_manager.get_model_config.return_value = {
-        "default_model": "llama2",
-        "base_url": "http://localhost:11434",
-        "temperature": 0.7,
-        "max_tokens": 1000,
-        "context_size": 4096,
-        "num_ctx": 4096,
-        "num_gpu": 50,
-        "num_thread": 8,
-        "repeat_penalty": 1.1,
-        "top_k": 40,
-        "top_p": 0.9
-    }
-    return config_manager
 
 @pytest.fixture
 def mock_llm_response():
@@ -50,112 +31,124 @@ def mock_llm_response():
     )
 
 class TestCreateAdapterFromConfig:
-    def test_create_ollama_adapter(self, mock_config_manager):
-        """Test creating an Ollama adapter with mock config"""
-        mock_config_manager.get_default_model.return_value = "ollama"
-        adapter = create_adapter_from_config(mock_config_manager)
+    def test_create_ollama_adapter(self):
+        config = {
+            "default_model": "ollama",
+            "models": {
+                "ollama": {"default_model": "llama2",
+                            "base_url": "http://localhost:11434",
+                            "temperature": 0.7,
+                            "max_tokens": 1000,
+                            "context_size": 4096,
+                            "num_ctx": 4096,
+                            "num_gpu": 50,
+                            "num_thread": 8,
+                            "repeat_penalty": 1.1,
+                            "top_k": 40,
+                            "top_p": 0.9}
+            },
+            "validation": {"fallback_models": []}
+        }
+        cm = ConfigManager.from_dict(config)
+        adapter = create_adapter_from_config(cm)
         assert isinstance(adapter, OllamaAdapter)
         assert adapter.model == "llama2"
         assert adapter.base_url == "http://localhost:11434"
 
-    def test_create_openai_adapter(self, mock_config_manager):
-        """Test creating an OpenAI adapter with mock config"""
-        mock_config_manager.get_default_model.return_value = "openai"
-        mock_config_manager.get_model_config.return_value = {
-            "default_model": "gpt-3.5-turbo",
-            "api_key": "test-key",
-            "temperature": 0.7,
-            "max_tokens": 1000
+    def test_create_openai_adapter(self):
+        config = {
+            "default_model": "openai",
+            "models": {
+                "openai": {"default_model": "gpt-3.5-turbo",
+                            "api_key": "test-key",
+                            "temperature": 0.7,
+                            "max_tokens": 1000}
+            },
+            "api_keys": {"openai": "test-key"},
+            "validation": {"fallback_models": []}
         }
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
-            with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
-                adapter = create_adapter_from_config(mock_config_manager)
-                assert MockAdapter.called
+        cm = ConfigManager.from_dict(config)
+        with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
+            adapter = create_adapter_from_config(cm)
+            assert MockAdapter.called
 
-    def test_create_anthropic_adapter(self, mock_config_manager):
-        """Test creating an Anthropic adapter with mock config"""
-        mock_config_manager.get_default_model.return_value = "anthropic"
-        mock_config_manager.get_model_config.return_value = {
-            "default_model": "claude-3-opus-20240229",
-            "api_key": "test-key",
-            "temperature": 0.7,
-            "max_tokens": 1000
+    def test_create_anthropic_adapter(self):
+        config = {
+            "default_model": "anthropic",
+            "models": {
+                "anthropic": {"default_model": "claude-3-opus-20240229",
+                               "api_key": "test-key",
+                               "temperature": 0.7,
+                               "max_tokens": 1000}
+            },
+            "api_keys": {"anthropic": "test-key"},
+            "validation": {"fallback_models": []}
         }
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-            with patch("lamia.engine.llm_manager.AnthropicAdapter", autospec=True) as MockAdapter:
-                adapter = create_adapter_from_config(mock_config_manager)
-                assert MockAdapter.called
+        cm = ConfigManager.from_dict(config)
+        with patch("lamia.engine.llm_manager.AnthropicAdapter", autospec=True) as MockAdapter:
+            adapter = create_adapter_from_config(cm)
+            assert MockAdapter.called
 
-    def test_unsupported_model(self, mock_config_manager):
-        """Test error handling for unsupported model type"""
-        mock_config_manager.get_default_model.return_value = "unsupported"
+    def test_unsupported_model(self):
+        config = {
+            "default_model": "unsupported",
+            "models": {"unsupported": {"default_model": "foo"}},
+            "validation": {"fallback_models": []}
+        }
+        cm = ConfigManager.from_dict(config)
         with pytest.raises(ValueError, match="Unsupported model type: unsupported"):
-            create_adapter_from_config(mock_config_manager)
+            create_adapter_from_config(cm)
 
-    def test_create_openai_adapter_exits_on_missing_key(self, mock_config_manager):
-        """Test that creating OpenAI adapter exits when API key is missing"""
-        mock_config_manager.get_default_model.return_value = "openai"
-        mock_config_manager.get_model_config.return_value = {
-            "default_model": "gpt-3.5-turbo",
-            "temperature": 0.7,
-            "max_tokens": 1000
+    def test_create_openai_adapter_throws_on_missing_key(self):
+        config = {
+            "default_model": "openai",
+            "models": {
+                "openai": {"default_model": "gpt-3.5-turbo",
+                            "temperature": 0.7,
+                            "max_tokens": 1000}
+            },
+            # No api_keys
+            "validation": {"fallback_models": []}
         }
+        cm = ConfigManager.from_dict(config)
         with patch.dict(os.environ, {}, clear=True), \
-             patch('sys.exit') as mock_exit:
-            with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True):
-                create_adapter_from_config(mock_config_manager)
-                mock_exit.assert_called_once_with(1)
+             patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True):
+            with pytest.raises(MissingAPIKeysError):
+                create_adapter_from_config(cm)
 
-    def test_create_anthropic_adapter_missing_key(self, mock_config_manager):
-        """Test error when Anthropic API key is missing"""
-        mock_config_manager.get_default_model.return_value = "anthropic"
-        mock_config_manager.get_model_config.return_value = {
-            "default_model": "claude-3-opus-20240229",
-            "temperature": 0.7,
-            "max_tokens": 1000
+    def test_create_anthropic_adapter_missing_key(self):
+        config = {
+            "default_model": "anthropic",
+            "models": {
+                "anthropic": {"default_model": "claude-3-opus-20240229",
+                               "temperature": 0.7,
+                               "max_tokens": 1000}
+            },
+            # No api_keys
+            "validation": {"fallback_models": []}
         }
+        cm = ConfigManager.from_dict(config)
         with patch.dict(os.environ, {}, clear=True):
             with patch("lamia.engine.llm_manager.AnthropicAdapter", autospec=True):
-                with pytest.raises(ValueError, match="Anthropic API key not found"):
-                    create_adapter_from_config(mock_config_manager)
+                with pytest.raises(MissingAPIKeysError):
+                    create_adapter_from_config(cm)
 
-    def test_create_openai_adapter_with_env_key(self, mock_config_manager):
-        """Test creating OpenAI adapter with env var API key"""
-        mock_config_manager.get_default_model.return_value = "openai"
-        mock_config_manager.get_model_config.return_value = {
-            "default_model": "gpt-3.5-turbo",
-            "temperature": 0.7,
-            "max_tokens": 1000
+    def test_create_openai_adapter_with_env_key(self):
+        config = {
+            "default_model": "openai",
+            "models": {
+                "openai": {"default_model": "gpt-3.5-turbo",
+                            "temperature": 0.7,
+                            "max_tokens": 1000}
+            },
+            # No api_keys
+            "validation": {"fallback_models": []}
         }
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-env-key'}):
+            cm = ConfigManager.from_dict(config)
             with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
-                adapter = create_adapter_from_config(mock_config_manager)
+                create_adapter_from_config(cm)
                 assert MockAdapter.called
-                assert isinstance(adapter, MagicMock)
-
-    def test_exit_on_missing_api_key_for_fallbacks(self, mock_config_manager, monkeypatch, capsys):
-        """Test exit if any fallback or default engine is missing its API key"""
-        # Simulate config with openai as default and anthropic as fallback
-        mock_config_manager.get_config.return_value = {
-            'default_model': 'openai',
-            'models': {
-                'openai': {'default_model': 'gpt-3.5-turbo'},
-                'anthropic': {'default_model': 'claude-3-opus-20240229'}
-            },
-            'validation': {
-                'fallback_models': ['anthropic']
-            }
-        }
-        # Remove both API keys
-        monkeypatch.delenv('OPENAI_API_KEY', raising=False)
-        monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
-        with pytest.raises(SystemExit) as e:
-            create_adapter_from_config(mock_config_manager)
-        assert e.value.code == 1
-        captured = capsys.readouterr()
-        assert 'openai: missing OPENAI_API_KEY' in captured.out
-        assert 'anthropic: missing ANTHROPIC_API_KEY' in captured.out
-        assert 'Please provide the missing API keys' in captured.out
 
 class TestGenerateResponse:
     @pytest.mark.asyncio

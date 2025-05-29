@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, Dict, Type, Any
+from typing import Optional, Dict, Type, Any, Union
 import logging
 from pathlib import Path
 import importlib
@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 class LamiaEngine:
     """Main engine for Lamia that handles runtime configuration and execution."""
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config: Dict[str, Any]):
         """Initialize the Lamia engine.
         
         Args:
-            config_path: Optional path to config file. If None, uses default lookup paths.
+            config: Configuration dictionary.
         """
-        self.config_manager = ConfigManager(config_path)
+        self.config_manager = ConfigManager(config)
         self.adapter = None
         self.validation_strategy = None
         self._setup_logging()
