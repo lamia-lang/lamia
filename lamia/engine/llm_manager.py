@@ -53,7 +53,7 @@ def check_api_key(model_type: str) -> str:
     if not api_key:
         print(f"Error: {env_var} environment variable is not set")
         print(f"Please set it using: export {env_var}=your-api-key")
-        print("You can also add it to your .env file:")
+        print("You can also add it to your .env file")
         print(f"{env_var}=your-api-key")
         sys.exit(1)
         
@@ -229,7 +229,7 @@ def create_adapter_from_config(config_manager: ConfigManager, override_model: st
             configs=configs
         )
     else:
-        raise ValueError(f"Unknown provider: {provider_name}")
+        raise ValueError(f"Unsupported model type: {provider_name}")
 
 async def generate_response(prompt: str, config_path: str = None) -> LLMResponse:
     """
