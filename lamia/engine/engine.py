@@ -62,17 +62,13 @@ class LamiaEngine:
             
         return None
     
-    def _get_validator_registry(self) -> Dict[str, BaseValidator]:
-        """Preload all validators in the validators folder and use the one matching the user-requested short name."""
-        # Discover all validator classes in the validators folder
+    def _discover_validators_recursively(self, package) -> dict:
+        """Recursively discover all validator classes in a package and its submodules."""
         validator_class_map = {}
-        package_path = validators_pkg.__path__
-        for _, module_name, _ in pkgutil.iter_modules(package_path):
-            if module_name.startswith('__'):
-                continue
-            module = importlib.import_module(f"lamia.adapters.llm.validation.validators.{module_name}")
-            for name, cls in inspect.getmembers(module, inspect.isclass):
-                # Only consider classes defined in this module (not imports)
+        for finder, name, ispkg in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
+            module = importlib.import_module(name)
+            # Add classes from this module
+            for _, cls in inspect.getmembers(module, inspect.isclass):
                 if (
                     cls.__module__ == module.__name__ and
                     issubclass(cls, BaseValidator) and
@@ -80,7 +76,18 @@ class LamiaEngine:
                     callable(getattr(cls, 'name'))
                 ):
                     validator_class_map[cls.name()] = cls
+            # If it's a package, recurse
+            if ispkg:
+                try:
+                    validator_class_map.update(self._discover_validators_recursively(module))
+                except Exception as e:
+                    logger.warning(f"Could not import submodule {name}: {e}")
+        return validator_class_map
 
+    def _get_validator_registry(self) -> Dict[str, BaseValidator]:
+        """Preload all validators in the validators folder and use the one matching the user-requested short name."""
+        # Recursively discover all validator classes in the validators folder
+        validator_class_map = self._discover_validators_recursively(validators_pkg)
         registry = {}
         validation_config = self.config_manager.config.get('validation', {})
         if validation_config.get('validators'):
