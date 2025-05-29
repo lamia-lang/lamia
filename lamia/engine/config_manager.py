@@ -2,6 +2,26 @@ import os
 from typing import Dict, Any, Optional
 import yaml
 
+PROVIDER_REGISTRY = {
+    "openai": {
+        "is_remote": True,
+        "env_var": "OPENAI_API_KEY"
+    },
+    "anthropic": {
+        "is_remote": True,
+        "env_var": "ANTHROPIC_API_KEY"
+    },
+    "lamia": {
+        "is_remote": True,
+        "env_var": "LAMIA_API_KEY"
+    },
+    "ollama": {
+        "is_remote": False,
+        "env_var": None
+    },
+    # Add more providers here as needed
+}
+
 class ConfigManager:
     """
     Manages configuration settings for the Lamia project.
@@ -21,8 +41,9 @@ class ConfigManager:
             raise ValueError("ConfigManager expects a config dict.")
         # Enrich api_keys from env if missing
         api_keys = config.get('api_keys', {}).copy() if config.get('api_keys') else {}
-        for provider, env_var in {'openai': 'OPENAI_API_KEY', 'anthropic': 'ANTHROPIC_API_KEY'}.items():
-            if provider not in api_keys and os.getenv(env_var):
+        for provider in PROVIDER_REGISTRY:
+            env_var = self.get_env_var_name(provider)
+            if provider not in api_keys and env_var and os.getenv(env_var):
                 api_keys[provider] = os.getenv(env_var)
         config['api_keys'] = api_keys
         self.config: Dict[str, Any] = config
@@ -30,6 +51,14 @@ class ConfigManager:
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]):
         return cls(config_dict)
+
+    @staticmethod
+    def is_remote_provider(provider: str) -> bool:
+        return PROVIDER_REGISTRY.get(provider, {}).get("is_remote", False)
+
+    @staticmethod
+    def get_env_var_name(provider: str) -> Optional[str]:
+        return PROVIDER_REGISTRY.get(provider, {}).get("env_var")
 
     def get_config(self) -> Dict[str, Any]:
         """Get the entire configuration dictionary."""

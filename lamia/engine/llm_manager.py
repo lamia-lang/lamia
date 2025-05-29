@@ -19,10 +19,16 @@ class MissingAPIKeysError(Exception):
     """Raised when one or more required API keys are missing for LLM engines."""
     def __init__(self, missing):
         self.missing = missing
-        message = ("\n❌ The following engines are missing required API keys:\n" +
-                   "\n".join([f"- {engine}: missing {env_var}" for engine, env_var in missing]) +
-                   "\n\nPlease provide the missing API keys as environment variables or in your .env file.\n" +
-                   "Alternatively, remove these engines from your default or fallback_models in config.yaml.")
+        message = (
+            "\n❌ The following engines are missing required API keys:\n" +
+            "\n".join([f"- {engine}: missing {env_var}" for engine, env_var in missing]) +
+            "\n\nPlease provide the missing API keys in one of the following ways:\n"
+            "- As environment variables (e.g., export OPENAI_API_KEY=...)\n"
+            "- In your config file under api_keys (e.g., api_keys: {openai: ...})\n"
+            "- As a parameter to the Lamia() constructor (e.g., Lamia(..., api_keys={...}))\n"
+            "You can also use LAMIA_API_KEY to proxy remote adapters (openai, anthropic).\n"
+            "Alternatively, remove these engines from your default or fallback_models in config."
+        )
         super().__init__(message)
 
 def check_api_key(model_type: str, config_manager: ConfigManager) -> Optional[str]:
@@ -150,16 +156,18 @@ def check_all_required_api_keys(config_manager: ConfigManager):
     """
     Check that all required API keys for default and fallback engines are present.
     If any are missing, raise MissingAPIKeysError.
+    Accepts LAMIA_API_KEY as a valid key for any remote provider.
     """
     config = config_manager.get_config()
     default_model = config.get('default_model')
     fallback_models = config.get('validation', {}).get('fallback_models', [])
     required_engines = set([default_model] + fallback_models)
     missing = []
+    lamia_key = config_manager.get_api_key('lamia')
     for engine in required_engines:
-        if engine in ('openai', 'anthropic'):
-            if not config_manager.get_api_key(engine):
-                env_var = 'OPENAI_API_KEY' if engine == 'openai' else 'ANTHROPIC_API_KEY'
+        if ConfigManager.is_remote_provider(engine):
+            if not (config_manager.get_api_key(engine) or lamia_key):
+                env_var = ConfigManager.get_env_var_name(engine)
                 missing.append((engine, env_var))
     if missing:
         raise MissingAPIKeysError(missing)

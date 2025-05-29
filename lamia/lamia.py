@@ -31,12 +31,6 @@ class Lamia:
         # Store validators as a list
         self._validators = validators if validators is not None else []
 
-    def _key_env_name(self, key):
-        # Map key to env var name (e.g., 'openai' -> 'OPENAI_API_KEY')
-        if key.lower().endswith('_api_key'):
-            return key.upper()
-        return f"{key.upper()}_API_KEY"
-
     def _build_config_from_models(self, models, api_keys=None, validators=None):
         # Use the first model as default, rest as fallback
         config = {

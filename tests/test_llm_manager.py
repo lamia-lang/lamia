@@ -150,6 +150,36 @@ class TestCreateAdapterFromConfig:
                 create_adapter_from_config(cm)
                 assert MockAdapter.called
 
+    def test_lamia_api_key_from_env(self, monkeypatch):
+        config = {
+            "default_model": "openai",
+            "models": {
+                "openai": {"default_model": "gpt-3.5-turbo"}
+            },
+            # No api_keys
+            "validation": {"fallback_models": []}
+        }
+        monkeypatch.setenv('LAMIA_API_KEY', 'env-lamia-key')
+        cm = ConfigManager.from_dict(config)
+        with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
+            adapter = create_adapter_from_config(cm)
+            assert MockAdapter.called
+        monkeypatch.delenv('LAMIA_API_KEY', raising=False)
+
+    def test_lamia_api_key_from_config(self):
+        config = {
+            "default_model": "openai",
+            "models": {
+                "openai": {"default_model": "gpt-3.5-turbo"}
+            },
+            "api_keys": {"lamia": "config-lamia-key"},
+            "validation": {"fallback_models": []}
+        }
+        cm = ConfigManager.from_dict(config)
+        with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
+            adapter = create_adapter_from_config(cm)
+            assert MockAdapter.called
+
 class TestGenerateResponse:
     @pytest.mark.asyncio
     async def test_generate_response_success(self, mock_config_manager, mock_llm_response):
