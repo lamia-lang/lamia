@@ -142,6 +142,7 @@ def main():
 
     config_dict = None
     if config_path:
+        print(f"Using configuration from: {config_path}")
         with open(config_path, 'r') as f:
             config_dict = yaml.safe_load(f)
     else:

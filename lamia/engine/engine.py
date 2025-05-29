@@ -7,7 +7,7 @@ import pkgutil
 import inspect
 
 from .config_manager import ConfigManager
-from .llm_manager import create_adapter_from_config, is_local_model_provider
+from .llm_manager import create_adapter_from_config
 from lamia.adapters.llm.base import LLMResponse
 from lamia.adapters.llm.validation.base import BaseValidator
 from lamia.adapters.llm.validation.custom_loader import (
@@ -128,8 +128,7 @@ class LamiaEngine:
             model_name = self.config_manager.get_default_model()
             config = self.config_manager.get_model_config(model_name)
             logger.info(f"Starting Lamia with {model_name} model")
-            logger.info(f"Using configuration from: {self.config_manager.config_path}")
-            if not is_local_model_provider(model_name):
+            if self.config_manager.is_remote_provider(model_name):
                 self.adapter = create_adapter_from_config(self.config_manager)
                 await self.adapter.initialize()
             else:

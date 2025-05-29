@@ -147,11 +147,6 @@ def ensure_ollama_model_pulled(model_name: str) -> bool:
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Failed to check/pull Ollama model: {str(e)}")
 
-def is_local_model_provider(provider_name: str) -> bool:
-    """Return True if the provider is a local engine (like Ollama)."""
-    # Add new local providers here as needed
-    return provider_name in {"ollama"}
-
 def check_all_required_api_keys(config_manager: ConfigManager):
     """
     Check that all required API keys for default and fallback engines are present.
@@ -171,18 +166,6 @@ def check_all_required_api_keys(config_manager: ConfigManager):
                 missing.append((engine, env_var))
     if missing:
         raise MissingAPIKeysError(missing)
-
-def validate_retries_config(retries, used_models):
-    """
-    retries: dict, e.g. {"ollama": 2, "ollama:neural-chat": 1}
-    used_models: set, e.g. {"openai", "ollama:llama2", "ollama:neural-chat"}
-    """
-    for key in retries:
-        if key not in used_models:
-            raise ValueError(
-                f"Retry policy specified for unused model or provider '{key}'. "
-                "Check your retries config and fallback models."
-            )
 
 def create_adapter_from_config(config_manager: ConfigManager, override_model: str = None) -> BaseLLMAdapter:
     """Create an adapter instance based on the active configuration. Local engines are not started here."""
@@ -232,60 +215,3 @@ def create_adapter_from_config(config_manager: ConfigManager, override_model: st
         )
     else:
         raise ValueError(f"Unsupported model type: {provider_name}")
-
-async def generate_response(prompt: str, config_path: str = None) -> LLMResponse:
-    """
-    Generate a response using the configured model.
-    
-    Args:
-        prompt: The input prompt to send to the LLM
-        config_path: Optional path to a config file. If None, uses default config
-        
-    Returns:
-        LLMResponse object containing the model's response and metadata
-        
-    Raises:
-        FileNotFoundError: If config file is not found
-        ValueError: If configuration is invalid
-        RuntimeError: If Ollama service fails to start or model is unavailable
-        SystemExit: If required API keys are not found in environment
-    """
-    # Load environment variables at the start
-    load_dotenv()
-    
-    config_manager = ConfigManager(config_path)
-    adapter = create_adapter_from_config(config_manager)
-    
-    async with adapter as llm:
-        model_config = config_manager.get_model_config(config_manager.get_default_model())
-        response = await llm.generate(
-            prompt,
-            temperature=model_config.get('temperature', 0.7),
-            max_tokens=model_config.get('max_tokens', 1000)
-        )
-    
-    return response
-
-async def main():
-    """Example usage of the LLM manager."""
-    # Example prompt
-    prompt = "Explain how neural networks work in one paragraph."
-    
-    try:
-        # Generate response using the configured model
-        response = await generate_response(prompt)
-        
-        print(f"\nModel: {response.model}")
-        print(f"Response: {response.text}")
-        print(f"Token usage: {response.usage}")
-        
-    except FileNotFoundError as e:
-        print(f"Configuration error: {e}")
-        print("Please create a config.yaml file with your desired settings.")
-    except ValueError as e:
-        print(f"Configuration error: {e}")
-    except Exception as e:
-        print(f"Error: {e}")
-
-if __name__ == "__main__":
-    asyncio.run(main()) 
