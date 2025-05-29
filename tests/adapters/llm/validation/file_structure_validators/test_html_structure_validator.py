@@ -5,6 +5,24 @@ from typing import Any
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
+async def test_html_structure_validator_should_allow_doctype(strict):
+    class HTMLModel(BaseModel):
+      body: Any
+
+    validator = HTMLStructureValidator(model=HTMLModel, strict=strict)
+    valid_html = """
+    <!DOCTYPE html>
+    <html>
+      <body>
+      <p>123</p>
+      </body>
+    </html>
+    """
+    result = await validator.validate(valid_html)
+    assert result.is_valid is True
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
 async def test_html_structure_validator_head_and_body_present(strict):
     class HTMLModel(BaseModel):
       head: Any

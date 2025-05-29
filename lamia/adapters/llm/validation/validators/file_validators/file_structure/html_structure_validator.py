@@ -69,9 +69,6 @@ class HTMLStructureValidator(DocumentStructureValidator):
     def parse(self, response: str):
         stripped = response.strip()
         if self.strict:
-            # Strict: must be only the HTML document
-            if not (stripped.lower().startswith("<html") and stripped.lower().endswith("</html>")):
-                raise ValueError("Response does not start with <html> and end with </html>.")
             html_block = stripped
         else:
             # Permissive: extract first <html>...</html> block

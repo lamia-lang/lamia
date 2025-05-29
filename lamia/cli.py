@@ -7,6 +7,7 @@ import ast
 import argparse
 import select
 import yaml
+import logging
 
 from lamia.engine import LamiaEngine
 from lamia.engine.llm_manager import MissingAPIKeysError
@@ -135,7 +136,14 @@ def main():
     parser.add_argument('filename', nargs='?', help='Prompt file to read from (if not provided, runs in interactive mode)')
     parser.add_argument('--file', '-f', type=str, help='Read prompt from a file instead of interactive mode')
     parser.add_argument('--config', '-c', type=str, help='Path to config file (optional)')
+    parser.add_argument('--log-level', default='INFO', help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
     args = parser.parse_args()
+
+    # Setup logging globally for CLI
+    logging.basicConfig(
+        level=getattr(logging, args.log_level.upper(), logging.INFO),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
 
     prompt_file = args.filename or args.file
     config_path = args.config

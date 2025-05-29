@@ -31,16 +31,6 @@ class LamiaEngine:
         self.config_manager = ConfigManager(config)
         self.adapter = None
         self.validation_strategy = None
-        self._setup_logging()
-    
-    def _setup_logging(self):
-        """Configure logging for the engine."""
-        # Only configure logging if it hasn't been configured yet
-        if not logging.getLogger().hasHandlers():
-            logging.basicConfig(
-                level=logging.INFO,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
     
     def _load_custom_validator(self, validator_config: dict) -> Optional[Type[BaseValidator]]:
         """Load a custom validator from file or function."""
