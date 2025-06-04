@@ -1,7 +1,6 @@
 from typing import Optional, Dict, Any
 import aiohttp
-import json
-
+import openai
 from .base import BaseLLMAdapter, LLMResponse, lazy_import
 
 class OpenAIAdapter(BaseLLMAdapter):
@@ -9,19 +8,20 @@ class OpenAIAdapter(BaseLLMAdapter):
     
     API_URL = "https://api.openai.com/v1/chat/completions"
     
-    def __init__(self, api_key: str, model: str = "gpt-3.5-turbo", has_context_memory: bool = None):
+    def __init__(self, api_key: str, model: str = "gpt-3.5-turbo"):
         self.api_key = api_key
         self.model = model
+        self._use_sdk = True  # For now tru
         self.client = None
         self.session = None
-        self._use_sdk = True  # Will be set to False if import fails
-        self._has_context_memory = has_context_memory
-        
-    @lazy_import("openai")
-    async def __aenter__(self):
+        self.initialize()
+
+    async def initialize(self) -> None:
         """Initialize client - will try SDK first, fallback to HTTP."""
         if self._use_sdk:
+            print("called")
             self.client = openai.AsyncOpenAI(api_key=self.api_key)
+            print( self.client )
         else:
             self.session = aiohttp.ClientSession(
                 headers={
@@ -30,12 +30,6 @@ class OpenAIAdapter(BaseLLMAdapter):
                 }
             )
         return self
-        
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._use_sdk and self.client:
-            await self.client.close()
-        elif self.session:
-            await self.session.close()
     
     @lazy_import("openai")
     async def generate(self, 
@@ -95,4 +89,10 @@ class OpenAIAdapter(BaseLLMAdapter):
         if self.model.startswith(chat_prefixes) or "turbo" in self.model:
             return True
         # Legacy completion models (e.g., text-davinci-003) are stateless
-        return False 
+        return False
+    
+    async def close(self) -> None:
+        if self._use_sdk and self.client:
+            await self.client.close()
+        elif self.session:
+            await self.session.close()

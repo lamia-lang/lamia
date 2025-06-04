@@ -11,15 +11,15 @@ class AnthropicAdapter(BaseLLMAdapter):
     API_URL = "https://api.anthropic.com/v1/messages"
     API_VERSION = "2023-06-01"
     
-    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229", has_context_memory: bool = None):
+    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
         self.api_key = api_key
         self.model = model
         self.client = None
         self.session = None
         self._use_sdk = False
-        self._has_context_memory = has_context_memory
+        self.initialize()
         
-    async def __aenter__(self):
+    async def initialize(self):
         # Try to import Anthropic SDK
         anthropic_module, success, error = import_optional(
             "anthropic", 
@@ -41,7 +41,7 @@ class AnthropicAdapter(BaseLLMAdapter):
         
         return self
         
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def close(self):
         if self._use_sdk and self.client:
             await self.client.close()
         elif self.session:
