@@ -17,7 +17,6 @@ class AnthropicAdapter(BaseLLMAdapter):
         self.client = None
         self.session = None
         self._use_sdk = False
-        self.initialize()
         
     async def initialize(self):
         # Try to import Anthropic SDK

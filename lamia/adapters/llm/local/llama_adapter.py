@@ -4,7 +4,7 @@ from pathlib import Path
 
 from llama_cpp import Llama
 
-from .base import BaseLLMAdapter, LLMResponse
+from ..base import BaseLLMAdapter, LLMResponse
 
 class LlamaAdapter(BaseLLMAdapter):
     """Adapter for local LLaMA models using llama.cpp Python bindings."""

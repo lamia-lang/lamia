@@ -36,6 +36,7 @@ class MyRemoteAdapter(BaseLLMAdapter):
         self.api_key = api_key
         self.model = model
         self.session = None
+        # ... Init other variables you might need
 
     async def initialize(self):
         self.session = aiohttp.ClientSession(headers={
