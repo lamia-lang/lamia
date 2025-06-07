@@ -5,6 +5,8 @@ from pathlib import Path
 import importlib
 import pkgutil
 import inspect
+import sys
+import os
 
 from .config_manager import ConfigManager
 from .llm_manager import create_adapter_from_config
@@ -74,10 +76,50 @@ class LamiaEngine:
                     logger.warning(f"Could not import submodule {name}: {e}")
         return validator_class_map
 
+    def _discover_validators_in_path(self, path: str) -> dict:
+        """Discover all validator classes in a given filesystem path."""
+        import importlib.util
+        import inspect
+        validator_class_map = {}
+        if not os.path.isdir(path):
+            return validator_class_map
+        sys.path.insert(0, path)
+        for file in os.listdir(path):
+            if file.endswith(".py") and not file.startswith("__"):
+                module_name = file[:-3]
+                try:
+                    spec = importlib.util.spec_from_file_location(module_name, os.path.join(path, file))
+                    if not spec or not spec.loader:
+                        continue
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    for _, cls in inspect.getmembers(module, inspect.isclass):
+                        if (
+                            issubclass(cls, BaseValidator)
+                            and cls is not BaseValidator
+                            and hasattr(cls, 'name')
+                            and callable(getattr(cls, 'name'))
+                        ):
+                            validator_class_map[cls.name()] = cls
+                except Exception as e:
+                    logger.warning(f"Could not import validator from {file}: {e}")
+        sys.path.pop(0)
+        return validator_class_map
+
     def _get_validator_registry(self) -> Dict[str, BaseValidator]:
-        """Preload all validators in the validators folder and use the one matching the user-requested short name."""
-        # Recursively discover all validator classes in the validators folder
+        """Preload all validators in the validators folder and extensions, checking for name conflicts."""
+        # Built-in validators
         validator_class_map = self._discover_validators_recursively(validators_pkg)
+        # Load from extensions/validators if present
+        ext_folder = self.config_manager.get_extensions_folder()
+        ext_validators_path = os.path.join(os.getcwd(), ext_folder, "validators")
+        ext_validator_class_map = self._discover_validators_in_path(ext_validators_path)
+        # Check for name conflicts
+        conflict_names = set(validator_class_map.keys()) & set(ext_validator_class_map.keys())
+        if conflict_names:
+            raise ValueError(f"User-defined validator name(s) conflict with built-in validators: {', '.join(conflict_names)}")
+        # Merge
+        validator_class_map.update(ext_validator_class_map)
         registry = {}
         validation_config = self.config_manager.config.get('validation', {})
         if validation_config.get('validators'):
@@ -123,7 +165,6 @@ class LamiaEngine:
         """Start the Lamia engine. Only initialize the adapter if the default model is not a local provider."""
         try:
             model_name = self.config_manager.get_default_model()
-            config = self.config_manager.get_model_config(model_name)
             logger.info(f"Starting Lamia with {model_name} model")
             if self.config_manager.is_remote_provider(model_name):
                 self.adapter = create_adapter_from_config(self.config_manager)

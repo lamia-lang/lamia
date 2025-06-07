@@ -11,6 +11,7 @@ import logging
 
 from lamia.engine import LamiaEngine
 from lamia.engine.llm_manager import MissingAPIKeysError
+from lamia.utils import scaffold
 
 async def interactive_mode(engine: LamiaEngine):
     """Run Lamia in interactive mode, processing user prompts."""
@@ -132,12 +133,56 @@ def run_python_code(user_input: str, mode: str = 'interactive', show_banner: boo
 
 def main():
     """Main entry point for the Lamia CLI."""
-    parser = argparse.ArgumentParser(description="Lamia CLI")
-    parser.add_argument('filename', nargs='?', help='Prompt file to read from (if not provided, runs in interactive mode)')
-    parser.add_argument('--file', '-f', type=str, help='Read prompt from a file instead of interactive mode')
-    parser.add_argument('--config', '-c', type=str, help='Path to config file (optional)')
-    parser.add_argument('--log-level', default='INFO', help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
-    args = parser.parse_args()
+    if len(sys.argv) > 1 and sys.argv[1] == "init":
+        parser = argparse.ArgumentParser(
+            description="Lamia CLI",
+            epilog="""
+            Subcommands:
+            init        Initialize a new Lamia project (see 'init --help' for options like --with-extensions)
+
+            For help on a subcommand, run:
+            lamia <subcommand> --help
+            """
+        )
+        subparsers = parser.add_subparsers(dest="command", required=True, help="Subcommands (use '<subcommand> --help' for details)")
+        init_parser = subparsers.add_parser("init", help="Initialize a new Lamia project in the current directory")
+        init_parser.add_argument("--with-extensions", action="store_true", help="Also scaffold the extensions folder structure (adapters, validators)")
+        parser.add_argument('--log-level', default='INFO', help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+        args = parser.parse_args()
+        if args.command == "init":
+            config_path = os.path.join(os.getcwd(), "config.yaml")
+            created = scaffold.create_minimal_config(config_path, with_extensions=args.with_extensions)
+            if created:
+                print("Created config.yaml")
+            else:
+                print("config.yaml already exists")
+            if args.with_extensions:
+                ext_path = scaffold.ensure_extensions_folder(os.getcwd())
+                updated = scaffold.update_config_with_extensions(config_path)
+                print(f"Extensions folder scaffolded at: {ext_path}")
+                if updated:
+                    print("config.yaml updated with extensions_folder key.")
+            env_path = os.path.join(os.getcwd(), ".env")
+            env_created = scaffold.create_env_file(env_path)
+            if env_created:
+                print("Created .env file with dummy API keys.")
+            else:
+                print(".env file already exists.")
+            return
+        return
+    else:
+        parser = argparse.ArgumentParser(
+            description="Lamia CLI",
+            epilog="""
+            For help on a subcommand, run:
+            lamia <subcommand> --help
+            """
+        )
+        parser.add_argument('filename', nargs='?', help='Prompt file to read from (if not provided, runs in interactive mode)')
+        parser.add_argument('--file', '-f', type=str, help='Read prompt from a file instead of interactive mode')
+        parser.add_argument('--config', '-c', type=str, help='Path to config file (optional)')
+        parser.add_argument('--log-level', default='INFO', help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+        args = parser.parse_args()
 
     # Setup logging globally for CLI
     logging.basicConfig(

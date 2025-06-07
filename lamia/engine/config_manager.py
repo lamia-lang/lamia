@@ -110,3 +110,7 @@ class ConfigManager:
         # Only return from the dict, never from the environment
         api_keys = self.config.get('api_keys', {})
         return api_keys.get(provider) 
+
+    def get_extensions_folder(self) -> str:
+        """Get the path to the extensions folder from config, defaulting to 'extensions' if not set."""
+        return self.config.get('extensions_folder', 'extensions') 

@@ -6,6 +6,7 @@ import requests
 import time
 import sys
 from typing import Optional, Dict, Any
+import importlib.util
 
 from dotenv import load_dotenv
 
@@ -167,6 +168,35 @@ def check_all_required_api_keys(config_manager: ConfigManager):
     if missing:
         raise MissingAPIKeysError(missing)
 
+def _discover_adapters_in_path(path: str) -> dict:
+    """Discover all adapter classes in a given filesystem path."""
+    import inspect
+    from lamia.adapters.llm.base import BaseLLMAdapter
+    adapter_class_map = {}
+    if not os.path.isdir(path):
+        return adapter_class_map
+    sys.path.insert(0, path)
+    for file in os.listdir(path):
+        if file.endswith(".py") and not file.startswith("__"):
+            module_name = file[:-3]
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, os.path.join(path, file))
+                if not spec or not spec.loader:
+                    continue
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                for _, cls in inspect.getmembers(module, inspect.isclass):
+                    if (
+                        issubclass(cls, BaseLLMAdapter)
+                        and cls is not BaseLLMAdapter
+                        and hasattr(cls, '__name__')
+                    ):
+                        adapter_class_map[cls.__name__] = cls
+            except Exception as e:
+                print(f"Warning: Could not import adapter from {file}: {e}")
+    sys.path.pop(0)
+    return adapter_class_map
+
 def create_adapter_from_config(config_manager: ConfigManager, override_model: str = None) -> BaseLLMAdapter:
     """Create an adapter instance based on the active configuration. Local engines are not started here."""
     check_all_required_api_keys(config_manager)
@@ -180,38 +210,50 @@ def create_adapter_from_config(config_manager: ConfigManager, override_model: st
         print(f"\nAvailable {provider_name.capitalize()} models:")
         for m in available_models:
             if isinstance(m, str):
-                print(f"- {m}")
+                model_name = m
             elif isinstance(m, dict):
-                print(f"- {m.get('name')}")
-        raise RuntimeError(
-            f"\nPlease specify one of the above models in config.yaml under {provider_name}.default_model"
-        )
+                model_name = m.get('name')
 
     # Extract has_context_memory from config if present
     has_context_memory = config_manager.get_has_context_memory(provider_name, model_name)
 
-    if provider_name == "openai":
-        return OpenAIAdapter(
-            api_key=check_api_key('openai', config_manager),
-            model=model_name,
-            has_context_memory=has_context_memory
-        )
-    elif provider_name == "anthropic":
-        return AnthropicAdapter(
-            api_key=check_api_key('anthropic', config_manager),
-            model=model_name,
-            has_context_memory=has_context_memory
-        )
-    elif provider_name == "ollama":
-        # Pass all extra config values as configs
-        configs = provider_config.copy()
-        configs.pop('default_model', None)
-        configs.pop('enabled', None)
-        configs.pop('models', None)
-        return OllamaAdapter(
-            model_path=model_name,
-            has_context_memory=has_context_memory,
-            configs=configs
-        )
+    # Discover extension adapters
+    ext_folder = config_manager.get_extensions_folder()
+    ext_adapters_path = os.path.join(os.getcwd(), ext_folder, "adapters")
+    ext_adapter_class_map = _discover_adapters_in_path(ext_adapters_path)
+    # Built-in mapping
+    builtin_adapters = {
+        "openai": OpenAIAdapter,
+        "anthropic": AnthropicAdapter,
+        "ollama": OllamaAdapter,
+    }
+    # Check for name conflicts
+    conflict_names = set(builtin_adapters.keys()) & set(ext_adapter_class_map.keys())
+    if conflict_names:
+        raise RuntimeError(f"User-defined adapter name(s) conflict with built-in adapters: {', '.join(conflict_names)}")
+    # Merge
+    all_adapters = {**builtin_adapters, **ext_adapter_class_map}
+    # Use the adapter by provider_name
+    if provider_name in all_adapters:
+        AdapterClass = all_adapters[provider_name]
+        # Pass config as needed (assume same signature as built-ins)
+        if provider_name == "openai":
+            return AdapterClass(
+                api_key=check_api_key('openai', config_manager),
+                model=model_name,
+            )
+        elif provider_name == "anthropic":
+            return AdapterClass(
+                api_key=check_api_key('anthropic', config_manager),
+                model=model_name,
+            )
+        elif provider_name == "ollama":
+            return AdapterClass(
+                model=model_name,
+                has_context_memory=has_context_memory
+            )
+        else:
+            # For extension adapters, try to instantiate with config_manager and model_name
+            return AdapterClass(config_manager=config_manager, model=model_name)
     else:
         raise ValueError(f"Unsupported model type: {provider_name}")
