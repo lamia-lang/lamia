@@ -198,6 +198,10 @@ def main():
         print(f"Using configuration from: {config_path}")
         with open(config_path, 'r') as f:
             config_dict = yaml.safe_load(f)
+    elif os.path.exists("config.yaml"):
+        print("Using configuration from: config.yaml")
+        with open("config.yaml", 'r') as f:
+            config_dict = yaml.safe_load(f)
     else:
         print("❌ Error: --config is required for CLI operation.", file=sys.stderr)
         sys.exit(1)
