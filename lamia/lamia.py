@@ -54,21 +54,22 @@ class Lamia:
             config['validation']['validators'] = validators
         return config
 
-    def run(self, prompt: str, temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> str:
-        """Generate a response synchronously (hides async details). Applies validators if provided."""
+    def run(self, prompt: str, temperature: Optional[float] = None, max_tokens: Optional[int] = None, skip_validators: bool = False) -> str:
+        """Generate a response synchronously (hides async details). Applies validators if provided, unless skip_validators is True."""
         async def _run():
             async with self._engine as engine:
                 response = await engine.generate(prompt, temperature=temperature, max_tokens=max_tokens)
                 text = response.text
-                for validator in self._validators:
-                    # If it's a class instance with .validate, use that
-                    if hasattr(validator, 'validate') and callable(getattr(validator, 'validate')):
-                        valid = validator.validate(text)
-                    else:
-                        valid = validator(text)
-                    if not valid:
-                        name = getattr(validator, '__name__', validator.__class__.__name__)
-                        raise ValueError(f"Validator {name} failed for response: {text}")
+                if not skip_validators:
+                    for validator in self._validators:
+                        # If it's a class instance with .validate, use that
+                        if hasattr(validator, 'validate') and callable(getattr(validator, 'validate')):
+                            valid = validator.validate(text)
+                        else:
+                            valid = validator(text)
+                        if not valid:
+                            name = getattr(validator, '__name__', validator.__class__.__name__)
+                            raise ValueError(f"Validator {name} failed for response: {text}")
                 return text
         # Use existing event loop if present
         try:

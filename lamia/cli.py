@@ -8,6 +8,7 @@ import argparse
 import select
 import yaml
 import logging
+import runpy
 
 from lamia.engine import LamiaEngine
 from lamia.engine.llm_manager import MissingAPIKeysError
@@ -107,7 +108,8 @@ def run_python_code(user_input: str, mode: str = 'interactive', show_banner: boo
         if show_banner:
             print("----------------------------------------")
         return True
-    except Exception:
+    except Exception as e:
+        print(f"Error: {str(e)}")
         pass
     try:
         code_ast = ast.parse(user_input, mode='exec')
@@ -127,9 +129,40 @@ def run_python_code(user_input: str, mode: str = 'interactive', show_banner: boo
                     if show_banner:
                         print("----------------------------------------")
         return True
-    except Exception:
+    except Exception as e:
+        print(f"Error: {str(e)}")
         pass
     return False
+
+def add_all_py_dirs_to_syspath_and_check_conflicts(root_dir):
+    module_names = {}
+    function_names = {}
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        py_files = [f for f in filenames if f.endswith('.py')]
+        if py_files:
+            sys.path.insert(0, dirpath)
+            for f in py_files:
+                mod_name = os.path.splitext(f)[0]
+                mod_path = os.path.join(dirpath, f)
+                # Check for module name conflicts
+                if mod_name in module_names:
+                    print(f"❌ Module name conflict: '{mod_name}.py' found in both '{module_names[mod_name]}' and '{dirpath}'. Please rename one of them.")
+                    sys.exit(1)
+                module_names[mod_name] = dirpath
+                # Check for function name conflicts
+                try:
+                    with open(mod_path, 'r') as file:
+                        node = ast.parse(file.read(), filename=mod_path)
+                        for n in node.body:
+                            if isinstance(n, ast.FunctionDef):
+                                func_name = n.name
+                                if func_name in function_names:
+                                    prev_mod, prev_path = function_names[func_name]
+                                    print(f"❌ Function name conflict: function '{func_name}' found in both '{prev_path}' and '{mod_path}'. Please rename one of them or use explicit imports (e.g., 'from <module> import <func>').")
+                                    sys.exit(1)
+                                function_names[func_name] = (mod_name, mod_path)
+                except Exception as e:
+                    print(f"Warning: Could not parse {mod_path}: {e}")
 
 def main():
     """Main entry point for the Lamia CLI."""
@@ -206,6 +239,9 @@ def main():
         print("❌ Error: --config is required for CLI operation.", file=sys.stderr)
         sys.exit(1)
 
+    # Add this before running the user script
+    add_all_py_dirs_to_syspath_and_check_conflicts(os.getcwd())
+
     async def run():
         engine = LamiaEngine(config_dict)
         try:
@@ -225,30 +261,15 @@ def main():
             sys.exit(1)
         try:
             if prompt_file:
-                # Read prompt from file and try to execute as Python code first
+                # Read prompt from file and execute as a Python script using runpy
                 try:
-                    with open(prompt_file, 'r') as f:
-                        prompt = f.read()
-                    if run_python_code(prompt, mode='file', show_banner=False):
-                        await engine.stop()
-                        sys.exit(0)
-                    # If not Python, send to engine
-                    response = await engine.generate(prompt)
-                    print(response.text)
-                    if hasattr(response, 'validation_result') and response.validation_result is not None:
-                        print("\n🛡️ Validation Result:")
-                        print("----------------------------------------")
-                        if response.validation_result.get('is_valid', False):
-                            print("✅ Valid output!")
-                        else:
-                            print(f"❌ Invalid output: {response.validation_result.get('error_message', 'Unknown error')}")
-                        print("----------------------------------------")
+                    runpy.run_path(prompt_file, run_name="__main__")
+                    await engine.stop()
+                    sys.exit(0)
                 except Exception as e:
                     print(f"Error reading file or generating response: {e}", file=sys.stderr)
                     await engine.stop()
                     sys.exit(1)
-                await engine.stop()
-                sys.exit(0)
             # Otherwise, run interactive mode
             await interactive_mode(engine)
         except KeyboardInterrupt:
