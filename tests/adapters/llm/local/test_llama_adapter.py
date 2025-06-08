@@ -2,6 +2,7 @@ import pytest
 import pytest_asyncio
 from unittest.mock import patch, MagicMock
 from lamia.adapters.llm.local.llama_adapter import LlamaAdapter
+from lamia.adapters.llm.local import llama_adapter
 
 @pytest_asyncio.fixture
 def llama_model_mock():
@@ -70,4 +71,7 @@ def test_model_path_file_not_found(mock_exists):
 def test_model_path_env(monkeypatch, mock_exists):
     monkeypatch.setenv("LLAMA_MODEL_PATH", "/tmp/from-env.bin")
     adapter = LlamaAdapter()
-    assert adapter.model_path == "/tmp/from-env.bin" 
+    assert adapter.model_path == "/tmp/from-env.bin"
+
+def test_import_llama_adapter():
+    assert llama_adapter is not None 

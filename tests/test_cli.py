@@ -8,6 +8,7 @@ from lamia.engine.engine import LamiaEngine
 import subprocess
 import sys
 import shutil
+import lamia.cli as cli_mod
 
 @pytest.mark.parametrize("cli_args", [
     ["sum.py"],
@@ -25,3 +26,6 @@ def test_cli_file_modes(tmp_path, cli_args):
     assert result.returncode == 0, f"stderr: {result.stderr}"
     # Should print the result of sum(10, 15) = 160 (since multiply(10, 15) = 150 + 15)
     assert "160" in result.stdout 
+
+def test_import_cli():
+    assert cli_mod is not None 
