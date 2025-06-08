@@ -71,6 +71,7 @@ class AnthropicAdapter(BaseLLMAdapter):
         
         return LLMResponse(
             text=response.content[0].text,
+            raw_response=response,
             model=self.model,
             usage={
                 "input_tokens": response.usage.input_tokens,

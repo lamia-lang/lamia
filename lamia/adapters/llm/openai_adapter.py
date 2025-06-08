@@ -46,6 +46,7 @@ class OpenAIAdapter(BaseLLMAdapter):
             
             return LLMResponse(
                 text=response.choices[0].message.content,
+                raw_response=response,
                 model=self.model,
                 usage={
                     "prompt_tokens": response.usage.prompt_tokens,
@@ -63,7 +64,7 @@ class OpenAIAdapter(BaseLLMAdapter):
             }
             
             try:
-                async with self.session.post(self.API_URL, json=payload) as response:
+                async with await self.session.post(self.API_URL, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         raise RuntimeError(f"OpenAI API error: {error_text}")
@@ -72,6 +73,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                     
                     return LLMResponse(
                         text=data["choices"][0]["message"]["content"],
+                        raw_response=data,
                         model=self.model,
                         usage=data.get("usage", {})
                     )
