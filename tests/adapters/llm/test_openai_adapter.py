@@ -3,6 +3,21 @@ import pytest_asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 from lamia.adapters.llm.openai_adapter import OpenAIAdapter
 
+def make_aiohttp_response_cm(status=200, json_data=None, text_data=None):
+    mock_response = AsyncMock()
+    mock_response.status = status
+    if json_data is not None:
+        mock_response.json = AsyncMock(return_value=json_data)
+    else:
+        mock_response.json = AsyncMock()
+    if text_data is not None:
+        mock_response.text = AsyncMock(return_value=text_data)
+    else:
+        mock_response.text = AsyncMock()
+    mock_post_cm = AsyncMock()
+    mock_post_cm.__aenter__.return_value = mock_response
+    return mock_post_cm
+
 @pytest_asyncio.fixture
 def openai_client_mock():
     mock = MagicMock()
@@ -10,18 +25,19 @@ def openai_client_mock():
         choices=[MagicMock(message=MagicMock(content="OpenAI response"))],
         usage=MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
     ))
+    mock.close = AsyncMock()  # Make close awaitable
     return mock
 
 @pytest_asyncio.fixture
 def aiohttp_session_mock():
     mock_session = MagicMock()
-    mock_response = AsyncMock()
-    mock_response.status = 200
-    mock_response.json = AsyncMock(return_value={
+    # Default: successful response
+    json_data = {
         "choices": [{"message": {"content": "HTTP response"}}],
         "usage": {"prompt_tokens": 7, "completion_tokens": 4, "total_tokens": 11}
-    })
-    mock_session.post = AsyncMock(return_value=mock_response)
+    }
+    mock_session.post = AsyncMock(return_value=make_aiohttp_response_cm(status=200, json_data=json_data, text_data="Some error text"))
+    mock_session.close = AsyncMock()  # Make close awaitable
     return mock_session
 
 @pytest.mark.asyncio
@@ -57,9 +73,10 @@ async def test_generate_sdk_returns_llmresponse(mock_async_openai, openai_client
 @pytest.mark.asyncio
 @patch("lamia.adapters.llm.openai_adapter.aiohttp.ClientSession")
 async def test_generate_http_returns_llmresponse(mock_client_session, aiohttp_session_mock):
+    mock_client_session.return_value = aiohttp_session_mock
+
     adapter = OpenAIAdapter(api_key="sk-test")
     adapter._use_sdk = False
-    mock_client_session.return_value = aiohttp_session_mock
     await adapter.initialize()
     response = await adapter.generate("Hello?")
     assert response.text == "HTTP response"
@@ -69,13 +86,12 @@ async def test_generate_http_returns_llmresponse(mock_client_session, aiohttp_se
 @pytest.mark.asyncio
 @patch("lamia.adapters.llm.openai_adapter.aiohttp.ClientSession")
 async def test_generate_http_error_handling(mock_client_session, aiohttp_session_mock):
+    aiohttp_session_mock.post = AsyncMock(return_value=make_aiohttp_response_cm(status=400, text_data="Bad Request"))
+    mock_client_session.return_value = aiohttp_session_mock
+
     adapter = OpenAIAdapter(api_key="sk-test")
     adapter._use_sdk = False
-    mock_client_session.return_value = aiohttp_session_mock
     await adapter.initialize()
-    # Simulate non-200 response
-    aiohttp_session_mock.post.return_value.status = 400
-    aiohttp_session_mock.post.return_value.text = AsyncMock(return_value="Bad Request")
     with pytest.raises(RuntimeError) as exc:
         await adapter.generate("fail")
     assert "OpenAI API error" in str(exc.value)

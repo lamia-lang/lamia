@@ -16,7 +16,8 @@ class AnthropicAdapter(BaseLLMAdapter):
         self.model = model
         self.client = None
         self.session = None
-        self._use_sdk = False
+        self._use_sdk = True
+        self._has_context_memory = None # User cannot set this for now
         
     async def initialize(self):
         # Try to import Anthropic SDK
