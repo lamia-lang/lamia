@@ -105,6 +105,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
     def find_all(self, tree, key):
         return tree.find_all(key)
 
+    # Overrides the base class method to add the <html> tag to the tree
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         try:
             tree = self.parse(response)
@@ -133,6 +134,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             )
         return ValidationResult(is_valid=True)
 
+    # Overrides the base class method to add the <html> tag to the tree
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         try:
             tree = self.parse(response)

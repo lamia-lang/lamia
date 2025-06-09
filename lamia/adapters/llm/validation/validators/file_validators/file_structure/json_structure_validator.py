@@ -124,9 +124,3 @@ class JSONStructureValidator(DocumentStructureValidator):
                     _find_all(item)
         _find_all(tree)
         return found
-
-    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        return await super().validate_strict(response, **kwargs)
-
-    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
-        return await super().validate_permissive(response, **kwargs) 

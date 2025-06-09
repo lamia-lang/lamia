@@ -98,6 +98,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         _, rows = tree
         return [row.get(key) for row in rows if key in row]
 
+    # Overrides the base class method because of the flat nature of CSV
     def validate_strict_recursive(self, tree, model):
         header, rows = tree
         model_fields = list(model.model_fields.keys())
@@ -111,6 +112,7 @@ class CSVStructureValidator(DocumentStructureValidator):
                 return False, f"Row {i+1} does not match schema: {e}"
         return True, None
 
+    # Overrides the base class method because of the flat nature of CSV
     def validate_permissive_recursive(self, tree, model):
         header, rows = tree
         model_fields = list(model.model_fields.keys())

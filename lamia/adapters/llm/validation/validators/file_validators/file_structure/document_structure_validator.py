@@ -42,13 +42,31 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Find all elements/fields with the given key anywhere in the tree."""
         pass
 
+    def _is_type_match(self, value, expected_type):
+        origin = typing.get_origin(expected_type)
+        args = typing.get_args(expected_type)
+        if origin is None:
+            # Handle Any and object
+            if expected_type is typing.Any or expected_type is object:
+                return True
+            return isinstance(value, expected_type)
+        elif origin is list:
+            return isinstance(value, list) and all(self._is_type_match(v, args[0]) for v in value)
+        elif origin is dict:
+            return isinstance(value, dict)
+        elif origin is typing.Union:
+            # Handle Optional[X] (which is Union[X, NoneType])
+            return any(self._is_type_match(value, arg) for arg in args)
+        return False
+
     def validate_strict_recursive(self, tree, model):
         for field, field_info in model.model_fields.items():
+            print(field, field_info)
             submodel = field_info.annotation
             elem = self.find_element(tree, field)
             if elem is None:
                 return False, f"Missing <{field}> as direct child."
-            # Support Any and object types: accept any content
+            
             if submodel is typing.Any or submodel is object:
                 continue
             if hasattr(submodel, "model_fields"):
@@ -59,6 +77,9 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 # Should only contain text, no nested tags/fields
                 if self.has_nested(elem):
                     return False, f"<{field}> should only contain text, but has nested elements."
+                # Type check
+                if not self._is_type_match(elem, submodel):
+                    return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(elem).__name__}, expected {submodel}."
         # Check for extra tags/fields among direct children
         model_tags = set(model.model_fields.keys())
         for child in self.iter_direct_children(tree):
@@ -85,6 +106,11 @@ class DocumentStructureValidator(BaseValidator, ABC):
                         break
                 if not found_valid:
                     return False, f"No <{field}> tag/field matches the required nested structure."
+            else:
+                # Type check for permissive: all found elems must match type
+                for elem in elems:
+                    if not self._is_type_match(elem, submodel):
+                        return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(elem).__name__}, expected {submodel}."
         return True, None
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
