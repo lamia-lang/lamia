@@ -106,6 +106,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         return tree.find_all(key)
 
     # Overrides the base class method to add the <html> tag to the tree
+    # TODO: Can be don by adding html field to the model, but this is a good demonstration that base class can be overridden
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         try:
             tree = self.parse(response)
@@ -135,6 +136,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         return ValidationResult(is_valid=True)
 
     # Overrides the base class method to add the <html> tag to the tree
+    # TODO: Can be don by adding html field to the model, but this is a good demonstration that base class can be overridden
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         try:
             tree = self.parse(response)

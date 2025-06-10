@@ -42,7 +42,28 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Find all elements/fields with the given key anywhere in the tree."""
         pass
 
+    def _is_primitive_type(self, t):
+        return t in (str, int, float, bool)
+
+    def _normalize_primitive_type(self, t):
+        # Normalize to canonical Python primitive types
+        if t == str or t == type(str()):
+            return str
+        if t == int or t == type(int()):
+            return int
+        if t == float or t == type(float()):
+            return float
+        if t == bool or t == type(bool()):
+            return bool
+        return t
+
+    def _get_primitive_value(self, value, expected_type):
+        # Always extract text from AST nodes for type checking
+        return self.get_text(value)
+
     def _is_type_match(self, value, expected_type):
+        value = self._get_primitive_value(value, expected_type)
+        
         origin = typing.get_origin(expected_type)
         args = typing.get_args(expected_type)
         if origin is None:
@@ -61,8 +82,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
     def validate_strict_recursive(self, tree, model):
         for field, field_info in model.model_fields.items():
-            print(field, field_info)
-            submodel = field_info.annotation
+            submodel = self._normalize_primitive_type(field_info.annotation)
             elem = self.find_element(tree, field)
             if elem is None:
                 return False, f"Missing <{field}> as direct child."
@@ -74,13 +94,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 if not valid:
                     return False, err
             else:
-                # Should only contain text, no nested tags/fields
                 if self.has_nested(elem):
                     return False, f"<{field}> should only contain text, but has nested elements."
-                # Type check
                 if not self._is_type_match(elem, submodel):
-                    return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(elem).__name__}, expected {submodel}."
-        # Check for extra tags/fields among direct children
+                    return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(self._get_primitive_value(elem, submodel)).__name__}, expected {submodel.__name__ if hasattr(submodel, '__name__') else submodel}."
         model_tags = set(model.model_fields.keys())
         for child in self.iter_direct_children(tree):
             name = self.get_name(child)
@@ -90,11 +107,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
     def validate_permissive_recursive(self, tree, model):
         for field, field_info in model.model_fields.items():
-            submodel = field_info.annotation
+            submodel = self._normalize_primitive_type(field_info.annotation)
             elems = self.find_all(tree, field)
             if not elems:
                 return False, f"Missing <{field}> tag/field anywhere in document."
-            # Support Any and object types: accept any content
             if submodel is typing.Any or submodel is object:
                 continue
             if hasattr(submodel, "model_fields"):
@@ -107,10 +123,9 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 if not found_valid:
                     return False, f"No <{field}> tag/field matches the required nested structure."
             else:
-                # Type check for permissive: all found elems must match type
                 for elem in elems:
                     if not self._is_type_match(elem, submodel):
-                        return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(elem).__name__}, expected {submodel}."
+                        return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(self._get_primitive_value(elem, submodel)).__name__}, expected {submodel.__name__ if hasattr(submodel, '__name__') else submodel}."
         return True, None
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
@@ -122,6 +137,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 error_message=f"Invalid file: {e}",
                 hint=self.initial_hint
             )
+        if self.model is None:
+            return ValidationResult(is_valid=True)
         valid, err = self.validate_strict_recursive(tree, self.model)
         if not valid:
             return ValidationResult(
@@ -140,6 +157,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 error_message=f"Invalid file: {e}",
                 hint=self.initial_hint
             )
+        if self.model is None:
+            return ValidationResult(is_valid=True)
         valid, err = self.validate_permissive_recursive(tree, self.model)
         if not valid:
             return ValidationResult(
