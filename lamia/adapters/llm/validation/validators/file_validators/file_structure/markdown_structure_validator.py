@@ -55,7 +55,30 @@ class Image(MarkdownStr): pass
 class TaskListItem(MarkdownStr): pass
 class Footnote(MarkdownStr): pass
 class HorizontalRule(MarkdownStr): pass
-# Add more as needed
+
+MARKDOWN_TYPE_MAPPING = {
+    Heading1: ("heading", 1),
+    Heading2: ("heading", 2),
+    Heading3: ("heading", 3),
+    Heading4: ("heading", 4),
+    Heading5: ("heading", 5),
+    Heading6: ("heading", 6),
+    Paragraph: ("paragraph", None),
+    CodeBlock: ("block_code", None),
+    InlineCode: ("codespan", None),
+    ListItem: ("list_item", None),
+    Blockquote: ("block_quote", None),
+    Table: ("table", None),
+    Image: ("image", None),
+    TaskListItem: ("task_list_item", None),
+    Footnote: ("footnote", None),
+    HorizontalRule: ("thematic_break", None),
+    BoldText: ("strong", None),
+    ItalicText: ("emphasis", None),
+    Strikethrough: ("strikethrough", None),
+    Url: ("link", None),
+}
+# Add more markdown types as needed
 
 class MarkdownStructureValidator(DocumentStructureValidator):
     """Validates if the Markdown matches a given Pydantic model structure, or just checks for well-formed Markdown if no model/schema is provided."""
@@ -193,30 +216,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         return results
 
     def _ast_type_for_field(self, typ):
-        mapping = {
-            Heading1: ("heading", 1),
-            Heading2: ("heading", 2),
-            Heading3: ("heading", 3),
-            Heading4: ("heading", 4),
-            Heading5: ("heading", 5),
-            Heading6: ("heading", 6),
-            Paragraph: ("paragraph", None),
-            CodeBlock: ("block_code", None),
-            InlineCode: ("codespan", None),
-            ListItem: ("list_item", None),
-            Blockquote: ("block_quote", None),
-            Table: ("table", None),
-            Image: ("image", None),
-            TaskListItem: ("task_list_item", None),
-            Footnote: ("footnote", None),
-            HorizontalRule: ("thematic_break", None),
-            BoldText: ("strong", None),
-            ItalicText: ("emphasis", None),
-            Strikethrough: ("strikethrough", None),
-            Url: ("link", None),
-            # Add more as needed
-        }
-        return mapping.get(typ, (None, None))
+        return MARKDOWN_TYPE_MAPPING.get(typ, (None, None))
 
     def _extract_text(self, node):
         if node is None:
@@ -254,6 +254,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
                         scan_idx += 1
                         found = True
                         break
+
                 if not found and strict:
                     scan_idx += 1
                     break
