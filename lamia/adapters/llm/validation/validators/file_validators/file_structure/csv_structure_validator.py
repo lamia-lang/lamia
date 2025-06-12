@@ -1,27 +1,9 @@
 import csv
 import io
-import importlib
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator
 from ....base import ValidationResult
-
-def import_model_from_path(path: str, default_module: str = "models"):
-    if "." in path:
-        parts = path.split('.')
-        module_path = '.'.join(parts[:-1])
-        class_name = parts[-1]
-        mod = importlib.import_module(module_path)
-        return getattr(mod, class_name)
-    else:
-        mod = importlib.import_module(default_module)
-        return getattr(mod, path)
-
-def describe_model_structure(model, indent=0):
-    lines = []
-    prefix = '  ' * indent
-    for field, field_info in model.model_fields.items():
-        lines.append(f'{prefix}{field}: {field_info.annotation.__name__}')
-    return lines
+from .utils import import_model_from_path, describe_model_structure
 
 class CSVStructureValidator(DocumentStructureValidator):
     """Validates if the CSV matches a given Pydantic model structure (one field per column)."""
@@ -42,7 +24,7 @@ class CSVStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        structure_lines = describe_model_structure(self.model)
+        structure_lines = describe_model_structure(self.model, format_type="csv")
         return (
             "Please ensure the CSV matches the required structure.\n"
             "Expected columns and types:\n"
@@ -98,6 +80,10 @@ class CSVStructureValidator(DocumentStructureValidator):
         _, rows = tree
         return [row.get(key) for row in rows if key in row]
 
+    # Helper method to get user-friendly row number (1-indexed)
+    def _user_row_num(self, index):
+        return index + 1
+
     # Overrides the base class method because of the flat nature of CSV
     def validate_strict_recursive(self, tree, model):
         header, rows = tree
@@ -110,11 +96,11 @@ class CSVStructureValidator(DocumentStructureValidator):
             for field, field_info in model.model_fields.items():
                 submodel = self._normalize_primitive_type(field_info.annotation)
                 if field not in row:
-                    return False, f"Row {i+1} is missing field '{field}'"
+                    return False, f"Row {self._user_row_num(i)} is missing field '{field}'"
                 
                 # Use _is_type_match instead of Pydantic validation
                 if not self._is_type_match(row[field], submodel):
-                    return False, f"Row {i+1}, field '{field}' has value {row[field]!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
+                    return False, f"Row {self._user_row_num(i)}, field '{field}' has value {row[field]!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
         
         return True, None
 
@@ -135,13 +121,13 @@ class CSVStructureValidator(DocumentStructureValidator):
             for field, field_info in model.model_fields.items():
                 submodel = self._normalize_primitive_type(field_info.annotation)
                 if field not in row:
-                    return False, f"Row {i+1} is missing field '{field}'"
+                    return False, f"Row {self._user_row_num(i)} is missing field '{field}'"
                 
                 # For permissive mode, strip whitespace from string values
                 value = row[field].strip() if isinstance(row[field], str) else row[field]
                 
                 # Use _is_type_match instead of Pydantic validation
                 if not self._is_type_match(value, submodel):
-                    return False, f"Row {i+1}, field '{field}' has value {value!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
+                    return False, f"Row {self._user_row_num(i)}, field '{field}' has value {value!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
         
         return True, None 

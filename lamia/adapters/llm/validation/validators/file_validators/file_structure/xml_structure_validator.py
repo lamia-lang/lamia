@@ -1,31 +1,7 @@
 import xml.etree.ElementTree as ET
-import importlib
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator
-
-def import_model_from_path(path: str, default_module: str = "models"):
-    if "." in path:
-        parts = path.split('.')
-        module_path = '.'.join(parts[:-1])
-        class_name = parts[-1]
-        mod = importlib.import_module(module_path)
-        return getattr(mod, class_name)
-    else:
-        mod = importlib.import_module(default_module)
-        return getattr(mod, path)
-
-def describe_model_structure(model, indent=0):
-    lines = []
-    prefix = '  ' * indent
-    for field, field_info in model.model_fields.items():
-        submodel = field_info.annotation
-        if hasattr(submodel, "model_fields"):
-            lines.append(f'{prefix}<{field}>')
-            lines.extend(describe_model_structure(submodel, indent + 1))
-            lines.append(f"{prefix}</{field}>")
-        else:
-            lines.append(f'{prefix}<{field}>...text...</{field}>')
-    return lines
+from .utils import import_model_from_path, describe_model_structure
 
 class XMLStructureValidator(DocumentStructureValidator):
     """Validates if the XML matches a given Pydantic model structure."""
@@ -46,7 +22,7 @@ class XMLStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        structure_lines = describe_model_structure(self.model)
+        structure_lines = describe_model_structure(self.model, format_type="xml")
         return (
             "Please ensure the XML matches the required structure.\n"
             "Expected structure:\n"

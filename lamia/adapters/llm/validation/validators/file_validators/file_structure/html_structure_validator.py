@@ -1,34 +1,9 @@
 from pydantic import BaseModel, create_model
 from bs4 import BeautifulSoup
-import importlib
 import re
 from .document_structure_validator import DocumentStructureValidator
 from ....base import ValidationResult
-
-def import_model_from_path(path: str, default_module: str = "models"):
-    if "." in path:
-        parts = path.split('.')
-        module_path = '.'.join(parts[:-1])
-        class_name = parts[-1]
-        mod = importlib.import_module(module_path)
-        return getattr(mod, class_name)
-    else:
-        mod = importlib.import_module(default_module)
-        return getattr(mod, path)
-
-def describe_model_structure(model, indent=0):
-    """Recursively describe the expected HTML structure from a Pydantic model."""
-    lines = []
-    prefix = '  ' * indent
-    for field, field_info in model.model_fields.items():
-        submodel = field_info.annotation
-        if hasattr(submodel, "model_fields"):
-            lines.append(f"{prefix}<{field}>")
-            lines.extend(describe_model_structure(submodel, indent + 1))
-            lines.append(f"{prefix}</{field}>")
-        else:
-            lines.append(f"{prefix}<{field}>...text...</{field}>")
-    return lines
+from .utils import import_model_from_path, describe_model_structure
 
 class HTMLStructureValidator(DocumentStructureValidator):
     """Validates if the HTML matches a given Pydantic model structure.
@@ -57,7 +32,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
     @property
     def initial_hint(self) -> str:
         if self._structure_check_enabled:
-            structure_lines = describe_model_structure(self.model)
+            structure_lines = describe_model_structure(self.model, format_type="html")
             return (
                 "Please ensure the HTML matches the required structure.\n" +
                 "Expected structure:\n" +
@@ -106,7 +81,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         return tree.find_all(key)
 
     # Overrides the base class method to add the <html> tag to the tree
-    # TODO: Can be don by adding html field to the model, but this is a good demonstration that base class can be overridden
+    # TODO: Can be done by adding html field to the model, but this is a good demonstration that base class can be overridden
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         try:
             tree = self.parse(response)
@@ -136,7 +111,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         return ValidationResult(is_valid=True)
 
     # Overrides the base class method to add the <html> tag to the tree
-    # TODO: Can be don by adding html field to the model, but this is a good demonstration that base class can be overridden
+    # TODO: Can be done by adding html field to the model, but this is a good demonstration that base class can be overridden
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         try:
             tree = self.parse(response)

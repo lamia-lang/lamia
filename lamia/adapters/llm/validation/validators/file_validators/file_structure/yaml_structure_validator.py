@@ -1,30 +1,7 @@
 import yaml
-import importlib
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator
-
-def import_model_from_path(path: str, default_module: str = "models"):
-    if "." in path:
-        parts = path.split('.')
-        module_path = '.'.join(parts[:-1])
-        class_name = parts[-1]
-        mod = importlib.import_module(module_path)
-        return getattr(mod, class_name)
-    else:
-        mod = importlib.import_module(default_module)
-        return getattr(mod, path)
-
-def describe_model_structure(model, indent=0):
-    lines = []
-    prefix = '  ' * indent
-    for field, field_info in model.model_fields.items():
-        submodel = field_info.annotation
-        if hasattr(submodel, "model_fields"):
-            lines.append(f'{prefix}{field}:')
-            lines.extend(describe_model_structure(submodel, indent + 1))
-        else:
-            lines.append(f'{prefix}{field}: ...')
-    return lines
+from .utils import import_model_from_path, describe_model_structure
 
 class YAMLStructureValidator(DocumentStructureValidator):
     """Validates if the YAML matches a given Pydantic model structure."""
@@ -45,7 +22,7 @@ class YAMLStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        structure_lines = describe_model_structure(self.model)
+        structure_lines = describe_model_structure(self.model, format_type="yaml")
         return (
             "Please ensure the YAML matches the required structure.\n"
             "Expected structure:\n"
