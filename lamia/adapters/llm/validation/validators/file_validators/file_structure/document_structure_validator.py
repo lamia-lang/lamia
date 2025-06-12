@@ -2,6 +2,10 @@ from abc import ABC, abstractmethod
 from ....base import BaseValidator, ValidationResult
 import typing
 
+# Set to True for strict type matching. For example, if you want to reject 123.45 as integer 123 in the strict validation mode.
+# TODO: This is not ideal for testing but I don't think we will need this in near future. So for now, no need to inject this properly.
+STRICT_TYPE_MATCH = False
+
 class DocumentStructureValidator(BaseValidator, ABC):
     def __init__(self, model, strict=True):
         super().__init__(strict=strict)
@@ -63,13 +67,34 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
     def _is_type_match(self, value, expected_type):
         value = self._get_primitive_value(value, expected_type)
-        
         origin = typing.get_origin(expected_type)
         args = typing.get_args(expected_type)
         if origin is None:
             # Handle Any and object
             if expected_type is typing.Any or expected_type is object:
                 return True
+            # Accept any value for str (except None)
+            if expected_type is str:
+                return value is not None
+                        # For int, float, bool, try to cast
+            if not STRICT_TYPE_MATCH:
+                # TODO: We might need to allow parsing of locale specific numbers. e.g. 123,456.789
+                def is_number(s):
+                    try:
+                        float(s)
+                        return True
+                    except ValueError:
+                        return False
+
+                if expected_type in (int, float, bool):
+                    try:
+                        expected_type(float(value) if isinstance(value, str) and is_number(value) else value)
+                        return True
+                    except (ValueError, TypeError):
+                        return False
+            else:
+                return _is_type_match_strictly_typed(self, value, expected_type)
+
             return isinstance(value, expected_type)
         elif origin is list:
             return isinstance(value, list) and all(self._is_type_match(v, args[0]) for v in value)
@@ -167,3 +192,52 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 hint=self.initial_hint
             )
         return ValidationResult(is_valid=True) 
+    
+# Use this method if you want to reject 123.45 as integer 123 in the strict validation mode.
+# Current implementation have relaxed type checking. Meaning that 123.45 will be accepted as int with value 123.
+def _is_type_match_strictly_typed(self, value, expected_type):
+    import re
+    # For int, float, bool, use stricter logic in strict mode
+    if expected_type is int:
+        if self.strict:
+            if isinstance(value, int):
+                return True
+            if isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
+                return True
+            return False
+        else:
+            try:
+                int(value)
+                return True
+            except (ValueError, TypeError):
+                return False
+    if expected_type is float:
+        if self.strict:
+            if isinstance(value, (int, float)):
+                return True
+            if isinstance(value, str) and re.fullmatch(r"-?(?:\d+\.\d*|\d*\.\d+|\d+)", value.strip()):
+                return True
+            return False
+        else:
+            try:
+                float(value)
+                return True
+            except (ValueError, TypeError):
+                return False
+    if expected_type is bool:
+        if self.strict:
+            if isinstance(value, bool):
+                return True
+            if isinstance(value, str) and value.strip().lower() in ("true", "false"):
+                return True
+            return False
+        else:
+            try:
+                if isinstance(value, bool):
+                    return True
+                if isinstance(value, str) and value.strip().lower() in ("true", "false", "1", "0"):
+                    return True
+                bool(value)
+                return True
+            except (ValueError, TypeError):
+                return False

@@ -1,7 +1,7 @@
 import csv
 import io
 import importlib
-from pydantic import BaseModel, create_model, ValidationError
+from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator
 from ....base import ValidationResult
 
@@ -77,8 +77,8 @@ class CSVStructureValidator(DocumentStructureValidator):
         return None
 
     def get_text(self, element):
-        # Not used for CSV
-        return None
+        # For CSV validation, element is the cell value (already a string)
+        return element
 
     def has_nested(self, element):
         # CSV is always flat
@@ -105,11 +105,17 @@ class CSVStructureValidator(DocumentStructureValidator):
         # Strict: header must match model fields exactly (order and names)
         if header != model_fields:
             return False, f"CSV header {header} does not match required columns {model_fields} (order and names must match)."
+        
         for i, row in enumerate(rows):
-            try:
-                model.model_validate(row)
-            except ValidationError as e:
-                return False, f"Row {i+1} does not match schema: {e}"
+            for field, field_info in model.model_fields.items():
+                submodel = self._normalize_primitive_type(field_info.annotation)
+                if field not in row:
+                    return False, f"Row {i+1} is missing field '{field}'"
+                
+                # Use _is_type_match instead of Pydantic validation
+                if not self._is_type_match(row[field], submodel):
+                    return False, f"Row {i+1}, field '{field}' has value {row[field]!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
+        
         return True, None
 
     # Overrides the base class method because of the flat nature of CSV
@@ -117,7 +123,6 @@ class CSVStructureValidator(DocumentStructureValidator):
         header, rows = tree
         model_fields = list(model.model_fields.keys())
         # Permissive: all model fields must be present in the correct order, extra columns allowed
-        # Find the indices of model fields in the header
         try:
             indices = [header.index(field) for field in model_fields]
         except ValueError:
@@ -125,11 +130,18 @@ class CSVStructureValidator(DocumentStructureValidator):
         # Check that indices are strictly increasing (correct order)
         if indices != sorted(indices):
             return False, f"CSV header {header} does not have required columns {model_fields} in the correct order."
+        
         for i, row in enumerate(rows):
-            # Only validate required fields, and strip whitespace from all string values
-            filtered_row = {k: v.strip() for k, v in row.items() if k in model_fields}
-            try:
-                model.model_validate(filtered_row)
-            except ValidationError as e:
-                return False, f"Row {i+1} does not match schema: {e}"
+            for field, field_info in model.model_fields.items():
+                submodel = self._normalize_primitive_type(field_info.annotation)
+                if field not in row:
+                    return False, f"Row {i+1} is missing field '{field}'"
+                
+                # For permissive mode, strip whitespace from string values
+                value = row[field].strip() if isinstance(row[field], str) else row[field]
+                
+                # Use _is_type_match instead of Pydantic validation
+                if not self._is_type_match(value, submodel):
+                    return False, f"Row {i+1}, field '{field}' has value {value!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
+        
         return True, None 

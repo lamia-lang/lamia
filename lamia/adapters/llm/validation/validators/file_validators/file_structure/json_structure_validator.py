@@ -90,7 +90,7 @@ class JSONStructureValidator(DocumentStructureValidator):
     def get_text(self, element):
         # For JSON, leaf nodes are primitives
         if isinstance(element, (str, int, float, bool)) or element is None:
-            return str(element)
+            return element
         return None
 
     def has_nested(self, element):

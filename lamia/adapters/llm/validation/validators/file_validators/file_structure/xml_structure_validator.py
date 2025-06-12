@@ -64,7 +64,26 @@ class XMLStructureValidator(DocumentStructureValidator):
         return None
 
     def get_text(self, element):
-        return element.text.strip() if element is not None and element.text else None
+        if element is not None and element.text:
+            text = element.text.strip()
+            # Try int
+            try:
+                return int(text)
+            except ValueError:
+                pass
+            # Try float
+            try:
+                return float(text)
+            except ValueError:
+                pass
+            # Try bool
+            lower = text.lower()
+            if lower == 'true':
+                return True
+            if lower == 'false':
+                return False
+            return text
+        return None
 
     def has_nested(self, element):
         return len(element) > 0
