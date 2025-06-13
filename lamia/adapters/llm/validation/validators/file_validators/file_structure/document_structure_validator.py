@@ -36,7 +36,7 @@ def validate_field_presence(field_name, field_type, data, mode):
             return True
     return True
 
-STRICT_TYPE_MATCH = True
+STRICT_TYPE_MATCH = False
 
 class DocumentStructureValidator(BaseValidator, ABC):
     def __init__(self, model, strict=True):
@@ -98,13 +98,11 @@ class DocumentStructureValidator(BaseValidator, ABC):
         for field, field_info in model.model_fields.items():
             submodel = self._normalize_primitive_type(field_info.annotation)
             elem = self.find_element(tree, field)
-            # Use validate_field for presence/null checks
-            if not validate_field_presence(field, field_info.annotation, tree, "strict"):
+            # Use element presence for tag-based trees
+            if elem is None:
                 if is_optional(field_info.annotation):
                     continue
-                if elem is None:
-                    return False, f"Missing <{field}> as direct child."
-                return False, f"<{field}> is null but not Optional."
+                return False, f"Missing <{field}> as direct child."
             if submodel is typing.Any or submodel is object:
                 continue
             if self._is_primitive_type(submodel):
@@ -195,6 +193,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
                     if submodel is int and isinstance(text, float):
                         info_loss[field] = f"float({text}) -> int({int(text)})"
                         values[field] = int(text)
+                    elif submodel is str:
+                        values[field] = str(text) if text is not None else None
                     else:
                         values[field] = submodel(text) if text is not None else None
                 except Exception:

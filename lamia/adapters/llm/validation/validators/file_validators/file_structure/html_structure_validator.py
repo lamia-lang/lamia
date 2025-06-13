@@ -58,21 +58,23 @@ class HTMLStructureValidator(DocumentStructureValidator):
         return soup
 
     def find_element(self, tree, key):
-        # Only direct children
+        # Only direct children that are tags
         for child in tree.children:
             if getattr(child, 'name', None) == key:
                 return child
         return None
 
     def get_text(self, element):
-        return element.get_text(strip=True) if element else None
+        text = element.get_text(strip=True) if element else None
+        return text
 
     def has_nested(self, element):
         # Returns True if there are any tag children
         return any(getattr(child, 'name', None) for child in element.children)
 
     def iter_direct_children(self, tree):
-        return (child for child in tree.children if getattr(child, 'name', None))
+        # Only yield children that are tags
+        return (child for child in tree.children if getattr(child, 'name', None) is not None)
 
     def get_name(self, element):
         return getattr(element, 'name', None)
@@ -108,7 +110,13 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 error_message=f"Strict validation failed: {err}",
                 hint=self.initial_hint
             )
-        return ValidationResult(is_valid=True)
+        # Fill the model from the tree, as in the base class
+        model_instance, info_loss = self._fill_model_from_tree(tree, self.model, permissive=False)
+        return ValidationResult(
+            is_valid=True,
+            result_type=model_instance,
+            info_loss=info_loss if info_loss else None
+        )
 
     # Overrides the base class method to add the <html> tag to the tree
     # TODO: Can be done by adding html field to the model, but this is a good demonstration that base class can be overridden
@@ -138,4 +146,9 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 error_message=f"Permissive validation failed: {err}",
                 hint=self.initial_hint
             )
-        return ValidationResult(is_valid=True) 
+        model_instance, info_loss = self._fill_model_from_tree(tree, self.model, permissive=False)
+        return ValidationResult(
+            is_valid=True,
+            result_type=model_instance,
+            info_loss=info_loss if info_loss else None
+        )

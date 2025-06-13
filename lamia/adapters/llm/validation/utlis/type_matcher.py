@@ -68,8 +68,15 @@ class TypeMatcher:
                     return self._is_type_match_strictly_typed(value, int)
                 if isinstance(value, int):
                     return True
-                if isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
-                    return True
+                if isinstance(value, str):
+                    s = value.strip()
+                    if re.fullmatch(r"-?\d+", s):
+                        return True
+                    try:
+                        float(s)
+                        return True
+                    except Exception:
+                        pass
                 return False
             if expected_type is float:
                 if self.strict:

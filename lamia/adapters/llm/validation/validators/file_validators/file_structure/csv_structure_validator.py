@@ -88,46 +88,58 @@ class CSVStructureValidator(DocumentStructureValidator):
     def validate_strict_recursive(self, tree, model):
         header, rows = tree
         model_fields = list(model.model_fields.keys())
-        # Strict: header must match model fields exactly (order and names)
         if header != model_fields:
             return False, f"CSV header {header} does not match required columns {model_fields} (order and names must match)."
-        
         for i, row in enumerate(rows):
             for field, field_info in model.model_fields.items():
                 submodel = self._normalize_primitive_type(field_info.annotation)
-                if field not in row:
+                value = row.get(field)
+                if value is None:
                     return False, f"Row {self._user_row_num(i)} is missing field '{field}'"
-                
-                # Use _is_type_match instead of Pydantic validation
-                if not self._is_type_match(row[field], submodel):
-                    return False, f"Row {self._user_row_num(i)}, field '{field}' has value {row[field]!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
-        
+                if not self.type_matcher._is_type_match(value, submodel):
+                    return False, f"Row {self._user_row_num(i)}, field '{field}' has value {value!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
         return True, None
 
     # Overrides the base class method because of the flat nature of CSV
     def validate_permissive_recursive(self, tree, model):
         header, rows = tree
         model_fields = list(model.model_fields.keys())
-        # Permissive: all model fields must be present in the correct order, extra columns allowed
         try:
             indices = [header.index(field) for field in model_fields]
         except ValueError:
             return False, f"CSV header {header} does not contain all required columns {model_fields}."
-        # Check that indices are strictly increasing (correct order)
         if indices != sorted(indices):
             return False, f"CSV header {header} does not have required columns {model_fields} in the correct order."
-        
         for i, row in enumerate(rows):
             for field, field_info in model.model_fields.items():
                 submodel = self._normalize_primitive_type(field_info.annotation)
-                if field not in row:
+                value = row.get(field)
+                if value is None:
                     return False, f"Row {self._user_row_num(i)} is missing field '{field}'"
-                
-                # For permissive mode, strip whitespace from string values
-                value = row[field].strip() if isinstance(row[field], str) else row[field]
-                
-                # Use _is_type_match instead of Pydantic validation
-                if not self._is_type_match(value, submodel):
+                if not self.type_matcher._is_type_match(value, submodel):
                     return False, f"Row {self._user_row_num(i)}, field '{field}' has value {value!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
-        
-        return True, None 
+        return True, None
+
+    def _fill_model_from_tree(self, tree, model, permissive=False, info_loss=None):
+        from pydantic import ValidationError
+        header, rows = tree
+        info_loss = info_loss or {}
+        if not rows:
+            return None, info_loss
+        row = rows[0]
+        values = {}
+        for field, field_info in model.model_fields.items():
+            submodel = self._normalize_primitive_type(field_info.annotation)
+            value = row.get(field)
+            if value is None:
+                values[field] = None
+                continue
+            try:
+                values[field] = self.type_matcher._get_primitive_value(value, submodel)
+            except Exception:
+                values[field] = None
+        try:
+            model_instance = model(**values)
+        except ValidationError:
+            model_instance = None
+        return model_instance, info_loss 
