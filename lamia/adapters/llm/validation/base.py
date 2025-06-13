@@ -11,12 +11,18 @@ class ValidationResult:
         is_valid: Whether the response is valid.
         error_message: Error message if invalid.
         hint: Optional hint for fixing the response.
-        validated_text: Sanitized/validated part of the response (if available).
+        raw_text: The original input text to the validator (e.g., LLM output with extra talking).
+        validated_text: The valid, extracted part of the response (e.g., document without LLM talking).
+        result_type: The validated and resolved type (e.g., parsed Pydantic model or atomic type value).
+        info_loss: Optional dict or structure describing info-losing type conversions (e.g., float->int truncation).
     """
     is_valid: bool
     error_message: Optional[str] = None
     hint: Optional[str] = None
+    raw_text: Optional[str] = None
     validated_text: Optional[str] = None
+    result_type: Optional[Any] = None
+    info_loss: Optional[dict] = None
 
 class BaseValidator(ABC):
     """Base class for response validators.

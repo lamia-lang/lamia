@@ -16,7 +16,11 @@ class JSONValidator(BaseValidator):
         return self._delegate.initial_hint
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        return await self._delegate.validate_strict(response, **kwargs)
+        result = await self._delegate.validate_strict(response, **kwargs)
+        result.raw_text = response
+        return result
 
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
-        return await self._delegate.validate_permissive(response, **kwargs) 
+        result = await self._delegate.validate_permissive(response, **kwargs)
+        result.raw_text = response
+        return result 
