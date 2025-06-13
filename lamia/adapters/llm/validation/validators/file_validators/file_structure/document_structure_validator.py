@@ -164,6 +164,49 @@ class DocumentStructureValidator(BaseValidator, ABC):
                             return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(self._get_primitive_value(elem, submodel)).__name__}, expected {submodel.__name__ if hasattr(submodel, '__name__') else submodel}."
         return True, None
 
+    def _fill_model_from_tree(self, tree, model, permissive=False, info_loss=None):
+        """
+        Recursively fill a Pydantic model from the parsed tree (dict, soup, AST, etc.).
+        Returns (model_instance, info_loss_dict)
+        """
+        from pydantic import ValidationError
+        values = {}
+        info_loss = info_loss or {}
+        for field, field_info in model.model_fields.items():
+            submodel = self._normalize_primitive_type(field_info.annotation)
+            if permissive:
+                elems = self.find_all(tree, field)
+                elem = elems[0] if elems else None
+            else:
+                elem = self.find_element(tree, field)
+            if elem is None:
+                values[field] = None
+                continue
+            if hasattr(submodel, "model_fields"):
+                # Nested Pydantic model
+                nested, nested_info_loss = self._fill_model_from_tree(elem, submodel, permissive, info_loss)
+                values[field] = nested
+                if nested_info_loss:
+                    info_loss[field] = nested_info_loss
+            elif self._is_primitive_type(submodel):
+                text = self.get_text(elem)
+                # Info-losing conversion: e.g., float->int
+                try:
+                    if submodel is int and isinstance(text, float):
+                        info_loss[field] = f"float({text}) -> int({int(text)})"
+                        values[field] = int(text)
+                    else:
+                        values[field] = submodel(text) if text is not None else None
+                except Exception:
+                    values[field] = None
+            else:
+                values[field] = self.get_text(elem)
+        try:
+            model_instance = model(**values)
+        except ValidationError:
+            model_instance = None
+        return model_instance, info_loss
+
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         try:
             tree = self.parse(response)
@@ -171,18 +214,27 @@ class DocumentStructureValidator(BaseValidator, ABC):
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Invalid file: {e}",
+                raw_text=response,
                 hint=self.initial_hint
             )
         if self.model is None:
-            return ValidationResult(is_valid=True)
+            return ValidationResult(is_valid=True, raw_text=response, validated_text=response, result_type=tree)
         valid, err = self.validate_strict_recursive(tree, self.model)
         if not valid:
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Strict validation failed: {err}",
+                raw_text=response,
                 hint=self.initial_hint
             )
-        return ValidationResult(is_valid=True)
+        model_instance, info_loss = self._fill_model_from_tree(tree, self.model, permissive=False)
+        return ValidationResult(
+            is_valid=True,
+            raw_text=response,
+            validated_text=response,  # For now, the whole doc; can be improved to just the valid part
+            result_type=model_instance,
+            info_loss=info_loss if info_loss else None
+        )
 
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         try:
@@ -191,15 +243,24 @@ class DocumentStructureValidator(BaseValidator, ABC):
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Invalid file: {e}",
+                raw_text=response,
                 hint=self.initial_hint
             )
         if self.model is None:
-            return ValidationResult(is_valid=True)
+            return ValidationResult(is_valid=True, raw_text=response, validated_text=response, result_type=tree)
         valid, err = self.validate_permissive_recursive(tree, self.model)
         if not valid:
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Permissive validation failed: {err}",
+                raw_text=response,
                 hint=self.initial_hint
             )
-        return ValidationResult(is_valid=True)
+        model_instance, info_loss = self._fill_model_from_tree(tree, self.model, permissive=True)
+        return ValidationResult(
+            is_valid=True,
+            raw_text=response,
+            validated_text=response,  # For now, the whole doc; can be improved to just the valid part
+            result_type=model_instance,
+            info_loss=info_loss if info_loss else None
+        )
