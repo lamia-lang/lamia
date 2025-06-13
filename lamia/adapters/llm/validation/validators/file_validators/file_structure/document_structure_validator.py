@@ -2,15 +2,47 @@ from abc import ABC, abstractmethod
 from ....base import BaseValidator, ValidationResult
 import typing
 import re
+from typing import get_origin, get_args, Any, Union
+from lamia.adapters.llm.validation.utlis.type_matcher import TypeMatcher
 
-# Set to True for strict type matching. For example, if you want to reject 123.45 as integer 123 in the strict validation mode.
-# TODO: This is not ideal for testing but I don't think we will need this in near future. So for now, no need to inject this properly.
-STRICT_TYPE_MATCH = False
+def is_optional(field_type):
+    return get_origin(field_type) is Union and type(None) in get_args(field_type)
+
+def is_any(field_type):
+    return field_type is Any
+
+def validate_field_presence(field_name, field_type, data, mode):
+    present = field_name in data
+    value = data.get(field_name, None)
+    optional = is_optional(field_type)
+    any_type = is_any(field_type)
+    concrete_type = not any_type and not optional
+
+    if mode == "strict":
+        if optional:
+            # OK if missing or None
+            return True
+        if not present or value is None:
+            return False
+        return True
+    elif mode == "permissive":
+        if optional:
+            return True
+        if any_type:
+            return True
+        if concrete_type:
+            if not present or value is None:
+                return False
+            return True
+    return True
+
+STRICT_TYPE_MATCH = True
 
 class DocumentStructureValidator(BaseValidator, ABC):
     def __init__(self, model, strict=True):
         super().__init__(strict=strict)
         self.model = model
+        self.type_matcher = TypeMatcher(strict=STRICT_TYPE_MATCH, get_text_func=self.get_text)
 
     @abstractmethod
     def parse(self, response: str):
@@ -48,130 +80,47 @@ class DocumentStructureValidator(BaseValidator, ABC):
         pass
 
     def _is_primitive_type(self, t):
-        return t in (str, int, float, bool)
+        return self.type_matcher._is_primitive_type(t)
 
     def _normalize_primitive_type(self, t):
-        # Normalize to canonical Python primitive types
-        if t == str or t == type(str()):
-            return str
-        if t == int or t == type(int()):
-            return int
-        if t == float or t == type(float()):
-            return float
-        if t == bool or t == type(bool()):
-            return bool
-        return t
+        return self.type_matcher._normalize_primitive_type(t)
 
     def _get_primitive_value(self, value, expected_type):
-        # Always extract text from AST nodes for type checking
-        return self.get_text(value)
-
-    # Use this method if you want to reject 123.45 as integer 123 in the strict validation mode.
-    # Current implementation has relaxed type checking. Meaning that 123.45 will be accepted as int with value 123.
-    def _is_type_match_strictly_typed(self, value, expected_type):
-        # For int, float, bool, use stricter logic in strict mode
-        if expected_type is int:
-            if self.strict:
-                if isinstance(value, int):
-                    return True
-                if isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
-                    return True
-                return False
-            else:
-                try:
-                    int(value)
-                    return True
-                except (ValueError, TypeError):
-                    return False
-        if expected_type is float:
-            if self.strict:
-                if isinstance(value, (int, float)):
-                    return True
-                if isinstance(value, str) and re.fullmatch(r"-?(?:\d+\.\d*|\d*\.\d+|\d+)", value.strip()):
-                    return True
-                return False
-            else:
-                try:
-                    float(value)
-                    return True
-                except (ValueError, TypeError):
-                    return False
-        if expected_type is bool:
-            if self.strict:
-                if isinstance(value, bool):
-                    return True
-                if isinstance(value, str) and value.strip().lower() in ("true", "false"):
-                    return True
-                return False
-            else:
-                try:
-                    if isinstance(value, bool):
-                        return True
-                    if isinstance(value, str) and value.strip().lower() in ("true", "false", "1", "0"):
-                        return True
-                    bool(value)
-                    return True
-                except (ValueError, TypeError):
-                    return False
+        return self.type_matcher._get_primitive_value(value, expected_type)
 
     def _is_type_match(self, value, expected_type):
-        value = self._get_primitive_value(value, expected_type)
-        origin = typing.get_origin(expected_type)
-        args = typing.get_args(expected_type)
-        if origin is None:
-            # Handle Any and object
-            if expected_type is typing.Any or expected_type is object:
-                return True
-            # Accept any value for str (except None)
-            if expected_type is str:
-                return value is not None
-            # For int, float, bool, try to cast
-            if not STRICT_TYPE_MATCH:
-                # TODO: We might need to allow parsing of locale specific numbers. e.g. 123,456.789
-                def is_number(s):
-                    try:
-                        float(s)
-                        return True
-                    except ValueError:
-                        return False
+        return self.type_matcher._is_type_match(value, expected_type)
 
-                if expected_type in (int, float, bool):
-                    try:
-                        expected_type(float(value) if isinstance(value, str) and is_number(value) else value)
-                        return True
-                    except (ValueError, TypeError):
-                        return False
-            else:
-                return self._is_type_match_strictly_typed(value, expected_type)
-
-            return isinstance(value, expected_type)
-        elif origin is list:
-            return isinstance(value, list) and all(self._is_type_match(v, args[0]) for v in value)
-        elif origin is dict:
-            return isinstance(value, dict)
-        elif origin is typing.Union:
-            # Handle Optional[X] (which is Union[X, NoneType])
-            return any(self._is_type_match(value, arg) for arg in args)
-        return False
+    def _is_type_match_strictly_typed(self, value, expected_type):
+        return self.type_matcher._is_type_match_strictly_typed(value, expected_type)
 
     def validate_strict_recursive(self, tree, model):
         for field, field_info in model.model_fields.items():
             submodel = self._normalize_primitive_type(field_info.annotation)
             elem = self.find_element(tree, field)
-            if elem is None:
-                return False, f"Missing <{field}> as direct child."
-            
+            # Use validate_field for presence/null checks
+            if not validate_field_presence(field, field_info.annotation, tree, "strict"):
+                if is_optional(field_info.annotation):
+                    continue
+                if elem is None:
+                    return False, f"Missing <{field}> as direct child."
+                return False, f"<{field}> is null but not Optional."
             if submodel is typing.Any or submodel is object:
                 continue
-            if hasattr(submodel, "model_fields"):
-                valid, err = self.validate_strict_recursive(elem, submodel)
-                if not valid:
-                    return False, err
-            else:
+            if self._is_primitive_type(submodel):
                 if self.has_nested(elem):
                     return False, f"<{field}> should only contain text, but has nested elements."
-                if not self._is_type_match(elem, submodel):
-                    return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(self._get_primitive_value(elem, submodel)).__name__}, expected {submodel.__name__ if hasattr(submodel, '__name__') else submodel}."
+            elif typing.get_origin(submodel) in (list, dict):
+                # Don't check for nested for lists/dicts
+                pass
+            else:
+                if hasattr(submodel, "model_fields"):
+                    valid, err = self.validate_strict_recursive(elem, submodel)
+                    if not valid:
+                        return False, err
+                else:
+                    if not self._is_type_match(elem, submodel):
+                        return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(self._get_primitive_value(elem, submodel)).__name__}, expected {submodel.__name__ if hasattr(submodel, '__name__') else submodel}."
         model_tags = set(model.model_fields.keys())
         for child in self.iter_direct_children(tree):
             name = self.get_name(child)
@@ -183,23 +132,36 @@ class DocumentStructureValidator(BaseValidator, ABC):
         for field, field_info in model.model_fields.items():
             submodel = self._normalize_primitive_type(field_info.annotation)
             elems = self.find_all(tree, field)
+            # Use validate_field for presence/null checks
             if not elems:
+                if validate_field_presence(field, field_info.annotation, tree, "permissive"):
+                    continue
                 return False, f"Missing <{field}> tag/field anywhere in document."
+            for elem in elems:
+                if not validate_field_presence(field, field_info.annotation, {field: elem}, "permissive"):
+                    return False, f"<{field}> is null but not Optional."
             if submodel is typing.Any or submodel is object:
                 continue
-            if hasattr(submodel, "model_fields"):
-                found_valid = False
-                for elem in elems:
-                    valid, _ = self.validate_permissive_recursive(elem, submodel)
-                    if valid:
-                        found_valid = True
-                        break
-                if not found_valid:
-                    return False, f"No <{field}> tag/field matches the required nested structure."
+            if self._is_primitive_type(submodel):
+                if self.has_nested(elem):
+                    return False, f"<{field}> should only contain text, but has nested elements."
+            elif typing.get_origin(submodel) in (list, dict):
+                # Don't check for nested for lists/dicts
+                pass
             else:
-                for elem in elems:
-                    if not self._is_type_match(elem, submodel):
-                        return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(self._get_primitive_value(elem, submodel)).__name__}, expected {submodel.__name__ if hasattr(submodel, '__name__') else submodel}."
+                if hasattr(submodel, "model_fields"):
+                    found_valid = False
+                    for elem in elems:
+                        valid, _ = self.validate_permissive_recursive(elem, submodel)
+                        if valid:
+                            found_valid = True
+                            break
+                    if not found_valid:
+                        return False, f"No <{field}> tag/field matches the required nested structure."
+                else:
+                    for elem in elems:
+                        if not self._is_type_match(elem, submodel):
+                            return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(self._get_primitive_value(elem, submodel)).__name__}, expected {submodel.__name__ if hasattr(submodel, '__name__') else submodel}."
         return True, None
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:

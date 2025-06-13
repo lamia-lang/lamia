@@ -1,3 +1,4 @@
+# NOTE: Type checking logic is now tested in unit tests for TypeMatcher. These tests remain as integration tests for file structure validators.
 import pytest
 from pydantic import BaseModel
 from lamia.adapters.llm.validation.validators.file_validators import *

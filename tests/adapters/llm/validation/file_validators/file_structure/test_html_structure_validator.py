@@ -44,7 +44,7 @@ async def test_html_structure_validator_head_and_body_present(strict):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
-async def test_html_structure_validator_valid_without_head_and_body(strict):
+async def test_html_structure_validator_invalid_without_head_and_body(strict):
     class HTMLModel(BaseModel):
       head: Any
       body: Any
@@ -112,14 +112,14 @@ async def test_html_structure_validator_correct_type_with_complex_model(strict):
       <body>
         <p>123</p>
       </body>
-    <html>
+    </html>
     """
     result = await validator.validate(html)
     assert result.is_valid is True
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
-async def test_html_structure_validator_correct_type_with_complex_model(strict):
+async def test_html_structure_validator_incorrect_type_with_complex_model(strict):
     class HeadModel(BaseModel):
       title: str
 
@@ -139,7 +139,7 @@ async def test_html_structure_validator_correct_type_with_complex_model(strict):
       <body>
         <p>abc</p>
       </body>
-    <html>
+    </html>
     """
     result = await validator.validate(html)
     assert result.is_valid is False
