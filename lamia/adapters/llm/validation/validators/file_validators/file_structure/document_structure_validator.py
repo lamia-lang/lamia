@@ -87,7 +87,11 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
         for field, field_info in model.model_fields.items():
             expected_type = field_info.annotation
-            elem = self.find_all(tree, field)[0] if permissive else self.find_element(tree, field)
+            if permissive:
+                elems = self.find_all(tree, field)
+                elem = elems[0] if elems else None
+            else:
+                elem = self.find_element(tree, field)
 
             if elem is None:
                 if is_optional(expected_type):
