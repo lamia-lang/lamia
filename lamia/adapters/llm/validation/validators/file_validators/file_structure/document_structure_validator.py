@@ -4,6 +4,7 @@ import typing
 import re
 from typing import get_origin, get_args, Any, Union
 from lamia.adapters.llm.validation.utlis.type_matcher import TypeMatcher
+from pydantic import BaseModel
 
 def is_optional(field_type):
     return get_origin(field_type) is Union and type(None) in get_args(field_type)
@@ -37,6 +38,17 @@ def validate_field_presence(field_name, field_type, data, mode):
     return True
 
 STRICT_TYPE_MATCH = False
+
+def is_pydantic_model(field_type):
+    try:
+        return issubclass(field_type, BaseModel)
+    except TypeError:
+        return False
+
+def is_list_of_models(field_type):
+    origin = get_origin(field_type)
+    args = get_args(field_type)
+    return origin in (list, typing.List) and args and is_pydantic_model(args[0])
 
 class DocumentStructureValidator(BaseValidator, ABC):
     def __init__(self, model, strict=True):
@@ -101,8 +113,35 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 is_valid = False
                 continue
 
-            text = self.get_text(elem)
-            match_result = self.type_matcher.validate_and_convert(text, expected_type)
+            # Recursive validation for nested models
+            if is_pydantic_model(expected_type):
+                nested_result = self._validate_tree(elem, expected_type, permissive, fill_model)
+                if not nested_result.is_valid:
+                    errors.append(f"Field {field}: {nested_result.error_message}")
+                    is_valid = False
+                    values[field] = None
+                else:
+                    values[field] = nested_result.result_type if fill_model else None
+                continue
+            # Recursive validation for lists of models
+            if is_list_of_models(expected_type):
+                item_type = get_args(expected_type)[0]
+                children = list(self.iter_direct_children(elem)) if elem is not None else []
+                nested_values = []
+                for child in children:
+                    nested_result = self._validate_tree(child, item_type, permissive, fill_model)
+                    if not nested_result.is_valid:
+                        errors.append(f"Field {field}[]: {nested_result.error_message}")
+                        is_valid = False
+                        nested_values.append(None)
+                    else:
+                        nested_values.append(nested_result.result_type if fill_model else None)
+                values[field] = nested_values
+                continue
+
+            # Use type_matcher for leaf fields
+            value = self.get_text(elem)
+            match_result = self.type_matcher.validate_and_convert(value, expected_type)
             if not match_result.is_valid:
                 errors.append(f"Field {field}: {match_result.error}")
                 is_valid = False
