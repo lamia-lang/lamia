@@ -1,5 +1,16 @@
 import typing
 import re
+from .error_messages import (
+    error_msg_none_not_allowed,
+    error_msg_cannot_convert_to_any,
+    error_msg_expected_type_got,
+    error_msg_expected_list_got,
+    error_msg_list_element_failed,
+    error_msg_expected_dict_got,
+    error_msg_expected_str_got,
+    error_msg_cannot_strictly_convert,
+    error_msg_cannot_convert,
+)
 
 class TypeMatchResult:
     def __init__(self, is_valid: bool, value: any = None, error: str = None):
@@ -20,7 +31,7 @@ class TypeMatcher:
                     return TypeMatchResult(True, None)
                 if expected_type is typing.Any:
                     return TypeMatchResult(True, None)
-                return TypeMatchResult(not self.strict, None, None if not self.strict else f"None is not allowed for {expected_type}")
+                return TypeMatchResult(False, None, error_msg_none_not_allowed(expected_type))
 
             # Handle Any
             if expected_type is typing.Any or expected_type is object:
@@ -34,24 +45,24 @@ class TypeMatcher:
                     result = self.validate_and_convert(value, arg)
                     if result.is_valid:
                         return result
-                return TypeMatchResult(False, None, f"Cannot convert {value!r} to any of {args}")
+                return TypeMatchResult(False, None, error_msg_cannot_convert_to_any(value, args))
 
             # Handle lists/dicts
             if origin is list:
                 if not isinstance(value, list):
-                    return TypeMatchResult(False, None, f"Expected list, got {type(value).__name__}")
+                    return TypeMatchResult(False, None, error_msg_expected_list_got(type(value).__name__))
                 if not args:
                     return TypeMatchResult(True, value)
                 coerced = []
                 for v in value:
                     result = self.validate_and_convert(v, args[0])
                     if not result.is_valid:
-                        return TypeMatchResult(False, None, f"List element {v!r} failed: {result.error}")
+                        return TypeMatchResult(False, None, error_msg_list_element_failed(v, result.error))
                     coerced.append(result.value)
                 return TypeMatchResult(True, coerced)
             if origin is dict:
                 if not isinstance(value, dict):
-                    return TypeMatchResult(False, None, f"Expected dict, got {type(value).__name__}")
+                    return TypeMatchResult(False, None, error_msg_expected_dict_got(type(value).__name__))
                 return TypeMatchResult(True, value)
 
             # Primitive types
@@ -60,7 +71,7 @@ class TypeMatcher:
                     return TypeMatchResult(True, value)
                 if not self.strict:
                     return TypeMatchResult(True, str(value))
-                return TypeMatchResult(False, None, f"Expected str, got {type(value).__name__}")
+                return TypeMatchResult(False, None, error_msg_expected_str_got(type(value).__name__))
             if expected_type is int:
                 return self._convert_int(value)
             if expected_type is float:
@@ -71,7 +82,7 @@ class TypeMatcher:
             # Fallback
             if isinstance(value, expected_type):
                 return TypeMatchResult(True, value)
-            return TypeMatchResult(False, None, f"Expected {expected_type}, got {type(value).__name__}")
+            return TypeMatchResult(False, None, error_msg_expected_type_got(expected_type.__name__, type(value).__name__))
         except Exception as e:
             return TypeMatchResult(False, None, str(e))
 
@@ -81,7 +92,7 @@ class TypeMatcher:
         if self.strict:
             if isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
                 return TypeMatchResult(True, int(value))
-            return TypeMatchResult(False, None, f"Cannot strictly convert {value!r} to int")
+            return TypeMatchResult(False, None, error_msg_cannot_strictly_convert(value, "int"))
         # relaxed
         if isinstance(value, float):
             return TypeMatchResult(True, int(value))
@@ -95,7 +106,7 @@ class TypeMatcher:
                     return TypeMatchResult(True, int(float_val))
                 except Exception:
                     pass
-        return TypeMatchResult(False, None, f"Cannot convert {value!r} to int")
+        return TypeMatchResult(False, None, error_msg_cannot_convert(value, "int"))
 
     def _convert_float(self, value):
         if isinstance(value, float):
@@ -105,14 +116,14 @@ class TypeMatcher:
         if self.strict:
             if isinstance(value, str) and re.fullmatch(r"-?(?:\d+\.\d*|\d*\.\d+|\d+)", value.strip()):
                 return TypeMatchResult(True, float(value))
-            return TypeMatchResult(False, None, f"Cannot strictly convert {value!r} to float")
+            return TypeMatchResult(False, None, error_msg_cannot_strictly_convert(value, "float"))
         # relaxed
         if isinstance(value, str):
             try:
                 return TypeMatchResult(True, float(value))
             except Exception:
                 pass
-        return TypeMatchResult(False, None, f"Cannot convert {value!r} to float")
+        return TypeMatchResult(False, None, error_msg_cannot_convert(value, "float"))
 
     def _convert_bool(self, value):
         if isinstance(value, bool):
@@ -120,7 +131,7 @@ class TypeMatcher:
         if self.strict:
             if isinstance(value, str) and value.strip().lower() in ("true", "false"):
                 return TypeMatchResult(True, value.strip().lower() == "true")
-            return TypeMatchResult(False, None, f"Cannot strictly convert {value!r} to bool")
+            return TypeMatchResult(False, None, error_msg_cannot_strictly_convert(value, "bool"))
         # relaxed
         if isinstance(value, str):
             v = value.strip().lower()
@@ -128,4 +139,4 @@ class TypeMatcher:
                 return TypeMatchResult(True, True)
             if v in ("false", "0"):
                 return TypeMatchResult(True, False)
-        return TypeMatchResult(False, None, f"Cannot convert {value!r} to bool") 
+        return TypeMatchResult(False, None, error_msg_cannot_convert(value, "bool")) 
