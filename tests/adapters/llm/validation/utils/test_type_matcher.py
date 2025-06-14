@@ -35,8 +35,8 @@ import typing
 ])
 def test_type_matcher_strict(expected_type, value, should_match):
     matcher = TypeMatcher(strict=True)
-    result = matcher._is_type_match(value, expected_type)
-    assert result == should_match 
+    result = matcher.validate_and_convert(value, expected_type)
+    assert result.is_valid == should_match
 
 # Strict not strict type checking tests are sperated because for each setup only one mode should be used.
 @pytest.mark.parametrize("expected_type,value,should_match", [
@@ -72,8 +72,8 @@ def test_type_matcher_strict(expected_type, value, should_match):
 ])
 def test_type_matcher_not_strict(expected_type, value, should_match):
     matcher = TypeMatcher(strict=False)
-    result = matcher._is_type_match(value, expected_type)
-    assert result == should_match
+    result = matcher.validate_and_convert(value, expected_type)
+    assert result.is_valid == should_match
 
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("expected_type,value,should_match_strict,should_match_not_strict", [
@@ -84,8 +84,8 @@ def test_type_matcher_not_strict(expected_type, value, should_match):
 ])
 def test_type_matcher_null_values(expected_type, value, should_match_strict, should_match_not_strict, strict):
     matcher = TypeMatcher(strict=strict)
-    result = matcher._is_type_match(value, expected_type)
+    result = matcher.validate_and_convert(value, expected_type)
     if strict:
-        assert result == should_match_strict
+        assert result.is_valid == should_match_strict
     else:
-        assert result == should_match_not_strict
+        assert result.is_valid == should_match_not_strict

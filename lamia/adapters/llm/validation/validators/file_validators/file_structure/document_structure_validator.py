@@ -79,21 +79,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Find all elements/fields with the given key anywhere in the tree."""
         pass
 
-    def _is_primitive_type(self, t):
-        return self.type_matcher._is_primitive_type(t)
-
-    def _normalize_primitive_type(self, t):
-        return self.type_matcher._normalize_primitive_type(t)
-
-    def _get_primitive_value(self, value, expected_type):
-        return self.type_matcher._get_primitive_value(value, expected_type)
-
-    def _is_type_match(self, value, expected_type):
-        return self.type_matcher._is_type_match(value, expected_type)
-
-    def _is_type_match_strictly_typed(self, value, expected_type):
-        return self.type_matcher._is_type_match_strictly_typed(value, expected_type)
-
     def _validate_tree(self, tree, model, permissive=False, fill_model=True):
         errors = []
         values = {}

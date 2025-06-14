@@ -179,27 +179,3 @@ class CSVStructureValidator(DocumentStructureValidator):
             result_type=model_instance,
             error_message=error_message
         )
-
-    def _fill_model_from_tree(self, tree, model, permissive=False, info_loss=None):
-        from pydantic import ValidationError
-        header, rows = tree
-        info_loss = info_loss or {}
-        if not rows:
-            return None, info_loss
-        row = rows[0]
-        values = {}
-        for field, field_info in model.model_fields.items():
-            submodel = self._normalize_primitive_type(field_info.annotation)
-            value = row.get(field)
-            if value is None:
-                values[field] = None
-                continue
-            try:
-                values[field] = self.type_matcher._get_primitive_value(value, submodel)
-            except Exception:
-                values[field] = None
-        try:
-            model_instance = model(**values)
-        except ValidationError:
-            model_instance = None
-        return model_instance, info_loss 
