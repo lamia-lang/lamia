@@ -2,10 +2,10 @@ import typing
 import re
 from .error_messages import (
     error_msg_none_not_allowed,
-    error_msg_cannot_convert_to_any,
+    error_msg_cannot_convert_to_any_of,
     error_msg_expected_type_got,
     error_msg_expected_list_got,
-    error_msg_list_element_failed,
+    error_msg_list_elements_invalid,
     error_msg_expected_dict_got,
     error_msg_expected_str_got,
     error_msg_cannot_strictly_convert,
@@ -45,7 +45,7 @@ class TypeMatcher:
                     result = self.validate_and_convert(value, arg)
                     if result.is_valid:
                         return result
-                return TypeMatchResult(False, None, error_msg_cannot_convert_to_any(value, args))
+                return TypeMatchResult(False, None, error_msg_cannot_convert_to_any_of(value, args))
 
             # Handle lists/dicts
             if origin is list:
@@ -54,11 +54,15 @@ class TypeMatcher:
                 if not args:
                     return TypeMatchResult(True, value)
                 coerced = []
-                for v in value:
+                invlaid_elems = {}
+                for index, v in enumerate(value):
                     result = self.validate_and_convert(v, args[0])
                     if not result.is_valid:
-                        return TypeMatchResult(False, None, error_msg_list_element_failed(v, result.error))
+                        invlaid_elems[index] = result.error
                     coerced.append(result.value)
+                
+                if invlaid_elems:
+                    return TypeMatchResult(False, None, error_msg_list_elements_invalid(value, invlaid_elems))
                 return TypeMatchResult(True, coerced)
             if origin is dict:
                 if not isinstance(value, dict):
