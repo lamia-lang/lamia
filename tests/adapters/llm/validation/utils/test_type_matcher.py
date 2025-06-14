@@ -38,6 +38,7 @@ def test_type_matcher_strict(expected_type, value, should_match):
     matcher = TypeMatcher(strict=True)
     result = matcher.validate_and_convert(value, expected_type)
     assert result.is_valid == should_match
+    
     if should_match:
         if expected_type is typing.Any: # isinstance fails on Any type. A workaround for the tests with Any type
             assert result.value == value
@@ -51,6 +52,9 @@ def test_type_matcher_strict(expected_type, value, should_match):
             assert result.value == expected_type(value) # value should be converted to the expected type in strict mode when it is a string
         else:
             assert result.value == value # value should be returned as is in strict mode for values other than strings
+    
+    assert result.error is None if should_match else not None
+
 
 def to_bool_non_pythonic(value: str) -> bool:
     return value.strip().lower() == "true"
@@ -85,17 +89,18 @@ def to_bool_non_pythonic(value: str) -> bool:
     (dict, [1, 2, 3], False, None),
     (typing.Union[int, str], 123, True, 123),
     (typing.Union[int, str], "abc", True, "abc"),
-    (typing.Union[int, str], 123.45, True, 123.45),
+    (typing.Union[int, str], 123.45, True, 123),
 ])
 def test_type_matcher_not_strict(expected_type, value, should_match, resulted_value):
     matcher = TypeMatcher(strict=False)
     result = matcher.validate_and_convert(value, expected_type)
     assert result.is_valid == should_match
     assert result.value == resulted_value
+    assert result.error is None if should_match else not None
 
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("expected_type,value,should_match_strict,should_match_not_strict", [
-    (int, None, False, True),
+    (int, None, False, False),
     (typing.Any, None, True, True),
     (typing.Optional[int], None, True, True),
     (typing.Optional[typing.Any], None, True, True),
@@ -108,3 +113,4 @@ def test_type_matcher_null_values(expected_type, value, should_match_strict, sho
     else:
         assert result.is_valid == should_match_not_strict
     assert result.value is None
+    assert result.error is None
