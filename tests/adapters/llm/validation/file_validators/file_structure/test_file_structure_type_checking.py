@@ -38,7 +38,10 @@ async def test_file_structure_validator_primitives_should_be_valid_strings(stric
 
     validator = validator_class(model=ModelWithPrimitiveTypesAsStrings, strict=strict)  
     result = await validator.validate(file_content)
-    assert result.is_valid is True, f"result should be valid: {result}"
+    assert result.result_type.title == "Test"
+    assert result.result_type.myboolen.lower() == "true"
+    assert result.result_type.myint == "123"
+    assert result.result_type.myfloat == "123.45"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -52,7 +55,14 @@ async def test_file_structure_validator_primitives_same_type_casting_should_be_v
 
     validator = validator_class(model=ModelWithPrimitiveTypes, strict=strict)
     result = await validator.validate(file_content)
+    print(result)
     assert result.is_valid is True, f"result should be valid: {result}"
+    # Check that result_type is a filled Pydantic model and fields match
+    assert isinstance(result.result_type, ModelWithPrimitiveTypes), f"result_type should be ModelWithPrimitiveTypes, got {type(result.result_type)}"
+    assert result.result_type.title == "Test"
+    assert result.result_type.myboolen is True or result.result_type.myboolen == True  # Accept bool True
+    assert result.result_type.myint == 123
+    assert abs(result.result_type.myfloat - 123.45) < 1e-6 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -67,3 +77,7 @@ async def test_file_structure_validator_possible_cross_numeric_type_validation_s
     validator = validator_class(model=ModelWithPrimitiveTypes, strict=strict)
     result = await validator.validate(file_content)
     assert result.is_valid is True, f"result should be valid: {result}"
+    assert result.result_type.title == "Test"
+    assert result.result_type.myboolen is True or result.result_type.myboolen == True  # Accept bool True
+    assert abs(result.result_type.myint - 123.00) < 1e-6 
+    assert result.result_type.myfloat == 123

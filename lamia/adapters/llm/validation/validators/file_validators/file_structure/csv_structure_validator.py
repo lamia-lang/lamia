@@ -2,7 +2,7 @@ import csv
 import io
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator
-from ....base import ValidationResult
+from ....base import ValidationResult       
 from .utils import import_model_from_path, describe_model_structure
 
 class CSVStructureValidator(DocumentStructureValidator):
@@ -88,37 +88,97 @@ class CSVStructureValidator(DocumentStructureValidator):
     def validate_strict_recursive(self, tree, model):
         header, rows = tree
         model_fields = list(model.model_fields.keys())
+        errors = []
+        values = {}
+        is_valid = True
+        info_loss = {}
         if header != model_fields:
-            return False, f"CSV header {header} does not match required columns {model_fields} (order and names must match)."
-        for i, row in enumerate(rows):
+            errors.append(f"CSV header {header} does not match required columns {model_fields} (order and names must match).")
+            is_valid = False
+        if not rows:
+            errors.append("CSV has no data rows.")
+            is_valid = False
+        else:
+            row = rows[0]
             for field, field_info in model.model_fields.items():
-                submodel = self._normalize_primitive_type(field_info.annotation)
+                expected_type = field_info.annotation
                 value = row.get(field)
                 if value is None:
-                    return False, f"Row {self._user_row_num(i)} is missing field '{field}'"
-                if not self.type_matcher._is_type_match(value, submodel):
-                    return False, f"Row {self._user_row_num(i)}, field '{field}' has value {value!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
-        return True, None
+                    errors.append(f"Row 1 is missing field '{field}'")
+                    is_valid = False
+                    values[field] = None
+                    continue
+                match_result = self.type_matcher.validate_and_convert(value, expected_type)
+                if not match_result.is_valid:
+                    errors.append(f"Row 1, field '{field}': {match_result.error}")
+                    is_valid = False
+                    values[field] = None
+                else:
+                    values[field] = match_result.value
+        model_instance = None
+        if is_valid:
+            try:
+                model_instance = model(**values)
+            except Exception as e:
+                errors.append(f"Model fill error: {e}")
+                is_valid = False
+        error_message = '; '.join(errors) if errors else None
+        return ValidationResult(
+            is_valid=is_valid,
+            result_type=model_instance,
+            error_message=error_message
+        )
 
     # Overrides the base class method because of the flat nature of CSV
     def validate_permissive_recursive(self, tree, model):
         header, rows = tree
         model_fields = list(model.model_fields.keys())
+        errors = []
+        values = {}
+        is_valid = True
+        info_loss = {}
         try:
             indices = [header.index(field) for field in model_fields]
         except ValueError:
-            return False, f"CSV header {header} does not contain all required columns {model_fields}."
-        if indices != sorted(indices):
-            return False, f"CSV header {header} does not have required columns {model_fields} in the correct order."
-        for i, row in enumerate(rows):
+            errors.append(f"CSV header {header} does not contain all required columns {model_fields}.")
+            is_valid = False
+        else:
+            if indices != sorted(indices):
+                errors.append(f"CSV header {header} does not have required columns {model_fields} in the correct order.")
+                is_valid = False
+        if not rows:
+            errors.append("CSV has no data rows.")
+            is_valid = False
+        else:
+            row = rows[0]
             for field, field_info in model.model_fields.items():
-                submodel = self._normalize_primitive_type(field_info.annotation)
+                expected_type = field_info.annotation
                 value = row.get(field)
                 if value is None:
-                    return False, f"Row {self._user_row_num(i)} is missing field '{field}'"
-                if not self.type_matcher._is_type_match(value, submodel):
-                    return False, f"Row {self._user_row_num(i)}, field '{field}' has value {value!r} that doesn't match expected type {submodel.__name__ if hasattr(submodel, '__name__') else submodel}"
-        return True, None
+                    errors.append(f"Row 1 is missing field '{field}'")
+                    is_valid = False
+                    values[field] = None
+                    continue
+                match_result = self.type_matcher.validate_and_convert(value, expected_type)
+                if not match_result.is_valid:
+                    errors.append(f"Row 1, field '{field}': {match_result.error}")
+                    is_valid = False
+                    values[field] = None
+                else:
+                    values[field] = match_result.value
+        model_instance = None
+        if is_valid:
+            try:
+                model_instance = model(**values)
+            except Exception as e:
+                errors.append(f"Model fill error: {e}")
+                is_valid = False
+        error_message = '; '.join(errors) if errors else None
+        return ValidationResult(
+            is_valid=is_valid,
+            result_type=model_instance,
+            error_message=error_message
+        )
 
     def _fill_model_from_tree(self, tree, model, permissive=False, info_loss=None):
         from pydantic import ValidationError

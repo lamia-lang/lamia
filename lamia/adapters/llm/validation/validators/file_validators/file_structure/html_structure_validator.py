@@ -103,20 +103,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 error_message="No <html> tag found",
                 hint=self.initial_hint
             )
-        valid, err = self.validate_strict_recursive(tree, self.model)
-        if not valid:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Strict validation failed: {err}",
-                hint=self.initial_hint
-            )
-        # Fill the model from the tree, as in the base class
-        model_instance, info_loss = self._fill_model_from_tree(tree, self.model, permissive=False)
-        return ValidationResult(
-            is_valid=True,
-            result_type=model_instance,
-            info_loss=info_loss if info_loss else None
-        )
+        return self.validate_strict_recursive(tree, self.model)
 
     # Overrides the base class method to add the <html> tag to the tree
     # TODO: Can be done by adding html field to the model, but this is a good demonstration that base class can be overridden
@@ -139,16 +126,4 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 error_message="No <html> tag found",
                 hint=self.initial_hint
             )
-        valid, err = self.validate_permissive_recursive(tree, self.model)
-        if not valid:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Permissive validation failed: {err}",
-                hint=self.initial_hint
-            )
-        model_instance, info_loss = self._fill_model_from_tree(tree, self.model, permissive=False)
-        return ValidationResult(
-            is_valid=True,
-            result_type=model_instance,
-            info_loss=info_loss if info_loss else None
-        )
+        return self.validate_permissive_recursive(tree, self.model)

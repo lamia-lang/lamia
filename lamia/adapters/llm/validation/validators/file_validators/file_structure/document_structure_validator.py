@@ -94,173 +94,70 @@ class DocumentStructureValidator(BaseValidator, ABC):
     def _is_type_match_strictly_typed(self, value, expected_type):
         return self.type_matcher._is_type_match_strictly_typed(value, expected_type)
 
-    def validate_strict_recursive(self, tree, model):
+    def _validate_tree(self, tree, model, permissive=False, fill_model=True):
+        errors = []
+        values = {}
+        is_valid = True
+        info_loss = {}
+
         for field, field_info in model.model_fields.items():
-            submodel = self._normalize_primitive_type(field_info.annotation)
-            elem = self.find_element(tree, field)
-            # Use element presence for tag-based trees
+            expected_type = field_info.annotation
+            elem = self.find_all(tree, field)[0] if permissive else self.find_element(tree, field)
+
             if elem is None:
-                if is_optional(field_info.annotation):
+                if is_optional(expected_type):
+                    values[field] = None
                     continue
-                return False, f"Missing <{field}> as direct child."
-            if submodel is typing.Any or submodel is object:
+                errors.append(f"Missing <{field}>")
+                is_valid = False
                 continue
-            if self._is_primitive_type(submodel):
-                if self.has_nested(elem):
-                    return False, f"<{field}> should only contain text, but has nested elements."
-            elif typing.get_origin(submodel) in (list, dict):
-                # Don't check for nested for lists/dicts
-                pass
+
+            text = self.get_text(elem)
+            match_result = self.type_matcher.validate_and_convert(text, expected_type)
+            if not match_result.is_valid:
+                errors.append(f"Field {field}: {match_result.error}")
+                is_valid = False
+                values[field] = None
             else:
-                if hasattr(submodel, "model_fields"):
-                    valid, err = self.validate_strict_recursive(elem, submodel)
-                    if not valid:
-                        return False, err
-                else:
-                    if not self._is_type_match(elem, submodel):
-                        return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(self._get_primitive_value(elem, submodel)).__name__}, expected {submodel.__name__ if hasattr(submodel, '__name__') else submodel}."
-        model_tags = set(model.model_fields.keys())
-        for child in self.iter_direct_children(tree):
-            name = self.get_name(child)
-            if name and name not in model_tags:
-                return False, f"Unexpected tag/field <{name}> found."
-        return True, None
+                values[field] = match_result.value
+
+        model_instance = None
+        if is_valid and fill_model:
+            try:
+                model_instance = model(**values)
+            except Exception as e:
+                errors.append(f"Model fill error: {e}")
+                is_valid = False
+
+        error_message = '; '.join(errors) if errors else None
+        return ValidationResult(
+            is_valid=is_valid,
+            result_type=model_instance if fill_model else None,
+            error_message=error_message
+        )
+
+    async def validate_strict(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
+        try:
+            tree = self.parse(response)
+        except Exception as e:
+            return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
+        if self.model is None:
+            return ValidationResult(is_valid=True, result_type=tree)
+        return self.validate_strict_recursive(tree, self.model)
+
+    async def validate_permissive(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
+        try:
+            tree = self.parse(response)
+        except Exception as e:
+            return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
+        if self.model is None:
+            return ValidationResult(is_valid=True, result_type=tree)
+        return self.validate_permissive_recursive(tree, self.model)
+
+    def validate_strict_recursive(self, tree, model):
+        """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
+        return self._validate_tree(tree, model, permissive=False)
 
     def validate_permissive_recursive(self, tree, model):
-        for field, field_info in model.model_fields.items():
-            submodel = self._normalize_primitive_type(field_info.annotation)
-            elems = self.find_all(tree, field)
-            # Use validate_field for presence/null checks
-            if not elems:
-                if validate_field_presence(field, field_info.annotation, tree, "permissive"):
-                    continue
-                return False, f"Missing <{field}> tag/field anywhere in document."
-            for elem in elems:
-                if not validate_field_presence(field, field_info.annotation, {field: elem}, "permissive"):
-                    return False, f"<{field}> is null but not Optional."
-            if submodel is typing.Any or submodel is object:
-                continue
-            if self._is_primitive_type(submodel):
-                if self.has_nested(elem):
-                    return False, f"<{field}> should only contain text, but has nested elements."
-            elif typing.get_origin(submodel) in (list, dict):
-                # Don't check for nested for lists/dicts
-                pass
-            else:
-                if hasattr(submodel, "model_fields"):
-                    found_valid = False
-                    for elem in elems:
-                        valid, _ = self.validate_permissive_recursive(elem, submodel)
-                        if valid:
-                            found_valid = True
-                            break
-                    if not found_valid:
-                        return False, f"No <{field}> tag/field matches the required nested structure."
-                else:
-                    for elem in elems:
-                        if not self._is_type_match(elem, submodel):
-                            return False, f"<{field}> has value {self.get_text(elem)!r} of type {type(self._get_primitive_value(elem, submodel)).__name__}, expected {submodel.__name__ if hasattr(submodel, '__name__') else submodel}."
-        return True, None
-
-    def _fill_model_from_tree(self, tree, model, permissive=False, info_loss=None):
-        """
-        Recursively fill a Pydantic model from the parsed tree (dict, soup, AST, etc.).
-        Returns (model_instance, info_loss_dict)
-        """
-        from pydantic import ValidationError
-        values = {}
-        info_loss = info_loss or {}
-        for field, field_info in model.model_fields.items():
-            submodel = self._normalize_primitive_type(field_info.annotation)
-            if permissive:
-                elems = self.find_all(tree, field)
-                elem = elems[0] if elems else None
-            else:
-                elem = self.find_element(tree, field)
-            if elem is None:
-                values[field] = None
-                continue
-            if hasattr(submodel, "model_fields"):
-                # Nested Pydantic model
-                nested, nested_info_loss = self._fill_model_from_tree(elem, submodel, permissive, info_loss)
-                values[field] = nested
-                if nested_info_loss:
-                    info_loss[field] = nested_info_loss
-            elif self._is_primitive_type(submodel):
-                text = self.get_text(elem)
-                # Info-losing conversion: e.g., float->int
-                try:
-                    if submodel is int and isinstance(text, float):
-                        info_loss[field] = f"float({text}) -> int({int(text)})"
-                        values[field] = int(text)
-                    elif submodel is str:
-                        values[field] = str(text) if text is not None else None
-                    else:
-                        values[field] = submodel(text) if text is not None else None
-                except Exception:
-                    values[field] = None
-            else:
-                values[field] = self.get_text(elem)
-        try:
-            model_instance = model(**values)
-        except ValidationError:
-            model_instance = None
-        return model_instance, info_loss
-
-    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        try:
-            tree = self.parse(response)
-        except Exception as e:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Invalid file: {e}",
-                raw_text=response,
-                hint=self.initial_hint
-            )
-        if self.model is None:
-            return ValidationResult(is_valid=True, raw_text=response, validated_text=response, result_type=tree)
-        valid, err = self.validate_strict_recursive(tree, self.model)
-        if not valid:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Strict validation failed: {err}",
-                raw_text=response,
-                hint=self.initial_hint
-            )
-        model_instance, info_loss = self._fill_model_from_tree(tree, self.model, permissive=False)
-        return ValidationResult(
-            is_valid=True,
-            raw_text=response,
-            validated_text=response,  # For now, the whole doc; can be improved to just the valid part
-            result_type=model_instance,
-            info_loss=info_loss if info_loss else None
-        )
-
-    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
-        try:
-            tree = self.parse(response)
-        except Exception as e:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Invalid file: {e}",
-                raw_text=response,
-                hint=self.initial_hint
-            )
-        if self.model is None:
-            return ValidationResult(is_valid=True, raw_text=response, validated_text=response, result_type=tree)
-        valid, err = self.validate_permissive_recursive(tree, self.model)
-        if not valid:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Permissive validation failed: {err}",
-                raw_text=response,
-                hint=self.initial_hint
-            )
-        model_instance, info_loss = self._fill_model_from_tree(tree, self.model, permissive=True)
-        return ValidationResult(
-            is_valid=True,
-            raw_text=response,
-            validated_text=response,  # For now, the whole doc; can be improved to just the valid part
-            result_type=model_instance,
-            info_loss=info_loss if info_loss else None
-        )
+        """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
+        return self._validate_tree(tree, model, permissive=True)
