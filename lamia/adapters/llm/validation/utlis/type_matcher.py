@@ -6,6 +6,7 @@ from .error_messages import (
     error_msg_expected_type_got,
     error_msg_expected_list_got,
     error_msg_list_elements_invalid,
+    error_msg_dict_elements_invalid,
     error_msg_expected_dict_got,
     error_msg_expected_str_got,
     error_msg_cannot_strictly_convert,
@@ -54,20 +55,35 @@ class TypeMatcher:
                 if not args:
                     return TypeMatchResult(True, value)
                 coerced = []
-                invlaid_elems = {}
+                invalid_elems = {}
                 for index, v in enumerate(value):
                     result = self.validate_and_convert(v, args[0])
                     if not result.is_valid:
-                        invlaid_elems[index] = result.error
+                        invalid_elems[index] = result.error
                     coerced.append(result.value)
                 
-                if invlaid_elems:
-                    return TypeMatchResult(False, None, error_msg_list_elements_invalid(value, invlaid_elems))
+                if invalid_elems:
+                    return TypeMatchResult(False, None, error_msg_list_elements_invalid(value, invalid_elems))
                 return TypeMatchResult(True, coerced)
             if origin is dict:
                 if not isinstance(value, dict):
                     return TypeMatchResult(False, None, error_msg_expected_dict_got(type(value).__name__))
-                return TypeMatchResult(True, value)
+                coerced = {}
+                invalid_keys = {}
+                invalid_values = {}
+                for k, v in value.items():
+                    print(f"args: {args[1]}")
+                    k_result = self.validate_and_convert(k, args[0])
+                    if not k_result.is_valid:
+                        invalid_keys[k] = k_result.error
+                    v_result = self.validate_and_convert(v, args[1])
+                    if not v_result.is_valid:
+                        invalid_values[v] = v_result.error
+                    coerced[k_result.value] = v_result.value
+                
+                if invalid_keys or invalid_values:
+                    return TypeMatchResult(False, None, error_msg_dict_elements_invalid(invalid_keys, invalid_values))
+                return TypeMatchResult(True, coerced)
 
             # Primitive types
             if expected_type is str:

@@ -14,10 +14,15 @@ def error_msg_expected_type_got(expected, actual):
 def error_msg_expected_list_got(actual):
     return error_msg_expected_type_got("list", actual)
 
-def error_msg_list_elements_invalid(list, invlaid_elems):
-    if len(invlaid_elems) >= MAX_INVALID_ELEMENTS_IN_REPORT:
-        n_more = len(invlaid_elems) - MAX_INVALID_ELEMENTS_IN_REPORT
-    return f"List elements with failed validation: {[f'{list[invalid_index]} at index {invalid_index} with failed validation: {invlaid_elems[invalid_index]}' for invalid_index in sorted(invlaid_elems.keys())[:MAX_INVALID_ELEMENTS_IN_REPORT]]} {f'{n_more} more failed elements are skipped...' if n_more else ''}"
+def error_msg_list_elements_invalid(list, invalid_elems):
+    n_more = len(invalid_elems) - MAX_INVALID_ELEMENTS_IN_REPORT
+    return f"List elements with failed validation: {[f'{list[invalid_index]} at index {invalid_index} with failed validation: {invalid_elems[invalid_index]}' for invalid_index in sorted(invalid_elems.keys())[:MAX_INVALID_ELEMENTS_IN_REPORT]]} {f'{n_more} more failed elements are skipped...' if n_more > 0 else ''}"
+
+def error_msg_dict_elements_invalid(invalid_keys, invalid_values):
+    n_more = len(invalid_keys) + len(invalid_values) - MAX_INVALID_ELEMENTS_IN_REPORT
+    error_arr = [f'dict key {invalid_key} with failed validation: {invalid_keys[invalid_key]}' for invalid_key in sorted(invalid_keys.keys())] \
+              + [f'dict value {invalid_value} with failed validation: {invalid_values[invalid_value]}' for invalid_value in sorted(invalid_values.keys())]
+    return f"Dict elements with failed validation: {error_arr[:MAX_INVALID_ELEMENTS_IN_REPORT]} {f'{n_more} more failed elements are skipped...' if n_more > 0 else ''}"
 
 def error_msg_expected_dict_got(actual):
     return error_msg_expected_type_got("dict", actual)
