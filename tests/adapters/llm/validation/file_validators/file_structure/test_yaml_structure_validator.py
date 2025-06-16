@@ -3,6 +3,9 @@ from pydantic import BaseModel, Field, RootModel
 from lamia.adapters.llm.validation.validators.file_validators import YAMLStructureValidator
 from typing import List, Dict, Optional, Any, Union, Tuple
 
+# The tests that are common to all file structure validators should go to multi_file_format folder
+# Tests exclusive to YAML format should go here
+
 yaml = """
 # YAML Example: Full Semantic Demonstration
 

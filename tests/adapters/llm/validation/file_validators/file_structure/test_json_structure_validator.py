@@ -2,6 +2,9 @@ import pytest
 from pydantic import BaseModel
 from lamia.adapters.llm.validation.validators.file_validators import JSONStructureValidator
 
+# The tests that are common to all file structure validators should go to multi_file_format folder
+# Tests exclusive to JSON format should go here
+
 class SimpleModel(BaseModel):
     title: str
     value: int

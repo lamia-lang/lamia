@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from lamia.adapters.llm.validation.validators.file_validators import MarkdownStructureValidator
 from lamia.adapters.llm.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1, Heading2, Paragraph
 
+# Markdown is not a structured format, and in Lamia it is treated as a structured format by predefined classes like Heading1, Heading2, Paragraph, etc.
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
 async def test_markdown_structure_validator_valid(strict):
