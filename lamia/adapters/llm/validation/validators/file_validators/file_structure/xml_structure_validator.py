@@ -13,7 +13,7 @@ class XMLStructureValidator(DocumentStructureValidator):
         elif schema is not None:
             resolved_model = create_model("XMLStructureModel", **schema)
         else:
-            raise ValueError("XMLStructureValidator requires a Pydantic model, model_name, or a schema dict.")
+            resolved_model = None
         super().__init__(model=resolved_model, strict=strict)
 
     @classmethod
@@ -40,25 +40,29 @@ class XMLStructureValidator(DocumentStructureValidator):
         return None
 
     def get_text(self, element):
-        if element is not None and element.text:
-            text = element.text.strip()
-            # Try int
-            try:
-                return int(text)
-            except ValueError:
-                pass
-            # Try float
-            try:
-                return float(text)
-            except ValueError:
-                pass
-            # Try bool
-            lower = text.lower()
-            if lower == 'true':
-                return True
-            if lower == 'false':
-                return False
-            return text
+        if element is not None:
+            if not element.text:
+                return element
+            else:
+                text = element.text.strip()
+                print(element, text)
+                # Try int
+                try:
+                    return int(text)
+                except ValueError:
+                    pass
+                # Try float
+                try:
+                    return float(text)
+                except ValueError:
+                    pass
+                # Try bool
+                lower = text.lower()
+                if lower == 'true':
+                    return True
+                if lower == 'false':
+                    return False
+                return text
         return None
 
     def has_nested(self, element):
