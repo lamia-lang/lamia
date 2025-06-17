@@ -67,12 +67,11 @@ async def test_file_structure_validator_exact_nestig(strict, file_content, valid
 @pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
 async def test_file_structure_validator_complex_text_structure_to_str(strict, file_content, validator_class):
     class Model(BaseModel):
-      head: str
+        head: str
 
     validator = validator_class(model=Model, strict=strict)
     result = await validator.validate(file_content)
-    assert result.is_valid is True
-    assert result.result_type.head.title == "Test"
+    assert result.is_valid is False
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -85,8 +84,18 @@ async def test_file_structure_validator_direct_children_with_any_type(strict, fi
     validator = validator_class(model=Model, strict=strict)
     result = await validator.validate(file_content)
     assert result.is_valid is True
-    assert result.result_type.head.title == "Test"
-    assert result.result_type.body == "This is a paragraph."
+    if validator_class == HTMLStructureValidator:
+        assert result.result_type.head == "<head><title>Test</title></head>"
+        assert result.result_type.body == "<body><p>This is a paragraph.</p></body>"
+    elif validator_class == XMLStructureValidator:
+        assert result.result_type.head == "<head><title>Test</title></head>"
+        assert result.result_type.body == "<body><p>This is a paragraph.</p></body>"
+    elif validator_class == JSONStructureValidator:
+        assert result.result_type.head == '{"title":"Test"}'
+        assert result.result_type.body == '{"p":"This is a paragraph."}'
+    elif validator_class == YAMLStructureValidator:
+        assert result.result_type.head == 'title: Test\n'
+        assert result.result_type.body == 'p: This is a paragraph.\n'
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])

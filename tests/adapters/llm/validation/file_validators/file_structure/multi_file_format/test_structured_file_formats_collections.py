@@ -66,7 +66,7 @@ async def test_file_structure_validator_check_one_type_in_set_unique_items(stric
 ])
 async def test_file_structure_validator_check_one_type_in_set_unique_items(strict, file_content, validator_class):
     class Paragraph(BaseModel):
-      p: str
+        p: str
 
     validator = validator_class(model=set[Paragraph], strict=False)
     result = await validator.validate(file_content)
@@ -77,7 +77,12 @@ async def test_file_structure_validator_check_one_type_in_set_unique_items(stric
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
-@pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
+@pytest.mark.parametrize("file_content, validator_class", [
+    ("<html><body><p>Flat</p><p><span>non-flat</span></p><body></html>", HTMLStructureValidator),
+    ("<root><p>Flat</p><p><span>non-flat</span></p></root>", XMLStructureValidator),
+    ('{"div1":{"p": "Flat"}, "div2":{"p": {"span": "non-flat"}}}', JSONStructureValidator),
+    ("div1:\n  p: Flat\ndiv2:\n  p: span: non-flat\n", YAMLStructureValidator)
+])
 async def test_file_structure_validator_flat_paragraphs_and_non_flat_paragraphs(strict, file_content, validator_class):
     class FlatAndNonFlatParagraphs(BaseModel):
       p: Any
@@ -87,7 +92,14 @@ async def test_file_structure_validator_flat_paragraphs_and_non_flat_paragraphs(
     assert result.is_valid is True
     assert len(result.result_type) == 2
     assert result.result_type.p == "Flat"
-    assert result.result_type.p == "<span>non-flat</span>"
+    if validator_class == HTMLStructureValidator:
+        assert result.result_type.p == "<span>non-flat</span>"
+    elif validator_class == XMLStructureValidator:
+        assert result.result_type.p == "<span>non-flat</span>"
+    elif validator_class == JSONStructureValidator:
+        assert result.result_type.p == {"span": "non-flat"}
+    elif validator_class == YAMLStructureValidator:
+        assert result.result_type.p == "span: non-flat"
 
     class FlatParagraphs(BaseModel):
       p: str
