@@ -187,7 +187,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
             return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
         if self.model is None:
             return ValidationResult(is_valid=True, result_type=tree)
-        return self.validate_strict_recursive(tree, self.model, response)
+        return self.validate_strict_recursive(tree, self.model)
 
     async def validate_permissive(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
         try:
@@ -196,12 +196,12 @@ class DocumentStructureValidator(BaseValidator, ABC):
             return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
         if self.model is None:
             return ValidationResult(is_valid=True, result_type=tree)
-        return self.validate_permissive_recursive(tree, self.model, response)
+        return self.validate_permissive_recursive(tree, self.model)
 
-    def validate_strict_recursive(self, tree, model, original_text=None):
+    def validate_strict_recursive(self, tree, model):
         """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
-        return self._validate_tree(tree, model, permissive=False, original_text=original_text)
+        return self._validate_tree(tree, model, permissive=False)
 
-    def validate_permissive_recursive(self, tree, model, original_text=None):
+    def validate_permissive_recursive(self, tree, model):
         """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
-        return self._validate_tree(tree, model, permissive=True, original_text=original_text)
+        return self._validate_tree(tree, model, permissive=True)
