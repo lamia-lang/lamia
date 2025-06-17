@@ -97,3 +97,28 @@ This is the additional text.
         assert result.validated_text['intro'] == "This is the intro paragraph."
         assert result.validated_text['subtitle'] == "Subsection"
         assert result.validated_text['body'] == "This is the body paragraph."
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+async def test_markdown_structure_validator_should_select_first_when_many_fields_sameType(strict):
+    class P1(BaseModel):
+        intro: Paragraph
+
+    validator = MarkdownStructureValidator(model=MyDocumentModel, strict=strict)
+    md = """
+# My Title
+# This is the additional Heading1
+
+This is the intro paragraph.
+
+This is the additional text.
+
+## Subsection
+
+This is the third paragraph.
+This is another text.
+"""
+    validator = MarkdownStructureValidator(model=P1, strict=False)
+    result = await validator.validate(md)
+    assert result.is_valid is True
+    assert result.result_type.p == "This is the intro paragraph"

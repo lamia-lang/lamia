@@ -2,7 +2,7 @@
 import pytest
 from pydantic import BaseModel
 from lamia.adapters.llm.validation.validators.file_validators import *
-from typing import Any
+from typing import Any, Optional
 
 FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES = [
     (
@@ -90,12 +90,78 @@ async def test_file_structure_validator_possible_cross_numeric_type_validation_s
     ("", XMLStructureValidator),
     ("", JSONStructureValidator),
     ("", YAMLStructureValidator),
+    ("", CSVStructureValidator),
 ])
 async def test_file_structure_validator_empty_text(strict, file_content, validator_class):
     class Model(BaseModel):
       val1: Any
-      vale: Any
+      val2: Any
 
     validator = validator_class(model=Model, strict=strict)
+    result = await validator.validate(file_content)
+    assert result.is_valid is False
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
+async def test_file_structure_validator_type_order_mismatch(strict, file_content, validator_class):
+    class OneToOneMatchingModelWithWrongOrder(BaseModel):
+        myfloat: int
+        myint: float
+        myboolen: bool
+        title: str
+
+    validator = validator_class(model=OneToOneMatchingModelWithWrongOrder, strict=strict)
+    result = await validator.validate(file_content)
+    assert result.is_valid is True
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
+async def test_file_structure_validator_additional_fields(strict, file_content, validator_class):
+    class ModelWithAdditionalFields(BaseModel):
+        title: str
+        myboolen: bool
+        myint: int
+        myfloat: float
+        extra: str
+
+    validator = validator_class(model=ModelWithAdditionalFields, strict=strict)
+    result = await validator.validate(file_content)
+    assert result.is_valid is False
+
+    class ModelWithAdditionalFields(BaseModel):
+        title: str
+        myboolen: bool
+        myint: int
+        myfloat: float
+        extra_any_is_for_non_null_types_only: Any # Check test_type_matcher for contract tests about Any
+
+    validator = validator_class(model=ModelWithAdditionalFields, strict=strict)
+    result = await validator.validate(file_content)
+    assert result.is_valid is False
+
+    class ModelWithAdditionalFields(BaseModel):
+        title: str
+        myboolen: bool
+        myint: int
+        myfloat: float
+        optional_extra: Optional[Any]
+        optional_extra: Optional[str]
+
+    validator = validator_class(model=ModelWithAdditionalFields, strict=strict)
+    result = await validator.validate(file_content)
+    assert result.is_valid is True
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
+async def test_file_structure_validator_missing_fields(strict, file_content, validator_class):
+    class ModelWithMissingFields(BaseModel):
+        title: str
+        myboolen: bool
+        myint: int
+
+    validator = validator_class(model=ModelWithMissingFields, strict=strict)
     result = await validator.validate(file_content)
     assert result.is_valid is False
