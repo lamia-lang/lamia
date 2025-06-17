@@ -2,6 +2,7 @@
 import pytest
 from pydantic import BaseModel
 from lamia.adapters.llm.validation.validators.file_validators import *
+from typing import Any
 
 FILE_CONTENT_VALIDATOR_PAIR_TWO_DISTINCT_PARAGRAPHS = [
     ("<html><body><p>paragraph1</p><p>paragraph2</p><body></html>", HTMLStructureValidator),
@@ -73,3 +74,26 @@ async def test_file_structure_validator_check_one_type_in_set_unique_items(stric
     assert result.is_valid is True
     assert len(result.result_type) == 1
     assert result.result_type[0].p == "dup_value"
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
+async def test_file_structure_validator_flat_paragraphs_and_non_flat_paragraphs(strict, file_content, validator_class):
+    class FlatAndNonFlatParagraphs(BaseModel):
+      p: Any
+
+    validator = validator_class(model=list[FlatAndNonFlatParagraphs], strict=strict)
+    result = await validator.validate(file_content)
+    assert result.is_valid is True
+    assert len(result.result_type) == 2
+    assert result.result_type.p == "Flat"
+    assert result.result_type.p == "<span>non-flat</span>"
+
+    class FlatParagraphs(BaseModel):
+      p: str
+
+    validator = validator_class(model=list[FlatParagraphs], strict=strict)
+    result = await validator.validate(file_content)
+    assert result.is_valid is True
+    assert len(result.result_type) == 1
+    assert result.result_type.p == "Flat"
