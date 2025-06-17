@@ -34,7 +34,7 @@ async def test_csv_structure_validator_type_validity_semicolons(strict):
 # Dup headers are currently not supported by CSVStructureValidator
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
-async def test_file_structure_validator_should_select_first_when_many_fields_with_same_name(strict, file_content, validator_class):
+async def test_csv_structure_validator_should_select_first_when_many_fields_with_same_name(strict):
     class DupHeaderModel(BaseModel):
       dup_header: str
 
