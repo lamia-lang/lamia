@@ -92,8 +92,10 @@ class CSVStructureValidator(DocumentStructureValidator):
         values = {}
         is_valid = True
         info_loss = {}
-        if header != model_fields:
-            errors.append(f"CSV header {header} does not match required columns {model_fields} (order and names must match).")
+        # Check that all required fields are present in the header (order does not matter)
+        missing_fields = [field for field in model_fields if field not in header]
+        if missing_fields:
+            errors.append(f"CSV header {header} is missing required columns {missing_fields}.")
             is_valid = False
         if not rows:
             errors.append("CSV has no data rows.")
@@ -137,15 +139,11 @@ class CSVStructureValidator(DocumentStructureValidator):
         values = {}
         is_valid = True
         info_loss = {}
-        try:
-            indices = [header.index(field) for field in model_fields]
-        except ValueError:
-            errors.append(f"CSV header {header} does not contain all required columns {model_fields}.")
+        # Check that all required fields are present in the header (order does not matter)
+        missing_fields = [field for field in model_fields if field not in header]
+        if missing_fields:
+            errors.append(f"CSV header {header} is missing required columns {missing_fields}.")
             is_valid = False
-        else:
-            if indices != sorted(indices):
-                errors.append(f"CSV header {header} does not have required columns {model_fields} in the correct order.")
-                is_valid = False
         if not rows:
             errors.append("CSV has no data rows.")
             is_valid = False
