@@ -91,7 +91,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Find all elements/fields with the given key anywhere in the tree."""
         pass
 
-    def _validate_tree(self, tree, model, permissive=False, fill_model=True):
+    def _validate_tree(self, tree, model, permissive=False, fill_model=True, original_text=None):
         errors = []
         values = {}
         is_valid = True
@@ -115,7 +115,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
             # Recursive validation for nested models
             if is_pydantic_model(expected_type):
-                nested_result = self._validate_tree(elem, expected_type, permissive, fill_model)
+                nested_result = self._validate_tree(elem, expected_type, permissive, fill_model, original_text)
                 if not nested_result.is_valid:
                     errors.append(f"Field {field}: {nested_result.error_message}")
                     is_valid = False
@@ -129,7 +129,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 children = list(self.iter_direct_children(elem)) if elem is not None else []
                 nested_values = []
                 for child in children:
-                    nested_result = self._validate_tree(child, item_type, permissive, fill_model)
+                    nested_result = self._validate_tree(child, item_type, permissive, fill_model, original_text)
                     if not nested_result.is_valid:
                         errors.append(f"Field {field}[]: {nested_result.error_message}")
                         is_valid = False
@@ -137,6 +137,18 @@ class DocumentStructureValidator(BaseValidator, ABC):
                     else:
                         nested_values.append(nested_result.result_type if fill_model else None)
                 values[field] = nested_values
+                continue
+
+            # Special handling for str and Any
+            if expected_type is str:
+                if self.has_nested(elem):
+                    errors.append(f"Field {field}: Expected a leaf string, but found nested structure.")
+                    is_valid = False
+                    values[field] = None
+                    continue
+            if expected_type is Any:
+                # Return the subtree as a string from the original text
+                values[field] = self.get_subtree_string(elem)
                 continue
 
             # Use type_matcher for leaf fields
@@ -164,6 +176,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
             error_message=error_message
         )
 
+    def get_subtree_string(self, elem):
+        # Default fallback: just str(elem). Should be overridden in subclasses.
+        return str(elem)
+
     async def validate_strict(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
         try:
             tree = self.parse(response)
@@ -171,7 +187,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
             return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
         if self.model is None:
             return ValidationResult(is_valid=True, result_type=tree)
-        return self.validate_strict_recursive(tree, self.model)
+        return self.validate_strict_recursive(tree, self.model, response)
 
     async def validate_permissive(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
         try:
@@ -180,12 +196,12 @@ class DocumentStructureValidator(BaseValidator, ABC):
             return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
         if self.model is None:
             return ValidationResult(is_valid=True, result_type=tree)
-        return self.validate_permissive_recursive(tree, self.model)
+        return self.validate_permissive_recursive(tree, self.model, response)
 
-    def validate_strict_recursive(self, tree, model):
+    def validate_strict_recursive(self, tree, model, original_text=None):
         """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
-        return self._validate_tree(tree, model, permissive=False)
+        return self._validate_tree(tree, model, permissive=False, original_text=original_text)
 
-    def validate_permissive_recursive(self, tree, model):
+    def validate_permissive_recursive(self, tree, model, original_text=None):
         """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
-        return self._validate_tree(tree, model, permissive=True)
+        return self._validate_tree(tree, model, permissive=True, original_text=original_text)

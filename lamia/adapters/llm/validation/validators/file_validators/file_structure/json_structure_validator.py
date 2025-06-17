@@ -100,3 +100,7 @@ class JSONStructureValidator(DocumentStructureValidator):
                     _find_all(item)
         _find_all(tree)
         return found
+
+    def get_subtree_string(self, elem):
+        import json
+        return json.dumps(elem, ensure_ascii=False, separators=(',', ':'))

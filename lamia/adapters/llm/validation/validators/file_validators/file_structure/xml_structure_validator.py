@@ -75,4 +75,7 @@ class XMLStructureValidator(DocumentStructureValidator):
         return element.tag
 
     def find_all(self, tree, key):
-        return tree.findall(f'.//{key}') 
+        return tree.findall(f'.//{key}')
+
+    def get_subtree_string(self, elem):
+        return ET.tostring(elem, encoding='unicode') 

@@ -68,4 +68,7 @@ class YAMLStructureValidator(DocumentStructureValidator):
                 for item in obj:
                     _find_all(item)
         _find_all(tree)
-        return found 
+        return found
+
+    def get_subtree_string(self, elem):
+        return yaml.dump(elem, allow_unicode=True) 
