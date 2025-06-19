@@ -4,7 +4,7 @@ from lamia.adapters.llm.validation.validators.file_validators import MarkdownVal
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
-async def test_markdown_structure_validator_full_md_file(strict):
+async def test_markdown_validator_full_md_file(strict):
 
     validator = MarkdownValidator(strict=strict)
     # The full md file is takend from https://gist.github.com/allysonsilva/85fff14a22bbdf55485be947566cc09e 
