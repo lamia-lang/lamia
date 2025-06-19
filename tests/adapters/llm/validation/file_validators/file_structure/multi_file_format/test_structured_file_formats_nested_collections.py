@@ -86,6 +86,7 @@ JSON_INVALID_CONTENT = """
 }
 """
 
+# TODO: Think about supporting non-native user defined lists in XML files, ul-s, ol-s with li-s in HTML files, etc.
 FILE_CONTENT_VALIDATOR_PAIR_WITH_NESTED_TYPES = [
     (YAML_VALID_CONTENT, YAMLStructureValidator),
     (JSON_VALID_CONTENT, JSONStructureValidator),

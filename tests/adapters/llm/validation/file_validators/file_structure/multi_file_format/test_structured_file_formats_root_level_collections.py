@@ -1,6 +1,5 @@
 # NOTE: Type checking logic is now tested in unit tests for TypeMatcher. These tests remain as integration tests for file structure validators.
-# This file tests validation of models where the root type is a collection (List[T] or set[T])
-# Examples: List[Paragraph], set[Paragraph] vs regular models that contain collections as fields
+# This file tests validation of models where the root type is a collection (List[T], set[T], etc.)
 import pytest
 from pydantic import BaseModel
 from lamia.adapters.llm.validation.validators.file_validators import *
