@@ -1,10 +1,16 @@
 import csv
 import io
+from collections import Counter
 from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator
 from ....base import ValidationResult       
 from .utils import import_model_from_path, describe_model_structure
+
+class DuplicateHeaderError(Exception):
+    def __init__(self, header: str):
+        self.header = header
+        super().__init__(f"Duplicate header '{header}'")
 
 def is_optional(field_info):
     annotation = field_info.annotation
@@ -46,6 +52,14 @@ class CSVStructureValidator(DocumentStructureValidator):
         dialect = csv.Sniffer().sniff(sample, delimiters=[',', ';'])
         reader = csv.DictReader(f, dialect=dialect)
         rows = list(reader)
+
+        # Check for duplicate headers
+        if reader.fieldnames:
+            header_counts = Counter(reader.fieldnames)
+            duplicates = [h for h, count in header_counts.items() if count > 1]
+            if duplicates:
+                raise DuplicateHeaderError(duplicates[0])
+
         # For strict mode, do not strip whitespace from header fields
         # For permissive mode, strip whitespace from header fields and remap rows
         if self.strict:

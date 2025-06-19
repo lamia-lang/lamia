@@ -91,7 +91,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Find all elements/fields with the given key anywhere in the tree."""
         pass
 
-    def _validate_tree(self, tree, model, permissive=False, fill_model=True, original_text=None):
+    def _validate_tree(self, tree, model, permissive=False, fill_model=True):
         errors = []
         values = {}
         is_valid = True
@@ -115,7 +115,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
             # Recursive validation for nested models
             if is_pydantic_model(expected_type):
-                nested_result = self._validate_tree(elem, expected_type, permissive, fill_model, original_text)
+                nested_result = self._validate_tree(elem, expected_type, permissive, fill_model)
                 if not nested_result.is_valid:
                     errors.append(f"Field {field}: {nested_result.error_message}")
                     is_valid = False
@@ -129,7 +129,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 children = list(self.iter_direct_children(elem)) if elem is not None else []
                 nested_values = []
                 for child in children:
-                    nested_result = self._validate_tree(child, item_type, permissive, fill_model, original_text)
+                    nested_result = self._validate_tree(child, item_type, permissive, fill_model)
                     if not nested_result.is_valid:
                         errors.append(f"Field {field}[]: {nested_result.error_message}")
                         is_valid = False
