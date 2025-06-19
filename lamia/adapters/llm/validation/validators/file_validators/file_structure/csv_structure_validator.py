@@ -1,9 +1,16 @@
 import csv
 import io
+from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator
 from ....base import ValidationResult       
 from .utils import import_model_from_path, describe_model_structure
+
+def is_optional(field_info):
+    annotation = field_info.annotation
+    return (
+        get_origin(annotation) is Union and type(None) in get_args(annotation)
+    )
 
 class CSVStructureValidator(DocumentStructureValidator):
     """Validates if the CSV matches a given Pydantic model structure (one field per column)."""
@@ -93,7 +100,10 @@ class CSVStructureValidator(DocumentStructureValidator):
         is_valid = True
         info_loss = {}
         # Check that all required fields are present in the header (order does not matter)
-        missing_fields = [field for field in model_fields if field not in header]
+        missing_fields = [
+            field for field, field_info in model.model_fields.items()
+            if field not in header and not is_optional(field_info)
+        ]
         if missing_fields:
             errors.append(f"CSV header {header} is missing required columns {missing_fields}.")
             is_valid = False
@@ -106,8 +116,9 @@ class CSVStructureValidator(DocumentStructureValidator):
                 expected_type = field_info.annotation
                 value = row.get(field)
                 if value is None:
-                    errors.append(f"Row 1 is missing field '{field}'")
-                    is_valid = False
+                    if not is_optional(field_info):
+                        errors.append(f"Row 1 is missing required field '{field}'")
+                        is_valid = False
                     values[field] = None
                     continue
                 match_result = self.type_matcher.validate_and_convert(value, expected_type)
@@ -140,7 +151,10 @@ class CSVStructureValidator(DocumentStructureValidator):
         is_valid = True
         info_loss = {}
         # Check that all required fields are present in the header (order does not matter)
-        missing_fields = [field for field in model_fields if field not in header]
+        missing_fields = [
+            field for field, field_info in model.model_fields.items()
+            if field not in header and not is_optional(field_info)
+        ]
         if missing_fields:
             errors.append(f"CSV header {header} is missing required columns {missing_fields}.")
             is_valid = False
@@ -153,8 +167,9 @@ class CSVStructureValidator(DocumentStructureValidator):
                 expected_type = field_info.annotation
                 value = row.get(field)
                 if value is None:
-                    errors.append(f"Row 1 is missing field '{field}'")
-                    is_valid = False
+                    if not is_optional(field_info):
+                        errors.append(f"Row 1 is missing required field '{field}'")
+                        is_valid = False
                     values[field] = None
                     continue
                 match_result = self.type_matcher.validate_and_convert(value, expected_type)

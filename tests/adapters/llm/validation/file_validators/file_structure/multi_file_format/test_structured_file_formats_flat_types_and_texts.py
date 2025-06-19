@@ -128,7 +128,7 @@ async def test_file_structure_validator_additional_fields(strict, file_content, 
 
     validator = validator_class(model=ModelWithAdditionalFields, strict=strict)
     result = await validator.validate(file_content)
-    assert result.is_valid is False
+    assert result.is_valid is False, f"extra str field should be invalid: {result}"
 
     class ModelWithAdditionalFields(BaseModel):
         title: str
@@ -139,7 +139,7 @@ async def test_file_structure_validator_additional_fields(strict, file_content, 
 
     validator = validator_class(model=ModelWithAdditionalFields, strict=strict)
     result = await validator.validate(file_content)
-    assert result.is_valid is False
+    assert result.is_valid is False, f"extra Any field should be invalid: {result}"
 
     class ModelWithAdditionalFields(BaseModel):
         title: str
