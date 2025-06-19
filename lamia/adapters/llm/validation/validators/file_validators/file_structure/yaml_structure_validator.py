@@ -13,7 +13,7 @@ class YAMLStructureValidator(DocumentStructureValidator):
         elif schema is not None:
             resolved_model = create_model("YAMLStructureModel", **schema)
         else:
-            raise ValueError("YAMLStructureValidator requires a Pydantic model, model_name, or a schema dict.")
+            resolved_model = None
         super().__init__(model=resolved_model, strict=strict)
 
     @classmethod

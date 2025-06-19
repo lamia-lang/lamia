@@ -28,7 +28,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         elif schema is not None:
             resolved_model = create_model("CSVStructureModel", **schema)
         else:
-            raise ValueError("CSVStructureValidator requires a Pydantic model, model_name, or a schema dict.")
+            resolved_model = None
         super().__init__(model=resolved_model, strict=strict)
 
     @classmethod

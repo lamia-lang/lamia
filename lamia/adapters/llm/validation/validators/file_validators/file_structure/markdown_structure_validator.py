@@ -83,6 +83,8 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             resolved_model = import_model_from_path(model_name, default_module=model_module)
         elif schema is not None:
             resolved_model = create_model("MarkdownStructureModel", **schema)
+        else:
+            resolved_model = None
         # If resolved_model is None, schema-less mode (well-formed only)
         super().__init__(model=resolved_model, strict=strict)
 
