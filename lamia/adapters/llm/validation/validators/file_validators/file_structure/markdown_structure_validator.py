@@ -8,9 +8,25 @@ from .utils import import_model_from_path, describe_model_structure
 
 # Marker classes for semantic mapping
 class MarkdownStr(str):
+    def __new__(cls, text: str = ""):
+        instance = super().__new__(cls, text)
+        instance._text = text
+        return instance
+    
+    @property
+    def text(self) -> str:
+        return self._text
+        
     @classmethod
     def __get_pydantic_core_schema__(cls, source, handler: GetCoreSchemaHandler):
-        return core_schema.str_schema()
+        return core_schema.with_info_after_validator_function(
+            function=lambda value, _: cls(text=str(value)),
+            schema=core_schema.str_schema(),
+            serialization=core_schema.str_schema(),
+        )
+
+    def __str__(self):
+        return self._text
 
 class Heading1(MarkdownStr): pass
 class Heading2(MarkdownStr): pass
@@ -269,7 +285,9 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         valid, err, values = self._match_fields(ast, self.model, strict=True)
         if not valid:
             return ValidationResult(is_valid=False, error_message=err, hint=self.initial_hint)
-        return ValidationResult(is_valid=True, validated_text=values)
+        # Create an instance of the model with our values
+        result_type = self.model(**values)
+        return ValidationResult(is_valid=True, validated_text=values, result_type=result_type)
 
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         if self.model is None:
@@ -286,4 +304,6 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         valid, err, values = self._match_fields(ast, self.model, strict=False)
         if not valid:
             return ValidationResult(is_valid=False, error_message=err, hint=self.initial_hint)
-        return ValidationResult(is_valid=True, validated_text=values) 
+        # Create an instance of the model with our values
+        result_type = self.model(**values)
+        return ValidationResult(is_valid=True, validated_text=values, result_type=result_type) 

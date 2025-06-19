@@ -27,10 +27,25 @@ This is the body paragraph.
     result = await validator.validate(md)
     print(result)
     assert result.is_valid
+    # Check raw text values
     assert result.validated_text['title'] == "My Title"
     assert result.validated_text['intro'] == "This is the intro paragraph."
     assert result.validated_text['subtitle'] == "Subsection"
     assert result.validated_text['body'] == "This is the body paragraph."
+    
+    # Check typed values in result_type
+    assert isinstance(result.result_type, MyDocumentModel)
+    print(type(result.result_type.title))
+    assert isinstance(result.result_type.title, Heading1)
+    assert isinstance(result.result_type.intro, Paragraph)
+    assert isinstance(result.result_type.subtitle, Heading2)
+    assert isinstance(result.result_type.body, Paragraph)
+    
+    # Check the actual values in typed fields using .text property
+    assert result.result_type.title.text == "My Title"
+    assert result.result_type.intro.text == "This is the intro paragraph."
+    assert result.result_type.subtitle.text == "Subsection"
+    assert result.result_type.body.text == "This is the body paragraph."
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -104,7 +119,6 @@ async def test_markdown_structure_validator_should_select_first_when_many_fields
     class P1(BaseModel):
         intro: Paragraph
 
-    validator = MarkdownStructureValidator(model=MyDocumentModel, strict=strict)
     md = """
 # My Title
 # This is the additional Heading1
@@ -121,4 +135,4 @@ This is another text.
     validator = MarkdownStructureValidator(model=P1, strict=False)
     result = await validator.validate(md)
     assert result.is_valid is True
-    assert result.result_type.p == "This is the intro paragraph"
+    assert result.result_type.intro == "This is the intro paragraph."

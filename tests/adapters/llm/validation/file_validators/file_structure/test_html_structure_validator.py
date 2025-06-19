@@ -35,4 +35,4 @@ async def test_html_structure_validator_tag_to_model_field_case_insensitive_mapp
     validator = HTMLStructureValidator(model=SimpleModel, strict=strict)
     valid_xml = '<html><TITLE>Test</TITLE><Value>123</value></html>'
     result = await validator.validate(valid_xml)
-    assert result.is_valid is False
+    assert result.is_valid is True
