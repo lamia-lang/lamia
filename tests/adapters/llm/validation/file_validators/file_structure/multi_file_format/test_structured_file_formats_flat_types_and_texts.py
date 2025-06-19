@@ -101,6 +101,9 @@ async def test_file_structure_validator_empty_text(strict, file_content, validat
     result = await validator.validate(file_content)
     assert result.is_valid is False
 
+# TODO: We might get strict in the future and require proper ordering in the file.
+# For parsing into the type it is not needed, but if user is interested in a particular order of fields,
+# we should have a possibility. It can be implemented with OrderedDict type see commented out tests on the bottom of the file.
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
@@ -165,3 +168,40 @@ async def test_file_structure_validator_missing_fields(strict, file_content, val
     validator = validator_class(model=ModelWithMissingFields, strict=strict)
     result = await validator.validate(file_content)
     assert result.is_valid is True
+
+"""
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
+async def test_file_structure_validator_ordered_fields_correct_order(strict, file_content, validator_class):
+    from collections import OrderedDict
+
+    validator = validator_class(model=OrderedDict([
+            ("title", str),
+            ("myint", int),
+            ("myfloat", float),
+            ("myboolen", bool)
+        ]), strict=strict)
+    result = await validator.validate(file_content)
+    # Should fail if fields are in different order than declared
+    assert result.is_valid is False
+    assert "field order" in result.error_message.lower()
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
+async def test_file_structure_validator_ordered_fields_incorrect_order(strict, file_content, validator_class):
+    from collections import OrderedDict
+
+    # incorrect order
+    validator = validator_class(model=OrderedDict([
+            ("myint", int),
+            ("title", str),
+            ("myfloat", float),
+            ("myboolen", bool)
+        ]), strict=strict)
+    result = await validator.validate(file_content)
+    # Should fail if fields are in different order than declared
+    assert result.is_valid is False
+    assert "field order" in result.error_message.lower()
+"""

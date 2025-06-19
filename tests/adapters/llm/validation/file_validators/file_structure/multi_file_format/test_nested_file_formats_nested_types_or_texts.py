@@ -114,4 +114,3 @@ async def test_html_structure_validator_incorrect_type_with_complex_model(strict
     validator = HTMLStructureValidator(model=HTMLModel, strict=strict)
     result = await validator.validate(file_content)
     assert result.is_valid is False
-

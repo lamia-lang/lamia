@@ -1,4 +1,6 @@
 # NOTE: Type checking logic is now tested in unit tests for TypeMatcher. These tests remain as integration tests for file structure validators.
+# This file tests validation of models where the root type is a collection (List[T] or set[T])
+# Examples: List[Paragraph], set[Paragraph] vs regular models that contain collections as fields
 import pytest
 from pydantic import BaseModel
 from lamia.adapters.llm.validation.validators.file_validators import *
@@ -109,3 +111,4 @@ async def test_file_structure_validator_flat_paragraphs_and_non_flat_paragraphs(
     assert result.is_valid is True
     assert len(result.result_type) == 1
     assert result.result_type.p == "Flat"
+    
