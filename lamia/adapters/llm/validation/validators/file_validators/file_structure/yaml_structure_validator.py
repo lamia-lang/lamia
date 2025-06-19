@@ -38,7 +38,7 @@ class YAMLStructureValidator(DocumentStructureValidator):
         return None
 
     def get_text(self, element):
-        if isinstance(element, (str, int, float, bool)) or element is None:
+        if isinstance(element, (str, int, float, bool, list, dict)) or element is None:
             return element
         return None
 
