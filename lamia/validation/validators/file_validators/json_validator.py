@@ -3,9 +3,9 @@ from .file_structure.json_structure_validator import JSONStructureValidator
 
 class JSONValidator(BaseValidator):
     """Validates if the response is valid JSON (well-formed, not structure-checked)."""
-    def __init__(self, strict: bool = True):
-        super().__init__(strict=strict)
-        self._delegate = JSONStructureValidator(model=None, strict=strict)
+    def __init__(self, strict: bool = True, generate_hints: bool = False):
+        super().__init__(strict=strict, generate_hints=generate_hints)
+        self._delegate = JSONStructureValidator(model=None, strict=strict, generate_hints=generate_hints)
 
     @classmethod
     def name(cls) -> str:

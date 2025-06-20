@@ -75,7 +75,7 @@ MARKDOWN_TYPE_MAPPING = {
 
 class MarkdownStructureValidator(DocumentStructureValidator):
     """Validates if the Markdown matches a given Pydantic model structure, or just checks for well-formed Markdown if no model/schema is provided."""
-    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models"):
+    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         resolved_model = None
         if model is not None:
             resolved_model = model
@@ -86,7 +86,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         else:
             resolved_model = None
         # If resolved_model is None, schema-less mode (well-formed only)
-        super().__init__(model=resolved_model, strict=strict)
+        super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     @classmethod
     def name(cls) -> str:

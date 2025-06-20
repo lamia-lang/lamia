@@ -10,7 +10,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
     - Accepts a Pydantic model class or a string (model name or full dotted path).
     - Can be used from config (with model name or full path) or from Lamia(...) constructor (with model class).
     """
-    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models"):
+    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         if model is not None:
             resolved_model = model
             self._structure_check_enabled = True
@@ -23,7 +23,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         else:
             resolved_model = None
             self._structure_check_enabled = False
-        super().__init__(model=resolved_model, strict=strict)
+        super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     @classmethod
     def name(cls) -> str:
@@ -95,7 +95,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Invalid file: {e}",
-                hint=self.initial_hint
+                hint=self.initial_hint if self.generate_hints else None
             )
         # If the root has an <html> element, start validation from there
         if self.model is None:
@@ -112,7 +112,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message="No <html> tag found",
-                hint=self.initial_hint
+                hint=self.initial_hint if self.generate_hints else None
             )
         return self.validate_strict_recursive(tree, self.model)
 
@@ -125,7 +125,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Invalid file: {e}",
-                hint=self.initial_hint
+                hint=self.initial_hint if self.generate_hints else None
             )
         if self.model is None:
             return ValidationResult(
@@ -142,6 +142,6 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message="No <html> tag found",
-                hint=self.initial_hint
+                hint=self.initial_hint if self.generate_hints else None
             )
         return self.validate_permissive_recursive(tree, self.model)

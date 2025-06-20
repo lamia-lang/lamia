@@ -53,7 +53,7 @@ class ValidationStrategy:
             config_copy.pop("strict", None)
             if validator_type in self.validator_registry:
                 validator_class = self.validator_registry[validator_type]
-                validators.append(validator_class(strict=strict, **config_copy))
+                validators.append(validator_class(strict=strict, generate_hints=True, **config_copy))
             else:
                 raise ValueError(f"Unknown validator type: {validator_type}")
         # Check for duplicate validator names

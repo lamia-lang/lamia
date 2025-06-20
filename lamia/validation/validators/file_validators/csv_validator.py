@@ -3,9 +3,9 @@ from .file_structure.csv_structure_validator import CSVStructureValidator
 
 class CSVValidator(BaseValidator):  
     """Validates if the response is valid CSV (well-formed, not structure-checked)."""
-    def __init__(self, strict: bool = True):
-        super().__init__(strict=strict)
-        self._delegate = CSVStructureValidator(model=None, strict=strict)
+    def __init__(self, strict: bool = True, generate_hints: bool = False):
+        super().__init__(strict=strict, generate_hints=generate_hints)
+        self._delegate = CSVStructureValidator(model=None, strict=strict, generate_hints=generate_hints)
 
     @classmethod
     def name(cls) -> str:

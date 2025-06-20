@@ -30,8 +30,9 @@ class BaseValidator(ABC):
     Subclasses should implement both validate_strict (forgiving) and validate_permissive (strict) methods.
     The __call__ method dispatches to the correct method based on the strict flag.
     """
-    def __init__(self, strict: bool = True):
+    def __init__(self, strict: bool = True, generate_hints: bool = False):
         self.strict = strict
+        self.generate_hints = generate_hints
         cls = self.__class__
         has_validate = cls.validate is not BaseValidator.validate
         has_strict = cls.validate_strict is not BaseValidator.validate_strict

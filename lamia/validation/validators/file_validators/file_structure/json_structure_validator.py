@@ -6,7 +6,7 @@ from .utils import import_model_from_path, describe_model_structure
 
 class JSONStructureValidator(DocumentStructureValidator):
     """Validates if the JSON matches a given Pydantic model structure."""
-    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models"):
+    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         if model is not None:
             resolved_model = model
             self._structure_check_enabled = True
@@ -19,7 +19,7 @@ class JSONStructureValidator(DocumentStructureValidator):
         else:
             resolved_model = None
             self._structure_check_enabled = False
-        super().__init__(model=resolved_model, strict=strict)
+        super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     @classmethod
     def name(cls) -> str:

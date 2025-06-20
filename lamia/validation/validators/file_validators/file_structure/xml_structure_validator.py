@@ -5,7 +5,7 @@ from .utils import import_model_from_path, describe_model_structure
 
 class XMLStructureValidator(DocumentStructureValidator):
     """Validates if the XML matches a given Pydantic model structure."""
-    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models"):
+    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         if model is not None:
             resolved_model = model
         elif model_name is not None:
@@ -14,7 +14,7 @@ class XMLStructureValidator(DocumentStructureValidator):
             resolved_model = create_model("XMLStructureModel", **schema)
         else:
             resolved_model = None
-        super().__init__(model=resolved_model, strict=strict)
+        super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     @classmethod
     def name(cls) -> str:

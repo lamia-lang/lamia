@@ -51,8 +51,8 @@ def is_list_of_models(field_type):
     return origin in (list, typing.List) and args and is_pydantic_model(args[0])
 
 class DocumentStructureValidator(BaseValidator, ABC):
-    def __init__(self, model, strict=True):
-        super().__init__(strict=strict)
+    def __init__(self, model, strict=True, generate_hints=False):
+        super().__init__(strict=strict, generate_hints=generate_hints)
         self.model = model
         self.type_matcher = TypeMatcher(strict=STRICT_TYPE_MATCH, get_text_func=self.get_text)
 
