@@ -23,7 +23,7 @@ class MyExtensionAdapter(BaseLLMAdapter):
 '''
 
 VALIDATOR_CODE = '''
-from lamia.adapters.llm.validation.base import BaseValidator, ValidationResult
+from lamia.validation.base import BaseValidator, ValidationResult
 class MyExtensionValidator(BaseValidator):
     @classmethod
     def name(cls):

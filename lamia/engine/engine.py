@@ -11,13 +11,13 @@ import os
 from .config_manager import ConfigManager
 from .llm_manager import create_adapter_from_config
 from lamia.adapters.llm.base import LLMResponse
-from lamia.adapters.llm.validation.base import BaseValidator
-from lamia.adapters.llm.validation.custom_loader import (
+from lamia.validation.base import BaseValidator
+from lamia.validation.custom_loader import (
     load_validator_from_file,
     load_validator_from_function
 )
-from lamia.adapters.llm.validation.strategy import ValidationStrategy, RetryConfig
-from lamia.adapters.llm.validation import validators as validators_pkg
+from lamia.adapters.llm.strategy import ValidationStrategy, RetryConfig
+from lamia.validation import validators as validators_pkg
 
 logger = logging.getLogger(__name__)
 

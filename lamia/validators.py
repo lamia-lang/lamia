@@ -1,1 +1,1 @@
-from lamia.adapters.llm.validation.validators import * 
+from lamia.validation.validators import * 

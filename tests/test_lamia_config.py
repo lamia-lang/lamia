@@ -4,7 +4,7 @@ import yaml
 import pytest
 from unittest import mock
 from lamia import Lamia
-from lamia.adapters.llm.validation.validators import HTMLValidator, LengthValidator
+from lamia.validation.validators import HTMLValidator, LengthValidator
 from examples.custom_validators.code_validator import CodeValidator
 
 # Helper to read YAML config from Lamia instance

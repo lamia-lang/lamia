@@ -1,5 +1,5 @@
 import pytest
-from lamia.adapters.llm.validation.strategy import ValidationStrategy, RetryConfig
+from lamia.adapters.llm.strategy import ValidationStrategy, RetryConfig
 from lamia.validators import HTMLValidator, LengthValidator
 from examples.custom_validators.code_validator import CodeValidator
 
