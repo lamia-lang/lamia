@@ -98,6 +98,13 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 hint=self.initial_hint
             )
         # If the root has an <html> element, start validation from there
+        if self.model is None:
+            return ValidationResult(
+                is_valid=True,
+                result_type=None,
+                validated_text=response,
+                raw_text=response
+            )
         html_elem = self.find_element(tree, "html")
         if html_elem is not None:
             tree = html_elem
@@ -119,6 +126,13 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 is_valid=False,
                 error_message=f"Invalid file: {e}",
                 hint=self.initial_hint
+            )
+        if self.model is None:
+            return ValidationResult(
+                is_valid=True,
+                result_type=None,
+                validated_text=response,
+                raw_text=response
             )
         # If the root has an <html> element, start validation from there
         html_elem = self.find_element(tree, "html")
