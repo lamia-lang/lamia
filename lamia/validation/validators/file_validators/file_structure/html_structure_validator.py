@@ -1,7 +1,7 @@
 from pydantic import BaseModel, create_model
 from bs4 import BeautifulSoup
 import re
-from .document_structure_validator import DocumentStructureValidator
+from .document_structure_validator import DocumentStructureValidator, ParsingError
 from ....base import ValidationResult
 from .utils import import_model_from_path, describe_model_structure
 
@@ -43,6 +43,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
 
     def parse(self, response: str):
         stripped = response.strip()
+        html_block = stripped
         if self.strict:
             # TODO: The folowing logic might need to be changed.
             # Beautifulsoup can perfectly parse even if the LLM is chatty around the HTML tag,
@@ -50,7 +51,11 @@ class HTMLStructureValidator(DocumentStructureValidator):
             # Also, if there will be a lot of requests to get HTMLs from the LLM, this can save the token usage
             match = re.search(r'<html', stripped, re.IGNORECASE)
             if not match:
-                raise ValueError("No <html> tag found in the response.")
+                raise ParsingError(
+                    message="No <html> tag found in the response.",
+                    original_text=response,
+                    parsed_text=response
+                )
 
             prefix = stripped[:match.start()]
             
@@ -60,19 +65,39 @@ class HTMLStructureValidator(DocumentStructureValidator):
 
             # If the prefix still contains non-whitespace characters, it's invalid chatter.
             if prefix_without_doctype.strip():
-                raise ValueError("Found non-comment/non-doctype text before <html> tag in strict mode.")
+                raise ParsingError(
+                    message="Found non-comment/non-doctype text before <html> tag in strict mode.",
+                    original_text=response,
+                    parsed_text=response
+                )
             
-            html_block = stripped
         else:
             # Permissive: extract first <html>...</html> block
             match = re.search(r'(<html[\s\S]*?</html>)', stripped, re.IGNORECASE)
             if not match:
-                raise ValueError("No valid <html>...</html> block found.")
+                raise ParsingError(
+                    message="No valid <html>...</html> block found.",
+                    original_text=response,
+                    parsed_text=response
+                )
             html_block = match.group(1)
-        # Always check for well-formed HTML
-        soup = BeautifulSoup(html_block, "html.parser")
-        if not soup.html:
-            raise ValueError("No <html> tag found or HTML is malformed.")
+        
+        try:
+            # Always check for well-formed HTML
+            soup = BeautifulSoup(html_block, "html.parser")
+            if not soup.html:
+                raise ParsingError(
+                    message="No <html> tag found or HTML is malformed.",
+                    original_text=response,
+                    parsed_text=html_block
+                )
+        except Exception as e:
+            raise ParsingError(
+                message=f"HTML parsing failed: {e}",
+                original_exception=e,
+                original_text=response,
+                parsed_text=html_block
+            ) from e
 
         return soup
 

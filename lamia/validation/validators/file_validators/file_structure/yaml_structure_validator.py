@@ -1,6 +1,7 @@
 import yaml
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator
+import re
+from .document_structure_validator import DocumentStructureValidator, ParsingError
 from .utils import import_model_from_path, describe_model_structure
 
 class YAMLStructureValidator(DocumentStructureValidator):
@@ -30,7 +31,56 @@ class YAMLStructureValidator(DocumentStructureValidator):
         )
 
     def parse(self, response: str):
-        return yaml.safe_load(response)
+        stripped = response.strip()
+        
+        if not self.strict:
+            # Strategy 1: Try markdown code blocks first
+            markdown_match = re.search(r'```(?:yaml|yml)?\s*\n?(.*?)\n?```', stripped, re.DOTALL | re.IGNORECASE)
+            if markdown_match:
+                yaml_candidate = markdown_match.group(1).strip()
+                try:
+                    return yaml.safe_load(yaml_candidate)
+                except yaml.YAMLError:
+                    pass  # Continue to next strategy
+            
+            # Strategy 2: Look for YAML-like patterns (key: value lines)
+            yaml_lines = []
+            for line in stripped.split('\n'):
+                line = line.strip()
+                # Simple YAML pattern: word characters followed by colon and value
+                if re.match(r'^[\w\s-]+:\s*.+$', line):
+                    yaml_lines.append(line)
+            
+            if yaml_lines:
+                yaml_candidate = '\n'.join(yaml_lines)
+                try:
+                    return yaml.safe_load(yaml_candidate)
+                except yaml.YAMLError:
+                    pass  # Continue to next strategy
+            
+            # Strategy 3: Try the whole thing (fallback)
+            try:
+                return yaml.safe_load(stripped)
+            except yaml.YAMLError:
+                pass
+            
+            # If nothing worked, raise error
+            raise ParsingError(
+                message="No valid YAML content found.",
+                original_text=response,
+                parsed_text=stripped
+            )
+        else:
+            # Strict mode: parse as-is
+            try:
+                return yaml.safe_load(stripped)
+            except yaml.YAMLError as e:
+                raise ParsingError(
+                    message=f"YAML parsing failed: {e}",
+                    original_exception=e,
+                    original_text=response,
+                    parsed_text=stripped
+                ) from e
 
     def find_element(self, tree, key):
         if isinstance(tree, dict):

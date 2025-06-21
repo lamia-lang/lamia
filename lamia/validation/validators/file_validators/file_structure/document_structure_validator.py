@@ -6,6 +6,14 @@ from typing import get_origin, get_args, Any, Union
 from lamia.validation.utlis.type_matcher import TypeMatcher
 from pydantic import BaseModel
 
+class ParsingError(ValueError):
+    """Custom exception for parsing errors."""
+    def __init__(self, message: str, original_exception: Exception = None, original_text: str = None, parsed_text: str = None):
+        super().__init__(message)
+        self.original_exception = original_exception
+        self.original_text = original_text
+        self.parsed_text = parsed_text
+
 def is_optional(field_type):
     return get_origin(field_type) is Union and type(None) in get_args(field_type)
 
@@ -196,7 +204,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
         try:
             tree = self.parse(response)
         except Exception as e:
-            return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
+            return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}", hint=self._generate_hint(e))
+        
         if self.model is None:
             return ValidationResult(is_valid=True, validated_text=response, result_type=None)
         return self.validate_permissive_recursive(tree, self.model)
@@ -208,3 +217,19 @@ class DocumentStructureValidator(BaseValidator, ABC):
     def validate_permissive_recursive(self, tree, model):
         """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
         return self._validate_tree(tree, model, permissive=True)
+    
+    def _generate_hint(self, e: Exception):
+        hint = f"Please ensure the response is a valid {self.__class__.name()}."
+        if isinstance(e, ParsingError):
+            if e.original_text is not None:
+                preceding_text = e.original_text[:e.original_text.find(e.parsed_text)]
+                following_text = e.original_text[e.original_text.find(e.parsed_text) + len(e.parsed_text):]
+                
+                if preceding_text:
+                    hint += f"The response should not include any text before the {self.__class__.name()}. Please do not include texts like {preceding_text} before the {self.__class__.name()} content."
+                if following_text:
+                    hint += f"The response should not include any text after the {self.__class__.name()}. Please do not include texts like {following_text} after the {self.__class__.name()} content."
+
+        hint += f"Detailed error: {e}."
+
+        return hint 

@@ -1,6 +1,6 @@
 import json
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator
+from .document_structure_validator import DocumentStructureValidator, ParsingError
 from ....base import ValidationResult
 from .utils import import_model_from_path, describe_model_structure
 
@@ -45,17 +45,31 @@ class JSONStructureValidator(DocumentStructureValidator):
             try:
                 return json.loads(stripped)
             except Exception as e:
-                raise ValueError(f"Invalid JSON: {e}")
+                raise ParsingError(
+                    message=f"Invalid JSON: {e}",
+                    original_exception=e,
+                    original_text=response,
+                    parsed_text=stripped
+                ) from e
         else:
             # Permissive: extract first JSON object or array
             match = re.search(r'({[\s\S]*})|\[([\s\S]*)\]', stripped)
             if not match:
-                raise ValueError("No valid JSON object or array found.")
+                raise ParsingError(
+                    message="No valid JSON object or array found.",
+                    original_text=response,
+                    parsed_text=stripped
+                )
             json_block = match.group(0)
             try:
                 return json.loads(json_block)
             except Exception as e:
-                raise ValueError(f"Invalid JSON: {e}")
+                raise ParsingError(
+                    message=f"Invalid JSON: {e}",
+                    original_exception=e,
+                    original_text=response,
+                    parsed_text=json_block
+                ) from e
 
     def find_element(self, tree, key):
         # Only direct children for strict mode

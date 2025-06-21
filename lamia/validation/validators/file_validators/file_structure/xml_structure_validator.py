@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator
+import re
+from .document_structure_validator import DocumentStructureValidator, ParsingError
 from .utils import import_model_from_path, describe_model_structure
 
 class XMLStructureValidator(DocumentStructureValidator):
@@ -30,7 +31,57 @@ class XMLStructureValidator(DocumentStructureValidator):
         )
 
     def parse(self, response: str):
-        return ET.fromstring(response)
+        stripped = response.strip()
+        
+        if not self.strict:
+            # Strategy 1: Try markdown code blocks first
+            markdown_match = re.search(r'```(?:xml)?\s*\n?(.*?)\n?```', stripped, re.DOTALL | re.IGNORECASE)
+            if markdown_match:
+                xml_candidate = markdown_match.group(1).strip()
+                try:
+                    return ET.fromstring(xml_candidate)
+                except ET.ParseError:
+                    pass  # Continue to next strategy
+            
+            # Strategy 2: Extract any content that looks like XML
+            lines = stripped.split('\n')
+            xml_lines = []
+            for line in lines:
+                line = line.strip()
+                # Look for lines that contain XML-like content
+                if line.startswith('<') and '>' in line:
+                    xml_lines.append(line)
+            
+            if xml_lines:
+                xml_candidate = ''.join(xml_lines)
+                try:
+                    return ET.fromstring(xml_candidate)
+                except ET.ParseError:
+                    pass  # Continue to next strategy
+            
+            # Strategy 3: Try the whole thing (fallback)
+            try:
+                return ET.fromstring(stripped)
+            except ET.ParseError:
+                pass
+            
+            # If nothing worked, raise error
+            raise ParsingError(
+                message="No valid XML content found.",
+                original_text=response,
+                parsed_text=stripped
+            )
+        else:
+            # Strict mode: parse as-is
+            try:
+                return ET.fromstring(stripped)
+            except ET.ParseError as e:
+                raise ParsingError(
+                    message=f"XML parsing failed: {e}",
+                    original_exception=e,
+                    original_text=response,
+                    parsed_text=stripped
+                ) from e
 
     def find_element(self, tree, key):
         # Only direct children
