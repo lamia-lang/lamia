@@ -3,14 +3,16 @@ import io
 from collections import Counter
 from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator
+from .document_structure_validator import DocumentStructureValidator, BaseValidationError
 from ....base import ValidationResult       
 from .utils import import_model_from_path, describe_model_structure
 
-class DuplicateHeaderError(Exception):
-    def __init__(self, header: str):
-        self.header = header
-        super().__init__(f"Duplicate header '{header}'")
+class DuplicateHeaderError(BaseValidationError):
+    """Exception for duplicate headers in structured data."""
+    def __init__(self, duplicate_header: str):
+        message = f"Duplicate header found: {duplicate_header}"
+        hint = "Duplicate headers are not supported. Please ensure each header appears only once."
+        super().__init__(message, hint=hint)
 
 def is_optional(field_info):
     annotation = field_info.annotation

@@ -1,7 +1,7 @@
 import yaml
 from pydantic import BaseModel, create_model
 import re
-from .document_structure_validator import DocumentStructureValidator, ParsingError
+from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from .utils import import_model_from_path, describe_model_structure
 
 class YAMLStructureValidator(DocumentStructureValidator):
@@ -65,8 +65,8 @@ class YAMLStructureValidator(DocumentStructureValidator):
                 pass
             
             # If nothing worked, raise error
-            raise ParsingError(
-                message="No valid YAML content found.",
+            raise TextAroundPayloadError(
+                validator_class_name="YAML",
                 original_text=response,
                 parsed_text=stripped
             )
@@ -75,9 +75,8 @@ class YAMLStructureValidator(DocumentStructureValidator):
             try:
                 return yaml.safe_load(stripped)
             except yaml.YAMLError as e:
-                raise ParsingError(
-                    message=f"YAML parsing failed: {e}",
-                    original_exception=e,
+                raise TextAroundPayloadError(
+                    validator_class_name="YAML",
                     original_text=response,
                     parsed_text=stripped
                 ) from e

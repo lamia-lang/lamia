@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 from pydantic import BaseModel, create_model
 import re
-from .document_structure_validator import DocumentStructureValidator, ParsingError
+from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from .utils import import_model_from_path, describe_model_structure
 
 class XMLStructureValidator(DocumentStructureValidator):
@@ -66,8 +66,8 @@ class XMLStructureValidator(DocumentStructureValidator):
                 pass
             
             # If nothing worked, raise error
-            raise ParsingError(
-                message="No valid XML content found.",
+            raise TextAroundPayloadError(
+                validator_class_name="XML",
                 original_text=response,
                 parsed_text=stripped
             )
@@ -76,9 +76,8 @@ class XMLStructureValidator(DocumentStructureValidator):
             try:
                 return ET.fromstring(stripped)
             except ET.ParseError as e:
-                raise ParsingError(
-                    message=f"XML parsing failed: {e}",
-                    original_exception=e,
+                raise TextAroundPayloadError(
+                    validator_class_name="XML",
                     original_text=response,
                     parsed_text=stripped
                 ) from e

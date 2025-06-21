@@ -1,6 +1,6 @@
 import json
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator, ParsingError
+from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from ....base import ValidationResult
 from .utils import import_model_from_path, describe_model_structure
 
@@ -45,9 +45,8 @@ class JSONStructureValidator(DocumentStructureValidator):
             try:
                 return json.loads(stripped)
             except Exception as e:
-                raise ParsingError(
-                    message=f"Invalid JSON: {e}",
-                    original_exception=e,
+                raise TextAroundPayloadError(
+                    validator_class_name="JSON",
                     original_text=response,
                     parsed_text=stripped
                 ) from e
@@ -55,8 +54,8 @@ class JSONStructureValidator(DocumentStructureValidator):
             # Permissive: extract first JSON object or array
             match = re.search(r'({[\s\S]*})|\[([\s\S]*)\]', stripped)
             if not match:
-                raise ParsingError(
-                    message="No valid JSON object or array found.",
+                raise TextAroundPayloadError(
+                    validator_class_name="JSON",
                     original_text=response,
                     parsed_text=stripped
                 )
@@ -64,9 +63,8 @@ class JSONStructureValidator(DocumentStructureValidator):
             try:
                 return json.loads(json_block)
             except Exception as e:
-                raise ParsingError(
-                    message=f"Invalid JSON: {e}",
-                    original_exception=e,
+                raise TextAroundPayloadError(
+                    validator_class_name="JSON",
                     original_text=response,
                     parsed_text=json_block
                 ) from e

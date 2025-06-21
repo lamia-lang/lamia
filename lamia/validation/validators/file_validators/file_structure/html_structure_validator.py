@@ -1,7 +1,7 @@
 from pydantic import BaseModel, create_model
 from bs4 import BeautifulSoup
 import re
-from .document_structure_validator import DocumentStructureValidator, ParsingError
+from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from ....base import ValidationResult
 from .utils import import_model_from_path, describe_model_structure
 
@@ -51,8 +51,8 @@ class HTMLStructureValidator(DocumentStructureValidator):
             # Also, if there will be a lot of requests to get HTMLs from the LLM, this can save the token usage
             match = re.search(r'<html', stripped, re.IGNORECASE)
             if not match:
-                raise ParsingError(
-                    message="No <html> tag found in the response.",
+                raise TextAroundPayloadError(
+                    validator_class_name="HTML",
                     original_text=response,
                     parsed_text=response
                 )
@@ -65,8 +65,8 @@ class HTMLStructureValidator(DocumentStructureValidator):
 
             # If the prefix still contains non-whitespace characters, it's invalid chatter.
             if prefix_without_doctype.strip():
-                raise ParsingError(
-                    message="Found non-comment/non-doctype text before <html> tag in strict mode.",
+                raise TextAroundPayloadError(
+                    validator_class_name="HTML",
                     original_text=response,
                     parsed_text=response
                 )
@@ -75,8 +75,8 @@ class HTMLStructureValidator(DocumentStructureValidator):
             # Permissive: extract first <html>...</html> block
             match = re.search(r'(<html[\s\S]*?</html>)', stripped, re.IGNORECASE)
             if not match:
-                raise ParsingError(
-                    message="No valid <html>...</html> block found.",
+                raise TextAroundPayloadError(
+                    validator_class_name="HTML",
                     original_text=response,
                     parsed_text=response
                 )
@@ -86,15 +86,14 @@ class HTMLStructureValidator(DocumentStructureValidator):
             # Always check for well-formed HTML
             soup = BeautifulSoup(html_block, "html.parser")
             if not soup.html:
-                raise ParsingError(
-                    message="No <html> tag found or HTML is malformed.",
+                raise TextAroundPayloadError(
+                    validator_class_name="HTML",
                     original_text=response,
                     parsed_text=html_block
                 )
         except Exception as e:
-            raise ParsingError(
-                message=f"HTML parsing failed: {e}",
-                original_exception=e,
+            raise TextAroundPayloadError(
+                validator_class_name="HTML",
                 original_text=response,
                 parsed_text=html_block
             ) from e

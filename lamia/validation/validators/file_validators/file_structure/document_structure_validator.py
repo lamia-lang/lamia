@@ -5,14 +5,36 @@ import re
 from typing import get_origin, get_args, Any, Union
 from lamia.validation.utlis.type_matcher import TypeMatcher
 from pydantic import BaseModel
+from typing import Callable
 
-class ParsingError(ValueError):
-    """Custom exception for parsing errors."""
-    def __init__(self, message: str, original_exception: Exception = None, original_text: str = None, parsed_text: str = None):
+class BaseValidationError(ValueError):
+    """Base exception for validation errors with hint support."""
+    def __init__(self, message: str, hint: str = None, original_exception: Exception = None):
         super().__init__(message)
+        self.hint = hint
         self.original_exception = original_exception
-        self.original_text = original_text
-        self.parsed_text = parsed_text
+
+class TextAroundPayloadError(BaseValidationError):
+    """Exception for when there's unexpected text around the payload."""
+    def __init__(self, validator_class_name: str, original_text: str, parsed_text: str):
+        # Generate dynamic message and hint
+        message = f"Invalid {validator_class_name}: unexpected text around payload"
+        
+        hint = f"Please ensure the response is a valid {validator_class_name}."
+        
+        try:
+            preceding_text = original_text[:original_text.find(parsed_text)]
+            following_text = original_text[original_text.find(parsed_text) + len(parsed_text):]
+            
+            if preceding_text:
+                hint += f" The response should not include any text before the {validator_class_name}. Please do not include texts like '{preceding_text}' before the {validator_class_name} content."
+            if following_text:
+                hint += f" The response should not include any text after the {validator_class_name}. Please do not include texts like '{following_text}' after the {validator_class_name} content."
+        except (ValueError, AttributeError):
+            # Handle cases where find() fails or other text processing issues
+            hint += " The response should only contain the expected payload format without any additional text before or after it."
+        
+        super().__init__(message, hint=hint)
 
 def is_optional(field_type):
     return get_origin(field_type) is Union and type(None) in get_args(field_type)
@@ -189,26 +211,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
         return str(elem)
 
     async def validate_strict(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
-        try:
-            tree = self.parse(response)
-        except Exception as e:
-            if self.generate_hints:
-                return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}", hint=f"Please ensure the response is a valid {self.__class__.name}.")
-            else:
-                return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
-        if self.model is None:
-            return ValidationResult(is_valid=True, validated_text=response, result_type=None)
-        return self.validate_strict_recursive(tree, self.model)
+        return self._validare_with_error_handling(response, self.validate_strict_recursive)
 
     async def validate_permissive(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
-        try:
-            tree = self.parse(response)
-        except Exception as e:
-            return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}", hint=self._generate_hint(e))
-        
-        if self.model is None:
-            return ValidationResult(is_valid=True, validated_text=response, result_type=None)
-        return self.validate_permissive_recursive(tree, self.model)
+        return self._validare_with_error_handling(response, self.validate_strict_recursive)
 
     def validate_strict_recursive(self, tree, model):
         """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
@@ -218,18 +224,15 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
         return self._validate_tree(tree, model, permissive=True)
     
-    def _generate_hint(self, e: Exception):
-        hint = f"Please ensure the response is a valid {self.__class__.name()}."
-        if isinstance(e, ParsingError):
-            if e.original_text is not None:
-                preceding_text = e.original_text[:e.original_text.find(e.parsed_text)]
-                following_text = e.original_text[e.original_text.find(e.parsed_text) + len(e.parsed_text):]
-                
-                if preceding_text:
-                    hint += f"The response should not include any text before the {self.__class__.name()}. Please do not include texts like {preceding_text} before the {self.__class__.name()} content."
-                if following_text:
-                    hint += f"The response should not include any text after the {self.__class__.name()}. Please do not include texts like {following_text} after the {self.__class__.name()} content."
-
-        hint += f"Detailed error: {e}."
-
-        return hint 
+    def _validare_with_error_handling(self, response: str, callback: Callable):
+        try:
+            tree = self.parse(response)
+            if self.model is None:
+                return ValidationResult(is_valid=True, validated_text=response, result_type=None)
+            return callback(tree, self.model)
+        except Exception as e:
+            if self.generate_hints:
+                hint = e.hint if isinstance(e, BaseValidationError) and e.hint else f"Please ensure the response is a valid {self.__class__.__name__}."
+                return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}", hint=hint)
+            else:
+                return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
