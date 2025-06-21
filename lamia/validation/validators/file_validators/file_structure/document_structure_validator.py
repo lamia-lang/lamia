@@ -184,9 +184,12 @@ class DocumentStructureValidator(BaseValidator, ABC):
         try:
             tree = self.parse(response)
         except Exception as e:
-            return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
+            if self.generate_hints:
+                return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}", hint=f"Please ensure the response is a valid {self.__class__.name}.")
+            else:
+                return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
         if self.model is None:
-            return ValidationResult(is_valid=True, validated_text=response, result_type=None, raw_text=response)
+            return ValidationResult(is_valid=True, validated_text=response, result_type=None)
         return self.validate_strict_recursive(tree, self.model)
 
     async def validate_permissive(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
@@ -195,7 +198,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
         except Exception as e:
             return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
         if self.model is None:
-            return ValidationResult(is_valid=True, result_type=tree)
+            return ValidationResult(is_valid=True, validated_text=response, result_type=None)
         return self.validate_permissive_recursive(tree, self.model)
 
     def validate_strict_recursive(self, tree, model):

@@ -49,9 +49,12 @@ class BaseValidator(ABC):
             raise NotImplementedError("BaseValidator.validate should not be called directly if overridden.")
         # Otherwise, dispatch to strict/permissive
         if self.strict:
-            return await self.validate_strict(response, **kwargs)
+            result = await self.validate_strict(response, **kwargs)
         else:
-            return await self.validate_permissive(response, **kwargs)
+            result = await self.validate_permissive(response, **kwargs)
+
+        result.raw_text = response
+        return result
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         raise NotImplementedError("Implement validate_strict for context-aware validators.")

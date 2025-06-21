@@ -44,6 +44,24 @@ class HTMLStructureValidator(DocumentStructureValidator):
     def parse(self, response: str):
         stripped = response.strip()
         if self.strict:
+            # TODO: The folowing logic might need to be changed.
+            # Beautifulsoup can perfectly parse even if the LLM is chatty around the HTML tag,
+            # We fail intentionally here to have the same behavior as other validators.
+            # Also, if there will be a lot of requests to get HTMLs from the LLM, this can save the token usage
+            match = re.search(r'<html', stripped, re.IGNORECASE)
+            if not match:
+                raise ValueError("No <html> tag found in the response.")
+
+            prefix = stripped[:match.start()]
+            
+            # Remove comments and doctype from the prefix to see if anything else is left.
+            prefix_without_comments = re.sub(r'<!--[\s\S]*?-->', '', prefix)
+            prefix_without_doctype = re.sub(r'<!DOCTYPE[\s\S]*?>', '', prefix_without_comments, re.IGNORECASE)
+
+            # If the prefix still contains non-whitespace characters, it's invalid chatter.
+            if prefix_without_doctype.strip():
+                raise ValueError("Found non-comment/non-doctype text before <html> tag in strict mode.")
+            
             html_block = stripped
         else:
             # Permissive: extract first <html>...</html> block
@@ -55,6 +73,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         soup = BeautifulSoup(html_block, "html.parser")
         if not soup.html:
             raise ValueError("No <html> tag found or HTML is malformed.")
+
         return soup
 
     def find_element(self, tree, key):
