@@ -10,102 +10,173 @@ import json
 from typing import Any, Callable, List, Tuple, Union, Type, Optional
 from ..base import BaseValidator, ValidationResult
 
+
+class LoopCounterTransformer(ast.NodeTransformer):
+    """AST transformer that injects loop counters to detect infinite loops."""
+    
+    def __init__(self, max_iterations: int = 10000):
+        self.max_iterations = max_iterations
+        self.counter_name = "_lamia_loop_counter"
+    
+    def visit_FunctionDef(self, node):
+        # Initialize loop counter at the start of each function
+        counter_init = ast.Assign(
+            targets=[ast.Name(id=self.counter_name, ctx=ast.Store())],
+            value=ast.Constant(value=0)
+        )
+        
+        # Transform the function body
+        transformed_body = [counter_init]
+        for stmt in node.body:
+            transformed_body.append(self.visit(stmt))
+        
+        node.body = transformed_body
+        return node
+    
+    def _create_counter_check(self):
+        """Create an AST node that checks and increments the loop counter."""
+        # Increment counter
+        increment = ast.AugAssign(
+            target=ast.Name(id=self.counter_name, ctx=ast.Store()),
+            op=ast.Add(),
+            value=ast.Constant(value=1)
+        )
+        
+        # Check if counter exceeds limit
+        check = ast.If(
+            test=ast.Compare(
+                left=ast.Name(id=self.counter_name, ctx=ast.Load()),
+                ops=[ast.Gt()],
+                comparators=[ast.Constant(value=self.max_iterations)]
+            ),
+            body=[
+                ast.Raise(
+                    exc=ast.Call(
+                        func=ast.Name(id='RuntimeError', ctx=ast.Load()),
+                        args=[ast.Constant(value=f"Infinite loop detected: exceeded {self.max_iterations} iterations")],
+                        keywords=[]
+                    )
+                )
+            ],
+            orelse=[]
+        )
+        
+        return [increment, check]
+    
+    def visit_For(self, node):
+        # Transform the loop body first
+        node = self.generic_visit(node)
+        
+        # Inject counter check at the beginning of the loop body
+        counter_checks = self._create_counter_check()
+        node.body = counter_checks + node.body
+        
+        return node
+    
+    def visit_While(self, node):
+        # Transform the loop body first
+        node = self.generic_visit(node)
+        
+        # Inject counter check at the beginning of the loop body
+        counter_checks = self._create_counter_check()
+        node.body = counter_checks + node.body
+        
+        return node
+
+
+def inject_loop_counters_string(code: str, max_iterations: int = 10000) -> str:
+    """
+    Simple string-based loop counter injection that's more reliable than AST transformation.
+    """
+    lines = code.split('\n')
+    result_lines = []
+    counter_name = "_lamia_loop_counter"
+    
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        
+        # Add counter initialization at the start of function definitions
+        if stripped.startswith('def '):
+            result_lines.append(line)
+            # Find the indentation level
+            indent = len(line) - len(line.lstrip())
+            counter_init = ' ' * (indent + 4) + f"{counter_name} = 0"
+            result_lines.append(counter_init)
+            continue
+            
+        # Inject counter checks for loops
+        if stripped.startswith('for ') or stripped.startswith('while '):
+            result_lines.append(line)
+            # Find the indentation level for the loop body
+            indent = len(line) - len(line.lstrip())
+            body_indent = ' ' * (indent + 4)
+            
+            # Add counter increment and check
+            counter_increment = body_indent + f"{counter_name} += 1"
+            counter_check = body_indent + f"if {counter_name} > {max_iterations}:"
+            counter_raise = body_indent + f"    raise RuntimeError('Infinite loop detected: exceeded {max_iterations} iterations')"
+            
+            result_lines.extend([counter_increment, counter_check, counter_raise])
+            continue
+            
+        result_lines.append(line)
+    
+    return '\n'.join(result_lines)
+
+
+class RecursionTracker:
+    """Runtime recursion depth tracker to detect infinite recursion."""
+    
+    def __init__(self, max_depth: int = 100):
+        self.max_depth = max_depth
+        self.current_depth = 0
+        self.original_trace_func = None
+    
+    def __enter__(self):
+        self.original_trace_func = sys.gettrace()
+        sys.settrace(self._trace_calls)
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.settrace(self.original_trace_func)
+    
+    def _trace_calls(self, frame, event, arg):
+        if event == 'call':
+            self.current_depth += 1
+            if self.current_depth > self.max_depth:
+                raise RecursionError(f"Infinite recursion detected: exceeded {self.max_depth} call depth")
+        elif event == 'return':
+            self.current_depth = max(0, self.current_depth - 1)
+        
+        return self._trace_calls
+
+
 class FunctionalValidator(BaseValidator):
-    """
-    Validator for Python functions with multi-layered security architecture.
-    
-    SECURITY MODEL:
-    ===============
-    
-    Layer 1: AST Analysis (Pre-execution)
-    - Blocks dangerous imports (os, sys, subprocess, etc.)
-    - Blocks dangerous operations (exec, eval, file operations, etc.)
-    - Prevents network and system calls before execution
-    
-    Layer 2: Namespace Restrictions (In-process execution)
-    - Restricted __builtins__ with only safe Python built-ins
-    - Exception types available for proper error handling
-    - No access to dangerous modules or functions
-    
-    Layer 3: Timeout Protection
-    - Signal-based timeout for infinite loop protection
-    - Configurable execution timeout (default: 5 seconds)
-    
-    Layer 4: Docker Isolation (Optional)
-    - Complete process isolation in containers
-    - Read-only filesystem, no network access
-    - Memory and CPU limits
-    - Non-root user execution
-    - Auto-cleanup of containers
-    - Graceful fallback to namespace execution if Docker unavailable
-    
-    DOCKER SECURITY:
-    ================
-    Even within Docker containers, the following restrictions apply:
-    - AST analysis still blocks dangerous code before execution
-    - Restricted __builtins__ within the container
-    - Container runs as 'nobody' user (non-root)
-    - Read-only filesystem prevents file modifications
-    - No network access (--network none)
-    - Memory and CPU limits prevent resource exhaustion
-    - Temporary filesystem limited to 10MB
-    
-    This means dangerous operations like os.system(), file I/O, network calls,
-    and imports are blocked BOTH by code analysis AND container restrictions.
-    
-    FALLBACK BEHAVIOR:
-    ==================
-    - If Docker is requested but unavailable, automatically falls back to namespace execution
-    - CI/CD environments without Docker daemon still work correctly
-    - Warning messages inform users about fallback behavior
-    - All security layers except Docker isolation remain active
-    
-    USAGE:
-    ======
-    ```python
-    # Basic usage (namespace execution)
-    validator = FunctionalValidator([((1, 2), 3), ((5, 3), 8)])
-    
-    # Docker execution (with fallback)
-    validator = FunctionalValidator([((1, 2), 3)], use_docker=True)
-    
-    # Test function
-    result = await validator.validate_strict("def add(a, b): return a + b")
-    ```
-    """
-    
     def __init__(self, 
                  test_cases: List[Tuple[Tuple[Any, ...], Union[Any, Type[Exception]]]], 
                  strict: bool = True, 
                  execution_timeout: int = 5,
                  use_docker: bool = False,
                  docker_image: str = "python:3.11-alpine",
-                 docker_memory_limit: str = "128m"):
-        """
-        Initialize FunctionalValidator.
-        
-        Args:
-            test_cases: List of (input_tuple, expected_output) pairs
-            strict: If True, expects clean code. If False, handles chatty responses
-            execution_timeout: Timeout in seconds for function execution
-            use_docker: If True, execute in Docker container for security (with fallback)
-            docker_image: Docker image to use for execution
-            docker_memory_limit: Memory limit for Docker container
-        """
+                 docker_memory_limit: str = "128m",
+                 max_loop_iterations: int = 10000,
+                 max_recursion_depth: int = 100):
         self.test_cases = test_cases
         self.strict = strict
         self.execution_timeout = execution_timeout
         self.docker_image = docker_image
         self.docker_memory_limit = docker_memory_limit
+        self.max_loop_iterations = max_loop_iterations
+        self.max_recursion_depth = max_recursion_depth
         
         # Check Docker availability if requested
         if use_docker:
             if self._check_docker_available():
                 self.use_docker = True
-                print("✅ Docker is available - using containerized execution")
+                print("Docker is available - using containerized execution")
             else:
                 self.use_docker = False
-                print("⚠️  Docker is not available - falling back to namespace execution")
+                print("Docker is not available - falling back to namespace execution")
         else:
             self.use_docker = False
 
@@ -135,15 +206,11 @@ class FunctionalValidator(BaseValidator):
 
     @property
     def name(self) -> str:
-        return "functional"
+        return "functional_validator"
 
     @property
     def initial_hint(self) -> str:
         """Generate a clear hint with formatted test cases for LLM understanding."""
-        security_note = ""
-        if self.use_docker:
-            security_note = "\n⚠️  Code will be executed in an isolated Docker container for security."
-        
         hint_parts = [
             "Please provide a Python function that satisfies all the given test cases.",
             "",
@@ -151,7 +218,7 @@ class FunctionalValidator(BaseValidator):
             "- Use triple backticks with 'python' language identifier: ```python",
             "- Do NOT include any explanations, comments, or text outside the code block",
             "- Provide ONLY the function definition inside the code block",
-            "- Use only standard Python built-ins (no external imports)" + security_note,
+            "- Use only standard Python built-ins (no external imports)",
             "",
             "Test cases your function must satisfy:"
         ]
@@ -221,6 +288,65 @@ class FunctionalValidator(BaseValidator):
             if isinstance(node, ast.Attribute) and node.attr in dangerous_patterns:
                 raise ValueError(f"Potentially dangerous attribute access detected: {node.attr}")
 
+    def _inject_loop_counters(self, code: str) -> str:
+        """
+        Inject loop counters into the code to detect infinite loops.
+        Returns the modified code with loop counters.
+        """
+        try:
+            tree = ast.parse(code)
+            transformer = LoopCounterTransformer(self.max_loop_iterations)
+            transformed_tree = transformer.visit(tree)
+            
+            # Fix missing line numbers and column offsets
+            ast.fix_missing_locations(transformed_tree)
+            
+            # Return the compiled code object instead of trying to convert back to string
+            return compile(transformed_tree, '<injected>', 'exec')
+        except Exception as e:
+            # If transformation fails, fall back to original code
+            print(f"Warning: Could not inject loop counters: {e}")
+            return code
+
+    def _inject_simple_loop_counters(self, code: str) -> str:
+        """
+        Simple string-based loop counter injection that's more reliable than AST transformation.
+        """
+        lines = code.split('\n')
+        result_lines = []
+        counter_name = "_lamia_loop_counter"
+        
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            
+            # Add counter initialization at the start of function definitions
+            if stripped.startswith('def '):
+                result_lines.append(line)
+                # Find the indentation level
+                indent = len(line) - len(line.lstrip())
+                counter_init = ' ' * (indent + 4) + f"{counter_name} = 0"
+                result_lines.append(counter_init)
+                continue
+                
+            # Inject counter checks for loops
+            if stripped.startswith('for ') or stripped.startswith('while '):
+                result_lines.append(line)
+                # Find the indentation level for the loop body
+                indent = len(line) - len(line.lstrip())
+                body_indent = ' ' * (indent + 4)
+                
+                # Add counter increment and check
+                counter_increment = body_indent + f"{counter_name} += 1"
+                counter_check = body_indent + f"if {counter_name} > {self.max_loop_iterations}:"
+                counter_raise = body_indent + f"    raise RuntimeError('Infinite loop detected: exceeded {self.max_loop_iterations} iterations')"
+                
+                result_lines.extend([counter_increment, counter_check, counter_raise])
+                continue
+                
+            result_lines.append(line)
+        
+        return '\n'.join(result_lines)
+
     def _create_safe_namespace(self) -> dict:
         """Create a safe execution namespace with only allowed built-ins."""
         safe_builtins = {
@@ -232,16 +358,19 @@ class FunctionalValidator(BaseValidator):
             # Exception types that might be needed
             'ValueError', 'TypeError', 'IndexError', 'KeyError', 'AttributeError',
             'ZeroDivisionError', 'StopIteration', 'RuntimeError', 'ArithmeticError',
-            'OverflowError', 'FloatingPointError', 'AssertionError'
+            'OverflowError', 'FloatingPointError', 'AssertionError', 'RecursionError'
         }
         
         # Create restricted built-ins
         restricted_builtins = {}
         namespace = {'__name__': '__restricted__'}
         
+        # Handle different types of __builtins__ (can be dict or module)
+        builtins_source = __builtins__ if isinstance(__builtins__, dict) else __builtins__.__dict__
+        
         for name in safe_builtins:
-            if hasattr(__builtins__, name):
-                builtin_obj = getattr(__builtins__, name)
+            if name in builtins_source:
+                builtin_obj = builtins_source[name]
                 restricted_builtins[name] = builtin_obj
                 # Also make exceptions directly available in namespace
                 if name.endswith('Error') or name in ['StopIteration']:
@@ -251,7 +380,7 @@ class FunctionalValidator(BaseValidator):
         return namespace
 
     def _execute_with_timeout(self, func: Callable, args: tuple, timeout: int = 5) -> Any:
-        """Execute function with timeout protection (for in-process execution)."""
+        """Execute function with timeout protection and recursion tracking (for in-process execution)."""
         def timeout_handler(signum, frame):
             raise TimeoutError(f"Function execution exceeded {timeout} seconds")
         
@@ -261,8 +390,10 @@ class FunctionalValidator(BaseValidator):
             signal.alarm(timeout)
         
         try:
-            result = func(*args)
-            return result
+            # Use recursion tracker to detect infinite recursion
+            with RecursionTracker(self.max_recursion_depth):
+                result = func(*args)
+                return result
         finally:
             if hasattr(signal, 'SIGALRM'):
                 signal.alarm(0)  # Cancel the alarm
@@ -276,80 +407,33 @@ class FunctionalValidator(BaseValidator):
         # Security check BEFORE Docker execution
         self._validate_code_safety(func_code)
         
-        # Create test script that will run in Docker with additional security restrictions
-        test_script = f'''
-import json
-import sys
-import traceback
-
-# Additional security: Restrict dangerous built-ins
-ALLOWED_BUILTINS = {{
-    'abs', 'all', 'any', 'bin', 'bool', 'chr', 'dict', 'divmod', 
-    'enumerate', 'filter', 'float', 'format', 'frozenset', 'hex', 
-    'int', 'isinstance', 'issubclass', 'iter', 'len', 'list', 'map', 
-    'max', 'min', 'oct', 'ord', 'pow', 'range', 'reversed', 'round', 
-    'set', 'slice', 'sorted', 'str', 'sum', 'tuple', 'type', 'zip',
-    # Exception types
-    'ValueError', 'TypeError', 'IndexError', 'KeyError', 'AttributeError',
-    'ZeroDivisionError', 'StopIteration', 'RuntimeError', 'ArithmeticError',
-    'OverflowError', 'FloatingPointError', 'AssertionError'
-}}
-
-# Create restricted namespace
-restricted_builtins = {{}}
-for name in ALLOWED_BUILTINS:
-    if hasattr(__builtins__, name):
-        restricted_builtins[name] = getattr(__builtins__, name)
-
-# Add exception types to global namespace for easy access
-for name in ['ValueError', 'TypeError', 'IndexError', 'KeyError', 'AttributeError',
-             'ZeroDivisionError', 'StopIteration', 'RuntimeError', 'ArithmeticError',
-             'OverflowError', 'FloatingPointError', 'AssertionError']:
-    if name in restricted_builtins:
-        globals()[name] = restricted_builtins[name]
-
-# Replace __builtins__ with restricted version
-__builtins__ = restricted_builtins
-
-# Function code from user (already security-checked on host)
-try:
-    exec("""
-{func_code}
-""", globals())
-except Exception as e:
-    print(json.dumps({{"success": False, "error": f"Code execution failed: {{type(e).__name__}}: {{str(e)}}"}}))
-    sys.exit(1)
-
-# Get the function from globals
-func_name = None
-for name, obj in globals().items():
-    if callable(obj) and not name.startswith('_') and name not in [
-        'json', 'sys', 'traceback', 'exec', 'globals', 'locals'
-    ] and name not in ALLOWED_BUILTINS:
-        func_name = name
-        break
-
-if func_name is None:
-    print(json.dumps({{"success": False, "error": "No function found"}}))
-    sys.exit(1)
-
-func = globals()[func_name]
-test_inputs = {repr(test_inputs)}
-
-try:
-    result = func(*test_inputs)
-    # Convert result to JSON-serializable format
-    if hasattr(result, '__dict__'):
-        result = str(result)  # Convert objects to string
-    print(json.dumps({{"success": True, "result": result}}))
-except Exception as e:
-    print(json.dumps({{"success": False, "error": f"{{type(e).__name__}}: {{str(e)}}"}}))
-'''
-
-        # Write script to temporary file
+        # Inject loop counters even for Docker execution
+        try:
+            tree = ast.parse(func_code)
+            transformer = LoopCounterTransformer(self.max_loop_iterations)
+            transformed_tree = transformer.visit(tree)
+            ast.fix_missing_locations(transformed_tree)
+            
+            # Convert back to source code for Docker execution
+            enhanced_func_code = ast.unparse(transformed_tree)
+        except Exception as e:
+            print(f"Warning: Could not inject loop counters for Docker execution: {e}")
+            enhanced_func_code = func_code
+        
+        # Write enhanced function code to temporary file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(test_script)
-            temp_script_path = f.name
+            f.write(enhanced_func_code)
+            func_file_path = f.name
+
+        # Get path to docker runner script
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        docker_runner_path = os.path.join(script_dir, 'utils', 'docker_runner.py')
+        
+        if not os.path.exists(docker_runner_path):
+            return {
+                'success': False,
+                'error': f"Docker runner script not found at {docker_runner_path}"
+            }
 
         try:
             # Run Docker container
@@ -362,9 +446,10 @@ except Exception as e:
                 '--user', 'nobody',  # Run as non-root user
                 '--read-only',  # Read-only filesystem
                 '--tmpfs', '/tmp:rw,noexec,nosuid,size=10m',  # Small temp space
-                '-v', f'{temp_script_path}:/script.py:ro',  # Mount script read-only
+                '-v', f'{docker_runner_path}:/docker_runner.py:ro',  # Mount runner script
+                '-v', f'{func_file_path}:/func.py:ro',  # Mount function file
                 self.docker_image,
-                'python', '/script.py'
+                'python', '/docker_runner.py', '/func.py', repr(test_inputs)
             ]
             
             result = subprocess.run(
@@ -400,21 +485,69 @@ except Exception as e:
                 'error': f"Docker execution error: {str(e)}"
             }
         finally:
-            # Clean up temporary file
+            # Clean up temporary files
             try:
-                os.unlink(temp_script_path)
+                os.unlink(func_file_path)
             except OSError:
                 pass  # Ignore cleanup errors
 
-    def _parse_clean_function(self, response: str) -> Callable:
-        """Parse function from clean code (strict mode)."""
+    def _execute_function(self, func: Union[Callable, str], inputs: tuple, use_docker: bool) -> dict:
+        """Execute function with given inputs. Returns dict with 'success', 'result', and 'error' keys."""
+        if use_docker:
+            return self._execute_in_docker(func, inputs, self.execution_timeout)
+        else:
+            try:
+                result = self._execute_with_timeout(func, inputs, self.execution_timeout)
+                return {'success': True, 'result': result, 'error': None}
+            except Exception as e:
+                return {'success': False, 'result': None, 'error': f"{type(e).__name__}: {str(e)}"}
+
+    def _parse_function(self, response: str, is_strict: bool = True) -> Union[Callable, str]:
+        """Parse function from response - returns either executable function or code string for Docker."""
         response = response.strip()
         
-        # Security check
-        self._validate_code_safety(response)
+        if not is_strict:
+            # Try to extract function from markdown code blocks first
+            code_block_patterns = [
+                r'```python\s*\n(.*?)\n```',
+                r'```\s*\n(.*?)\n```',
+            ]
+            
+            extracted_code = None
+            for pattern in code_block_patterns:
+                match = re.search(pattern, response, re.DOTALL)
+                if match:
+                    extracted_code = match.group(1).strip()
+                    break
+            
+            if not extracted_code:
+                def_matches = re.findall(r'def\s+\w+\s*\([^)]*\):[^def]*?(?=def|\Z)', response, re.DOTALL | re.MULTILINE)
+                if def_matches:
+                    extracted_code = def_matches[0].strip()
+                else:
+                    extracted_code = response
+            
+            # Normalize indentation
+            lines = extracted_code.split('\n')
+            if lines:
+                min_indent = float('inf')
+                for line in lines:
+                    if line.strip():
+                        indent = len(line) - len(line.lstrip())
+                        min_indent = min(min_indent, indent)
+                
+                if min_indent != float('inf') and min_indent > 0:
+                    normalized_lines = []
+                    for line in lines:
+                        if line.strip():
+                            normalized_lines.append(line[min_indent:] if len(line) >= min_indent else line)
+                        else:
+                            normalized_lines.append('')
+                    extracted_code = '\n'.join(normalized_lines)
+            
+            response = extracted_code
         
-        # For strict mode, expect relatively clean function definitions
-        # Look for function definition
+        # Extract function definition
         lines = response.split('\n')
         func_lines = []
         in_function = False
@@ -423,18 +556,15 @@ except Exception as e:
             stripped_line = line.strip()
             if stripped_line.startswith('def '):
                 in_function = True
-                func_lines = [line]  # Start fresh from this def
+                func_lines = [line]
             elif in_function:
                 func_lines.append(line)
-                # Function ends when we hit a line with no indentation that's not empty
-                # and doesn't start with def, unless it's the last line
                 if (stripped_line and 
                     not line.startswith(' ') and 
                     not line.startswith('\t') and 
                     not stripped_line.startswith('def') and
                     not stripped_line.startswith('#')):
-                    # This line is not part of the function
-                    func_lines.pop()  # Remove the line that's not part of function
+                    func_lines.pop()
                     break
         
         if not func_lines:
@@ -442,267 +572,104 @@ except Exception as e:
         
         func_code = '\n'.join(func_lines)
         
-        # For Docker execution, we'll return the code string wrapped in a special object
+        # If using Docker, just return the code string
         if self.use_docker:
-            class DockerFunction:
-                def __init__(self, code):
-                    self.code = code
-                    self.__name__ = "docker_function"
-            return DockerFunction(func_code)
+            self._validate_code_safety(func_code)  # Only security check for Docker
+            return func_code
         
-        # Create a safe namespace and execute the function definition
+        # Otherwise, execute in safe namespace with enhanced protection
+        self._validate_code_safety(func_code)  # Security check for non-Docker too
+        
+        # Try simple string-based loop counter injection as fallback
+        try:
+            enhanced_func_code = self._inject_simple_loop_counters(func_code)
+        except Exception as e:
+            print(f"Warning: Loop counter injection failed, using original code: {e}")
+            enhanced_func_code = func_code
+        
         namespace = self._create_safe_namespace()
         try:
-            exec(func_code, namespace)
+            exec(enhanced_func_code, namespace)
         except Exception as e:
-            raise ValueError(f"Failed to parse function from response: {e}")
+            # If enhanced version fails, try original
+            try:
+                exec(func_code, namespace)
+            except Exception as e:
+                raise ValueError(f"Failed to parse function from response: {e}")
         
-        # Find the function in the namespace (exclude built-ins)
-        functions = [v for k, v in namespace.items() if callable(v) and not k.startswith('__')]
+        functions = [v for k, v in namespace.items() 
+                    if callable(v) and not k.startswith('__') and not k.endswith('Error') 
+                    and k not in ['StopIteration'] and hasattr(v, '__code__')]
         
         if not functions:
             raise ValueError("No function found in the response")
         
         if len(functions) > 1:
-            function_names = [name for name, obj in namespace.items() if callable(obj) and not name.startswith('__')]
+            function_names = [name for name, obj in namespace.items() 
+                            if callable(obj) and not name.startswith('__') and not name.endswith('Error') 
+                            and name not in ['StopIteration'] and hasattr(obj, '__code__')]
             raise ValueError(f"Multiple functions found in response: {', '.join(function_names)}. Please provide only one function")
         
         return functions[0]
 
-    def _parse_chatty_function(self, response: str) -> Callable:
+    def _parse_clean_function(self, response: str) -> Union[Callable, str]:
+        """Parse function from clean code (strict mode)."""
+        return self._parse_function(response, is_strict=True)
+
+    def _parse_chatty_function(self, response: str) -> Union[Callable, str]:
         """Parse function from chatty LLM response (permissive mode)."""
-        response = response.strip()
-        
-        # Try to extract function from markdown code blocks first
-        code_block_patterns = [
-            r'```python\s*\n(.*?)\n```',  # ```python\n...\n```
-            r'```\s*\n(.*?)\n```',       # ```\n...\n```
-        ]
-        
-        extracted_code = None
-        for pattern in code_block_patterns:
-            match = re.search(pattern, response, re.DOTALL)
-            if match:
-                extracted_code = match.group(1).strip()
-                break
-        
-        # If no code block found, try to find function definition in the entire response
-        if not extracted_code:
-            # Try to find any code that looks like a function using more aggressive regex
-            def_matches = re.findall(r'def\s+\w+\s*\([^)]*\):[^def]*?(?=def|\Z)', response, re.DOTALL | re.MULTILINE)
-            if def_matches:
-                # Take the first function definition found
-                extracted_code = def_matches[0].strip()
-            else:
-                extracted_code = response
-        
-        # Security check
-        self._validate_code_safety(extracted_code)
-        
-        # Normalize indentation to handle cases where function is indented
-        lines = extracted_code.split('\n')
-        if lines:
-            # Find the minimum indentation of non-empty lines
-            min_indent = float('inf')
-            for line in lines:
-                if line.strip():  # Skip empty lines
-                    indent = len(line) - len(line.lstrip())
-                    min_indent = min(min_indent, indent)
-            
-            # Remove the minimum indentation from all lines
-            if min_indent != float('inf') and min_indent > 0:
-                normalized_lines = []
-                for line in lines:
-                    if line.strip():  # Non-empty line
-                        normalized_lines.append(line[min_indent:] if len(line) >= min_indent else line)
-                    else:  # Empty line
-                        normalized_lines.append('')
-                extracted_code = '\n'.join(normalized_lines)
-        
-        # Now extract function definition from the code
-        lines = extracted_code.split('\n')
-        func_lines = []
-        in_function = False
-        
-        for line in lines:
-            stripped_line = line.strip()
-            if stripped_line.startswith('def '):
-                in_function = True
-                func_lines = [line]  # Start fresh from this def
-            elif in_function:
-                func_lines.append(line)
-                # Function ends when we hit a line with no indentation that's not empty
-                # and doesn't start with def, unless it's the last line
-                if (stripped_line and 
-                    not line.startswith(' ') and 
-                    not line.startswith('\t') and 
-                    not stripped_line.startswith('def') and
-                    not stripped_line.startswith('#')):
-                    # This line is not part of the function
-                    func_lines.pop()  # Remove the line that's not part of function
-                    break
-        
-        if not func_lines:
-            raise ValueError("No function definition found in the response")
-        
-        func_code = '\n'.join(func_lines)
-        
-        # For Docker execution, we'll return the code string wrapped in a special object
-        if self.use_docker:
-            class DockerFunction:
-                def __init__(self, code):
-                    self.code = code
-                    self.__name__ = "docker_function"
-            return DockerFunction(func_code)
-        
-        # Create a safe namespace and execute the function definition
-        namespace = self._create_safe_namespace()
-        try:
-            exec(func_code, namespace)
-        except Exception as e:
-            raise ValueError(f"Failed to parse function from response: {e}")
-        
-        # Find the function in the namespace (exclude built-ins)
-        functions = [v for k, v in namespace.items() if callable(v) and not k.startswith('__')]
-        
-        if not functions:
-            raise ValueError("No function found in the response")
-        
-        if len(functions) > 1:
-            function_names = [name for name, obj in namespace.items() if callable(obj) and not name.startswith('__')]
-            raise ValueError(f"Multiple functions found in response: {', '.join(function_names)}. Please provide only one function")
-        
-        return functions[0]
+        return self._parse_function(response, is_strict=False)
 
-    def _test_function(self, func: Union[Callable, Any]) -> ValidationResult:
+    def _test_function(self, func: Union[Callable, str]) -> ValidationResult:
         """Test the function against all test cases."""
+        # Determine execution mode once
+        use_docker = self.use_docker and isinstance(func, str)
+        
         for i, (inputs, expected) in enumerate(self.test_cases):
             try:
+                # Execute the function
+                exec_result = self._execute_function(func, inputs, use_docker)
+                
                 if inspect.isclass(expected) and issubclass(expected, Exception):
                     # Expecting an exception
-                    try:
-                        if self.use_docker and hasattr(func, 'code'):
-                            # Try Docker execution first
-                            result_data = self._execute_in_docker(func.code, inputs, self.execution_timeout)
-                            
-                            # If Docker fails, fall back to namespace execution
-                            if not result_data['success'] and 'Docker' in result_data['error']:
-                                print(f"⚠️  Docker execution failed, falling back to namespace execution: {result_data['error']}")
-                                # Parse and execute in namespace instead
-                                namespace = self._create_safe_namespace()
-                                exec(func.code, namespace)
-                                functions = [v for k, v in namespace.items() if callable(v) and not k.startswith('__')]
-                                if functions:
-                                    fallback_func = functions[0]
-                                    try:
-                                        result = self._execute_with_timeout(fallback_func, inputs, self.execution_timeout)
-                                        return ValidationResult(
-                                            is_valid=False,
-                                            error_message=f"Test case {i+1}: Expected {expected.__name__} but got result: {result}",
-                                            hint=self.initial_hint
-                                        )
-                                    except Exception as e:
-                                        if not isinstance(e, expected):
-                                            return ValidationResult(
-                                                is_valid=False,
-                                                error_message=f"Test case {i+1}: Expected {expected.__name__} but got {type(e).__name__}: {e}",
-                                                hint=self.initial_hint
-                                            )
-                                        # Exception matches, continue to next test case
-                                        continue
-                                else:
-                                    return ValidationResult(
-                                        is_valid=False,
-                                        error_message=f"Test case {i+1}: No function found after fallback",
-                                        hint=self.initial_hint
-                                    )
-                            
-                            if result_data['success']:
-                                return ValidationResult(
-                                    is_valid=False,
-                                    error_message=f"Test case {i+1}: Expected {expected.__name__} but got result: {result_data['result']}",
-                                    hint=self.initial_hint
-                                )
-                            else:
-                                # Check if the error matches expected exception
-                                error_msg = result_data['error']
-                                if expected.__name__ in error_msg:
-                                    continue  # Expected exception occurred
-                                else:
-                                    return ValidationResult(
-                                        is_valid=False,
-                                        error_message=f"Test case {i+1}: Expected {expected.__name__} but got: {error_msg}",
-                                        hint=self.initial_hint
-                                    )
-                        else:
-                            # In-process execution
-                            result = self._execute_with_timeout(func, inputs, self.execution_timeout)
-                            return ValidationResult(
-                                is_valid=False,
-                                error_message=f"Test case {i+1}: Expected {expected.__name__} but got result: {result}",
-                                hint=self.initial_hint
-                            )
-                    except TimeoutError:
+                    if exec_result['success']:
                         return ValidationResult(
                             is_valid=False,
-                            error_message=f"Test case {i+1}: Function execution timed out after {self.execution_timeout} seconds",
+                            error_message=f"Test case {i+1}: Expected {expected.__name__} but got result: {exec_result['result']}",
                             hint=self.initial_hint
                         )
-                    except Exception as e:
-                        if not isinstance(e, expected):
+                    else:
+                        # Check if the error matches expected exception
+                        if expected.__name__ in exec_result['error']:
+                            continue  # Expected exception occurred
+                        else:
                             return ValidationResult(
                                 is_valid=False,
-                                error_message=f"Test case {i+1}: Expected {expected.__name__} but got {type(e).__name__}: {e}",
+                                error_message=f"Test case {i+1}: Expected {expected.__name__} but got: {exec_result['error']}",
                                 hint=self.initial_hint
                             )
-                        # Exception matches, continue to next test case
                 else:
                     # Expecting a normal return value
-                    try:
-                        if self.use_docker and hasattr(func, 'code'):
-                            # Try Docker execution first
-                            result_data = self._execute_in_docker(func.code, inputs, self.execution_timeout)
-                            
-                            # If Docker fails, fall back to namespace execution
-                            if not result_data['success'] and 'Docker' in result_data['error']:
-                                print(f"⚠️  Docker execution failed, falling back to namespace execution: {result_data['error']}")
-                                # Parse and execute in namespace instead
-                                namespace = self._create_safe_namespace()
-                                exec(func.code, namespace)
-                                functions = [v for k, v in namespace.items() if callable(v) and not k.startswith('__')]
-                                if functions:
-                                    fallback_func = functions[0]
-                                    result = self._execute_with_timeout(fallback_func, inputs, self.execution_timeout)
-                                else:
-                                    return ValidationResult(
-                                        is_valid=False,
-                                        error_message=f"Test case {i+1}: No function found after fallback",
-                                        hint=self.initial_hint
-                                    )
-                            elif not result_data['success']:
-                                return ValidationResult(
-                                    is_valid=False,
-                                    error_message=f"Test case {i+1}: Execution failed: {result_data['error']}",
-                                    hint=self.initial_hint
-                                )
-                            else:
-                                result = result_data['result']
-                        else:
-                            # In-process execution
-                            result = self._execute_with_timeout(func, inputs, self.execution_timeout)
-                        
-                        if result != expected:
-                            return ValidationResult(
-                                is_valid=False,
-                                error_message=f"Test case {i+1}: Expected {expected} but got {result} for inputs {inputs}",
-                                hint=self.initial_hint
-                            )
-                    except TimeoutError:
+                    if not exec_result['success']:
                         return ValidationResult(
                             is_valid=False,
-                            error_message=f"Test case {i+1}: Function execution timed out after {self.execution_timeout} seconds",
+                            error_message=f"Test case {i+1}: Execution failed: {exec_result['error']}",
                             hint=self.initial_hint
                         )
+                    
+                    if exec_result['result'] != expected:
+                        return ValidationResult(
+                            is_valid=False,
+                            error_message=f"Test case {i+1}: Expected {expected} but got {exec_result['result']} for inputs {inputs}",
+                            hint=self.initial_hint
+                        )
+                        
+            except TimeoutError:
+                return ValidationResult(
+                    is_valid=False,
+                    error_message=f"Test case {i+1}: Function execution timed out after {self.execution_timeout} seconds",
+                    hint=self.initial_hint
+                )
             except Exception as e:
                 if not (inspect.isclass(expected) and issubclass(expected, Exception)):
                     return ValidationResult(
@@ -711,32 +678,20 @@ except Exception as e:
                         hint=self.initial_hint
                     )
         
-        # All test cases passed
         return ValidationResult(
             is_valid=True,
-            validated_text=getattr(func, '__name__', 'function'),
+            validated_text=getattr(func, '__name__', 'function') if callable(func) else 'function',
             hint=self.initial_hint
         )
 
-    async def validate_strict(self, response: Union[str, Callable], **kwargs) -> ValidationResult:
-        """
-        Strict validation: expects clean function code or actual function objects.
-        Does not handle chatty responses. Only supports Python functions.
-        """
+    def _validate(self, response: Union[str, Callable], parse_func: Callable) -> ValidationResult:
+        """Common validation logic for both strict and permissive modes."""
         try:
             if callable(response):
-                # Direct function validation - still apply security checks by testing
                 return self._test_function(response)
-            elif isinstance(response, str):
-                # Parse clean function code
-                func = self._parse_clean_function(response)
-                return self._test_function(func)
             else:
-                return ValidationResult(
-                    is_valid=False,
-                    error_message=f"Expected function or string, got {type(response).__name__}",
-                    hint=self.initial_hint
-                )
+                func = parse_func(response)
+                return self._test_function(func)
         except ValueError as e:
             return ValidationResult(
                 is_valid=False,
@@ -749,167 +704,9 @@ except Exception as e:
                 error_message=f"Failed to parse or execute function: {e}",
                 hint=self.initial_hint
             )
+
+    async def validate_strict(self, response: Union[str, Callable], **kwargs) -> ValidationResult:
+        return self._validate(response, self._parse_clean_function)
 
     async def validate_permissive(self, response: Union[str, Callable], **kwargs) -> ValidationResult:
-        """
-        Permissive validation: extract function from chatty LLM responses.
-        This mode scrapes away chattiness and explanation text.
-        Only supports Python functions.
-        """
-        try:
-            if callable(response):
-                # Direct function validation
-                return self._test_function(response)
-            elif isinstance(response, str):
-                # Parse chatty response and extract function
-                func = self._parse_chatty_function(response)
-                return self._test_function(func)
-            else:
-                return ValidationResult(
-                    is_valid=False,
-                    error_message=f"Expected function or string, got {type(response).__name__}",
-                    hint=self.initial_hint
-                )
-        except ValueError as e:
-            return ValidationResult(
-                is_valid=False,
-                error_message=str(e),
-                hint=self.initial_hint
-            )
-        except Exception as e:
-            return ValidationResult(
-                is_valid=False,
-                error_message=f"Failed to parse or execute function: {e}",
-                hint=self.initial_hint
-            )
-
-    @staticmethod
-    def can_handle_content(content: str) -> bool:
-        """
-        Smart detection: Check if the content appears to be Python function code.
-        This enables automatic selection of FunctionalValidator for string validation.
-        
-        Args:
-            content: String content to analyze
-            
-        Returns:
-            True if content appears to be Python function code
-        """
-        if not isinstance(content, str):
-            return False
-            
-        content = content.strip()
-        if not content:
-            return False
-        
-        # Check for function definition patterns
-        function_indicators = [
-            r'def\s+\w+\s*\([^)]*\)\s*:',  # def function_name():
-            r'```python\s*\n.*def\s+\w+',   # ```python\ndef function
-            r'lambda\s+[^:]+:',             # lambda expressions
-        ]
-        
-        for pattern in function_indicators:
-            if re.search(pattern, content, re.DOTALL | re.MULTILINE):
-                return True
-        
-        # Check for Python-specific keywords in context
-        python_keywords = ['def', 'return', 'if', 'else', 'for', 'while', 'try', 'except']
-        lines = content.split('\n')
-        python_line_count = 0
-        
-        for line in lines:
-            line = line.strip()
-            if any(keyword in line for keyword in python_keywords):
-                python_line_count += 1
-        
-        # If more than 30% of non-empty lines contain Python keywords, likely Python code
-        non_empty_lines = len([line for line in lines if line.strip()])
-        if non_empty_lines > 0 and python_line_count / non_empty_lines > 0.3:
-            return True
-            
-        return False
-
-    @staticmethod
-    def suggest_test_cases_from_content(content: str) -> List[Tuple[Tuple[Any, ...], Any]]:
-        """
-        Smart suggestion: Extract potential test cases from content or comments.
-        
-        Args:
-            content: String content to analyze
-            
-        Returns:
-            List of suggested test cases in the format [((inputs...), expected_output)]
-        """
-        suggested_cases = []
-        
-        # Look for example calls in comments or docstrings
-        example_patterns = [
-            r'#.*(\w+)\(([^)]+)\).*(?:should return|returns?|=>|=)\s*([^\n]+)',
-            r'""".*(\w+)\(([^)]+)\).*(?:should return|returns?|=>|=)\s*([^\n]+)',
-            r'>>>.*(\w+)\(([^)]+)\)\s*([^\n]+)',  # Doctest style
-        ]
-        
-        for pattern in example_patterns:
-            matches = re.findall(pattern, content, re.MULTILINE | re.DOTALL)
-            for match in matches:
-                try:
-                    func_name, args_str, expected_str = match
-                    # Try to parse arguments and expected result
-                    args = eval(f"({args_str})")
-                    if not isinstance(args, tuple):
-                        args = (args,)
-                    expected = eval(expected_str.strip())
-                    suggested_cases.append((args, expected))
-                except:
-                    continue  # Skip if parsing fails
-        
-        # If no examples found, suggest simple test cases based on function signature
-        if not suggested_cases:
-            func_match = re.search(r'def\s+(\w+)\s*\(([^)]*)\)', content)
-            if func_match:
-                func_name, params = func_match.groups()
-                param_list = [p.strip().split('=')[0].strip() for p in params.split(',') if p.strip()]
-                
-                # Suggest basic test cases based on parameter count
-                if len(param_list) == 1:
-                    suggested_cases = [((1,), 1), ((0,), 0)]
-                elif len(param_list) == 2:
-                    suggested_cases = [((1, 2), 3), ((0, 0), 0)]
-                elif len(param_list) >= 3:
-                    suggested_cases = [((1, 2, 3), 6), ((0, 0, 0), 0)]
-        
-        return suggested_cases
-
-    @staticmethod
-    def _should_use_docker_for_content(content: str) -> bool:
-        """
-        Determine if Docker should be used based on content analysis.
-        
-        Args:
-            content: String content to analyze
-            
-        Returns:
-            True if Docker is recommended for this content
-        """
-        # Use Docker for potentially risky content
-        risky_patterns = [
-            r'import\s+os',
-            r'import\s+sys',
-            r'import\s+subprocess',
-            r'exec\s*\(',
-            r'eval\s*\(',
-            r'open\s*\(',
-            r'file\s*\(',
-        ]
-        
-        for pattern in risky_patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                return True
-        
-        # Use Docker for complex functions (more than 10 lines)
-        lines = [line.strip() for line in content.split('\n') if line.strip()]
-        if len(lines) > 10:
-            return True
-            
-        return False 
+        return self._validate(response, self._parse_chatty_function)
