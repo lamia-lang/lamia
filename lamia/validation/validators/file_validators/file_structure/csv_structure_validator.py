@@ -39,12 +39,15 @@ class CSVStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        structure_lines = describe_model_structure(self.model, format_type="csv")
-        return (
-            "Please ensure the CSV matches the required structure.\n"
-            "Expected columns and types:\n"
-            + '\n'.join(structure_lines)
-        )
+        if self.model is not None:
+            structure_lines = describe_model_structure(self.model, format_type="csv")
+            return (
+                "Please ensure the CSV matches the required structure.\n"
+                "Expected columns and types:\n"
+                + '\n'.join(structure_lines)
+            )
+        else:
+            return "Please return only the CSV code, starting with the header row and ending with the last row, with no explanation or extra text."
 
     def parse(self, response: str):
         # Returns a tuple: (header, list of row dicts)

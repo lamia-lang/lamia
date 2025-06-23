@@ -13,16 +13,12 @@ class HTMLStructureValidator(DocumentStructureValidator):
     def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         if model is not None:
             resolved_model = model
-            self._structure_check_enabled = True
         elif model_name is not None:
             resolved_model = import_model_from_path(model_name, default_module=model_module)
-            self._structure_check_enabled = True
         elif schema is not None:
             resolved_model = create_model("HTMLStructureModel", **schema)
-            self._structure_check_enabled = True
         else:
             resolved_model = None
-            self._structure_check_enabled = False
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     @classmethod
@@ -31,7 +27,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        if self._structure_check_enabled:
+        if self.model is not None:
             structure_lines = describe_model_structure(self.model, format_type="html")
             return (
                 "Please ensure the HTML matches the required structure.\n" +

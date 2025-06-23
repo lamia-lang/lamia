@@ -27,7 +27,7 @@ class JSONStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        if self._structure_check_enabled:
+        if self.model is not None:
             structure_lines = describe_model_structure(self.model, format_type="json")
             return (
                 "Please ensure the JSON matches the required structure.\n"
