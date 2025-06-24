@@ -2,7 +2,7 @@ import yaml
 from pydantic import BaseModel, create_model
 import re
 from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
-from .utils import import_model_from_path, describe_model_structure
+from .utils import import_model_from_path
 
 class YAMLStructureValidator(DocumentStructureValidator):
     """Validates if the YAML matches a given Pydantic model structure."""
@@ -21,9 +21,13 @@ class YAMLStructureValidator(DocumentStructureValidator):
     def name(cls) -> str:
         return "yaml_structure"
 
+    @classmethod
+    def file_type(cls) -> str:
+        return "yaml"
+
     @property
     def initial_hint(self) -> str:
-        structure_lines = describe_model_structure(self.model, format_type="yaml")
+        structure_lines = self._describe_structure(self.model)
         return (
             "Please ensure the YAML matches the required structure.\n"
             "Expected structure:\n"
@@ -120,4 +124,16 @@ class YAMLStructureValidator(DocumentStructureValidator):
         return found
 
     def get_subtree_string(self, elem):
-        return yaml.dump(elem, allow_unicode=True) 
+        return yaml.dump(elem, allow_unicode=True)
+
+    def _describe_structure(self, model, indent=0):
+        lines = []
+        prefix = '  ' * indent
+        for field, field_info in model.model_fields.items():
+            submodel = field_info.annotation
+            if hasattr(submodel, "model_fields"):
+                lines.append(f'{prefix}{field}:')
+                lines.extend(self._describe_structure(submodel, indent + 1))
+            else:
+                lines.append(f'{prefix}{field}: ...')
+        return lines 

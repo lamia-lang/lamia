@@ -5,7 +5,7 @@ from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator, BaseValidationError
 from ....base import ValidationResult       
-from .utils import import_model_from_path, describe_model_structure
+from .utils import import_model_from_path
 
 class DuplicateHeaderError(BaseValidationError):
     """Exception for duplicate headers in structured data."""
@@ -37,10 +37,14 @@ class CSVStructureValidator(DocumentStructureValidator):
     def name(cls) -> str:
         return "csv_structure"
 
+    @classmethod
+    def file_type(cls) -> str:
+        return "csv"
+
     @property
     def initial_hint(self) -> str:
         if self.model is not None:
-            structure_lines = describe_model_structure(self.model, format_type="csv")
+            structure_lines = self._describe_structure(self.model)
             return (
                 "Please ensure the CSV matches the required structure.\n"
                 "Expected columns and types:\n"
@@ -211,3 +215,9 @@ class CSVStructureValidator(DocumentStructureValidator):
             result_type=model_instance,
             error_message=error_message
         )
+
+    def _describe_structure(self, model, indent=0):
+        lines = []
+        for field, field_info in model.model_fields.items():
+            lines.append(f'{field}: {field_info.annotation.__name__}')
+        return lines

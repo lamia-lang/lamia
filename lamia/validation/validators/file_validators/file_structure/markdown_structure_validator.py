@@ -4,7 +4,7 @@ from .document_structure_validator import DocumentStructureValidator
 from ....base import BaseValidator, ValidationResult
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
-from .utils import import_model_from_path, describe_model_structure
+from .utils import import_model_from_path
 
 # Marker classes for semantic mapping
 class MarkdownStr(str):
@@ -91,6 +91,10 @@ class MarkdownStructureValidator(DocumentStructureValidator):
     @classmethod
     def name(cls) -> str:
         return "markdown_structure"
+
+    @classmethod
+    def file_type(cls) -> str:
+        return "markdown"
 
     @property
     def initial_hint(self) -> str:
@@ -308,4 +312,16 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             return ValidationResult(is_valid=False, error_message=err, hint=self.initial_hint)
         # Create an instance of the model with our values
         result_type = self.model(**values)
-        return ValidationResult(is_valid=True, validated_text=values, result_type=result_type) 
+        return ValidationResult(is_valid=True, validated_text=values, result_type=result_type)
+
+    def _describe_structure(self, model, indent=0):
+        lines = []
+        prefix = '  ' * indent
+        for field, field_info in model.model_fields.items():
+            submodel = field_info.annotation
+            if hasattr(submodel, "model_fields"):
+                lines.append(f'{prefix}{field}:')
+                lines.extend(self._describe_structure(submodel, indent + 1))
+            else:
+                lines.append(f'{prefix}{field}: ...')
+        return lines 

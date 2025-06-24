@@ -3,7 +3,7 @@ import re
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError, InvalidPayloadError
 from ....base import ValidationResult
-from .utils import import_model_from_path, describe_model_structure
+from .utils import import_model_from_path
 
 class JSONStructureValidator(DocumentStructureValidator):
     """Validates if the JSON matches a given Pydantic model structure."""
@@ -21,11 +21,15 @@ class JSONStructureValidator(DocumentStructureValidator):
     @classmethod
     def name(cls) -> str:
         return "json_structure"
+    
+    @classmethod
+    def file_type(cls) -> str:
+        return "json"
 
     @property
     def initial_hint(self) -> str:
         if self.model is not None:
-            structure_lines = describe_model_structure(self.model, format_type="json")
+            structure_lines = self._describe_structure(self.model)
             return (
                 "Please ensure the JSON matches the required structure.\n"
                 "Expected structure:\n"
@@ -40,7 +44,7 @@ class JSONStructureValidator(DocumentStructureValidator):
         match = re.search(r'({[\s\S]*})|\[([\s\S]*)\]', response)
         if not match:
             raise InvalidPayloadError(
-                expected_file_format="JSON",
+                expected_file_format=self.file_type(),
                 text=response,
             )
         elif self.strict: # and self.generate_hints
@@ -57,9 +61,17 @@ class JSONStructureValidator(DocumentStructureValidator):
             return json.loads(payload)
         except Exception as e:
             raise InvalidPayloadError(
-                expected_file_format="JSON",
+                expected_file_format=self.file_type(),
                 text=payload,
             ) from e
+        
+    
+    def extract_payload(self, response: str) -> str:
+        match = re.search(r'({[\s\S]*})|\[[\s\S]*\]', response)
+        return match.group(0) if match else None
+
+    def load_payload(self, payload: str) -> any:
+        return json.loads(payload)
 
     def find_element(self, tree, key):
         # Only direct children for strict mode
@@ -107,3 +119,19 @@ class JSONStructureValidator(DocumentStructureValidator):
 
     def get_subtree_string(self, elem):
         return json.dumps(elem, ensure_ascii=False, separators=(',', ':'))
+    
+    def _describe_structure(self, model, indent=0):
+        lines = []
+        prefix = '  ' * indent
+        
+        for field, field_info in model.model_fields.items():
+            submodel = field_info.annotation
+            
+            if hasattr(submodel, "model_fields"):
+                lines.append(f'{prefix}"{field}": {{')
+                lines.extend(self._describe_structure(submodel, indent + 1))
+                lines.append(f"{prefix}}}")
+            else:
+                lines.append(f'{prefix}"{field}": ...')
+        
+        return lines

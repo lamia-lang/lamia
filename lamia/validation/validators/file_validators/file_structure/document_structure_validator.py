@@ -16,20 +16,20 @@ class BaseValidationError(ValueError):
 
 class TextAroundPayloadError(BaseValidationError):
     """Exception for when there's unexpected text around the payload."""
-    def __init__(self, validator_class_name: str, original_text: str, payload_text: str):
+    def __init__(self, expected_file_format: str, original_text: str, payload_text: str):
         # Generate dynamic message and hint
-        message = f"Invalid {validator_class_name}: unexpected text around payload"
+        message = f"Invalid {expected_file_format}: unexpected text around payload"
         
-        hint = f"Please ensure the response is a valid {validator_class_name}."
+        hint = f"Please ensure the response is a valid {expected_file_format}."
         
         try:
             preceding_text = original_text[:original_text.find(payload_text)]
             following_text = original_text[original_text.find(payload_text) + len(payload_text):]
             
             if preceding_text:
-                hint += f" The response should not include any text before the {validator_class_name}. Please do not include texts like '{preceding_text}' before the {validator_class_name} content."
+                hint += f" The response should not include any text before the {expected_file_format}. Please do not include texts like '{preceding_text}' before the {validator_class_name} content."
             if following_text:
-                hint += f" The response should not include any text after the {validator_class_name}. Please do not include texts like '{following_text}' after the {validator_class_name} content."
+                hint += f" The response should not include any text after the {expected_file_format}. Please do not include texts like '{following_text}' after the {validator_class_name} content."
         except (ValueError, AttributeError):
             # Handle cases where find() fails or other text processing issues
             hint += " The response should only contain the expected payload format without any additional text before or after it."
@@ -100,6 +100,33 @@ class DocumentStructureValidator(BaseValidator, ABC):
         stripped = response.strip()
         payload = self.extract_payload(stripped)
         return self.load_payload(payload)
+    
+    @classmethod
+    @abstractmethod
+    def name(cls) -> str:
+        pass
+
+    @classmethod
+    @abstractmethod
+    def file_type(cls) -> str:
+        pass
+
+    @abstractmethod
+    def _describe_structure(self, model, indent=0):
+        """Describe the expected structure from a Pydantic model for this file format."""
+        pass
+
+    @property
+    def initial_hint(self) -> str:
+        if self.model is not None:
+            structure_lines = self._describe_structure(self.model)
+            return (
+                f"Please ensure the {self.file_type()} matches the required structure.\n"
+                "Expected structure:\n"
+                + '\n'.join(structure_lines)
+            )
+        else:
+            return f"Please return only valid {self.file_type()}, with no explanation or extra text."
 
     @abstractmethod
     def extract_payload(self, response: str) -> str:

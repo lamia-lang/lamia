@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import re
 from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from ....base import ValidationResult
-from .utils import import_model_from_path, describe_model_structure
+from .utils import import_model_from_path
 
 class HTMLStructureValidator(DocumentStructureValidator):
     """Validates if the HTML matches a given Pydantic model structure.
@@ -24,11 +24,15 @@ class HTMLStructureValidator(DocumentStructureValidator):
     @classmethod
     def name(cls) -> str:
         return "html_structure"
+    
+    @classmethod
+    def file_type(cls) -> str:
+        return "html"
 
     @property
     def initial_hint(self) -> str:
         if self.model is not None:
-            structure_lines = describe_model_structure(self.model, format_type="html")
+            structure_lines = self._describe_structure(self.model)
             return (
                 "Please ensure the HTML matches the required structure.\n" +
                 "Expected structure:\n" +
@@ -184,3 +188,16 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 hint=self.initial_hint if self.generate_hints else None
             )
         return self.validate_permissive_recursive(tree, self.model)
+
+    def _describe_structure(self, model, indent=0):
+        lines = []
+        prefix = '  ' * indent
+        for field, field_info in model.model_fields.items():
+            submodel = field_info.annotation
+            if hasattr(submodel, "model_fields"):
+                lines.append(f'{prefix}<{field}>')
+                lines.extend(self._describe_structure(submodel, indent + 1))
+                lines.append(f'{prefix}</{field}>')
+            else:
+                lines.append(f'{prefix}<{field}>...text...</{field}>')
+        return lines

@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from pydantic import BaseModel, create_model
 import re
 from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
-from .utils import import_model_from_path, describe_model_structure
+from .utils import import_model_from_path
 
 class XMLStructureValidator(DocumentStructureValidator):
     """Validates if the XML matches a given Pydantic model structure."""
@@ -20,6 +20,10 @@ class XMLStructureValidator(DocumentStructureValidator):
     @classmethod
     def name(cls) -> str:
         return "xml_structure"
+
+    @classmethod
+    def file_type(cls) -> str:
+        return "xml"
 
     @property
     def initial_hint(self) -> str:
@@ -128,4 +132,17 @@ class XMLStructureValidator(DocumentStructureValidator):
         return tree.findall(f'.//{key}')
 
     def get_subtree_string(self, elem):
-        return ET.tostring(elem, encoding='unicode') 
+        return ET.tostring(elem, encoding='unicode')
+
+    def _describe_structure(self, model, indent=0):
+        lines = []
+        prefix = '  ' * indent
+        for field, field_info in model.model_fields.items():
+            submodel = field_info.annotation
+            if hasattr(submodel, "model_fields"):
+                lines.append(f'{prefix}<{field}>')
+                lines.extend(self._describe_structure(submodel, indent + 1))
+                lines.append(f'{prefix}</{field}>')
+            else:
+                lines.append(f'{prefix}<{field}>...text...</{field}>')
+        return lines 
