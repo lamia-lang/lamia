@@ -16,15 +16,15 @@ class BaseValidationError(ValueError):
 
 class TextAroundPayloadError(BaseValidationError):
     """Exception for when there's unexpected text around the payload."""
-    def __init__(self, validator_class_name: str, original_text: str, parsed_text: str):
+    def __init__(self, validator_class_name: str, original_text: str, payload_text: str):
         # Generate dynamic message and hint
         message = f"Invalid {validator_class_name}: unexpected text around payload"
         
         hint = f"Please ensure the response is a valid {validator_class_name}."
         
         try:
-            preceding_text = original_text[:original_text.find(parsed_text)]
-            following_text = original_text[original_text.find(parsed_text) + len(parsed_text):]
+            preceding_text = original_text[:original_text.find(payload_text)]
+            following_text = original_text[original_text.find(payload_text) + len(payload_text):]
             
             if preceding_text:
                 hint += f" The response should not include any text before the {validator_class_name}. Please do not include texts like '{preceding_text}' before the {validator_class_name} content."
@@ -33,6 +33,16 @@ class TextAroundPayloadError(BaseValidationError):
         except (ValueError, AttributeError):
             # Handle cases where find() fails or other text processing issues
             hint += " The response should only contain the expected payload format without any additional text before or after it."
+        
+        super().__init__(message, hint=hint)
+
+class InvalidPayloadError(BaseValidationError):
+    """Exception for when there's unexpected text around the payload."""
+    def __init__(self, expected_file_format: str, text: str):
+        # Generate dynamic message and hint
+        message = f"Invalid {expected_file_format}: no valid {expected_file_format} payload is found in the text: {text}"
+        
+        hint = f"Please ensure the response is a valid {expected_file_format}."
         
         super().__init__(message, hint=hint)
 
@@ -86,9 +96,19 @@ class DocumentStructureValidator(BaseValidator, ABC):
         self.model = model
         self.type_matcher = TypeMatcher(strict=STRICT_TYPE_MATCH, get_text_func=self.get_text)
 
-    @abstractmethod
     def parse(self, response: str):
-        """Parse the document string into a navigable structure (tree/dict)."""
+        stripped = response.strip()
+        payload = self.extract_payload(stripped)
+        return self.load_payload(payload)
+
+    @abstractmethod
+    def extract_payload(self, response: str) -> str:
+        """Extract the relevant data block as a string from the response."""
+        pass
+
+    @abstractmethod
+    def load_payload(self, payload: str) -> Any:
+        """Convert the extracted payload string into a Python object."""
         pass
 
     @abstractmethod
@@ -228,7 +248,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
         try:
             tree = self.parse(response)
             if self.model is None:
-                return ValidationResult(is_valid=True, validated_text=response, result_type=None)
+                return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(tree), result_type=None)
             return callback(tree, self.model)
         except Exception as e:
             if self.generate_hints:

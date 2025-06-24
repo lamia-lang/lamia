@@ -1,6 +1,7 @@
 import json
+import re
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
+from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError, InvalidPayloadError
 from ....base import ValidationResult
 from .utils import import_model_from_path, describe_model_structure
 
@@ -9,16 +10,12 @@ class JSONStructureValidator(DocumentStructureValidator):
     def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         if model is not None:
             resolved_model = model
-            self._structure_check_enabled = True
         elif model_name is not None:
             resolved_model = import_model_from_path(model_name, default_module=model_module)
-            self._structure_check_enabled = True
         elif schema is not None:
             resolved_model = create_model("JSONStructureModel", **schema)
-            self._structure_check_enabled = True
         else:
             resolved_model = None
-            self._structure_check_enabled = False
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     @classmethod
@@ -37,37 +34,32 @@ class JSONStructureValidator(DocumentStructureValidator):
         else:
             return "Please return only valid JSON, with no explanation or extra text. The response must be a single JSON object or array."
 
-    def parse(self, response: str):
-        import re
-        stripped = response.strip()
-        if self.strict:
-            # Strict: must be only the JSON document
-            try:
-                return json.loads(stripped)
-            except Exception as e:
-                raise TextAroundPayloadError(
-                    validator_class_name="JSON",
-                    original_text=response,
-                    parsed_text=stripped
-                ) from e
-        else:
-            # Permissive: extract first JSON object or array
-            match = re.search(r'({[\s\S]*})|\[([\s\S]*)\]', stripped)
-            if not match:
-                raise TextAroundPayloadError(
-                    validator_class_name="JSON",
-                    original_text=response,
-                    parsed_text=stripped
-                )
-            json_block = match.group(0)
-            try:
-                return json.loads(json_block)
-            except Exception as e:
-                raise TextAroundPayloadError(
-                    validator_class_name="JSON",
-                    original_text=response,
-                    parsed_text=json_block
-                ) from e
+    def extract_payload(self, response: str) -> str:
+        if self.strict and not self.generate_hints:
+            return response
+        match = re.search(r'({[\s\S]*})|\[([\s\S]*)\]', response)
+        if not match:
+            raise InvalidPayloadError(
+                expected_file_format="JSON",
+                text=response,
+            )
+        elif self.strict: # and self.generate_hints
+            raise TextAroundPayloadError(
+                validator_class_name="JSON",
+                original_text=response,
+                parsed_text=match.group(0)
+            )
+
+        return match.group(0)
+
+    def load_payload(self, payload: str) -> any:
+        try:
+            return json.loads(payload)
+        except Exception as e:
+            raise InvalidPayloadError(
+                expected_file_format="JSON",
+                text=payload,
+            ) from e
 
     def find_element(self, tree, key):
         # Only direct children for strict mode
@@ -114,5 +106,4 @@ class JSONStructureValidator(DocumentStructureValidator):
         return found
 
     def get_subtree_string(self, elem):
-        import json
         return json.dumps(elem, ensure_ascii=False, separators=(',', ':'))
