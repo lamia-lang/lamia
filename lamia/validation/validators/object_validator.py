@@ -1,17 +1,23 @@
-from pydantic import create_model, ValidationError
+from pydantic import create_model, ValidationError, BaseModel
 from ..base import BaseValidator, ValidationResult
 import json as _json
 import re
+from typing import Union, Type
 
 class ObjectValidator(BaseValidator):
-    """Validates if the response matches an object type (dict/record) using a Pydantic model schema."""
+    """Validates if the response matches an object type (dict/record) using a Pydantic model schema or a Pydantic BaseModel class."""
     @classmethod
     def name(cls) -> str:
         return "object"
-    def __init__(self, schema: dict, strict: bool = True):
+    def __init__(self, schema: Union[dict, Type[BaseModel]], strict: bool = True):
         super().__init__(strict=strict)
         self.schema = schema
-        self.model = self._create_pydantic_model(schema)
+        if isinstance(schema, dict):
+            self.model = self._create_pydantic_model(schema)
+        elif isinstance(schema, type) and issubclass(schema, BaseModel):
+            self.model = schema
+        else:
+            raise ValueError("schema must be a dict or a Pydantic BaseModel subclass")
 
     @property
     def initial_hint(self) -> str:
