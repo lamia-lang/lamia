@@ -4,6 +4,8 @@ import re
 from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from ....base import ValidationResult
 from .utils import import_model_from_path
+from typing import Any
+from .document_structure_validator import InvalidPayloadError
 
 class HTMLStructureValidator(DocumentStructureValidator):
     """Validates if the HTML matches a given Pydantic model structure.
@@ -41,6 +43,25 @@ class HTMLStructureValidator(DocumentStructureValidator):
         else:
             return "Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text."
 
+    def extract_payload(self, response: str) -> str:
+        match = re.search(r'(<html[\s\S]*?</html>)', response, re.IGNORECASE)
+        return match.group(1) if match else None
+
+    def load_payload(self, payload: str) -> Any:
+        if self.strict:
+            # TODO: The folowing logic might need to be changed.
+            # Beautifulsoup can perfectly parse even if the LLM is chatty around the HTML tag,
+            # We fail intentionally here to have the same behavior as other validators.
+            # Also, if there will be a lot of requests to get HTMLs from the LLM, this can save the token usage
+            match = re.search(r'<html', payload, re.IGNORECASE)
+            if not match:
+                raise InvalidPayloadError(
+                    expected_file_format=self.file_type(),
+                    text=payload,
+                )
+        else:
+            return BeautifulSoup(payload, "html.parser")
+
     def parse(self, response: str):
         stripped = response.strip()
         html_block = stripped
@@ -51,24 +72,9 @@ class HTMLStructureValidator(DocumentStructureValidator):
             # Also, if there will be a lot of requests to get HTMLs from the LLM, this can save the token usage
             match = re.search(r'<html', stripped, re.IGNORECASE)
             if not match:
-                raise TextAroundPayloadError(
-                    validator_class_name="HTML",
-                    original_text=response,
-                    parsed_text=response
-                )
-
-            prefix = stripped[:match.start()]
-            
-            # Remove comments and doctype from the prefix to see if anything else is left.
-            prefix_without_comments = re.sub(r'<!--[\s\S]*?-->', '', prefix)
-            prefix_without_doctype = re.sub(r'<!DOCTYPE[\s\S]*?>', '', prefix_without_comments, re.IGNORECASE)
-
-            # If the prefix still contains non-whitespace characters, it's invalid chatter.
-            if prefix_without_doctype.strip():
-                raise TextAroundPayloadError(
-                    validator_class_name="HTML",
-                    original_text=response,
-                    parsed_text=response
+                raise InvalidPayloadError(
+                    expected_file_format=self.file_type(),
+                    text=response,
                 )
             
         else:

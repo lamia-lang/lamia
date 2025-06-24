@@ -84,6 +84,30 @@ class YAMLStructureValidator(DocumentStructureValidator):
                     original_text=response,
                     parsed_text=stripped
                 ) from e
+            
+    def extract_payload(self, response: str) -> str:
+        markdown_match = re.search(r'```(?:yaml|yml)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
+        if markdown_match:
+            return markdown_match.group(1).strip()
+        else:
+            yaml_lines = []
+            for line in stripped.split('\n'):
+                line = line.strip()
+                # Simple YAML pattern: word characters followed by colon and value
+                if re.match(r'^[\w\s-]+:\s*.+$', line):
+                    yaml_lines.append(line)
+            
+            if yaml_lines:
+                yaml_candidate = '\n'.join(yaml_lines)
+                try:
+                    return yaml.safe_load(yaml_candidate)
+                except yaml.YAMLError:
+                    return None
+                
+                return yaml_candidate
+
+    def load_payload(self, payload: str) -> any:
+        return yaml.safe_load(payload)
 
     def find_element(self, tree, key):
         if isinstance(tree, dict):

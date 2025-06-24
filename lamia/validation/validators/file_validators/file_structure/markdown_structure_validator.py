@@ -99,7 +99,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
     @property
     def initial_hint(self) -> str:
         if self.model is not None:
-            structure_lines = describe_model_structure(self.model, format_type="markdown")
+            structure_lines = self._describe_structure(self.model)
             return (
                 "Please ensure the Markdown matches the required structure.\n"
                 "Expected structure:\n"
@@ -107,10 +107,14 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             )
         else:
             return "Please ensure the Markdown is well-formed."
+        
+    def extract_payload(self, response: str) -> str:
+        # TODO: Implement this
+        return response
 
-    def parse(self, response: str):
+    def load_payload(self, payload: str) -> any:
         # Parse markdown into an AST using mistune 3.x
-        return mistune.create_markdown(renderer='ast')(response)
+        return mistune.create_markdown(renderer='ast')(payload)
 
     def _extract_text_from_children(self, children):
         if not children:

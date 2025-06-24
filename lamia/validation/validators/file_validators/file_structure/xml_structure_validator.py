@@ -27,28 +27,19 @@ class XMLStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        structure_lines = describe_model_structure(self.model, format_type="xml")
+        structure_lines = self._describe_structure(self.model)
         return (
             "Please ensure the XML matches the required structure.\n"
             "Expected structure:\n"
             + '\n'.join(structure_lines)
         )
-
-    def parse(self, response: str):
-        stripped = response.strip()
-        
-        if not self.strict:
-            # Strategy 1: Try markdown code blocks first
-            markdown_match = re.search(r'```(?:xml)?\s*\n?(.*?)\n?```', stripped, re.DOTALL | re.IGNORECASE)
-            if markdown_match:
-                xml_candidate = markdown_match.group(1).strip()
-                try:
-                    return ET.fromstring(xml_candidate)
-                except ET.ParseError:
-                    pass  # Continue to next strategy
-            
-            # Strategy 2: Extract any content that looks like XML
-            lines = stripped.split('\n')
+    
+    def extract_payload(self, response: str) -> str:
+        markdown_match = re.search(r'```(?:xml)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
+        if markdown_match:
+            return markdown_match.group(1).strip()
+        else:
+            lines = response.split('\n')
             xml_lines = []
             for line in lines:
                 line = line.strip()
@@ -59,32 +50,14 @@ class XMLStructureValidator(DocumentStructureValidator):
             if xml_lines:
                 xml_candidate = ''.join(xml_lines)
                 try:
-                    return ET.fromstring(xml_candidate)
+                    ET.fromstring(xml_candidate)
                 except ET.ParseError:
-                    pass  # Continue to next strategy
-            
-            # Strategy 3: Try the whole thing (fallback)
-            try:
-                return ET.fromstring(stripped)
-            except ET.ParseError:
-                pass
-            
-            # If nothing worked, raise error
-            raise TextAroundPayloadError(
-                validator_class_name="XML",
-                original_text=response,
-                parsed_text=stripped
-            )
-        else:
-            # Strict mode: parse as-is
-            try:
-                return ET.fromstring(stripped)
-            except ET.ParseError as e:
-                raise TextAroundPayloadError(
-                    validator_class_name="XML",
-                    original_text=response,
-                    parsed_text=stripped
-                ) from e
+                    return None
+                
+                return xml_candidate
+
+    def load_payload(self, payload: str) -> any:
+        return ET.fromstring(payload)
 
     def find_element(self, tree, key):
         # Only direct children

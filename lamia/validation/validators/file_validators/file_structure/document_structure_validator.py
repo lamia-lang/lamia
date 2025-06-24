@@ -98,9 +98,38 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
     def parse(self, response: str):
         stripped = response.strip()
-        payload = self.extract_payload(stripped)
-        return self.load_payload(payload)
-    
+        if self.strict:
+            payload = response
+
+            if self.generate_hints:
+                payload = self.extract_payload(stripped)
+                if not payload:
+                    raise InvalidPayloadError(
+                        expected_file_format=self.file_type(),
+                        text=response,
+                    )
+                if payload != stripped:
+                    raise TextAroundPayloadError(
+                        validator_class_name="JSON",
+                        original_text=response,
+                        payload_text=payload
+                    )
+        else:
+            payload = self.extract_payload(stripped)
+            if not payload:
+                raise InvalidPayloadError(
+                    expected_file_format=self.file_type(),
+                    text=response,
+                )
+            
+        try:
+            return self.load_payload(payload)
+        except Exception as e:
+            raise InvalidPayloadError(
+                expected_file_format=self.file_type(),
+                text=payload,
+            ) from e
+
     @classmethod
     @abstractmethod
     def name(cls) -> str:

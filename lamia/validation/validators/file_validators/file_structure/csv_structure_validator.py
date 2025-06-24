@@ -6,6 +6,7 @@ from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator, BaseValidationError
 from ....base import ValidationResult       
 from .utils import import_model_from_path
+from typing import Any
 
 class DuplicateHeaderError(BaseValidationError):
     """Exception for duplicate headers in structured data."""
@@ -53,9 +54,12 @@ class CSVStructureValidator(DocumentStructureValidator):
         else:
             return "Please return only the CSV code, starting with the header row and ending with the last row, with no explanation or extra text."
 
-    def parse(self, response: str):
+    def extract_payload(self, response: str) -> str:
+        return response
+
+    def load_payload(self, payload: str) -> Any:
         # Returns a tuple: (header, list of row dicts)
-        f = io.StringIO(response)
+        f = io.StringIO(payload)
         sample = f.read(1024)  # Read a sample to detect the delimiter
         f.seek(0)  # Reset file pointer to the beginning
         dialect = csv.Sniffer().sniff(sample, delimiters=[',', ';'])
