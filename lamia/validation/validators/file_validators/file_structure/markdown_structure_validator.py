@@ -106,12 +106,13 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
             return (
-                "Please ensure the Markdown matches the required structure.\n"
+                "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).\n"
+                "Ensure the Markdown matches the required structure.\n"
                 "Expected structure:\n"
                 + '\n'.join(structure_lines)
             )
         else:
-            return "Please ensure the Markdown is well-formed."
+            return "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```) and ensure it is well-formed."
 
     # Public methods
     def extract_payload(self, response: str) -> str:
@@ -214,9 +215,13 @@ class MarkdownStructureValidator(DocumentStructureValidator):
                     results.append(node)
         return results
 
+    # Overrides the base class method because unlike other file structure validators, 
+    # Markdown works with it's own predefined classes like Heading1, Paragraph, etc.
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         return await self._validate_common(response, strict=True, **kwargs)
 
+    # Overrides the base class method because unlike other file structure validators, 
+    # Markdown works with it's own predefined classes like Heading1, Paragraph, etc.
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         return await self._validate_common(response, strict=False, **kwargs)
 
