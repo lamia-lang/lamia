@@ -59,6 +59,12 @@ class HTMLStructureValidator(DocumentStructureValidator):
                     expected_file_format=self.file_type(),
                     text=payload,
                 )
+            else:
+                raise TextAroundPayloadError(
+                    validator_class_name="HTML",
+                    original_text=payload,
+                    payload_text=match.group(0)
+                )
         else:
             return BeautifulSoup(payload, "html.parser")
 
