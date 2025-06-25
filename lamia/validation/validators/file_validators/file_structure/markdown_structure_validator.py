@@ -5,6 +5,7 @@ from ....base import BaseValidator, ValidationResult
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
 from .utils import import_model_from_path
+import re
 
 # Marker classes for semantic mapping
 class MarkdownStr(str):
@@ -107,10 +108,11 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             )
         else:
             return "Please ensure the Markdown is well-formed."
-        
+
     def extract_payload(self, response: str) -> str:
-        # TODO: Implement this
-        return response
+        markdown_match = re.search(r'```(?:markdown)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
+        if markdown_match:
+            return markdown_match.group(1).strip()
 
     def load_payload(self, payload: str) -> any:
         # Parse markdown into an AST using mistune 3.x
@@ -280,43 +282,27 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             return False, f"Missing element(s) for field(s): {', '.join(missing_fields)}", None
         return True, None, values
 
-    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        if self.model is None:
-            # Just check well-formedness
-            try:
-                self.parse(response)
-                return ValidationResult(is_valid=True)
-            except Exception as e:
-                return ValidationResult(is_valid=False, error_message=f"Invalid Markdown: {e}")
+    async def _validate_common(self, response: str, strict: bool, **kwargs) -> ValidationResult:
+        """Shared validation logic for both strict and permissive modes."""
         try:
             ast = self.parse(response)
+            if self.model is None:
+                return ValidationResult(is_valid=True)
         except Exception as e:
-            return ValidationResult(is_valid=False, error_message=f"Invalid Markdown: {e}")
-        valid, err, values = self._match_fields(ast, self.model, strict=True)
+            return ValidationResult(is_valid=False, error_message=f"Invalid Markdown: {e}", hint=self.initial_hint)
+
+        valid, err, values = self._match_fields(ast, self.model, strict=strict)
         if not valid:
             return ValidationResult(is_valid=False, error_message=err, hint=self.initial_hint)
         # Create an instance of the model with our values
         result_type = self.model(**values)
         return ValidationResult(is_valid=True, validated_text=values, result_type=result_type)
 
+    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+        return await self._validate_common(response, strict=True, **kwargs)
+
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
-        if self.model is None:
-            # Just check well-formedness
-            try:
-                self.parse(response)
-                return ValidationResult(is_valid=True)
-            except Exception as e:
-                return ValidationResult(is_valid=False, error_message=f"Invalid Markdown: {e}")
-        try:
-            ast = self.parse(response)
-        except Exception as e:
-            return ValidationResult(is_valid=False, error_message=f"Invalid Markdown: {e}")
-        valid, err, values = self._match_fields(ast, self.model, strict=False)
-        if not valid:
-            return ValidationResult(is_valid=False, error_message=err, hint=self.initial_hint)
-        # Create an instance of the model with our values
-        result_type = self.model(**values)
-        return ValidationResult(is_valid=True, validated_text=values, result_type=result_type)
+        return await self._validate_common(response, strict=False, **kwargs)
 
     def _describe_structure(self, model, indent=0):
         lines = []
