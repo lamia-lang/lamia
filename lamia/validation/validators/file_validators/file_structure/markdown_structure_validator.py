@@ -308,12 +308,50 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         except Exception as e:
             return ValidationResult(is_valid=False, error_message=f"Invalid Markdown: {e}", hint=self.initial_hint)
 
-        valid, err, values = self._match_fields(ast, self.model, strict=strict)
+        valid, err, values = self._match_fields(ast, model=self.model, strict=strict)
         if not valid:
             return ValidationResult(is_valid=False, error_message=err, hint=self.initial_hint)
-        # Create an instance of the model with our values
-        result_type = self.model(**values)
-        return ValidationResult(is_valid=True, validated_text=values, result_type=result_type)
+        
+        # Collect info_loss for type conversions
+        info_loss = {}
+        converted_values = {}
+        
+        for field_name, raw_value in values.items():
+            field_info = self.model.model_fields[field_name]
+            expected_type = field_info.annotation
+            
+            # Use type_matcher to convert and track info_loss
+            match_result = self.type_matcher.validate_and_convert(raw_value, expected_type)
+            if not match_result.is_valid:
+                return ValidationResult(
+                    is_valid=False, 
+                    error_message=f"Field {field_name}: {match_result.error}", 
+                    hint=self.initial_hint
+                )
+            
+            converted_values[field_name] = match_result.value
+            
+            # Collect type conversion info loss
+            if match_result.info_loss:
+                info_loss[field_name] = match_result.info_loss
+        
+        # Create an instance of the model with converted values
+        try:
+            result_type = self.model(**converted_values)
+        except Exception as e:
+            return ValidationResult(
+                is_valid=False, 
+                error_message=f"Model creation error: {e}", 
+                hint=self.initial_hint
+            )
+        
+        return ValidationResult(
+            is_valid=True, 
+            validated_text=response,
+            raw_text=response, 
+            result_type=result_type,
+            info_loss=info_loss if info_loss else None
+        )
 
     def _describe_structure(self, model, indent=0):
         lines = []
