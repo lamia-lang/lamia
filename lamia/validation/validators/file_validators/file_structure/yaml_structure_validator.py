@@ -27,12 +27,15 @@ class YAMLStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        structure_lines = self._describe_structure(self.model)
-        return (
-            "Please ensure the YAML matches the required structure.\n"
-            "Expected structure:\n"
-            + '\n'.join(structure_lines)
-        )
+        if self.model is not None:
+            structure_lines = self._describe_structure(self.model)
+            return (
+                "Please ensure the YAML matches the required structure.\n"
+                "Expected structure:\n"
+                + '\n'.join(structure_lines)
+            )
+        else:
+            return "Please return only valid YAML, with no explanation or extra text."
 
     def parse(self, response: str):
         stripped = response.strip()

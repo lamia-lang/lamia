@@ -34,7 +34,7 @@ Please return only valid JSON, with no explanation or extra text. The response m
     (
         XMLValidator(strict=True, generate_hints=True),
         '''
-Please return only valid XML, with no explanation or extra text. The response must be a single XML document with a single root element.
+Please return only valid XML, with no explanation or extra text.
 '''
     ),
     (

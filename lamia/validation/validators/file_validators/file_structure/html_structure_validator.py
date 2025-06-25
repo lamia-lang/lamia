@@ -62,50 +62,6 @@ class HTMLStructureValidator(DocumentStructureValidator):
         else:
             return BeautifulSoup(payload, "html.parser")
 
-    def parse(self, response: str):
-        stripped = response.strip()
-        html_block = stripped
-        if self.strict:
-            # TODO: The folowing logic might need to be changed.
-            # Beautifulsoup can perfectly parse even if the LLM is chatty around the HTML tag,
-            # We fail intentionally here to have the same behavior as other validators.
-            # Also, if there will be a lot of requests to get HTMLs from the LLM, this can save the token usage
-            match = re.search(r'<html', stripped, re.IGNORECASE)
-            if not match:
-                raise InvalidPayloadError(
-                    expected_file_format=self.file_type(),
-                    text=response,
-                )
-            
-        else:
-            # Permissive: extract first <html>...</html> block
-            match = re.search(r'(<html[\s\S]*?</html>)', stripped, re.IGNORECASE)
-            if not match:
-                raise TextAroundPayloadError(
-                    validator_class_name="HTML",
-                    original_text=response,
-                    parsed_text=response
-                )
-            html_block = match.group(1)
-        
-        try:
-            # Always check for well-formed HTML
-            soup = BeautifulSoup(html_block, "html.parser")
-            if not soup.html:
-                raise TextAroundPayloadError(
-                    validator_class_name="HTML",
-                    original_text=response,
-                    parsed_text=html_block
-                )
-        except Exception as e:
-            raise TextAroundPayloadError(
-                validator_class_name="HTML",
-                original_text=response,
-                parsed_text=html_block
-            ) from e
-
-        return soup
-
     def find_element(self, tree, key):
         # Only direct children that are tags
         for child in tree.children:

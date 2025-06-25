@@ -27,12 +27,15 @@ class XMLStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        structure_lines = self._describe_structure(self.model)
-        return (
-            "Please ensure the XML matches the required structure.\n"
-            "Expected structure:\n"
-            + '\n'.join(structure_lines)
-        )
+        if self.model is not None:
+            structure_lines = self._describe_structure(self.model)
+            return (
+                "Please ensure the XML matches the required structure.\n"
+                "Expected structure:\n"
+                + '\n'.join(structure_lines)
+            )
+        else:
+            return "Please return only valid XML, with no explanation or extra text."
     
     def extract_payload(self, response: str) -> str:
         markdown_match = re.search(r'```(?:xml)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
