@@ -7,6 +7,7 @@ from .document_structure_validator import DocumentStructureValidator, BaseValida
 from ....base import ValidationResult       
 from .utils import import_model_from_path
 from typing import Any
+import re
 
 class DuplicateHeaderError(BaseValidationError):
     """Exception for duplicate headers in structured data."""
@@ -32,7 +33,28 @@ class CSVStructureValidator(DocumentStructureValidator):
             resolved_model = create_model("CSVStructureModel", **schema)
         else:
             resolved_model = None
+        
+        # Validate that model only contains primitive types
+        if resolved_model is not None:
+            self._validate_model_is_flat(resolved_model)
+            
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
+
+    def _validate_model_is_flat(self, model):
+        """Ensure model only contains primitive types"""
+        non_primitive_fields = []
+        
+        for field, field_info in model.model_fields.items():
+            field_type = field_info.annotation
+            # Check if it's a primitive type
+            if not (field_type in (str, int, float, bool) or field_type.__name__ in ('str', 'int', 'float', 'bool')):
+                non_primitive_fields.append(f"'{field}': {field_info.annotation.__name__}")
+        
+        if non_primitive_fields:
+            raise ValueError(
+                f"CSV validation only supports primitive types (str, int, float, bool). "
+                f"Non-primitive fields found: {', '.join(non_primitive_fields)}. "
+            )
 
     @classmethod
     def name(cls) -> str:
@@ -45,17 +67,87 @@ class CSVStructureValidator(DocumentStructureValidator):
     @property
     def initial_hint(self) -> str:
         if self.model is not None:
-            structure_lines = self._describe_structure(self.model)
-            return (
+            # Check for non-primitive types and provide better hint
+            primitive_fields = []
+            non_primitive_fields = []
+            
+            for field, field_info in self.model.model_fields.items():
+                field_type = field_info.annotation
+                # Check if it's a primitive type
+                if field_type in (str, int, float, bool) or field_type.__name__ in ('str', 'int', 'float', 'bool'):
+                    primitive_fields.append(field)
+                else:
+                    non_primitive_fields.append(f"{field}: {field_info.annotation.__name__}")
+            
+            if non_primitive_fields:
+                return (
+                    "CSV validation error: CSV files only support primitive types (str, int, float, bool).\n"
+                    f"Non-primitive fields found: {', '.join(non_primitive_fields)}\n"
+                    "Please use a different validator for complex data structures."
+                )
+            
+            expected_header = ', '.join(primitive_fields)
+            structure_lines = [f'{field}: {field_info.annotation.__name__}' for field, field_info in self.model.model_fields.items()]
+            
+            hint = (
                 "Please ensure the CSV matches the required structure.\n"
+                f"Expected header row: {expected_header}\n"
                 "Expected columns and types:\n"
-                + '\n'.join(structure_lines)
+                + '\n'.join(structure_lines) + "\n\n"
             )
         else:
-            return "Please return only the CSV code, starting with the header row and ending with the last row, with no explanation or extra text."
+            hint = ""
+        hint += "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows."
+        hint += " Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes."
+
+        return hint
 
     def extract_payload(self, response: str) -> str:
+        # Strategy 1: Try markdown code blocks first
+        markdown_match = re.search(r'```(?:csv)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
+        if markdown_match:
+            return markdown_match.group(1).strip()
+        
+        # Strategy 2: Model-based detection (if we have a model)
+        if self.model is not None:
+            return self._extract_csv_with_model(response)
+        else:
+            return self._extract_csv_generic(response)
+    
+    def _extract_csv_with_model(self, response: str) -> str:
+        """Extract CSV by looking for expected header"""
+        expected_headers = [",".join(self.model.model_fields.keys()),";".join(self.model.model_fields.keys())]
+        lines = response.split('\n')
+        
+        for i, line in enumerate(lines):
+            if line.strip() in expected_headers:
+                separator = ',' if ',' in line else ';'
+                # Found header, extract from here until empty line or end
+                csv_lines = []
+                for j in range(i, len(lines)):
+                    line_stripped = lines[j].strip()
+                    if not line_stripped:
+                        break
+                    if line_stripped.count(separator) != len(self.model.model_fields.keys()) - 1:
+                        break
+                    csv_lines.append(line_stripped)
+                return '\n'.join(csv_lines)
+        
         return response
+    
+    def _extract_csv_generic(self, response: str) -> str:
+        """Extract CSV - look for lines with commas or semicolons"""
+        lines = response.split('\n')
+        csv_lines = []
+        
+        for line in lines:
+            line = line.strip()
+            if ',' in line or ';' in line:
+                csv_lines.append(line)
+            elif csv_lines:  # Found CSV block, stop at first non-CSV line
+                break
+                
+        return '\n'.join(csv_lines) if csv_lines else response
 
     def load_payload(self, payload: str) -> Any:
         # Returns a tuple: (header, list of row dicts)

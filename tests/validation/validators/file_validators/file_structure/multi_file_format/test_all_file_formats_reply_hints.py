@@ -66,17 +66,17 @@ VALIDATOR_CONFIGS = [
     (MarkdownStructureValidator, "markdown", SimpleMD),
 ]
 
-def create_chatty_response(payload: str, for_markdown: bool = False) -> str:
-    if for_markdown:
+def create_chatty_response(payload: str, with_code_fences: bool = False) -> str:
+    if with_code_fences:
         return f"Of course, here is the file you requested:\n\n```{payload}```\n\nLet me know if you need anything else!"
     else:  # without_markdown
         return f"Here's the content you requested:\n\n{payload}\n\nHope this helps!"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
-@pytest.mark.parametrize("is_markdown", [True, False])
+@pytest.mark.parametrize("with_code_fences", [True, False])
 @pytest.mark.parametrize("validator_class, payload_key, model", VALIDATOR_CONFIGS)
-async def test_reply_hint_generation_after_response_with_enclosing_texts(strict, is_markdown, validator_class, payload_key, model):
+async def test_reply_hint_generation_after_response_with_enclosing_texts(strict, with_code_fences, validator_class, payload_key, model):
     if model is None:
         validator = validator_class(strict=strict, generate_hints=True)
     else:
@@ -84,7 +84,7 @@ async def test_reply_hint_generation_after_response_with_enclosing_texts(strict,
     
     payload = PAYLOADS[payload_key]
     
-    chatty_response = create_chatty_response(payload, is_markdown)
+    chatty_response = create_chatty_response(payload, with_code_fences)
     
     result = await validator.validate(chatty_response)
     

@@ -17,6 +17,13 @@ class CompoundModel(BaseModel):
     mystr: str
     mysubmodel: SubModel
 
+# CSV-specific model with only primitive types
+class CSVModel(BaseModel):
+    mystr: str
+    myint: int
+    myfloat: float
+    mybool: bool
+
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("validator,expected_structure", [
     (
@@ -46,7 +53,7 @@ Please return only valid YAML, with no explanation or extra text.
     (
         CSVValidator(strict=True, generate_hints=True),
         '''
-Please return only the CSV code, starting with the header row and ending with the last row, with no explanation or extra text.
+Please return only the CSV code in triple backticks (```csv), starting with the header row and ending with the last row, with no explanation or extra text.
 '''
     ),
     (
@@ -99,12 +106,15 @@ mysubmodel:
 '''
     ),
     (
-        CSVStructureValidator(model=CompoundModel, generate_hints=True),
+        CSVStructureValidator(model=CSVModel, generate_hints=True),
         '''
 Please ensure the CSV matches the required structure.
+Expected header row: mystr,myint,myfloat,mybool
 Expected columns and types:
 mystr: str
-mysubmodel: SubModel
+myint: int
+myfloat: float
+mybool: bool
 '''
     ),
     (

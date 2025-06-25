@@ -1,6 +1,7 @@
 import pytest
 from pydantic import BaseModel
-from lamia.validation.validators.file_validators import CSVStructureValidator
+from lamia.validation.validators.file_validators.file_structure.csv_structure_validator import CSVStructureValidator
+from lamia.validation.base import ValidationResult
 
 # The tests that are common to all file structure validators should go to multi_file_format folder
 # Tests exclusive to CSV format should go here
@@ -8,6 +9,12 @@ from lamia.validation.validators.file_validators import CSVStructureValidator
 class SimpleModel(BaseModel):
     title: str
     value: int
+
+class CSVModel(BaseModel):
+    mystr: str
+    myint: int
+    myfloat: float
+    mybool: bool
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -77,4 +84,26 @@ async def test_csv_structure_validator_whitespaces(strict):
     csv_with_extra_whitespace = '  title  ,  value  \n  Test  ,  123  \n  Foo  ,  456  \n'
     result = await validator.validate(csv_with_extra_whitespace)
     assert result.is_valid is not strict, f"Expected CSV with extra whitespace to {'fail' if strict else 'pass'} in {'strict' if strict else 'permissive'} mode, got: {result}"
+
+def test_csv_structure_validator_flat_model():
+    """Test that CSVStructureValidator works with primitive types only"""
+    validator = CSVStructureValidator(model=CSVModel)
+    assert validator.model == CSVModel
+
+def test_csv_structure_validator_rejects_non_primitive_model():
+    class NonPrimitiveWrongCVSModel(BaseModel):
+        name: str
+        nested: dict  # This should cause validation to fail
+        items: list   # This should also cause validation to fail
+        another_model: SimpleModel
+
+    """Test that CSVStructureValidator fails early with non-primitive types"""
+    with pytest.raises(ValueError) as exc_info:
+        CSVStructureValidator(model=NonPrimitiveWrongCVSModel)
+    
+    error_message = str(exc_info.value)
+    assert "CSV validation only supports primitive types" in error_message
+    assert "'nested': dict" in error_message
+    assert "'items': list" in error_message
+    assert "'another_model': SimpleModel" in error_message
 
