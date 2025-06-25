@@ -76,6 +76,8 @@ MARKDOWN_TYPE_MAPPING = {
 
 class MarkdownStructureValidator(DocumentStructureValidator):
     """Validates if the Markdown matches a given Pydantic model structure, or just checks for well-formed Markdown if no model/schema is provided."""
+    
+    # Constructor
     def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         resolved_model = None
         if model is not None:
@@ -89,6 +91,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         # If resolved_model is None, schema-less mode (well-formed only)
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
+    # Class methods
     @classmethod
     def name(cls) -> str:
         return "markdown_structure"
@@ -97,6 +100,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
     def file_type(cls) -> str:
         return "markdown"
 
+    # Properties
     @property
     def initial_hint(self) -> str:
         if self.model is not None:
@@ -109,6 +113,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         else:
             return "Please ensure the Markdown is well-formed."
 
+    # Public methods
     def extract_payload(self, response: str) -> str:
         markdown_match = re.search(r'```(?:markdown)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
         if markdown_match:
@@ -117,17 +122,6 @@ class MarkdownStructureValidator(DocumentStructureValidator):
     def load_payload(self, payload: str) -> any:
         # Parse markdown into an AST using mistune 3.x
         return mistune.create_markdown(renderer='ast')(payload)
-
-    def _extract_text_from_children(self, children):
-        if not children:
-            return ''
-        texts = []
-        for child in children:
-            if child.get('type') == 'text':
-                texts.append(child.get('raw', ''))
-            elif 'children' in child:
-                texts.append(self._extract_text_from_children(child['children']))
-        return ''.join(texts)
 
     def find_element(self, tree, key, depth=1):
         if self.model is None:
@@ -220,6 +214,24 @@ class MarkdownStructureValidator(DocumentStructureValidator):
                     results.append(node)
         return results
 
+    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+        return await self._validate_common(response, strict=True, **kwargs)
+
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+        return await self._validate_common(response, strict=False, **kwargs)
+
+    # Private methods
+    def _extract_text_from_children(self, children):
+        if not children:
+            return ''
+        texts = []
+        for child in children:
+            if child.get('type') == 'text':
+                texts.append(child.get('raw', ''))
+            elif 'children' in child:
+                texts.append(self._extract_text_from_children(child['children']))
+        return ''.join(texts)
+
     def _ast_type_for_field(self, typ):
         return MARKDOWN_TYPE_MAPPING.get(typ, (None, None))
 
@@ -297,12 +309,6 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         # Create an instance of the model with our values
         result_type = self.model(**values)
         return ValidationResult(is_valid=True, validated_text=values, result_type=result_type)
-
-    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-        return await self._validate_common(response, strict=True, **kwargs)
-
-    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
-        return await self._validate_common(response, strict=False, **kwargs)
 
     def _describe_structure(self, model, indent=0):
         lines = []
