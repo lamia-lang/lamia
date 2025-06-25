@@ -103,12 +103,10 @@ class CSVStructureValidator(DocumentStructureValidator):
         return hint
 
     def extract_payload(self, response: str) -> str:
-        # Strategy 1: Try markdown code blocks first
         markdown_match = re.search(r'```(?:csv)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
         if markdown_match:
             return markdown_match.group(1).strip()
         
-        # Strategy 2: Model-based detection (if we have a model)
         if self.model is not None:
             return self._extract_csv_with_model(response)
         else:
@@ -128,12 +126,26 @@ class CSVStructureValidator(DocumentStructureValidator):
                     line_stripped = lines[j].strip()
                     if not line_stripped:
                         break
-                    if line_stripped.count(separator) != len(self.model.model_fields.keys()) - 1:
+                    # Count separators outside of quotes
+                    expected_sep_count = len(self.model.model_fields.keys()) - 1
+                    actual_sep_count = self._count_separators_outside_quotes(line_stripped, separator)
+                    if actual_sep_count != expected_sep_count:
                         break
                     csv_lines.append(line_stripped)
                 return '\n'.join(csv_lines)
         
         return response
+    
+    def _count_separators_outside_quotes(self, line: str, separator: str) -> int:
+        """Count separators that are not inside double quotes"""
+        count = 0
+        in_quotes = False
+        for char in line:
+            if char == '"':
+                in_quotes = not in_quotes
+            elif char == separator and not in_quotes:
+                count += 1
+        return count
     
     def _extract_csv_generic(self, response: str) -> str:
         """Extract CSV - look for lines with commas or semicolons"""
@@ -142,7 +154,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         
         for line in lines:
             line = line.strip()
-            if ',' in line or ';' in line:
+            if ',' in line:
                 csv_lines.append(line)
             elif csv_lines:  # Found CSV block, stop at first non-CSV line
                 break
@@ -247,6 +259,7 @@ class CSVStructureValidator(DocumentStructureValidator):
                     values[field] = None
                 else:
                     values[field] = match_result.value
+                    # No info loss can be here when match_result.is_valid is True
         model_instance = None
         if is_valid:
             try:
@@ -258,7 +271,8 @@ class CSVStructureValidator(DocumentStructureValidator):
         return ValidationResult(
             is_valid=is_valid,
             result_type=model_instance,
-            error_message=error_message
+            error_message=error_message,
+            info_loss=info_loss if info_loss else None
         )
 
     # Overrides the base class method because of the flat nature of CSV
@@ -298,6 +312,9 @@ class CSVStructureValidator(DocumentStructureValidator):
                     values[field] = None
                 else:
                     values[field] = match_result.value
+                    # Collect type conversion info loss
+                    if match_result.info_loss:
+                        info_loss[field] = match_result.info_loss
         model_instance = None
         if is_valid:
             try:
@@ -309,7 +326,8 @@ class CSVStructureValidator(DocumentStructureValidator):
         return ValidationResult(
             is_valid=is_valid,
             result_type=model_instance,
-            error_message=error_message
+            error_message=error_message,
+            info_loss=info_loss if info_loss else None
         )
 
     def _describe_structure(self, model, indent=0):
