@@ -24,90 +24,76 @@ class CSVModel(BaseModel):
     myfloat: float
     mybool: bool
 
-@pytest.mark.parametrize("strict", [True, False])
-@pytest.mark.parametrize("validator,expected_structure", [
-    (
-        HTMLValidator(strict=True, generate_hints=True),
-        '''
-Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text.
-'''
-    ),
-    (
-        JSONValidator(strict=True, generate_hints=True),
-        '''
-Please return only valid JSON, with no explanation or extra text. The response must be a single JSON object or array.
-'''
-    ),
-    (
-        XMLValidator(strict=True, generate_hints=True),
-        '''
-Please return only valid XML, with no explanation or extra text.
-'''
-    ),
-    (
-        YAMLValidator(strict=True, generate_hints=True),
-        '''
-Please return only valid YAML, with no explanation or extra text.
-'''
-    ),
-    (
-        CSVValidator(strict=True, generate_hints=True),
-        '''
-Please return only the CSV code in triple backticks (```csv), starting with the header row and ending with the last row, with no explanation or extra text.
-'''
-    ),
-    (
-        MarkdownValidator(strict=True, generate_hints=True),
-        '''
-Please ensure the Markdown is well-formed.
-'''
-    ),
-    (
-        HTMLStructureValidator(model=CompoundModel, generate_hints=True),
-        '''
+VALIDATOR_CLASSES = {
+    "html": HTMLValidator,
+    "json": JSONValidator,
+    "xml": XMLValidator,
+    "yaml": YAMLValidator,
+    "csv": CSVValidator,
+    "markdown": MarkdownValidator,
+    "html_structure": HTMLStructureValidator,
+    "json_structure": JSONStructureValidator,
+    "xml_structure": XMLStructureValidator,
+    "yaml_structure": YAMLStructureValidator,
+    "csv_structure": CSVStructureValidator,
+    "markdown_structure": MarkdownStructureValidator,
+}
+
+MODEL_CLASSES = {
+    "html": None,
+    "json": None,
+    "xml": None,
+    "yaml": None,
+    "csv": None,
+    "markdown": None,
+    "html_structure": CompoundModel,
+    "json_structure": CompoundModel,
+    "xml_structure": CompoundModel,
+    "yaml_structure": CompoundModel,
+    "csv_structure": CSVModel,
+    "markdown_structure": CompoundModel,
+}
+
+# --- Test Payloads ---
+ERROR_MESSAGES = {
+    "html": "Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text.",
+    "json": "Please return only valid JSON, with no explanation or extra text. The response must be a single JSON object or array.",
+    "xml": "Please return only valid XML, with no explanation or extra text.",
+    "yaml": "Please return only valid YAML, with no explanation or extra text.",
+    "csv": "Please return only the CSV code in triple backticks (```csv), starting with the header row and ending with the last row, with no explanation or extra text. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes",
+    "markdown": "Please ensure the Markdown is well-formed.",
+    "html_structure": '''
 Please ensure the HTML matches the required structure.
 Expected structure:
 <mystr>...text...</mystr>
 <mysubmodel>
   <myint>...text...</myint>
 </mysubmodel>
-'''
-    ),
-    (
-        JSONStructureValidator(model=CompoundModel, generate_hints=True),
-        '''
+''',
+    "json_structure": '''
 Please ensure the JSON matches the required structure.
 Expected structure:
 "mystr": ...
 "mysubmodel": {
   "myint": ...
 }
-'''
-    ),
-    (
-        XMLStructureValidator(model=CompoundModel, generate_hints=True),
-        '''
+''',
+    "xml_structure": '''
 Please ensure the XML matches the required structure.
 Expected structure:
 <mystr>...text...</mystr>
 <mysubmodel>
   <myint>...text...</myint>
 </mysubmodel>
-'''
-    ),
-    (
-        YAMLStructureValidator(model=CompoundModel, generate_hints=True),
-        '''
+''',
+    "yaml_structure": '''
 Please ensure the YAML matches the required structure.
 Expected structure:
 mystr: ...
 mysubmodel:
   myint: ...
-'''
-    ),
-    (
-        CSVStructureValidator(model=CSVModel, generate_hints=True),
-        '''
+''',
+    "csv_structure": '''
 Please ensure the CSV matches the required structure.
 Expected header row: mystr,myint,myfloat,mybool
 Expected columns and types:
@@ -115,18 +101,41 @@ mystr: str
 myint: int
 myfloat: float
 mybool: bool
-'''
-    ),
-    (
-        MarkdownStructureValidator(model=CompoundModel, generate_hints=True),
-        '''
+
+Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
+''', 
+    "markdown_structure": '''
 Please ensure the Markdown matches the required structure.
 Expected structure:
 mystr: ...
 mysubmodel:
   myint: ...
 '''
-    ),
+}
+
+
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("validator_type", [
+    "html",
+    "json",
+    "xml",
+    "yaml",
+    "csv",
+    "markdown",
+    "html_structure",
+    "json_structure",
+    "xml_structure",
+    "yaml_structure",
+    "csv_structure",
+    "markdown_structure"
 ])
-def test_structure_validator_initial_hint_exact(strict, validator, expected_structure):
-    assert validator.initial_hint.strip() == expected_structure.strip()
+def test_structure_validator_initial_hint_exact(strict, validator_type):
+    validator_class = VALIDATOR_CLASSES[validator_type]
+
+    model = MODEL_CLASSES[validator_type]
+    if model is not None:
+        validator = validator_class(model=model, strict=strict, generate_hints=True)
+    else:
+        validator = validator_class(strict=strict, generate_hints=True)
+
+    assert validator.initial_hint.strip() == ERROR_MESSAGES[validator_type].strip()
