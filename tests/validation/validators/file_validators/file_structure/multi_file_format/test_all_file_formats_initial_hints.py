@@ -8,6 +8,7 @@ from lamia.validation.validators import (
     CSVValidator, CSVStructureValidator,
     MarkdownValidator, MarkdownStructureValidator,
 )
+from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1, Paragraph
 
 # Define models once for all tests
 class SubModel(BaseModel):
@@ -23,6 +24,11 @@ class CSVModel(BaseModel):
     myint: int
     myfloat: float
     mybool: bool
+
+# Markdown-specific model using proper markdown classes
+class MarkdownModel(BaseModel):
+    title: Heading1
+    content: Paragraph
 
 VALIDATOR_CLASSES = {
     "html": HTMLValidator,
@@ -51,7 +57,7 @@ MODEL_CLASSES = {
     "xml_structure": CompoundModel,
     "yaml_structure": CompoundModel,
     "csv_structure": CSVModel,
-    "markdown_structure": CompoundModel,
+    "markdown_structure": MarkdownModel,
 }
 
 # --- Test Payloads ---
@@ -66,19 +72,23 @@ ERROR_MESSAGES = {
         'strict': '''
 Please ensure the HTML matches the required structure exactly.
 Expected structure (as direct children under <html>):
-<mystr>...text...</mystr>
+<mystr>string value</mystr>
 <mysubmodel>
-  <myint>...text...</myint>
+  <myint>integer value</myint>
 </mysubmodel>
+Expected target pydantic type in json format to be extracted from the HTML:
+{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundModel","type":"object"}
 ''',
         "permissive": '''
 Please ensure the HTML contains the required fields somewhere in the structure.
 The fields can be nested within other HTML elements like <body>, <div>, etc.
 Required fields that must be present somewhere under <html> root tags:
-<mystr>...text...</mystr>
+<mystr>string value</mystr>
 <mysubmodel>
-  <myint>...text...</myint>
+  <myint>integer value</myint>
 </mysubmodel>
+Expected target pydantic type in json format to be extracted from the HTML:
+{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundModel","type":"object"}
 ''' 
     },
     "json_structure": {
@@ -167,18 +177,16 @@ Please return only the CSV table, starting with the header row and ending with t
 Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).
 Ensure the Markdown matches the required structure exactly.
 Expected structure:
-mystr: "..."
-mysubmodel:
-  myint: ...
+title: "..."
+content: "..."
 ''',
         "permissive": '''
 Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).
 Ensure the Markdown contains the required fields with the correct types.
 The fields can be nested within other Markdown structures.
 Required fields that must be present:
-mystr: "..." (string)
-mysubmodel:
-  myint: ... (integer)
+title: "..." (Heading1)
+content: "..." (Paragraph)
 '''
     }
 }

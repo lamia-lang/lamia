@@ -6,6 +6,7 @@ from ....base import ValidationResult
 from .utils import import_model_from_path
 from typing import Any
 from .document_structure_validator import InvalidPayloadError
+import json
 
 class HTMLStructureValidator(DocumentStructureValidator):
     """Validates if the HTML matches a given Pydantic model structure.
@@ -35,18 +36,24 @@ class HTMLStructureValidator(DocumentStructureValidator):
     def initial_hint(self) -> str:
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
+            json_schema = self.model.model_json_schema()
+            json_schema_str = json.dumps(json_schema, separators=(',', ':'))
             if self.strict:
                 return (
                     "Please ensure the HTML matches the required structure exactly.\n" +
                     "Expected structure (as direct children under <html>):\n" +
-                    '\n'.join(structure_lines)
+                    '\n'.join(structure_lines) + "\n" +
+                    "Expected target pydantic type in json format to be extracted from the HTML:\n" +
+                    json_schema_str
                 )
             else:
                 return (
                     "Please ensure the HTML contains the required fields somewhere in the structure.\n" +
                     "The fields can be nested within other HTML elements like <body>, <div>, etc.\n" +
                     "Required fields that must be present somewhere under <html> root tags:\n" +
-                    '\n'.join(structure_lines)
+                    '\n'.join(structure_lines) + "\n" +
+                    "Expected target pydantic type in json format to be extracted from the HTML:\n" +
+                    json_schema_str
                 )
         else:
             return "Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text."
@@ -175,5 +182,21 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 lines.extend(self._describe_structure(submodel, indent + 1))
                 lines.append(f'{prefix}</{field}>')
             else:
-                lines.append(f'{prefix}<{field}>...text...</{field}>')
+                # Always show type-specific hints for better LLM guidance
+                type_hint = self._get_type_hint(submodel)
+                lines.append(f'{prefix}<{field}>{type_hint}</{field}>')
         return lines
+
+    def _get_type_hint(self, annotation):
+        """Get a user-friendly type hint for the annotation."""
+        if annotation == str:
+            return "string value"
+        elif annotation == int:
+            return "integer value"
+        elif annotation == float:
+            return "float value"
+        elif annotation == bool:
+            return "boolean value"
+        else:
+            return "value"
+
