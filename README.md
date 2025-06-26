@@ -124,168 +124,40 @@ Use Ctrl+C or type 'exit' to quit the interactive session.
 - `examples/`: Example implementations
   - `custom_validators/`: Custom validator examples
 
-## Validators
+## Validation
 
-Lamia includes a robust validation system to ensure LLM outputs meet specific criteria.
+Lamia includes a robust validation system to ensure LLM outputs meet specific quality and format requirements. Validators can be combined, customized, and configured to validate responses against various criteria.
 
-### Strict vs. Forgiving Validation
+### Quick Example
 
-Each validator supports a `strict` flag, which controls how strictly the output is validated:
-- `strict: true` (default): Only accepts pure, valid output (e.g., only the HTML, JSON, or pattern match, with no extra text).
-- `strict: false`: Accepts output that contains a valid block (e.g., a valid HTML or JSON block within a longer response).
-
-If the `strict` flag is omitted, strict validation is used by default.
-
-**Example config:**
 ```yaml
+# config.yaml
 validation:
   enabled: true
   validators:
-    - type: "html"
-      strict: true
     - type: "json"
-    - type: "regex"
-      pattern: "^\\d{4}-\\d{2}-\\d{2}$"
-      strict: true
+      strict: false
+    - type: "length"
+      max_length: 1000
 ```
 
-**Example code:**
-```python
-lamia = Lamia(
-    ...,
-    validators=[
-        {"type": "html"},
-        {"type": "json", "strict": False},
-        {"type": "regex", "pattern": r"^\\d{4}-\\d{2}-\\d{2}$", "strict": True}
-    ]
-)
-```
+### Available Validators
 
-### Built-in Validators
+- **File Validators**: HTML, JSON, YAML, XML, Markdown, CSV
+- **Structure Validators**: Validate against Pydantic model schemas
+- **Type Validators**: Atomic types, objects, regex patterns
+- **Quality Validators**: Length constraints, functional validation
 
-- **HTML Validator**: Ensures output is valid HTML markup
-- **JSON Validator**: Validates JSON structure and syntax
-- **Regex Validator**: Matches output against custom regex patterns
-- **Length Validator**: Enforces minimum and maximum length constraints
-- **Atomic Type Validator**: Ensures output is a valid atomic type (integer, float, bool, or string)
+**📚 For complete validation documentation, examples, and guides:**
+- **[Validation Module Documentation](lamia/validation/README.md)** - Comprehensive guide to all validators
+- **[Custom Validator Examples](examples/custom_validators/)** - Example implementations
 
-### Atomic Type Validator
-
-The `atomic_type` validator allows you to validate that the LLM output is a valid integer, float, boolean, or string. This is useful for enforcing that the response is a single value of a specific type.
-
-#### Usage from config.yaml
-
-```yaml
-validators:
-  - type: "atomic_type"
-    atomic_type: "integer"  # or "float", "bool", "string"
-    strict: true  # Optional, default is true
-```
-
-#### Usage from Python code
-
-```python
-from lamia.adapters.llm.validation.validators import AtomicTypeValidator
-
-lamia = Lamia(
-    ...,
-    validators=[AtomicTypeValidator(atomic_type="integer")]
-)
-```
-
-#### How it works
-- In strict mode, the response must be exactly the specified type (e.g., only an integer, with no extra text).
-- In forgiving mode (`strict: false`), the response is valid if it contains exactly one value of the specified type.
-- If there are multiple values of the type in the response, validation fails.
-
-#### Examples
-
-**Valid integer:**
-```
-42
-```
-
-**Valid float:**
-```
-3.1415
-```
-
-**Valid boolean:**
-```
-true
-```
-
-**Valid string:**
-```
-hello world
-```
-
-**Invalid (multiple values):**
-```
-42 and 43
-```
-
-### HTML Structure Validator
-
-The `html_structure` validator allows you to validate the structure of HTML output using a Pydantic model. This is useful for ensuring that generated HTML matches a specific tag and nesting structure.
-
-#### Usage from config.yaml
-
-Define your Pydantic models in a `models/` folder (or any importable module):
-
-```python
-# models/html_structure.py
-from pydantic import BaseModel
-
-class Body(BaseModel):
-    h1: str
-
-class HtmlStructure(BaseModel):
-    title: str
-    body: Body
-```
-
-Reference the top-level model in your config using the short class name (imported from `models`):
-
-```yaml
-validators:
-  - type: "html_structure"
-    model: HtmlStructure  # Will be imported from the models folder
-```
-
-You can also use a full dotted path to a model in any package:
-
-```yaml
-validators:
-  - type: "html_structure"
-    model: myapp.models.html_structure.HtmlStructure
-```
-
-#### Usage from Python code
-
-You can pass any model class from your Python path when constructing Lamia:
-
-```python
-from myapp.models.html_structure import HtmlStructure
-from lamia.adapters.llm.validation.validators import HTMLStructureValidator
-
-lamia = Lamia(
-    ...,
-    validators=[HTMLStructureValidator(model=HtmlStructure)]
-)
-```
-
-#### How it works
-- The validator parses the HTML, maps tags to model fields (recursively), and validates the result using Pydantic.
-- If you specify a string for `model`, it will be dynamically imported from the `models` module (by default), or from a full dotted path if provided.
-- You can also provide a schema dict for quick prototyping.
-
-#### Example
-Given this HTML:
-```html
-<html><head><title>My Title</title></head><body><h1>Header</h1></body></html>
-```
-And the model above, validation will pass if the structure matches.
+The validation documentation covers:
+- All built-in validators and their configuration options
+- Creating custom validators (simple and structure-aware)
+- Strict vs permissive validation modes  
+- Advanced features like type conversion and error handling
+- Complete API reference and usage examples
 
 ## Development
 
@@ -295,11 +167,7 @@ And the model above, validation will pass if the structure matches.
    - Windows: `venv\Scripts\activate`
    - Unix/MacOS: `source venv/bin/activate`
 4. Install development dependencies: `pip install -e ".[dev]"`
-5. Run tests: `pytest tests/` 
-
-### Custom Validators
-
-The `examples/custom_validators/` directory contains example implementations.
+5. Run tests: `pytest tests/`
 
 ## Model Configuration
 
