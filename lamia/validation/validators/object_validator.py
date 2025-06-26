@@ -21,6 +21,7 @@ class ObjectValidator(BaseValidator):
 
     @property
     def initial_hint(self) -> str:
+        # TODO: for openai and anthropic we can request the object structure with a structured api params instead of a prompt
         return "Please ensure the response is a valid JSON object matching the required schema, with no explanation or extra text."
 
     def _create_pydantic_model(self, schema: dict):

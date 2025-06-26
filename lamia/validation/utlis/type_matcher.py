@@ -14,10 +14,11 @@ from .error_messages import (
 )
 
 class TypeMatchResult:
-    def __init__(self, is_valid: bool, value: any = None, error: str = None):
+    def __init__(self, is_valid: bool, value: any = None, error: str = None, info_loss: dict = None):
         self.is_valid = is_valid
         self.value = value
         self.error = error
+        self.info_loss = info_loss or {}
 
 class TypeMatcher:
     def __init__(self, strict: bool = False, get_text_func=None):
@@ -56,21 +57,26 @@ class TypeMatcher:
                     return TypeMatchResult(True, value)
                 coerced = []
                 invalid_elems = {}
+                combined_info_loss = {}
                 for index, v in enumerate(value):
                     result = self.validate_and_convert(v, args[0])
                     if not result.is_valid:
                         invalid_elems[index] = result.error
                     coerced.append(result.value)
+                    # Collect info loss from nested conversions
+                    if result.info_loss:
+                        combined_info_loss[f"element_{index}"] = result.info_loss
                 
                 if invalid_elems:
                     return TypeMatchResult(False, None, error_msg_list_elements_invalid(value, invalid_elems))
-                return TypeMatchResult(True, coerced)
+                return TypeMatchResult(True, coerced, info_loss=combined_info_loss)
             if origin is dict:
                 if not isinstance(value, dict):
                     return TypeMatchResult(False, None, error_msg_expected_dict_got(type(value).__name__))
                 coerced = {}
                 invalid_keys = {}
                 invalid_values = {}
+                combined_info_loss = {}
                 for k, v in value.items():
                     print(f"args: {args[1]}")
                     k_result = self.validate_and_convert(k, args[0])
@@ -80,17 +86,28 @@ class TypeMatcher:
                     if not v_result.is_valid:
                         invalid_values[v] = v_result.error
                     coerced[k_result.value] = v_result.value
+                    # Collect info loss from nested conversions
+                    if k_result.info_loss:
+                        combined_info_loss[f"key_{k}"] = k_result.info_loss
+                    if v_result.info_loss:
+                        combined_info_loss[f"value_{k}"] = v_result.info_loss
                 
                 if invalid_keys or invalid_values:
                     return TypeMatchResult(False, None, error_msg_dict_elements_invalid(invalid_keys, invalid_values))
-                return TypeMatchResult(True, coerced)
+                return TypeMatchResult(True, coerced, info_loss=combined_info_loss)
 
             # Primitive types
             if expected_type is str:
                 if isinstance(value, str):
                     return TypeMatchResult(True, value)
                 if not self.strict:
-                    return TypeMatchResult(True, str(value))
+                    # Converting non-string to string can lose type information
+                    info_loss = {
+                        "conversion": f"{type(value).__name__} -> str",
+                        "original_value": value,
+                        "original_type": type(value).__name__
+                    }
+                    return TypeMatchResult(True, str(value), info_loss=info_loss)
                 return TypeMatchResult(False, None, error_msg_expected_str_got(type(value).__name__))
             if expected_type is int:
                 return self._convert_int(value)
@@ -115,15 +132,36 @@ class TypeMatcher:
             return TypeMatchResult(False, None, error_msg_cannot_strictly_convert(value, "int"))
         # relaxed
         if isinstance(value, float):
-            return TypeMatchResult(True, int(value))
+            # Track info loss when converting float to int
+            original_float = value
+            converted_int = int(value)
+            info_loss = {}
+            if original_float != converted_int:
+                info_loss = {
+                    "conversion": "float -> int",
+                    "original_value": original_float,
+                    "converted_value": converted_int,
+                    "lost_decimal": original_float - converted_int
+                }
+            return TypeMatchResult(True, converted_int, info_loss=info_loss)
         if isinstance(value, str):
             try:
                 return TypeMatchResult(True, int(value))
             except ValueError:
                 try:
                     float_val = float(value)
-                    # Allow truncation in relaxed mode
-                    return TypeMatchResult(True, int(float_val))
+                    # Allow truncation in relaxed mode - track info loss
+                    converted_int = int(float_val)
+                    info_loss = {}
+                    if float_val != converted_int:
+                        info_loss = {
+                            "conversion": "str -> float -> int",
+                            "original_value": value,
+                            "intermediate_float": float_val,
+                            "converted_value": converted_int,
+                            "lost_decimal": float_val - converted_int
+                        }
+                    return TypeMatchResult(True, converted_int, info_loss=info_loss)
                 except Exception:
                     pass
         return TypeMatchResult(False, None, error_msg_cannot_convert(value, "int"))

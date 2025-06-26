@@ -2,6 +2,7 @@ from .regex_validator import RegexValidator
 from .length_validator import LengthValidator
 from .atomic_type_validator import AtomicTypeValidator
 from .object_validator import ObjectValidator
+from .functional_validator import FunctionalValidator
 from .file_validators import (
     HTMLValidator,
     JSONValidator,
@@ -25,6 +26,7 @@ __all__ = [
     "LengthValidator",
     "AtomicTypeValidator",
     "ObjectValidator",
+    "FunctionalValidator",
     "HTMLStructureValidator",
     "JSONStructureValidator",
     "YAMLStructureValidator",
