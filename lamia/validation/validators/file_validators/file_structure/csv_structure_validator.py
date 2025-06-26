@@ -89,18 +89,10 @@ class CSVStructureValidator(DocumentStructureValidator):
             structure_lines = [f'{field}: {field_info.annotation.__name__}' for field, field_info in self.model.model_fields.items()]
             
             expected_header = ','.join(primitive_fields)
-            if self.strict:
-                hint = (
+            hint = (
                     "Please ensure the CSV matches the required structure exactly.\n"
                     f"Expected header row: {expected_header}\n"
                     "Expected columns and types:\n"
-                    + '\n'.join(structure_lines) + "\n\n"
-                )
-            else:
-                hint = (
-                    "Please ensure the CSV contains the required columns with the correct types.\n"
-                    "Additional columns are allowed.\n"
-                    "Required columns and types:\n"
                     + '\n'.join(structure_lines) + "\n\n"
                 )
         else:

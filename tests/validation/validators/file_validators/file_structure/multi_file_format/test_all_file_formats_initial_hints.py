@@ -151,9 +151,9 @@ mybool: bool
 Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
 ''',
         "permissive": '''
-Please ensure the CSV contains the required columns with the correct types.
-Additional columns are allowed.
-Required columns and types:
+Please ensure the CSV matches the required structure exactly.
+Expected header row: mystr,myint,myfloat,mybool
+Expected columns and types:
 mystr: str
 myint: int
 myfloat: float
