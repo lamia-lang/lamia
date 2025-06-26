@@ -62,40 +62,86 @@ ERROR_MESSAGES = {
     "yaml": "Please return only valid YAML, with no explanation or extra text.",
     "csv": "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.",
     "markdown": "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```) and ensure it is well-formed.",
-    "html_structure": '''
-Please ensure the HTML matches the required structure.
-Expected structure:
+    "html_structure": { 
+        'strict': '''
+Please ensure the HTML matches the required structure exactly.
+Expected structure (as direct children under <html>):
 <mystr>...text...</mystr>
 <mysubmodel>
   <myint>...text...</myint>
 </mysubmodel>
 ''',
-    "json_structure": '''
-Please ensure the JSON matches the required structure.
+        "permissive": '''
+Please ensure the HTML contains the required fields somewhere in the structure.
+The fields can be nested within other HTML elements like <body>, <div>, etc.
+Required fields that must be present somewhere under <html> root tags:
+<mystr>...text...</mystr>
+<mysubmodel>
+  <myint>...text...</myint>
+</mysubmodel>
+''' 
+    },
+    "json_structure": {
+        'strict': '''
+Please ensure the JSON matches the required structure exactly.
 Expected structure:
-"mystr": ...
-"mysubmodel": {
-  "myint": ...
+{
+  "mystr": "...",
+  "mysubmodel": {
+    "myint": ...
+  }
 }
 ''',
-    "xml_structure": '''
-Please ensure the XML matches the required structure.
-Expected structure:
+        "permissive": '''
+Please ensure the JSON contains the required fields with the correct types.
+The fields can be nested within other JSON objects.
+Required fields that must be present:
+"mystr": "..." (string)
+"mysubmodel": {
+  "myint": ... (integer)
+}
+'''
+    },
+    "xml_structure": {
+        'strict': '''
+Please ensure the XML matches the required structure exactly.
+Expected structure (as direct children under root):
 <mystr>...text...</mystr>
 <mysubmodel>
   <myint>...text...</myint>
 </mysubmodel>
 ''',
-    "yaml_structure": '''
-Please ensure the YAML matches the required structure.
+        "permissive": '''
+Please ensure the XML contains the required elements somewhere in the structure.
+The elements can be nested within other XML elements.
+Required elements that must be present somewhere:
+<mystr>...text...</mystr>
+<mysubmodel>
+  <myint>...text...</myint>
+</mysubmodel>
+'''
+    },
+    "yaml_structure": {
+        'strict': '''
+Please ensure the YAML matches the required structure exactly.
 Expected structure:
-mystr: ...
+mystr: "..."
 mysubmodel:
   myint: ...
 ''',
-    "csv_structure": '''
-Please ensure the CSV matches the required structure.
-Expected header row: mystr, myint, myfloat, mybool
+        "permissive": '''
+Please ensure the YAML contains the required fields with the correct types.
+The fields can be nested within other YAML objects.
+Required fields that must be present:
+mystr: "..." (string)
+mysubmodel:
+  myint: ... (integer)
+'''
+    },
+    "csv_structure": {
+        'strict': '''
+Please ensure the CSV matches the required structure exactly.
+Expected header row: mystr,myint,myfloat,mybool
 Expected columns and types:
 mystr: str
 myint: int
@@ -103,15 +149,38 @@ myfloat: float
 mybool: bool
 
 Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
-''', 
-    "markdown_structure": '''
+''',
+        "permissive": '''
+Please ensure the CSV contains the required columns with the correct types.
+Additional columns are allowed.
+Required columns and types:
+mystr: str
+myint: int
+myfloat: float
+mybool: bool
+
+Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
+'''
+    }, 
+    "markdown_structure": {
+        'strict': '''
 Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).
-Ensure the Markdown matches the required structure.
+Ensure the Markdown matches the required structure exactly.
 Expected structure:
-mystr: ...
+mystr: "..."
 mysubmodel:
   myint: ...
+''',
+        "permissive": '''
+Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).
+Ensure the Markdown contains the required fields with the correct types.
+The fields can be nested within other Markdown structures.
+Required fields that must be present:
+mystr: "..." (string)
+mysubmodel:
+  myint: ... (integer)
 '''
+    }
 }
 
 
@@ -139,4 +208,11 @@ def test_structure_validator_initial_hint_exact(strict, validator_type):
     else:
         validator = validator_class(strict=strict, generate_hints=True)
 
-    assert validator.initial_hint.strip() == ERROR_MESSAGES[validator_type].strip()
+    # Get the appropriate message based on strict/permissive mode
+    if validator_type.endswith('_structure'):
+        message_key = "strict" if strict else "permissive"
+        expected_message = ERROR_MESSAGES[validator_type][message_key]
+    else:
+        expected_message = ERROR_MESSAGES[validator_type]
+
+    assert validator.initial_hint.strip() == expected_message.strip()

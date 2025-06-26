@@ -30,11 +30,42 @@ class JSONStructureValidator(DocumentStructureValidator):
     def initial_hint(self) -> str:
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
-            return (
-                "Please ensure the JSON matches the required structure.\n"
-                "Expected structure:\n"
-                + '\n'.join(structure_lines)
-            )
+            if self.strict:
+                strict_lines = []
+                for i, line in enumerate(structure_lines):
+                    if 'mystr' in line:
+                        formatted_line = line.replace('...', '"..."')
+                        # Add comma for the first field
+                        strict_lines.append(f"  {formatted_line},")
+                    else:
+                        strict_lines.append(f"  {line}")
+                return (
+                    "Please ensure the JSON matches the required structure exactly.\n"
+                    "Expected structure:\n"
+                    "{\n"
+                    + '\n'.join(strict_lines)
+                    + "\n}"
+                )
+            else:
+                permissive_lines = []
+                for line in structure_lines:
+                    if '...' in line:
+                        if 'mystr' in line:
+                            permissive_lines.append(line.strip().replace('...', '"..." (string)'))
+                        else:
+                            # Keep proper indentation for nested fields
+                            if line.startswith('  '):
+                                permissive_lines.append(f"  {line.strip().replace('...', '... (integer)')}")
+                            else:
+                                permissive_lines.append(line.strip().replace('...', '... (integer)'))
+                    else:
+                        permissive_lines.append(line)
+                return (
+                    "Please ensure the JSON contains the required fields with the correct types.\n"
+                    "The fields can be nested within other JSON objects.\n"
+                    "Required fields that must be present:\n"
+                    + '\n'.join(permissive_lines)
+                )
         else:
             return "Please return only valid JSON, with no explanation or extra text. The response must be a single JSON object or array."    
     

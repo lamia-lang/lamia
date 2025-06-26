@@ -29,11 +29,31 @@ class YAMLStructureValidator(DocumentStructureValidator):
     def initial_hint(self) -> str:
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
-            return (
-                "Please ensure the YAML matches the required structure.\n"
-                "Expected structure:\n"
-                + '\n'.join(structure_lines)
-            )
+            if self.strict:
+                strict_lines = []
+                for line in structure_lines:
+                    if 'mystr' in line:
+                        strict_lines.append(line.replace(': ...', ': "..."'))
+                    else:
+                        strict_lines.append(line)
+                return (
+                    "Please ensure the YAML matches the required structure exactly.\n"
+                    "Expected structure:\n"
+                    + '\n'.join(strict_lines)
+                )
+            else:
+                permissive_lines = []
+                for line in structure_lines:
+                    if 'mystr' in line:
+                        permissive_lines.append(line.replace(': ...', ': "..." (string)'))
+                    else:
+                        permissive_lines.append(line.replace(': ...', ': ... (integer)'))
+                return (
+                    "Please ensure the YAML contains the required fields with the correct types.\n"
+                    "The fields can be nested within other YAML objects.\n"
+                    "Required fields that must be present:\n"
+                    + '\n'.join(permissive_lines)
+                )
         else:
             return "Please return only valid YAML, with no explanation or extra text."
             

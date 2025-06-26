@@ -86,15 +86,23 @@ class CSVStructureValidator(DocumentStructureValidator):
                     "Please use a different validator for complex data structures."
                 )
             
-            expected_header = ', '.join(primitive_fields)
             structure_lines = [f'{field}: {field_info.annotation.__name__}' for field, field_info in self.model.model_fields.items()]
             
-            hint = (
-                "Please ensure the CSV matches the required structure.\n"
-                f"Expected header row: {expected_header}\n"
-                "Expected columns and types:\n"
-                + '\n'.join(structure_lines) + "\n\n"
-            )
+            expected_header = ','.join(primitive_fields)
+            if self.strict:
+                hint = (
+                    "Please ensure the CSV matches the required structure exactly.\n"
+                    f"Expected header row: {expected_header}\n"
+                    "Expected columns and types:\n"
+                    + '\n'.join(structure_lines) + "\n\n"
+                )
+            else:
+                hint = (
+                    "Please ensure the CSV contains the required columns with the correct types.\n"
+                    "Additional columns are allowed.\n"
+                    "Required columns and types:\n"
+                    + '\n'.join(structure_lines) + "\n\n"
+                )
         else:
             hint = ""
         hint += "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows."
