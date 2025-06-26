@@ -36,57 +36,6 @@ class YAMLStructureValidator(DocumentStructureValidator):
             )
         else:
             return "Please return only valid YAML, with no explanation or extra text."
-
-    def parse(self, response: str):
-        stripped = response.strip()
-        
-        if not self.strict:
-            # Strategy 1: Try markdown code blocks first
-            markdown_match = re.search(r'```(?:yaml|yml)?\s*\n?(.*?)\n?```', stripped, re.DOTALL | re.IGNORECASE)
-            if markdown_match:
-                yaml_candidate = markdown_match.group(1).strip()
-                try:
-                    return yaml.safe_load(yaml_candidate)
-                except yaml.YAMLError:
-                    pass  # Continue to next strategy
-            
-            # Strategy 2: Look for YAML-like patterns (key: value lines)
-            yaml_lines = []
-            for line in stripped.split('\n'):
-                line = line.strip()
-                # Simple YAML pattern: word characters followed by colon and value
-                if re.match(r'^[\w\s-]+:\s*.+$', line):
-                    yaml_lines.append(line)
-            
-            if yaml_lines:
-                yaml_candidate = '\n'.join(yaml_lines)
-                try:
-                    return yaml.safe_load(yaml_candidate)
-                except yaml.YAMLError:
-                    pass  # Continue to next strategy
-            
-            # Strategy 3: Try the whole thing (fallback)
-            try:
-                return yaml.safe_load(stripped)
-            except yaml.YAMLError:
-                pass
-            
-            # If nothing worked, raise error
-            raise TextAroundPayloadError(
-                validator_class_name="YAML",
-                original_text=response,
-                parsed_text=stripped
-            )
-        else:
-            # Strict mode: parse as-is
-            try:
-                return yaml.safe_load(stripped)
-            except yaml.YAMLError as e:
-                raise TextAroundPayloadError(
-                    validator_class_name="YAML",
-                    original_text=response,
-                    parsed_text=stripped
-                ) from e
             
     def extract_payload(self, response: str) -> str:
         markdown_match = re.search(r'```(?:yaml|yml)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
@@ -94,7 +43,7 @@ class YAMLStructureValidator(DocumentStructureValidator):
             return markdown_match.group(1).strip()
         else:
             yaml_lines = []
-            for line in stripped.split('\n'):
+            for line in response.split('\n'):
                 line = line.strip()
                 # Simple YAML pattern: word characters followed by colon and value
                 if re.match(r'^[\w\s-]+:\s*.+$', line):
@@ -103,11 +52,12 @@ class YAMLStructureValidator(DocumentStructureValidator):
             if yaml_lines:
                 yaml_candidate = '\n'.join(yaml_lines)
                 try:
-                    return yaml.safe_load(yaml_candidate)
+                    yaml.safe_load(yaml_candidate)
+                    return yaml_candidate
                 except yaml.YAMLError:
                     return None
                 
-                return yaml_candidate
+            return yaml_candidate
 
     def load_payload(self, payload: str) -> any:
         return yaml.safe_load(payload)
