@@ -67,26 +67,12 @@ class CSVStructureValidator(DocumentStructureValidator):
     @property
     def initial_hint(self) -> str:
         if self.model is not None:
-            # Check for non-primitive types and provide better hint
             primitive_fields = []
-            non_primitive_fields = []
+            structure_lines = []
             
             for field, field_info in self.model.model_fields.items():
-                field_type = field_info.annotation
-                # Check if it's a primitive type
-                if field_type in (str, int, float, bool) or field_type.__name__ in ('str', 'int', 'float', 'bool'):
-                    primitive_fields.append(field)
-                else:
-                    non_primitive_fields.append(f"{field}: {field_info.annotation.__name__}")
-            
-            if non_primitive_fields:
-                return (
-                    "CSV validation error: CSV files only support primitive types (str, int, float, bool).\n"
-                    f"Non-primitive fields found: {', '.join(non_primitive_fields)}\n"
-                    "Please use a different validator for complex data structures."
-                )
-            
-            structure_lines = [f'{field}: {field_info.annotation.__name__}' for field, field_info in self.model.model_fields.items()]
+                primitive_fields.append(field)
+                structure_lines.append(f'{field}: {field_info.annotation.__name__}')
             
             expected_header = ','.join(primitive_fields)
             hint = (
