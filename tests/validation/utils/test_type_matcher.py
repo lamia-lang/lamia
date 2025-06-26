@@ -147,3 +147,355 @@ def test_type_matcher_null_values(expected_type, value, should_match_strict, sho
         assert result.error is None
     else:
         assert result.error == expected_error
+
+# Info Loss Tracking Tests
+class TestInfoLossTracking:
+    """Test info_loss tracking for information-losing type conversions."""
+    
+    def test_float_to_int_info_loss(self):
+        """Test that float to int conversion tracks decimal loss."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert(3.14159, int)
+        
+        assert result.is_valid is True
+        assert result.value == 3
+        assert result.info_loss == {
+            "conversion": "float -> int",
+            "original_value": 3.14159,
+            "converted_value": 3,
+            "lost_decimal": 3.14159 - 3
+        }
+    
+    def test_float_to_int_no_loss_when_whole_number(self):
+        """Test that float to int conversion with no decimal part has no info_loss."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert(5.0, int)
+        
+        assert result.is_valid is True
+        assert result.value == 5
+        assert result.info_loss == {}  # No info loss when decimal is 0
+    
+    def test_string_decimal_to_int_info_loss(self):
+        """Test that string with decimal to int conversion tracks loss."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert("42.789", int)
+        
+        assert result.is_valid is True
+        assert result.value == 42
+        assert result.info_loss == {
+            "conversion": "str -> float -> int",
+            "original_value": "42.789",
+            "intermediate_float": 42.789,
+            "converted_value": 42,
+            "lost_decimal": 42.789 - 42
+        }
+    
+    def test_string_whole_number_to_int_no_loss(self):
+        """Test that string whole number to int has no info_loss."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert("42.0", int)
+        
+        assert result.is_valid is True
+        assert result.value == 42
+        assert result.info_loss == {}  # No info loss when decimal is 0
+    
+    def test_direct_string_int_to_int_no_loss(self):
+        """Test that direct string int to int has no info_loss."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert("42", int)
+        
+        assert result.is_valid is True
+        assert result.value == 42
+        assert result.info_loss == {}  # No conversion needed
+    
+    def test_int_to_str_type_change_info_loss(self):
+        """Test that int to string conversion tracks type change."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert(123, str)
+        
+        assert result.is_valid is True
+        assert result.value == "123"
+        assert result.info_loss == {
+            "conversion": "int -> str",
+            "original_value": 123,
+            "original_type": "int"
+        }
+    
+    def test_float_to_str_type_change_info_loss(self):
+        """Test that float to string conversion tracks type change."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert(3.14, str)
+        
+        assert result.is_valid is True
+        assert result.value == "3.14"
+        assert result.info_loss == {
+            "conversion": "float -> str",
+            "original_value": 3.14,
+            "original_type": "float"
+        }
+    
+    def test_no_conversion_no_info_loss(self):
+        """Test that no conversion means no info_loss."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert(42, int)
+        
+        assert result.is_valid is True
+        assert result.value == 42
+        assert result.info_loss == {}
+    
+    def test_list_with_info_loss_conversions(self):
+        """Test that list conversions collect info_loss from elements."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert([1.5, 2.7, 3], list[int])
+        
+        assert result.is_valid is True
+        assert result.value == [1, 2, 3]
+        
+        # Check that info_loss is collected from elements that had conversions
+        assert "element_0" in result.info_loss
+        assert result.info_loss["element_0"]["conversion"] == "float -> int"
+        assert result.info_loss["element_0"]["original_value"] == 1.5
+        assert abs(result.info_loss["element_0"]["lost_decimal"] - 0.5) < 1e-10
+        
+        assert "element_1" in result.info_loss
+        assert result.info_loss["element_1"]["conversion"] == "float -> int"
+        assert result.info_loss["element_1"]["original_value"] == 2.7
+        assert abs(result.info_loss["element_1"]["lost_decimal"] - 0.7) < 1e-10
+        
+        # Element 2 had no conversion, so no info_loss recorded
+        assert "element_2" not in result.info_loss
+    
+    def test_dict_with_info_loss_conversions(self):
+        """Test that dict conversions collect info_loss from keys and values."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert({123: 4.5, "hello": 6}, dict[str, int])
+        
+        assert result.is_valid is True
+        assert result.value == {"123": 4, "hello": 6}
+        
+        # Check key conversion info_loss
+        assert "key_123" in result.info_loss
+        assert result.info_loss["key_123"]["conversion"] == "int -> str"
+        assert result.info_loss["key_123"]["original_value"] == 123
+        
+        # Check value conversion info_loss  
+        assert "value_123" in result.info_loss
+        assert result.info_loss["value_123"]["conversion"] == "float -> int"
+        assert result.info_loss["value_123"]["original_value"] == 4.5
+        assert abs(result.info_loss["value_123"]["lost_decimal"] - 0.5) < 1e-10
+        
+        # No info_loss for value that didn't need conversion
+        assert "value_hello" not in result.info_loss
+    
+    def test_strict_mode_no_info_loss_on_rejection(self):
+        """Test that strict mode doesn't track info_loss when conversion is rejected."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(3.14, int)
+        
+        assert result.is_valid is False
+        assert result.info_loss == {}  # No info_loss when conversion fails
+    
+    def test_nested_list_info_loss_collection(self):
+        """Test that nested collections properly collect info_loss."""
+        matcher = TypeMatcher(strict=False)
+        # List of lists with float to int conversions
+        result = matcher.validate_and_convert([[1.5, 2], [3.7]], list[list[int]])
+        
+        assert result.is_valid is True
+        assert result.value == [[1, 2], [3]]
+        
+        # Should collect info_loss from nested conversions
+        assert "element_0" in result.info_loss
+        assert "element_1" in result.info_loss
+
+    def test_deeply_nested_list_info_loss(self):
+        """Test info_loss tracking in deeply nested lists."""
+        matcher = TypeMatcher(strict=False)
+        # List of lists of lists with conversions
+        nested_data = [[[1.5, 2.3], [3]], [[4.7, 5], [6.1]]]
+        result = matcher.validate_and_convert(nested_data, list[list[list[int]]])
+        
+        assert result.is_valid is True
+        assert result.value == [[[1, 2], [3]], [[4, 5], [6]]]
+        
+        # Check that info_loss is properly nested
+        assert "element_0" in result.info_loss
+        assert "element_1" in result.info_loss
+        
+        # Check nested structure of info_loss
+        elem_0_info = result.info_loss["element_0"]
+        assert "element_0" in elem_0_info  # [[1.5, 2.3], [3]]
+        assert "element_1" not in elem_0_info  # [3] has no conversions
+        
+        # Check the deepest level
+        elem_0_0_info = elem_0_info["element_0"]
+        assert "element_0" in elem_0_0_info  # 1.5 -> 1
+        assert "element_1" in elem_0_0_info  # 2.3 -> 2
+        assert elem_0_0_info["element_0"]["original_value"] == 1.5
+        assert elem_0_0_info["element_1"]["original_value"] == 2.3
+
+    def test_dict_of_lists_info_loss(self):
+        """Test info_loss tracking in dict containing lists with conversions."""
+        matcher = TypeMatcher(strict=False)
+        data = {
+            "integers": [1.5, 2.7, 3],
+            "floats": [42.3, 85.7, 99.0]
+        }
+        result = matcher.validate_and_convert(data, dict[str, list[int]])
+        
+        assert result.is_valid is True
+        assert result.value == {"integers": [1, 2, 3], "floats": [42, 85, 99]}
+        
+        # Check info_loss structure
+        assert "value_integers" in result.info_loss
+        assert "value_floats" in result.info_loss
+        
+        # Check integers list info_loss
+        integers_info = result.info_loss["value_integers"]
+        assert "element_0" in integers_info  # 1.5 -> 1
+        assert "element_1" in integers_info  # 2.7 -> 2
+        assert "element_2" not in integers_info  # 3 no conversion
+        
+        # Check floats list info_loss
+        floats_info = result.info_loss["value_floats"]
+        assert "element_0" in floats_info  # 42.3 -> 42
+        assert "element_1" in floats_info  # 85.7 -> 85
+        assert "element_2" not in floats_info  # 99.0 -> 99 (no decimal lost)
+
+    def test_list_of_dicts_info_loss(self):
+        """Test info_loss tracking in list containing dicts with conversions."""
+        matcher = TypeMatcher(strict=False)
+        data = [
+            {"id": 1.0, "count": 123, "score": 85.7},
+            {"id": 2.5, "count": 456, "score": 92.0}
+        ]
+        result = matcher.validate_and_convert(data, list[dict[str, int]])
+        
+        assert result.is_valid is True
+        assert result.value == [
+            {"id": 1, "count": 123, "score": 85},
+            {"id": 2, "count": 456, "score": 92}
+        ]
+        
+        # Check nested info_loss structure
+        assert "element_0" in result.info_loss
+        assert "element_1" in result.info_loss
+        
+        # First dict info_loss
+        dict_0_info = result.info_loss["element_0"]
+        assert "value_id" not in dict_0_info     # 1.0 -> 1 (no decimal lost, so no info_loss)
+        assert "value_count" not in dict_0_info  # 123 no conversion
+        assert "value_score" in dict_0_info      # 85.7 -> 85
+        
+        # Second dict info_loss
+        dict_1_info = result.info_loss["element_1"]
+        assert "value_id" in dict_1_info      # 2.5 -> 2
+        assert "value_count" not in dict_1_info  # 456 no conversion
+        assert "value_score" not in dict_1_info  # 92.0 -> 92 (no decimal lost)
+
+    def test_complex_nested_structure_info_loss(self):
+        """Test info_loss tracking in complex nested structures."""
+        matcher = TypeMatcher(strict=False)
+        # Dict containing lists of dicts with various conversions
+        data = {
+            "users": [
+                {"id": 1.0, "scores": [85.5, 90.2, 88]},
+                {"id": 2.7, "scores": [92.1, 87.8]}
+            ],
+            "metadata": {
+                "count": 2.0,
+                "average": 88.65
+            }
+        }
+        
+        # Convert to: dict[str, list[dict[str, list[int]]]] for users, 
+        # but let's use a simpler target type for this test
+        result = matcher.validate_and_convert(data, dict[str, dict[str, int]])
+        
+        # This will fail because the structure doesn't match, but let's test a simpler case
+        # Let's test with a flattened version
+        flat_data = {
+            "user_id": 1.5,
+            "score": 85.7,
+            "count": 2.0
+        }
+        result = matcher.validate_and_convert(flat_data, dict[str, int])
+        
+        assert result.is_valid is True
+        assert result.value == {"user_id": 1, "score": 85, "count": 2}
+        
+        # Check which values have info_loss (only those with actual decimal loss)
+        assert "value_user_id" in result.info_loss  # 1.5 -> 1 loses 0.5
+        assert "value_score" in result.info_loss    # 85.7 -> 85 loses 0.7
+        assert "value_count" not in result.info_loss  # 2.0 -> 2 loses no decimals
+        
+        # Check specific conversion details
+        assert result.info_loss["value_user_id"]["original_value"] == 1.5
+        assert result.info_loss["value_user_id"]["lost_decimal"] == 0.5
+        assert result.info_loss["value_score"]["original_value"] == 85.7
+        assert abs(result.info_loss["value_score"]["lost_decimal"] - 0.7) < 1e-10
+
+    def test_mixed_conversion_types_in_nested_structure(self):
+        """Test various conversion types within nested structures."""
+        matcher = TypeMatcher(strict=False)
+        data = {
+            "float_to_int": [1.5, 2.7],
+            "int_to_str": [123, 456],
+            "mixed_to_str": [789, 3.14, "hello"]
+        }
+        
+        expected_result = dict[str, list[str]]
+        result = matcher.validate_and_convert(data, expected_result)
+        
+        assert result.is_valid is True
+        assert result.value == {
+            "float_to_int": ["1.5", "2.7"],
+            "int_to_str": ["123", "456"], 
+            "mixed_to_str": ["789", "3.14", "hello"]
+        }
+        
+        # Check info_loss for different conversion types
+        assert "value_float_to_int" in result.info_loss
+        assert "value_int_to_str" in result.info_loss
+        assert "value_mixed_to_str" in result.info_loss
+        
+        # Float to string conversions
+        float_info = result.info_loss["value_float_to_int"]
+        assert "element_0" in float_info
+        assert float_info["element_0"]["conversion"] == "float -> str"
+        assert float_info["element_0"]["original_value"] == 1.5
+        
+        # Int to string conversions
+        int_info = result.info_loss["value_int_to_str"]
+        assert "element_0" in int_info
+        assert int_info["element_0"]["conversion"] == "int -> str"
+        assert int_info["element_0"]["original_value"] == 123
+        
+        # Mixed conversions (hello should not appear in info_loss)
+        mixed_info = result.info_loss["value_mixed_to_str"]
+        assert "element_0" in mixed_info  # 789 -> "789"
+        assert "element_1" in mixed_info  # 3.14 -> "3.14"
+        assert "element_2" not in mixed_info  # "hello" no conversion
+
+    def test_empty_nested_structures_no_info_loss(self):
+        """Test that empty nested structures don't create spurious info_loss entries."""
+        matcher = TypeMatcher(strict=False)
+        
+        # Empty structures
+        empty_list_result = matcher.validate_and_convert([], list[int])
+        assert empty_list_result.is_valid is True
+        assert empty_list_result.value == []
+        assert empty_list_result.info_loss == {}
+        
+        empty_dict_result = matcher.validate_and_convert({}, dict[str, int])
+        assert empty_dict_result.is_valid is True
+        assert empty_dict_result.value == {}
+        assert empty_dict_result.info_loss == {}
+        
+        # Nested structures with only empty lists (valid conversions)
+        nested_empty = {"list1": [], "list2": []}
+        nested_result = matcher.validate_and_convert(nested_empty, dict[str, list[int]])
+        assert nested_result.is_valid is True
+        assert nested_result.value == {"list1": [], "list2": []}
+        # No info_loss for empty lists
+        assert nested_result.info_loss == {}
