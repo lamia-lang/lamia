@@ -7,6 +7,9 @@ from lamia.validation.utlis.type_matcher import TypeMatcher
 from pydantic import BaseModel
 from typing import Callable
 
+# TODO: we can configure type checking to be different from the file validator strict mode with this flag
+#STRICT_TYPE_MATCH = False
+
 class BaseValidationError(ValueError):
     """Base exception for validation errors with hint support."""
     def __init__(self, message: str, hint: str = None, original_exception: Exception = None):
@@ -77,8 +80,6 @@ def validate_field_presence(field_name, field_type, data, mode):
             return True
     return True
 
-STRICT_TYPE_MATCH = False
-
 def is_pydantic_model(field_type):
     try:
         return issubclass(field_type, BaseModel)
@@ -94,7 +95,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
     def __init__(self, model, strict=True, generate_hints=False):
         super().__init__(strict=strict, generate_hints=generate_hints)
         self.model = model
-        self.type_matcher = TypeMatcher(strict=STRICT_TYPE_MATCH, get_text_func=self.get_text)
+        self.type_matcher = TypeMatcher(strict=strict, get_text_func=self.get_text)
 
     def parse(self, response: str):
         stripped = response.strip()
@@ -197,7 +198,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Find all elements/fields with the given key anywhere in the tree."""
         pass
 
-    def _validate_tree(self, tree, model, permissive=False, fill_model=True):
+    def _validate_tree(self, tree, model, permissive=False):
         errors = []
         values = {}
         is_valid = True
@@ -221,28 +222,37 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
             # Recursive validation for nested models
             if is_pydantic_model(expected_type):
-                nested_result = self._validate_tree(elem, expected_type, permissive, fill_model)
+                nested_result = self._validate_tree(elem, expected_type, permissive)
                 if not nested_result.is_valid:
                     errors.append(f"Field {field}: {nested_result.error_message}")
                     is_valid = False
                     values[field] = None
                 else:
-                    values[field] = nested_result.result_type if fill_model else None
+                    values[field] = nested_result.result_type
+                    # Collect nested info loss
+                    if nested_result.info_loss:
+                        info_loss[field] = nested_result.info_loss
                 continue
             # Recursive validation for lists of models
             if is_list_of_models(expected_type):
                 item_type = get_args(expected_type)[0]
                 children = list(self.iter_direct_children(elem)) if elem is not None else []
                 nested_values = []
-                for child in children:
-                    nested_result = self._validate_tree(child, item_type, permissive, fill_model)
+                field_info_loss = {}
+                for idx, child in enumerate(children):
+                    nested_result = self._validate_tree(child, item_type, permissive)
                     if not nested_result.is_valid:
-                        errors.append(f"Field {field}[]: {nested_result.error_message}")
+                        errors.append(f"Field {field}[{idx}]: {nested_result.error_message}")
                         is_valid = False
                         nested_values.append(None)
                     else:
-                        nested_values.append(nested_result.result_type if fill_model else None)
+                        nested_values.append(nested_result.result_type)
+                        # Collect nested info loss
+                        if nested_result.info_loss:
+                            field_info_loss[f"item_{idx}"] = nested_result.info_loss
                 values[field] = nested_values
+                if field_info_loss:
+                    info_loss[field] = field_info_loss
                 continue
 
             # Special handling for str and Any
@@ -266,9 +276,12 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 values[field] = None
             else:
                 values[field] = match_result.value
+                # Collect type conversion info loss
+                if match_result.info_loss:
+                    info_loss[field] = match_result.info_loss
 
         model_instance = None
-        if is_valid and fill_model:
+        if is_valid:
             try:
                 model_instance = model(**values)
             except Exception as e:
@@ -278,19 +291,20 @@ class DocumentStructureValidator(BaseValidator, ABC):
         error_message = '; '.join(errors) if errors else None
         return ValidationResult(
             is_valid=is_valid,
-            result_type=model_instance if fill_model else None,
-            error_message=error_message
+            result_type=model_instance,
+            error_message=error_message,
+            info_loss=info_loss if info_loss else None
         )
 
     def get_subtree_string(self, elem):
         # Default fallback: just str(elem). Should be overridden in subclasses.
         return str(elem)
 
-    async def validate_strict(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
+    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         return self._validare_with_error_handling(response, self.validate_strict_recursive)
 
-    async def validate_permissive(self, response: str, fill_model: bool = True, **kwargs) -> ValidationResult:
-        return self._validare_with_error_handling(response, self.validate_strict_recursive)
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+        return self._validare_with_error_handling(response, self.validate_permissive_recursive)
 
     def validate_strict_recursive(self, tree, model):
         """Shallow wrapper for backward compatibility. Calls unified _validate_tree logic."""
