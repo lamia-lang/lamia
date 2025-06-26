@@ -60,8 +60,8 @@ ERROR_MESSAGES = {
     "json": "Please return only valid JSON, with no explanation or extra text. The response must be a single JSON object or array.",
     "xml": "Please return only valid XML, with no explanation or extra text.",
     "yaml": "Please return only valid YAML, with no explanation or extra text.",
-    "csv": "Please return only the CSV code in triple backticks (```csv), starting with the header row and ending with the last row, with no explanation or extra text. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes",
-    "markdown": "Please ensure the Markdown is well-formed.",
+    "csv": "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.",
+    "markdown": "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```) and ensure it is well-formed.",
     "html_structure": '''
 Please ensure the HTML matches the required structure.
 Expected structure:
@@ -95,7 +95,7 @@ mysubmodel:
 ''',
     "csv_structure": '''
 Please ensure the CSV matches the required structure.
-Expected header row: mystr,myint,myfloat,mybool
+Expected header row: mystr, myint, myfloat, mybool
 Expected columns and types:
 mystr: str
 myint: int
@@ -105,7 +105,8 @@ mybool: bool
 Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
 ''', 
     "markdown_structure": '''
-Please ensure the Markdown matches the required structure.
+Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).
+Ensure the Markdown matches the required structure.
 Expected structure:
 mystr: ...
 mysubmodel:
