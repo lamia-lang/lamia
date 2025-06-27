@@ -1,5 +1,6 @@
 from pydantic import create_model, ValidationError, BaseModel
 from ..base import BaseValidator, ValidationResult
+from ..utils.pydantic_utils import get_pydantic_json_schema
 import json as _json
 import re
 from typing import Union, Type
@@ -9,8 +10,9 @@ class ObjectValidator(BaseValidator):
     @classmethod
     def name(cls) -> str:
         return "object"
-    def __init__(self, schema: Union[dict, Type[BaseModel]], strict: bool = True):
-        super().__init__(strict=strict)
+
+    def __init__(self, schema: Union[dict, Type[BaseModel]], strict: bool = True, generate_hints: bool = False):
+        super().__init__(strict=strict, generate_hints=generate_hints)
         self.schema = schema
         if isinstance(schema, dict):
             self.model = self._create_pydantic_model(schema)
@@ -22,7 +24,8 @@ class ObjectValidator(BaseValidator):
     @property
     def initial_hint(self) -> str:
         # TODO: for openai and anthropic we can request the object structure with a structured api params instead of a prompt
-        return "Please ensure the response is a valid JSON object matching the required schema, with no explanation or extra text."
+        json_schema = get_pydantic_json_schema(self.model)
+        return f"Please ensure the response is a valid JSON object matching the required schema, with no explanation or extra text. Schema: {json_schema}"
 
     def _create_pydantic_model(self, schema: dict):
         type_map = {
@@ -51,7 +54,7 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Response is not valid JSON: {e}",
-                hint=self.initial_hint
+                hint=self.initial_hint if self.generate_hints else None
             )
         try:
             self.model.model_validate(data)
@@ -60,7 +63,7 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Response does not match schema: {e}",
-                hint=self.initial_hint
+                hint=self.initial_hint if self.generate_hints else None
             )
 
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
@@ -69,7 +72,7 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message="No valid JSON object found.",
-                hint=self.initial_hint
+                hint=self.initial_hint if self.generate_hints else None
             )
         json_block = match.group(0)
         try:
@@ -78,7 +81,7 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Extracted JSON is not valid: {e}",
-                hint=self.initial_hint
+                hint=self.initial_hint if self.generate_hints else None
             )
         try:
             self.model.model_validate(data)
@@ -87,5 +90,5 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=f"Extracted JSON does not match schema: {e}",
-                hint=self.initial_hint
+                hint=self.initial_hint if self.generate_hints else None
             ) 

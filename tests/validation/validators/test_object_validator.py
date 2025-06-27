@@ -2,6 +2,7 @@ import pytest
 from lamia.validation.validators.object_validator import ObjectValidator
 import asyncio
 from pydantic import BaseModel
+import json
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -52,7 +53,9 @@ async def test_object_validator_invalid_json(strict):
     else:
         result = await validator.validate_permissive(invalid_json)
     assert not result.is_valid
-    assert "not valid JSON" in result.error_message or "No valid JSON object found" in result.error_message
+    assert ("not valid JSON" in result.error_message or 
+            "No valid JSON object found" in result.error_message or
+            "Extracted JSON is not valid" in result.error_message)
 
 @pytest.mark.asyncio
 async def test_object_validator_permissive_extracts_json():
@@ -111,11 +114,8 @@ async def test_object_validator_initial_hint_included(strict):
     validator = ObjectValidator(schema=schema, strict=strict, generate_hints=True)
     invalid_json = '{"a": "not_an_int", "b": "hello"}'
     result = await validator.validate(invalid_json)
-    if strict:
-        assert result.hint is not None
-        assert "Please ensure" in result.hint or "Please return only" in result.hint
-    else:
-        assert result.hint is None
+    assert result.hint is not None
+    assert "Please ensure" in result.hint or "Please return only" in result.hint
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -132,8 +132,61 @@ async def test_object_validator_initial_hint_included_pydantic(strict):
     validator = ObjectValidator(schema=MyModel, strict=strict, generate_hints=True)
     invalid_json = '{"a": "not_an_int", "b": "hello"}'
     result = await validator.validate(invalid_json)
-    if strict:
-        assert result.hint is not None
-        assert "Please ensure" in result.hint or "Please return only" in result.hint
-    else:
-        assert result.hint is None 
+    assert result.hint is not None
+    assert "Please ensure" in result.hint or "Please return only" in result.hint
+
+def test_object_validator_initial_hint_contains_schema():
+    """Test that the initial hint contains the JSON schema."""
+    schema = {"a": "int", "b": "string"}
+    validator = ObjectValidator(schema=schema)
+    hint = validator.initial_hint
+    
+    # Check that the hint contains the base message
+    assert "Please ensure the response is a valid JSON object matching the required schema" in hint
+    assert "with no explanation or extra text" in hint
+    assert "Schema:" in hint
+    
+    # Check that the hint contains JSON schema
+    assert "{" in hint and "}" in hint
+    
+    # Extract and validate the JSON schema part
+    schema_start = hint.find("Schema: ") + len("Schema: ")
+    json_schema_str = hint[schema_start:]
+    
+    # Should be valid JSON
+    json_schema = json.loads(json_schema_str)
+    assert isinstance(json_schema, dict)
+    assert "type" in json_schema
+    assert json_schema["type"] == "object"
+    assert "properties" in json_schema
+
+def test_object_validator_initial_hint_contains_schema_pydantic():
+    """Test that the initial hint contains the JSON schema for Pydantic models."""
+    validator = ObjectValidator(schema=MyModel)
+    hint = validator.initial_hint
+    
+    # Check that the hint contains the base message
+    assert "Please ensure the response is a valid JSON object matching the required schema" in hint
+    assert "with no explanation or extra text" in hint
+    assert "Schema:" in hint
+    
+    # Check that the hint contains JSON schema
+    assert "{" in hint and "}" in hint
+    
+    # Extract and validate the JSON schema part
+    schema_start = hint.find("Schema: ") + len("Schema: ")
+    json_schema_str = hint[schema_start:]
+    
+    # Should be valid JSON
+    json_schema = json.loads(json_schema_str)
+    assert isinstance(json_schema, dict)
+    assert "type" in json_schema
+    assert json_schema["type"] == "object"
+    assert "properties" in json_schema
+    
+    # Check that it has the expected fields from MyModel
+    properties = json_schema["properties"]
+    assert "a" in properties
+    assert "b" in properties
+    assert properties["a"]["type"] == "integer"
+    assert properties["b"]["type"] == "string"
