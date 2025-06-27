@@ -89,7 +89,28 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         else:
             resolved_model = None
         # If resolved_model is None, schema-less mode (well-formed only)
+        if resolved_model is not None:
+            self._validate_model_uses_markdown_types(resolved_model)
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
+
+    def _validate_model_uses_markdown_types(self, model):
+        """Ensure model only uses predefined markdown types, not regular types like str, int, etc."""
+        invalid_fields = []
+        
+        for field, field_info in model.model_fields.items():
+            field_type = field_info.annotation
+            # Check if it's a known markdown type
+            if field_type not in MARKDOWN_TYPE_MAPPING:
+                invalid_fields.append(f"'{field}': {field_type.__name__}")
+        
+        if invalid_fields:
+            available_types = ", ".join([cls.__name__ for cls in MARKDOWN_TYPE_MAPPING.keys()])
+            raise ValueError(
+                f"Markdown validation only supports predefined markdown types. "
+                f"Invalid fields found: {', '.join(invalid_fields)}. "
+                f"Available markdown types: {available_types}. "
+                f"Use Heading1-6 for headings, Paragraph for text, etc."
+            )
 
     # Class methods
     @classmethod
@@ -318,39 +339,13 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         except Exception as e:
             return ValidationResult(is_valid=False, error_message=f"Invalid Markdown: {e}", hint=self.initial_hint)
 
-        print("parsed")
         valid, err, values = self._match_fields(ast, model=self.model, strict=strict)
         if not valid:
             return ValidationResult(is_valid=False, error_message=err, hint=self.initial_hint)
         
-        print("matched")
-        
-        # Collect info_loss for type conversions
-        info_loss = {}
-        converted_values = {}
-        
-        for field_name, raw_value in values.items():
-            field_info = self.model.model_fields[field_name]
-            expected_type = field_info.annotation
-            
-            # Use type_matcher to convert and track info_loss
-            match_result = self.type_matcher.validate_and_convert(raw_value, expected_type)
-            if not match_result.is_valid:
-                return ValidationResult(
-                    is_valid=False, 
-                    error_message=f"Field {field_name}: {match_result.error}", 
-                    hint=self.initial_hint
-                )
-            
-            converted_values[field_name] = match_result.value
-            
-            # Collect type conversion info loss
-            if match_result.info_loss:
-                info_loss[field_name] = match_result.info_loss
-        
         # Create an instance of the model with converted values
         try:
-            result_type = self.model(**converted_values)
+            result_type = self.model(**values)
         except Exception as e:
             return ValidationResult(
                 is_valid=False, 
@@ -363,7 +358,6 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             validated_text=response,
             raw_text=response, 
             result_type=result_type,
-            info_loss=info_loss if info_loss else None
         )
 
     def _describe_structure(self, model, indent=0):

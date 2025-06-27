@@ -34,12 +34,6 @@ class FlatPerson(BaseModel):
     age: int  # Will cause info_loss if given "25.7"
     score: float
 
-# Markdown-specific model
-class MarkdownReport(BaseModel):
-    title: Heading1
-    summary: Paragraph
-    score: int  # Will cause info_loss if content has "85.7"
-
 
 # Test data that will cause info_loss (float values for int fields)
 TEST_DATA = {
@@ -109,13 +103,6 @@ John Doe,25.7,85.123""",
         "model": FlatPerson,
         "expected_info_loss_fields": ["age"]  # CSV is flat, only direct field info_loss
     },
-    
-    "markdown": {
-        "content": """# My Report Title
-This is a summary with a score of 85.7 embedded in the text.""",
-        "model": MarkdownReport,
-        "expected_info_loss_fields": []  # Markdown extracts text, conversion happens later
-    }
 }
 
 VALIDATOR_CLASSES = {
@@ -124,7 +111,6 @@ VALIDATOR_CLASSES = {
     "xml": XMLStructureValidator,
     "yaml": YAMLStructureValidator,
     "csv": CSVStructureValidator,
-    "markdown": MarkdownStructureValidator,
 }
 
 
