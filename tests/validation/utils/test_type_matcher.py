@@ -1,8 +1,8 @@
 import pytest
-from lamia.validation.utlis.type_matcher import TypeMatcher
+from lamia.validation.utils.type_matcher import TypeMatcher
 import typing
 from typing import get_origin
-from lamia.validation.utlis.error_messages import (
+from lamia.validation.utils.error_messages import (
     error_msg_none_not_allowed,
     error_msg_cannot_convert_to_any_of,
     error_msg_expected_list_got,
