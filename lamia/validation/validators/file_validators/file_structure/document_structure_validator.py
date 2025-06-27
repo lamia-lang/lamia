@@ -3,7 +3,8 @@ from ....base import BaseValidator, ValidationResult
 import typing
 import re
 from typing import get_origin, get_args, Any, Union
-from lamia.validation.utlis.type_matcher import TypeMatcher
+from lamia.validation.utils.type_matcher import TypeMatcher
+from lamia.validation.utils.pydantic_utils import get_pydantic_json_schema
 from pydantic import BaseModel
 from typing import Callable
 
@@ -146,14 +147,24 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Describe the expected structure from a Pydantic model for this file format."""
         pass
 
+    def _get_model_schema_hint(self) -> str:
+        """Get the JSON schema hint for the model. Child classes can use this instead of directly importing schema functions."""
+        if self.model is not None:
+            schema = get_pydantic_json_schema(self.model)
+            return f"Expected target pydantic type in JSON format to be extracted from the {self.file_type().upper()}:\n{schema}"
+        return ""
+
     @property
     def initial_hint(self) -> str:
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
+            schema_hint = self._get_model_schema_hint()
             return (
                 f"Please ensure the {self.file_type()} matches the required structure.\n"
                 "Expected structure:\n"
-                + '\n'.join(structure_lines)
+                + '\n'.join(structure_lines) + "\n"
+                + f"Expected target pydantic type in JSON format to be extracted from the {self.file_type().upper()}:\n"
+                + schema_hint
             )
         else:
             return f"Please return only valid {self.file_type()}, with no explanation or extra text."

@@ -76,7 +76,7 @@ Expected structure (as direct children under <html>):
 <mysubmodel>
   <myint>integer value</myint>
 </mysubmodel>
-Expected target pydantic type in json format to be extracted from the HTML:
+Expected target pydantic type in JSON format to be extracted from the HTML:
 {"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundModel","type":"object"}
 ''',
         "permissive": '''
@@ -87,7 +87,7 @@ Required fields that must be present somewhere under <html> root tags:
 <mysubmodel>
   <myint>integer value</myint>
 </mysubmodel>
-Expected target pydantic type in json format to be extracted from the HTML:
+Expected target pydantic type in JSON format to be extracted from the HTML:
 {"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundModel","type":"object"}
 ''' 
     },
@@ -96,39 +96,49 @@ Expected target pydantic type in json format to be extracted from the HTML:
 Please ensure the JSON matches the required structure exactly.
 Expected structure:
 {
-  "mystr": "...",
+  "mystr": ...,
   "mysubmodel": {
     "myint": ...
   }
 }
+Expected target pydantic type in JSON format to be extracted from the JSON:
+{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundModel","type":"object"}
 ''',
         "permissive": '''
 Please ensure the JSON contains the required fields with the correct types.
 The fields can be nested within other JSON objects.
 Required fields that must be present:
-"mystr": "..." (string)
-"mysubmodel": {
-  "myint": ... (integer)
+{
+  "mystr": ...,
+  "mysubmodel": {
+    "myint": ...
+  }
 }
+Expected target pydantic type in JSON format to be extracted from the JSON:
+{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundModel","type":"object"}
 '''
     },
     "xml_structure": {
         'strict': '''
 Please ensure the XML matches the required structure exactly.
 Expected structure (as direct children under root):
-<mystr>...text...</mystr>
+<mystr>string value</mystr>
 <mysubmodel>
-  <myint>...text...</myint>
+  <myint>integer value</myint>
 </mysubmodel>
+Expected target pydantic type in JSON format to be extracted from the XML:
+{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundModel","type":"object"}
 ''',
         "permissive": '''
 Please ensure the XML contains the required elements somewhere in the structure.
 The elements can be nested within other XML elements.
 Required elements that must be present somewhere:
-<mystr>...text...</mystr>
+<mystr>string value</mystr>
 <mysubmodel>
-  <myint>...text...</myint>
+  <myint>integer value</myint>
 </mysubmodel>
+Expected target pydantic type in JSON format to be extracted from the XML:
+{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundModel","type":"object"}
 '''
     },
     "yaml_structure": {

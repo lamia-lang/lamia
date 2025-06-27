@@ -29,18 +29,21 @@ class XMLStructureValidator(DocumentStructureValidator):
     def initial_hint(self) -> str:
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
+            schema_hint = self._get_model_schema_hint()
             if self.strict:
                 return (
                     "Please ensure the XML matches the required structure exactly.\n"
                     "Expected structure (as direct children under root):\n"
-                    + '\n'.join(structure_lines)
+                    + '\n'.join(structure_lines) + "\n" +
+                    schema_hint
                 )
             else:
                 return (
                     "Please ensure the XML contains the required elements somewhere in the structure.\n"
                     "The elements can be nested within other XML elements.\n"
                     "Required elements that must be present somewhere:\n"
-                    + '\n'.join(structure_lines)
+                    + '\n'.join(structure_lines) + "\n" +
+                    schema_hint
                 )
         else:
             return "Please return only valid XML, with no explanation or extra text."
@@ -128,5 +131,20 @@ class XMLStructureValidator(DocumentStructureValidator):
                 lines.extend(self._describe_structure(submodel, indent + 1))
                 lines.append(f'{prefix}</{field}>')
             else:
-                lines.append(f'{prefix}<{field}>...text...</{field}>')
-        return lines 
+                # Always show type-specific hints for better LLM guidance (like HTML validator)
+                type_hint = self._get_type_hint(submodel)
+                lines.append(f'{prefix}<{field}>{type_hint}</{field}>')
+        return lines
+
+    def _get_type_hint(self, annotation):
+        """Get a user-friendly type hint for the annotation."""
+        if annotation == str:
+            return "string value"
+        elif annotation == int:
+            return "integer value"
+        elif annotation == float:
+            return "float value"
+        elif annotation == bool:
+            return "boolean value"
+        else:
+            return "value" 

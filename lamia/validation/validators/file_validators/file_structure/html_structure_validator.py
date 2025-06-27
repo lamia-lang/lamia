@@ -36,14 +36,12 @@ class HTMLStructureValidator(DocumentStructureValidator):
     def initial_hint(self) -> str:
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
-            json_schema = self.model.model_json_schema()
-            json_schema_str = json.dumps(json_schema, separators=(',', ':'))
+            json_schema_str = self._get_model_schema_hint()
             if self.strict:
                 return (
                     "Please ensure the HTML matches the required structure exactly.\n" +
                     "Expected structure (as direct children under <html>):\n" +
                     '\n'.join(structure_lines) + "\n" +
-                    "Expected target pydantic type in json format to be extracted from the HTML:\n" +
                     json_schema_str
                 )
             else:
@@ -52,7 +50,6 @@ class HTMLStructureValidator(DocumentStructureValidator):
                     "The fields can be nested within other HTML elements like <body>, <div>, etc.\n" +
                     "Required fields that must be present somewhere under <html> root tags:\n" +
                     '\n'.join(structure_lines) + "\n" +
-                    "Expected target pydantic type in json format to be extracted from the HTML:\n" +
                     json_schema_str
                 )
         else:

@@ -5,6 +5,7 @@ from .document_structure_validator import DocumentStructureValidator, TextAround
 from ....base import ValidationResult
 from .utils import import_model_from_path
 
+
 class JSONStructureValidator(DocumentStructureValidator):
     """Validates if the JSON matches a given Pydantic model structure."""
     def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
@@ -28,43 +29,27 @@ class JSONStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        if self.model is not None:
-            structure_lines = self._describe_structure(self.model)
+        if self.model is not None and self.generate_hints:
+            # Generate clean JSON structure
+            structure_lines = self._describe_structure(self.model, strict_mode=self.strict)
+            json_structure = "{\n" + '\n'.join(f"  {line}" for line in structure_lines) + "\n}"
+            
+            schema_hint = self._get_model_schema_hint()
+            
             if self.strict:
-                strict_lines = []
-                for i, line in enumerate(structure_lines):
-                    if 'mystr' in line:
-                        formatted_line = line.replace('...', '"..."')
-                        # Add comma for the first field
-                        strict_lines.append(f"  {formatted_line},")
-                    else:
-                        strict_lines.append(f"  {line}")
                 return (
                     "Please ensure the JSON matches the required structure exactly.\n"
                     "Expected structure:\n"
-                    "{\n"
-                    + '\n'.join(strict_lines)
-                    + "\n}"
+                    f"{json_structure}\n"
+                    f"{schema_hint}"
                 )
             else:
-                permissive_lines = []
-                for line in structure_lines:
-                    if '...' in line:
-                        if 'mystr' in line:
-                            permissive_lines.append(line.strip().replace('...', '"..." (string)'))
-                        else:
-                            # Keep proper indentation for nested fields
-                            if line.startswith('  '):
-                                permissive_lines.append(f"  {line.strip().replace('...', '... (integer)')}")
-                            else:
-                                permissive_lines.append(line.strip().replace('...', '... (integer)'))
-                    else:
-                        permissive_lines.append(line)
                 return (
                     "Please ensure the JSON contains the required fields with the correct types.\n"
                     "The fields can be nested within other JSON objects.\n"
                     "Required fields that must be present:\n"
-                    + '\n'.join(permissive_lines)
+                    f"{json_structure}\n"
+                    f"{schema_hint}"
                 )
         else:
             return "Please return only valid JSON, with no explanation or extra text. The response must be a single JSON object or array."    
@@ -123,18 +108,22 @@ class JSONStructureValidator(DocumentStructureValidator):
     def get_subtree_string(self, elem):
         return json.dumps(elem, ensure_ascii=False, separators=(',', ':'))
     
-    def _describe_structure(self, model, indent=0):
+    def _describe_structure(self, model, indent=0, strict_mode=True):
         lines = []
         prefix = '  ' * indent
         
-        for field, field_info in model.model_fields.items():
+        field_items = list(model.model_fields.items())
+        for i, (field, field_info) in enumerate(field_items):
             submodel = field_info.annotation
+            is_last = (i == len(field_items) - 1)
+            comma = "" if is_last else ","
             
             if hasattr(submodel, "model_fields"):
                 lines.append(f'{prefix}"{field}": {{')
-                lines.extend(self._describe_structure(submodel, indent + 1))
-                lines.append(f"{prefix}}}")
+                lines.extend(self._describe_structure(submodel, indent + 1, strict_mode=strict_mode))
+                lines.append(f"{prefix}}}{comma}")
             else:
-                lines.append(f'{prefix}"{field}": ...')
+                # Universal ... for all field types - Pydantic schema provides type information
+                lines.append(f'{prefix}"{field}": ...{comma}')
         
         return lines
