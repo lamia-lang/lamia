@@ -73,7 +73,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 )
             else:
                 raise TextAroundPayloadError(
-                    validator_class_name="HTML",
+                    expected_file_format=self.file_type(),
                     original_text=payload,
                     payload_text=match.group(0)
                 )

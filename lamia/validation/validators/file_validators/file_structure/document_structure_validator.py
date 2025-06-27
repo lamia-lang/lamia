@@ -31,9 +31,9 @@ class TextAroundPayloadError(BaseValidationError):
             following_text = original_text[original_text.find(payload_text) + len(payload_text):]
             
             if preceding_text:
-                hint += f" The response should not include any text before the {expected_file_format}. Please do not include texts like '{preceding_text}' before the {validator_class_name} content."
+                hint += f" The response should not include any text before the {expected_file_format}. Please do not include texts like '{preceding_text}' before the {expected_file_format} content."
             if following_text:
-                hint += f" The response should not include any text after the {expected_file_format}. Please do not include texts like '{following_text}' after the {validator_class_name} content."
+                hint += f" The response should not include any text after the {expected_file_format}. Please do not include texts like '{following_text}' after the {expected_file_format} content."
         except (ValueError, AttributeError):
             # Handle cases where find() fails or other text processing issues
             hint += " The response should only contain the expected payload format without any additional text before or after it."
@@ -112,7 +112,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
                     )
                 if payload != stripped:
                     raise TextAroundPayloadError(
-                        validator_class_name="JSON",
+                        expected_file_format=self.file_type(),
                         original_text=response,
                         payload_text=payload
                     )

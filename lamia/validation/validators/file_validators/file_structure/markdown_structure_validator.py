@@ -107,27 +107,28 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             structure_lines = self._describe_structure(self.model)
             if self.strict:
                 return (
-                    "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).\n"
+                    "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).\n"
                     "Ensure the Markdown matches the required structure exactly.\n"
                     "Expected structure:\n"
                     + '\n'.join(structure_lines)
                 )
             else:
                 return (
-                    "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).\n"
+                    "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).\n"
                     "Ensure the Markdown contains the required fields with the correct types.\n"
                     "The fields can be nested within other Markdown structures.\n"
                     "Required fields that must be present:\n"
                     + '\n'.join(structure_lines)
                 )
         else:
-            return "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```) and ensure it is well-formed."
+            return "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```) and ensure it is well-formed."
 
     # Public methods
     def extract_payload(self, response: str) -> str:
         markdown_match = re.search(r'```(?:markdown)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
         if markdown_match:
             return markdown_match.group(1).strip()
+        return None
 
     def load_payload(self, payload: str) -> any:
         # Parse markdown into an AST using mistune 3.x
@@ -317,9 +318,12 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         except Exception as e:
             return ValidationResult(is_valid=False, error_message=f"Invalid Markdown: {e}", hint=self.initial_hint)
 
+        print("parsed")
         valid, err, values = self._match_fields(ast, model=self.model, strict=strict)
         if not valid:
             return ValidationResult(is_valid=False, error_message=err, hint=self.initial_hint)
+        
+        print("matched")
         
         # Collect info_loss for type conversions
         info_loss = {}
