@@ -29,6 +29,8 @@ class YAMLStructureValidator(DocumentStructureValidator):
     def initial_hint(self) -> str:
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
+            schema_hint = self._get_model_schema_hint()
+            
             if self.strict:
                 strict_lines = []
                 for line in structure_lines:
@@ -39,7 +41,8 @@ class YAMLStructureValidator(DocumentStructureValidator):
                 return (
                     "Please ensure the YAML matches the required structure exactly.\n"
                     "Expected structure:\n"
-                    + '\n'.join(strict_lines)
+                    + '\n'.join(strict_lines) + "\n"
+                    + schema_hint
                 )
             else:
                 permissive_lines = []
@@ -52,7 +55,8 @@ class YAMLStructureValidator(DocumentStructureValidator):
                     "Please ensure the YAML contains the required fields with the correct types.\n"
                     "The fields can be nested within other YAML objects.\n"
                     "Required fields that must be present:\n"
-                    + '\n'.join(permissive_lines)
+                    + '\n'.join(permissive_lines) + "\n"
+                    + schema_hint
                 )
         else:
             return "Please return only valid YAML, with no explanation or extra text."
