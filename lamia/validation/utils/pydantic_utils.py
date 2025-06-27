@@ -17,10 +17,19 @@ class TokenOptimizedGenerateJsonSchema(GenerateJsonSchema):
         return json_schema
     
     def _optimize_schema(self, schema_dict: Dict[str, Any]) -> None:
-        """Recursively remove title fields and other redundant information."""
+        """Recursively remove title metadata fields and other redundant information."""
         if isinstance(schema_dict, dict):
-            # Remove title fields
-            schema_dict.pop('title', None)
+            # Only remove title if this looks like a field definition with type/ref info
+            # Don't remove title from properties objects that represent actual model fields
+            has_type_info = any(key in schema_dict for key in ['type', '$ref', 'anyOf', 'allOf', 'oneOf'])
+            has_properties = 'properties' in schema_dict
+            
+            # Remove title metadata from field definitions, but not from properties lists
+            if has_type_info and not has_properties:
+                schema_dict.pop('title', None)
+            # Also remove title from the root schema if it has properties (schema-level title)
+            elif has_properties:
+                schema_dict.pop('title', None)
             
             # Recursively process all nested objects
             for key, value in list(schema_dict.items()):
