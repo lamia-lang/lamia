@@ -364,16 +364,16 @@ Please return only the CSV table, starting with the header row and ending with t
 Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).
 Ensure the Markdown matches the required structure exactly.
 Expected structure:
-title: "..."
-content: "..."
+title: # Level 1 heading (starts with single #)
+content: Regular paragraph text (plain text without special formatting)
 ''',
         "permissive": '''
 Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).
 Ensure the Markdown contains the required fields with the correct types.
 The fields can be nested within other Markdown structures.
 Required fields that must be present:
-title: "..." (Heading1)
-content: "..." (Paragraph)
+title: # Level 1 heading (starts with single #)
+content: Regular paragraph text (plain text without special formatting)
 '''
     },
     "txt_structure": {

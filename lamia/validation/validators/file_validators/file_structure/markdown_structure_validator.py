@@ -106,31 +106,19 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
             if self.strict:
-                strict_lines = []
-                for line in structure_lines:
-                    if 'mystr' in line:
-                        strict_lines.append(line.replace(': ...', ': "..."'))
-                    else:
-                        strict_lines.append(line)
                 return (
                     "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).\n"
                     "Ensure the Markdown matches the required structure exactly.\n"
                     "Expected structure:\n"
-                    + '\n'.join(strict_lines)
+                    + '\n'.join(structure_lines)
                 )
             else:
-                permissive_lines = []
-                for line in structure_lines:
-                    if 'mystr' in line:
-                        permissive_lines.append(line.replace(': ...', ': "..." (string)'))
-                    else:
-                        permissive_lines.append(line.replace(': ...', ': ... (integer)'))
                 return (
                     "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).\n"
                     "Ensure the Markdown contains the required fields with the correct types.\n"
                     "The fields can be nested within other Markdown structures.\n"
                     "Required fields that must be present:\n"
-                    + '\n'.join(permissive_lines)
+                    + '\n'.join(structure_lines)
                 )
         else:
             return "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```) and ensure it is well-formed."
@@ -375,13 +363,60 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         )
 
     def _describe_structure(self, model, indent=0):
+        """Describe structure using LLM-friendly markdown syntax descriptions instead of class names."""
         lines = []
         prefix = '  ' * indent
         for field, field_info in model.model_fields.items():
-            submodel = field_info.annotation
-            if hasattr(submodel, "model_fields"):
+            field_type = field_info.annotation
+            if hasattr(field_type, "model_fields"):
                 lines.append(f'{prefix}{field}:')
-                lines.extend(self._describe_structure(submodel, indent + 1))
+                lines.extend(self._describe_structure(field_type, indent + 1))
             else:
-                lines.append(f'{prefix}{field}: ...')
+                # Convert markdown type to human-readable description
+                markdown_description = self._get_markdown_type_description(field_type)
+                lines.append(f'{prefix}{field}: {markdown_description}')
         return lines 
+
+    def _get_markdown_type_description(self, field_type):
+        """Convert a markdown field type to a human-readable description for LLMs."""
+        type_descriptions = {
+            Heading1: "# Level 1 heading (starts with single #)",
+            Heading2: "## Level 2 heading (starts with ##)",
+            Heading3: "### Level 3 heading (starts with ###)",
+            Heading4: "#### Level 4 heading (starts with ####)",
+            Heading5: "##### Level 5 heading (starts with #####)",
+            Heading6: "###### Level 6 heading (starts with ######)",
+            Paragraph: "Regular paragraph text (plain text without special formatting)",
+            BoldText: "**Bold text** (surrounded by double asterisks)",
+            ItalicText: "*Italic text* (surrounded by single asterisks)",
+            Strikethrough: "~~Strikethrough text~~ (surrounded by double tildes)",
+            CodeBlock: "```code block``` (fenced code block with triple backticks)",
+            InlineCode: "`inline code` (surrounded by single backticks)",
+            ListItem: "- List item (bullet point starting with dash)",
+            Blockquote: "> Blockquote (line starting with >)",
+            Table: "| Table | with | columns | (pipe-separated values)",
+            Image: "![Alt text](image-url) (image syntax)",
+            TaskListItem: "- [ ] Task list item (checkbox list item)",
+            Footnote: "[^footnote] (footnote reference)",
+            HorizontalRule: "--- (horizontal rule with three dashes)",
+            Url: "[Link text](url) (link syntax)",
+        }
+        
+        # Handle generic types like str, int, etc.
+        if field_type == str:
+            return "string value"
+        elif field_type == int:
+            return "integer value"
+        elif field_type == float:
+            return "float value"
+        elif field_type == bool:
+            return "boolean value"
+        
+        # Get description for markdown types
+        description = type_descriptions.get(field_type)
+        if description:
+            return description
+        
+        # Fallback for unknown types
+        type_name = getattr(field_type, '__name__', str(field_type))
+        return f"{type_name} (custom type)"
