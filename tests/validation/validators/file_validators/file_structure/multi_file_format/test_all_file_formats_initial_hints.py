@@ -240,7 +240,7 @@ ERROR_MESSAGES = {
     "xml": "Please return only valid XML, with no explanation or extra text.",
     "yaml": "Please return only valid YAML, with no explanation or extra text.",
     "csv": "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.",
-    "markdown": "Please provide your Markdown content wrapped in triple backticks (```markdown ... ```) and ensure it is well-formed.",
+    "markdown": "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```) and ensure it is well-formed.",
     "html_structure": { 
         'strict': '''
 Please ensure the HTML matches the required structure exactly.
@@ -361,14 +361,14 @@ Please return only the CSV table, starting with the header row and ending with t
     }, 
     "markdown_structure": {
         'strict': '''
-Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).
+Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).
 Ensure the Markdown matches the required structure exactly.
 Expected structure:
 title: # Level 1 heading (starts with single #)
 content: Regular paragraph text (plain text without special formatting)
 ''',
         "permissive": '''
-Please provide your Markdown content wrapped in triple backticks (```markdown ... ```).
+Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).
 Ensure the Markdown contains the required fields with the correct types.
 The fields can be nested within other Markdown structures.
 Required fields that must be present:
