@@ -91,7 +91,11 @@ class CSVStructureValidator(DocumentStructureValidator):
     def extract_payload(self, response: str) -> str:
         markdown_match = re.search(r'```(?:csv)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
         if markdown_match:
-            return markdown_match.group(1).strip()
+            csv_candidate = markdown_match.group(1).strip()
+            if self._is_valid_csv(csv_candidate):
+                return csv_candidate
+            else:
+                return None
         
         if self.model is not None:
             return self._extract_csv_with_model(response)
@@ -99,28 +103,52 @@ class CSVStructureValidator(DocumentStructureValidator):
             return self._extract_csv_generic(response)
     
     def _extract_csv_with_model(self, response: str) -> str:
-        """Extract CSV by looking for expected header"""
+        """Extract CSV by looking for expected header - be permissive for duplicate/malformed headers"""
         expected_headers = [",".join(self.model.model_fields.keys()),";".join(self.model.model_fields.keys())]
+        model_fields = set(self.model.model_fields.keys())
         lines = response.split('\n')
         
+        # First try exact header match
         for i, line in enumerate(lines):
             if line.strip() in expected_headers:
                 separator = ',' if ',' in line else ';'
-                # Found header, extract from here until empty line or end
+                # Found exact header, extract from here until empty line or end
                 csv_lines = []
                 for j in range(i, len(lines)):
                     line_stripped = lines[j].strip()
                     if not line_stripped:
                         break
-                    # Count separators outside of quotes
-                    expected_sep_count = len(self.model.model_fields.keys()) - 1
-                    actual_sep_count = self._count_separators_outside_quotes(line_stripped, separator)
-                    if actual_sep_count != expected_sep_count:
-                        break
                     csv_lines.append(line_stripped)
-                return '\n'.join(csv_lines)
+                
+                extracted_csv = '\n'.join(csv_lines)
+                return extracted_csv
         
-        return response
+        # If no exact match, look for CSV that contains our model fields (even with duplicates)
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+                
+            # Check if this line contains our field names with separators
+            has_separators = ',' in line_stripped or ';' in line_stripped
+            if has_separators:
+                separator = ',' if ',' in line_stripped else ';'
+                # Split the header and check if it contains our model fields
+                header_fields = [f.strip() for f in line_stripped.split(separator)]
+                
+                # If this header contains any of our model fields, treat it as potential CSV
+                if any(field in model_fields for field in header_fields if field):
+                    csv_lines = []
+                    for j in range(i, len(lines)):
+                        line_stripped = lines[j].strip()
+                        if not line_stripped:
+                            break
+                        csv_lines.append(line_stripped)
+                    
+                    extracted_csv = '\n'.join(csv_lines)
+                    return extracted_csv
+        
+        return None
     
     def _count_separators_outside_quotes(self, line: str, separator: str) -> int:
         """Count separators that are not inside double quotes"""
@@ -144,8 +172,47 @@ class CSVStructureValidator(DocumentStructureValidator):
                 csv_lines.append(line)
             elif csv_lines:  # Found CSV block, stop at first non-CSV line
                 break
+        
+        if csv_lines:
+            extracted_csv = '\n'.join(csv_lines)
+            if self._is_valid_csv(extracted_csv):
+                return extracted_csv
+        
+        return None
+
+
+
+    def _is_valid_csv(self, csv_text: str) -> bool:
+        """Check if the CSV text can be parsed as CSV format (basic format check only)"""
+        try:
+            # Basic check: ensure it has at least 2 lines (header + data)
+            lines = csv_text.strip().split('\n')
+            if len(lines) < 2:
+                return False
                 
-        return '\n'.join(csv_lines) if csv_lines else response
+            # Check if we can at least detect a CSV dialect
+            f = io.StringIO(csv_text)
+            sample = f.read(1024)
+            f.seek(0)
+            
+            # Try to sniff dialect - this will fail if it's not CSV-like
+            dialect = csv.Sniffer().sniff(sample, delimiters=[',', ';'])
+            
+            # Try to create a reader - this will fail for completely malformed CSV
+            reader = csv.reader(f, dialect=dialect)
+            
+            # Try to read at least one row to ensure basic parseability
+            first_row = next(reader, None)
+            if first_row is None:
+                return False
+                
+            # Basic sanity check: header should have at least one field
+            if len(first_row) == 0:
+                return False
+                
+            return True
+        except Exception:
+            return False
 
     def load_payload(self, payload: str) -> Any:
         # Returns a tuple: (header, list of row dicts)

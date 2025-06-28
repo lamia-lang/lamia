@@ -124,7 +124,11 @@ class DocumentStructureValidator(BaseValidator, ABC):
             
         try:
             return self.load_payload(payload)
+        except BaseValidationError:
+            # Let semantic validation errors (like DuplicateHeaderError) bubble up unchanged
+            raise
         except Exception as e:
+            # Only wrap basic parsing errors
             raise InvalidPayloadError(
                 expected_file_format=self.file_type(),
                 text=payload,
