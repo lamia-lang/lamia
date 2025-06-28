@@ -335,7 +335,8 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         try:
             ast = self.parse(response)
             if self.model is None:
-                return ValidationResult(is_valid=True)
+                print(ast)
+                return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(ast))
         except Exception as e:
             error_msg = f"Invalid Markdown: {e}"
             return ValidationResult(is_valid=False, error_message=error_msg, hint=self.get_retry_hint(error=e))
@@ -357,23 +358,29 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         
         return ValidationResult(
             is_valid=True, 
-            validated_text=self.extract_payload(response),
-            raw_text=response, 
+            validated_text=self.get_subtree_string(ast),
             result_type=result_type,
         )
     
     def get_subtree_string(self, elem):
         """Convert markdown AST back to string using mistune's MarkdownRenderer."""
+        import mistune
         from mistune.renderers.markdown import MarkdownRenderer
-        from mistune import Markdown
         
-        md_renderer = MarkdownRenderer()
-        md = Markdown(renderer=md_renderer)
+        # Use mistune's MarkdownRenderer to convert AST back to markdown
+        renderer = MarkdownRenderer()
+        md_instance = mistune.create_markdown(renderer=MarkdownRenderer())
         
+        # Create proper state for rendering
+        state = md_instance.inline.state_cls({})
+        
+        # Use the renderer's proper API to render AST tokens back to markdown
         if isinstance(elem, list):
-            return md.renderer.finalize_data(elem)
+            # For a list of tokens, use render_tokens with state
+            return renderer.render_tokens(elem, state)
         else:
-            return md.renderer.finalize_data([elem])
+            # For a single token, use render_token with state
+            return renderer.render_token(elem, state)
 
     def _describe_structure(self, model, indent=0):
         """Describe structure using LLM-friendly markdown syntax descriptions instead of class names."""
