@@ -10,6 +10,7 @@ from lamia.validation.validators import (
     MarkdownValidator, MarkdownStructureValidator,
 )
 from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1
+from lamia.validation.validators.file_validators.file_structure.document_structure_validator import DocumentStructureValidator
 
 # --- Test Models for Structure Validators ---
 class SimpleHTML(BaseModel):
@@ -170,3 +171,69 @@ async def test_no_hint_generation_when_hinting_disabled_for_invalid_payload(stri
         assert not _contains_error_class_path(result.hint), f"Hint contains error class path: {result.hint}"
     assert result.validated_text is None
     assert result.raw_text == chatty_response
+
+# --- Test for Nested Exceptions ---
+class DummyThrowingNestedExceptionValidator(DocumentStructureValidator):
+    """Dummy validator that throws nested exceptions for testing."""
+    
+    @classmethod
+    def name(cls) -> str:
+        return "dummy_nested"
+    
+    @classmethod
+    def file_type(cls) -> str:
+        return "dummy"
+    
+    def _describe_structure(self, model, indent=0):
+        return ["dummy structure"]
+    
+    def extract_payload(self, response: str) -> str:
+        # This will throw a nested exception
+        try:
+            # Inner exception
+            raise ValueError("Inner parsing error occurred")
+        except ValueError as inner_error:
+            # Outer exception that wraps the inner one
+            raise RuntimeError("Outer wrapper error") from inner_error
+    
+    def load_payload(self, payload: str):
+        pass
+    
+    def find_element(self, tree, key):
+        pass
+    
+    def get_text(self, element):
+        pass
+    
+    def has_nested(self, element):
+        return False
+    
+    def iter_direct_children(self, tree):
+        return []
+    
+    def get_name(self, element):
+        pass
+    
+    def find_all(self, tree, key):
+        return []
+    
+    def get_subtree_string(self, elem):
+        return ""
+
+@pytest.mark.asyncio
+async def test_nested_exception_messages_in_hints():
+    """Test that both outer and inner exception messages appear in hints when exceptions are chained."""
+    
+    # Create a validator that will trigger nested exceptions
+    validator = DummyThrowingNestedExceptionValidator(model=None, strict=True, generate_hints=True)
+    
+    # This should cause a nested exception via extract_payload
+    test_input = "some test input"
+    
+    result = await validator.validate(test_input)
+    
+    assert result.is_valid is False
+    assert result.hint is not None
+    assert result.error_message is not None
+    assert "Outer wrapper error" in result.hint
+    assert "Inner parsing error occurred" in result.hint

@@ -115,7 +115,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         try:
             tree = self.parse(response)
         except Exception as e:
-            error_msg = f"Invalid file: {e}"
+            error_msg = f"Invalid file: {str(e)}"
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
@@ -147,7 +147,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         try:
             tree = self.parse(response)
         except Exception as e:
-            error_msg = f"Invalid file: {e}"
+            error_msg = f"Invalid file: {str(e)}"
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,

@@ -82,8 +82,20 @@ class BaseValidator(ABC):
         parts = []
         
         if error:
-            error_lines = traceback.format_exception_only(type(error), error)
-            parts.append(f"Error: {''.join(error_lines).strip()}")
+            # Collect all exception messages in the chain
+            error_messages = []
+            current_error = error
+            while current_error is not None:
+                error_msg = str(current_error)
+                if error_msg:
+                    error_messages.append(error_msg)
+                # Follow the chain: __cause__ (explicit chaining) or __context__ (implicit chaining)
+                current_error = current_error.__cause__ or current_error.__context__
+            
+            if error_messages:
+                # Join all error messages with " -> " to show the chain
+                full_error_message = " caused by ".join(error_messages)
+                parts.append(f"Error: {full_error_message}")
         
         if retry_hint:
             parts.append(retry_hint)
