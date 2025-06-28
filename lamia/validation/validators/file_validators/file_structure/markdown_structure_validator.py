@@ -357,10 +357,23 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         
         return ValidationResult(
             is_valid=True, 
-            validated_text=response,
+            validated_text=self.extract_payload(response),
             raw_text=response, 
             result_type=result_type,
         )
+    
+    def get_subtree_string(self, elem):
+        """Convert markdown AST back to string using mistune's MarkdownRenderer."""
+        from mistune.renderers.markdown import MarkdownRenderer
+        from mistune import Markdown
+        
+        md_renderer = MarkdownRenderer()
+        md = Markdown(renderer=md_renderer)
+        
+        if isinstance(elem, list):
+            return md.renderer.finalize_data(elem)
+        else:
+            return md.renderer.finalize_data([elem])
 
     def _describe_structure(self, model, indent=0):
         """Describe structure using LLM-friendly markdown syntax descriptions instead of class names."""

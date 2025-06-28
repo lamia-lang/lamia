@@ -209,6 +209,11 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Find all elements/fields with the given key anywhere in the tree."""
         pass
 
+    @abstractmethod
+    def get_subtree_string(self, elem):
+        """Convert an element back to its string representation in the original format."""
+        pass
+
     def _validate_tree(self, tree, model, permissive=False):
         errors = []
         values = {}
@@ -306,10 +311,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
             error_message=error_message,
             info_loss=info_loss if info_loss else None
         )
-
-    def get_subtree_string(self, elem):
-        # Default fallback: just str(elem). Should be overridden in subclasses.
-        return str(elem)
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         return self._validare_with_error_handling(response, self.validate_strict_recursive)
