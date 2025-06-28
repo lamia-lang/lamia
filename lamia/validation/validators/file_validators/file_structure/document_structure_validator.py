@@ -336,6 +336,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
         except Exception as e:
             if self.generate_hints:
                 hint = self.get_retry_hint(e, e.hint if isinstance(e, BaseValidationError) and e.hint else "")
-                return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}", hint=hint)
+                return ValidationResult(is_valid=False, error_message=f"Invalid file: {str(e)}", hint=hint)
             else:
-                return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")
+                return ValidationResult(is_valid=False, error_message=f"Invalid file: {str(e)}")
