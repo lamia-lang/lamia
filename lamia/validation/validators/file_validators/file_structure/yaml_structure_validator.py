@@ -1,7 +1,7 @@
 import yaml
 from pydantic import BaseModel, create_model
 import re
-from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
+from .document_structure_validator import DocumentStructureValidator
 from .utils import import_model_from_path
 
 class YAMLStructureValidator(DocumentStructureValidator):
@@ -64,7 +64,12 @@ class YAMLStructureValidator(DocumentStructureValidator):
     def extract_payload(self, response: str) -> str:
         markdown_match = re.search(r'```(?:yaml|yml)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
         if markdown_match:
-            return markdown_match.group(1).strip()
+            yaml_candidate = markdown_match.group(1).strip()
+            try:
+                yaml.safe_load(yaml_candidate)
+                return yaml_candidate
+            except yaml.YAMLError:
+                return None
         else:
             yaml_lines = []
             for line in response.split('\n'):
