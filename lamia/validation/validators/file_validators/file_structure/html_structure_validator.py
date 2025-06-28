@@ -65,18 +65,23 @@ class HTMLStructureValidator(DocumentStructureValidator):
             # Beautifulsoup can perfectly parse even if the LLM is chatty around the HTML tag,
             # We fail intentionally here to have the same behavior as other validators.
             # Also, if there will be a lot of requests to get HTMLs from the LLM, this can save the token usage
-            match = re.search(r'<html', payload, re.IGNORECASE)
-            if not match:
+            html_match = re.search(r'(<html[\s\S]*?</html>)', payload, re.IGNORECASE)
+            if not html_match:
                 raise InvalidPayloadError(
                     expected_file_format=self.file_type(),
                     text=payload,
                 )
             else:
-                raise TextAroundPayloadError(
-                    expected_file_format=self.file_type(),
-                    original_text=payload,
-                    payload_text=match.group(0)
-                )
+                html_content = html_match.group(1)
+                # Check if there's extra text around the HTML content
+                if payload.strip() != html_content.strip():
+                    raise TextAroundPayloadError(
+                        expected_file_format=self.file_type(),
+                        original_text=payload,
+                        payload_text=html_content
+                    )
+                else:
+                    return BeautifulSoup(html_content, "html.parser")
         else:
             return BeautifulSoup(payload, "html.parser")
 
