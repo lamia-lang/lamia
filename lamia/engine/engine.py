@@ -35,7 +35,7 @@ class LamiaEngine:
         self.adapter = None
         self.validation_strategy = None
     
-    def _setup_validation(self):
+    async def _setup_validation(self):
         """Set up the validation strategy if enabled in config."""
         validation_config = self.config_manager.config.get('validation', {})
         if validation_config.get('enabled'):
@@ -47,9 +47,10 @@ class LamiaEngine:
             # Use ValidatorRegistry for registry
             ext_folder = self.config_manager.get_extensions_folder()
             validator_registry = ValidatorRegistry(self.config_manager.config, ext_folder)
+            registry = await validator_registry.get_registry()
             self.validation_strategy = ValidationStrategy(
                 config=retry_config,
-                validator_registry=validator_registry.get_registry()
+                validator_registry=registry
             )
             logger.info("Validation strategy enabled")
         else:
@@ -67,7 +68,7 @@ class LamiaEngine:
             else:
                 self.adapter = None  # Will be lazily initialized in generate()
             # Set up validation if enabled
-            self._setup_validation()
+            await self._setup_validation()
             logger.info("Engine started successfully")
             return True
         except Exception as e:

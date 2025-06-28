@@ -1,7 +1,7 @@
 import os
 import yaml
 
-def create_minimal_config(config_path, with_extensions=False, extensions_folder_name="extensions"):
+def create_minimal_config(config_path: str, with_extensions: bool = False, extensions_folder_name: str = "extensions") -> bool:
     """Create a minimal config.yaml if it does not exist."""
     if os.path.exists(config_path):
         return False  # Already exists
@@ -12,14 +12,14 @@ def create_minimal_config(config_path, with_extensions=False, extensions_folder_
         yaml.safe_dump(config, f, sort_keys=False)
     return True
 
-def ensure_extensions_folder(root_dir, extensions_folder_name="extensions"):
+def ensure_extensions_folder(root_dir: str, extensions_folder_name: str = "extensions") -> str:
     """Create the extensions folder with adapters/ and validators/ subfolders."""
     ext_path = os.path.join(root_dir, extensions_folder_name)
     os.makedirs(os.path.join(ext_path, "adapters"), exist_ok=True)
     os.makedirs(os.path.join(ext_path, "validators"), exist_ok=True)
     return ext_path
 
-def update_config_with_extensions(config_path, extensions_folder_name="extensions"):
+def update_config_with_extensions(config_path: str, extensions_folder_name: str = "extensions") -> bool:
     """Add or update the extensions_folder key in config.yaml."""
     if not os.path.exists(config_path):
         return False
@@ -30,7 +30,7 @@ def update_config_with_extensions(config_path, extensions_folder_name="extension
         yaml.safe_dump(config, f, sort_keys=False)
     return True
 
-def create_env_file(env_path):
+def create_env_file(env_path: str) -> bool:
     """Create a .env file with dummy API keys if it does not exist, and add a comment hinting the user to change them."""
     if os.path.exists(env_path):
         return False  # Already exists
@@ -44,7 +44,7 @@ def create_env_file(env_path):
         f.write(env_content)
     return True
 
-def create_full_default_config(config_path):
+def create_full_default_config(config_path: str) -> bool:
     """Create a full default config.yaml with all settings, overwriting if it exists."""
     config_content = '''# Default model to use (options: openai, openai:gpt-4-32k anthropic, ollama)
 default_model: ollama

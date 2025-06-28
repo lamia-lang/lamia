@@ -4,6 +4,101 @@ This module provides a flexible framework for validating LLM responses in Lamia.
 
 ---
 
+## Method Contracts and Return Values
+
+### BaseValidator Abstract Methods
+
+When implementing custom validators, you must follow these strict contracts:
+
+#### `name` property
+- **Returns**: `str` - A unique name for the validator
+- **When**: Always called during validator registration
+- **Contract**: Must return a string that doesn't conflict with built-in validators
+
+#### `initial_hint` property  
+- **Returns**: `str` - A hint for the LLM prompt
+- **When**: Called before sending requests to the LLM
+- **Contract**: Must return a descriptive string to guide LLM behavior
+
+#### `validate()` method (Simple validators)
+- **Parameters**: `response: str, **kwargs`
+- **Returns**: `ValidationResult` - Always returns a ValidationResult object
+- **When**: Called for each validation check
+- **Contract**: Must return `ValidationResult(is_valid=True/False, ...)` - never None
+
+#### `validate_strict()` / `validate_permissive()` methods (Context-aware validators)
+- **Parameters**: `response: str, **kwargs`
+- **Returns**: `ValidationResult` - Always returns a ValidationResult object  
+- **When**: Called based on the `strict` flag
+- **Contract**: Must return `ValidationResult(is_valid=True/False, ...)` - never None
+- **Important**: If implementing these, do NOT implement `validate()` as well
+
+### DocumentStructureValidator Abstract Methods
+
+For file structure validators, these methods have specific contracts:
+
+#### `extract_payload(response: str) -> str | None`
+- **Returns**: 
+  - `str` - The extracted payload when valid content is found
+  - `None` - When no valid payload is found in the response
+- **When**: Called during parsing to extract valid content from LLM response
+- **Contract**: 
+  - Must return `None` if no valid payload can be extracted
+  - Must return the clean payload string if extraction succeeds
+  - Should handle both markdown code blocks and plain text
+
+#### `load_payload(payload: str) -> Any`
+- **Returns**: `Any` - Parsed Python object from the payload
+- **When**: Called after successful payload extraction
+- **Contract**: 
+  - Must parse the payload string into appropriate Python objects
+  - Should raise exceptions for invalid payloads (caught by framework)
+  - Never called with None payload
+
+#### `find_element(tree, key) -> Any | None`
+- **Returns**: 
+  - The found element if key exists
+  - `None` if key not found
+- **When**: Called during structure validation
+- **Contract**: Must handle the parsed tree structure for your format
+
+#### `get_text(element) -> Any`
+- **Returns**: The primitive value or text content of the element
+- **When**: Called to extract values from parsed elements
+- **Contract**: Must return the actual value (str, int, float, bool, etc.)
+
+#### `has_nested(element) -> bool`
+- **Returns**: `bool` - True if element has nested structure
+- **When**: Called to determine if recursive validation is needed
+- **Contract**: Must accurately detect nested vs primitive elements
+
+#### `iter_direct_children(tree) -> Iterator`
+- **Returns**: Iterator yielding direct child elements
+- **When**: Called during recursive structure traversal
+- **Contract**: Must yield only direct children, not all descendants
+
+#### `get_name(element) -> str | None`
+- **Returns**: The name/tag/key of the element
+- **When**: Called to identify elements during validation
+- **Contract**: Format-specific implementation
+
+#### `find_all(tree, key) -> List`
+- **Returns**: List of all elements matching the key
+- **When**: Called for recursive searches
+- **Contract**: Must find all occurrences, not just first match
+
+#### `get_subtree_string(elem) -> str`
+- **Returns**: String representation of the element in original format
+- **When**: Called for error reporting and debugging
+- **Contract**: Must produce valid format-specific string
+
+#### `_describe_structure(model, indent=0) -> List[str]`
+- **Returns**: List of strings describing expected structure
+- **When**: Called to generate helpful hints for users
+- **Contract**: Must return format-specific structure description
+
+---
+
 ## Built-in Validators
 
 ### File validators
@@ -16,7 +111,8 @@ This module provides a flexible framework for validating LLM responses in Lamia.
 
 ### File Structure Validators
 
-These validators not only check if the response is valid in the given format, but also validate that it matches a specific Pydantic model structure:
+These validators not only check if the response is valid in the given format, but also validate that it matches a specific Pydantic model structure, concurrently they create an result object according to the provided pydantic schema, just like ObjectValidator (see below). When the type
+can be fetched these vlaidators will fetch it from the file so that you can use teh data in a structured form
 
 - **JSONStructureValidator**: Validates JSON against a Pydantic model schema
 - **YAMLStructureValidator**: Validates YAML against a Pydantic model schema  
@@ -224,10 +320,6 @@ And the model above, validation will pass if the structure matches.
 
 You can create custom validators as either classes (subclassing `BaseValidator`) or as standalone functions.
 
-### Context-Aware vs Non-Context-Aware Validators
-
-There are two styles of validators you can implement:
-
 #### 1. Simple Validators
 - **Implement only the `validate()` method.**
 - These validators check the response as-is and do not "clean" or extract content.
@@ -313,7 +405,7 @@ CodeValidator(strict=True) and just call a validate() on it. You do not need to 
 Generally, file validators need to support both strict or permissive modes. You can create a
 new file validator for not yet supported file type by extending `DocumentStructureValidator`.
 
-### Using DocumentStructureValidator
+In this case you don't need to write validate_strict and validate_strict() and validate_permissive() or validate() functions and inplemement the validator from zero
 
 The `DocumentStructureValidator` is an abstract base class that provides a framework for validating structured documents against Pydantic models. It handles the heavy lifting of:
 
@@ -405,57 +497,7 @@ The `DocumentStructureValidator` constructor accepts these parameters:
 - `model_module`: Module to import models from when using `model_name` (default: "models")
 - `generate_hints`: Whether to generate helpful hints in error messages (default: False)
 
-### Example Usage
-
-```python
-# Using with a Pydantic model
-from pydantic import BaseModel
-
-class Person(BaseModel):
-    name: str
-    age: int
-
-validator = JSONStructureValidator(model=Person, strict=False, generate_hints=True)
-
-# Using with model name (will import from models.Person)
-validator = JSONStructureValidator(model_name="Person", model_module="myapp.models")
-
-# Using with dynamic schema
-schema = {"name": (str, ...), "age": (int, ...)}
-validator = JSONStructureValidator(schema=schema)
-```
-
-### Configuration in config.yaml
-
-```yaml
-validation:
-  enabled: true
-  validators:
-    - type: "json_structure"
-      model_name: "Person"
-      model_module: "models"
-      strict: false
-      generate_hints: true
-```
-
 ### Advanced Features
-
-#### JSON Schema Generation
-
-The validation module includes utilities for generating JSON schemas from Pydantic models, with optional token optimization:
-
-```python
-from lamia.validation.validators.file_validators.file_structure.schema_utils import (
-    get_json_schema, 
-    get_formatted_json_schema_human_readable
-)
-
-# Get compact JSON schema
-schema = get_json_schema(model, optimize_for_tokens=True)
-
-# Get human-readable formatted schema  
-readable_schema = get_formatted_json_schema_human_readable(model)
-```
 
 #### Type Matching and Conversion
 
@@ -475,6 +517,77 @@ The validation framework provides specialized exception types:
 - `InvalidPayloadError`: When no valid payload is found
 
 These exceptions automatically generate helpful hints for the LLM to improve its responses.
+
+---
+
+## Runtime Contract Checking
+
+Lamia includes a comprehensive runtime contract checker that validates custom validator implementations against the documented contracts. This helps catch implementation errors that Python's type system might miss.
+
+### Automatic Contract Checking
+
+When you load custom validators through the ValidatorRegistry (via config.yaml or programmatically), the contract checker automatically runs to verify:
+
+- Property return types (`name`, `initial_hint`)
+- Validation method return types (`ValidationResult` objects)
+- `extract_payload` returns `str` or `None` as documented
+- All required abstract methods are implemented
+- Method signatures match the expected contracts
+
+### Configuration
+
+Contract checking is enabled by default but can be configured:
+
+```yaml
+validation:
+  enabled: true
+  enable_contract_checking: true  # Enable/disable contract checking
+  strict_contract_checking: false  # If true, reject validators that fail contract checks
+  validators:
+    - type: "custom_file"
+      path: "my_validator.py"
+```
+
+### Manual Contract Checking
+
+You can also run contract checks manually in your code:
+
+```python
+from lamia.validation.contract_checker import check_validator_contracts
+
+# Check a validator class
+passed, violations = await check_validator_contracts(MyCustomValidator)
+
+if not passed:
+    for violation in violations:
+        print(f"Contract violation in {violation.method_name}:")
+        print(f"  Expected: {violation.expected}")
+        print(f"  Got: {violation.actual}")
+        print(f"  Error: {violation.error_message}")
+```
+
+### What Gets Checked
+
+#### BaseValidator Contracts
+- `name` property returns non-empty string
+- `initial_hint` property returns string
+- `validate()` method returns `ValidationResult` object
+- `validate_strict()` and `validate_permissive()` return `ValidationResult` objects
+
+#### DocumentStructureValidator Contracts
+- `extract_payload(response: str)` returns `str` or `None`
+- All required abstract methods are implemented and callable
+- Methods handle edge cases appropriately
+
+
+
+### Benefits
+
+Contract checking helps you:
+- **Catch bugs early**: Find implementation errors before runtime
+- **Ensure reliability**: Verify validators follow expected patterns
+- **Improve debugging**: Get detailed error messages about what's wrong
+- **Maintain consistency**: Ensure all custom validators work the same way
 
 ---
 
