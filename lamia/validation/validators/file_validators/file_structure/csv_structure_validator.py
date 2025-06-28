@@ -210,12 +210,21 @@ class CSVStructureValidator(DocumentStructureValidator):
 
     # Overrides the base class method because of the flat nature of CSV
     def validate_strict_recursive(self, tree, model):
+        return self._validate_csv_recursive(tree, model)
+
+    # Overrides the base class method because of the flat nature of CSV
+    def validate_permissive_recursive(self, tree, model):
+        return self._validate_csv_recursive(tree, model)
+
+    def _validate_csv_recursive(self, tree, model):
+        """Common validation logic for both strict and permissive modes."""
         header, rows = tree
         model_fields = list(model.model_fields.keys())
         errors = []
         values = {}
         is_valid = True
         info_loss = {}
+        
         # Check that all required fields are present in the header (order does not matter)
         missing_fields = [
             field for field, field_info in model.model_fields.items()
@@ -224,6 +233,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         if missing_fields:
             errors.append(f"CSV header {header} is missing required columns {missing_fields}.")
             is_valid = False
+            
         if not rows:
             errors.append("CSV has no data rows.")
             is_valid = False
@@ -238,6 +248,7 @@ class CSVStructureValidator(DocumentStructureValidator):
                         is_valid = False
                     values[field] = None
                     continue
+                    
                 match_result = self.type_matcher.validate_and_convert(value, expected_type)
                 if not match_result.is_valid:
                     errors.append(f"Row 1, field '{field}': {match_result.error}")
@@ -245,7 +256,10 @@ class CSVStructureValidator(DocumentStructureValidator):
                     values[field] = None
                 else:
                     values[field] = match_result.value
-                    # No info loss can be here when match_result.is_valid is True
+                    # Collect type conversion info loss only in permissive mode
+                    if match_result.info_loss:
+                        info_loss[field] = match_result.info_loss
+                        
         model_instance = None
         if is_valid:
             try:
@@ -253,68 +267,41 @@ class CSVStructureValidator(DocumentStructureValidator):
             except Exception as e:
                 errors.append(f"Model fill error: {e}")
                 is_valid = False
+                
         error_message = '; '.join(errors) if errors else None
         return ValidationResult(
             is_valid=is_valid,
+            validated_text=self.get_subtree_string(tree),
             result_type=model_instance,
             error_message=error_message,
             info_loss=info_loss if info_loss else None
         )
 
-    # Overrides the base class method because of the flat nature of CSV
-    def validate_permissive_recursive(self, tree, model):
-        header, rows = tree
-        model_fields = list(model.model_fields.keys())
-        errors = []
-        values = {}
-        is_valid = True
-        info_loss = {}
-        # Check that all required fields are present in the header (order does not matter)
-        missing_fields = [
-            field for field, field_info in model.model_fields.items()
-            if field not in header and not is_optional(field_info)
-        ]
-        if missing_fields:
-            errors.append(f"CSV header {header} is missing required columns {missing_fields}.")
-            is_valid = False
-        if not rows:
-            errors.append("CSV has no data rows.")
-            is_valid = False
-        else:
-            row = rows[0]
-            for field, field_info in model.model_fields.items():
-                expected_type = field_info.annotation
-                value = row.get(field)
-                if value is None:
-                    if not is_optional(field_info):
-                        errors.append(f"Row 1 is missing required field '{field}'")
-                        is_valid = False
-                    values[field] = None
-                    continue
-                match_result = self.type_matcher.validate_and_convert(value, expected_type)
-                if not match_result.is_valid:
-                    errors.append(f"Row 1, field '{field}': {match_result.error}")
-                    is_valid = False
-                    values[field] = None
-                else:
-                    values[field] = match_result.value
-                    # Collect type conversion info loss
-                    if match_result.info_loss:
-                        info_loss[field] = match_result.info_loss
-        model_instance = None
-        if is_valid:
-            try:
-                model_instance = model(**values)
-            except Exception as e:
-                errors.append(f"Model fill error: {e}")
-                is_valid = False
-        error_message = '; '.join(errors) if errors else None
-        return ValidationResult(
-            is_valid=is_valid,
-            result_type=model_instance,
-            error_message=error_message,
-            info_loss=info_loss if info_loss else None
-        )
+    def get_subtree_string(self, elem):
+        # For CSV, elem is (header, rows) tuple
+        # Return the validated data as CSV string format
+        if not elem:
+            return ""
+            
+        header, rows = elem
+        if not header:
+            return ""
+            
+        # Use csv.writer to properly handle escaping and quoting
+        # Force Unix line endings for consistency across platforms
+        output = io.StringIO()
+        writer = csv.writer(output, lineterminator='\n')
+        
+        # Write header
+        writer.writerow(header)
+        
+        # Write all rows (for CSV validation, we typically validate first row only)
+        for row in rows:
+            # Convert dict row back to ordered list based on header
+            row_values = [row.get(col, '') for col in header]
+            writer.writerow(row_values)
+            
+        return output.getvalue().strip()
 
     def _describe_structure(self, model, indent=0):
         lines = []

@@ -97,6 +97,7 @@ async def test_reply_hint_generation_after_response_with_enclosing_texts(strict,
     if strict:
         assert "unexpected text around payload" in result.hint
         assert validator.initial_hint in result.hint
+        assert result.raw_text == chatty_response
     else:
         assert result.hint is None
         assert result.validated_text.replace(" ", "").replace("\n", "") == payload.replace(" ", "").replace("\n", "")
@@ -124,9 +125,11 @@ async def test_reply_hint_generation_for_invalid_payload(strict, is_markdown, va
     if strict:
         assert "no valid html payload is found in the text" in result.hint
         assert validator.initial_hint in result.hint
+        assert result.raw_text == chatty_response
     else:
         assert "no valid html payload is found in the text" in result.hint
         assert validator.initial_hint in result.hint
+        assert result.raw_text == chatty_response
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -146,3 +149,4 @@ async def test_no_hint_generation_when_hinting_disabled_for_invalid_payload(stri
     
     assert result.is_valid is False
     assert result.hint is None
+    assert result.raw_text == chatty_response
