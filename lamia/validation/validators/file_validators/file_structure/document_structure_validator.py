@@ -334,7 +334,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
             return callback(tree, self.model)
         except Exception as e:
             if self.generate_hints:
-                hint = e.hint if isinstance(e, BaseValidationError) and e.hint else f"Please ensure the response is a valid {self.__class__.__name__}."
+                hint = self.get_retry_hint(e, e.hint if isinstance(e, BaseValidationError) and e.hint else "")
                 return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}", hint=hint)
             else:
                 return ValidationResult(is_valid=False, error_message=f"Invalid file: {e}")

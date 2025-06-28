@@ -95,7 +95,7 @@ async def test_reply_hint_generation_after_response_with_enclosing_texts(strict,
     
     assert result.is_valid is not strict
     if strict:
-        assert result.error_message in result.hint
+        assert "unexpected text around payload" in result.hint
         assert validator.initial_hint in result.hint
     else:
         assert result.hint is None
@@ -121,16 +121,18 @@ async def test_reply_hint_generation_for_invalid_payload(strict, is_markdown, va
     assert result.is_valid is False
     assert result.hint is not None
     assert result.error_message is not None
-    
-    # Check that the hint contains both the error message and initial hint
-    assert result.error_message in result.hint
-    assert validator.initial_hint in result.hint
+    if strict:
+        assert "unexpected text around payload" in result.hint
+        assert validator.initial_hint in result.hint
+    else:
+        assert "unexpected text around payload" in result.hint
+        assert validator.initial_hint in result.hint
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("is_markdown", [True, False])
 @pytest.mark.parametrize("validator_class, payload_key, model", VALIDATOR_CONFIGS)
-async def test_no_hint_generation_when_hiniting_diabled_for_invalid_payload(strict, is_markdown, validator_class, payload_key, model):
+async def test_no_hint_generation_when_hinting_diabled_for_invalid_payload(strict, is_markdown, validator_class, payload_key, model):
     if model is None:
         validator = validator_class(strict=strict)
     else:
