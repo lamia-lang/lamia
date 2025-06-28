@@ -51,7 +51,13 @@ class XMLStructureValidator(DocumentStructureValidator):
     def extract_payload(self, response: str) -> str:
         markdown_match = re.search(r'```(?:xml)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
         if markdown_match:
-            return markdown_match.group(1).strip()
+            xml_candidate = markdown_match.group(1).strip()
+            # Validate the extracted XML from markdown code blocks
+            try:
+                ET.fromstring(xml_candidate)
+                return xml_candidate
+            except ET.ParseError:
+                return None
         else:
             lines = response.split('\n')
             xml_lines = []
@@ -65,10 +71,9 @@ class XMLStructureValidator(DocumentStructureValidator):
                 xml_candidate = ''.join(xml_lines)
                 try:
                     ET.fromstring(xml_candidate)
+                    return xml_candidate
                 except ET.ParseError:
                     return None
-                
-                return xml_candidate
 
     def load_payload(self, payload: str) -> any:
         return ET.fromstring(payload)
