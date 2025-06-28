@@ -334,12 +334,13 @@ class MarkdownStructureValidator(DocumentStructureValidator):
 
     async def _validate_common(self, response: str, strict: bool, **kwargs) -> ValidationResult:
         """Shared validation logic for both strict and permissive modes."""
-        # instead of parsing like others we need to extract and that's it
-        ast = self.extract_payload(response)
-        if ast is None:
+        payload = self.extract_payload(response)
+        if payload is None:
             error_msg = f"Invalid Markdown: {response}"
             return ValidationResult(is_valid=False, error_message=error_msg, hint=self.get_retry_hint(retry_hint=error_msg))
-        
+
+        ast = self.load_payload(payload)  # Parse Markdown string into AST
+
         if self.model is None:
             return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(ast))
 
