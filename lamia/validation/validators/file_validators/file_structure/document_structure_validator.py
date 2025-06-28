@@ -19,7 +19,6 @@ class BaseValidationError(ValueError):
         self.original_exception = original_exception
 
 class TextAroundPayloadError(BaseValidationError):
-    """Exception for when there's unexpected text around the payload."""
     def __init__(self, expected_file_format: str, original_text: str, payload_text: str):
         # Generate dynamic message and hint
         message = f"Invalid {expected_file_format}: unexpected text around payload"
@@ -41,7 +40,6 @@ class TextAroundPayloadError(BaseValidationError):
         super().__init__(message, hint=hint)
 
 class InvalidPayloadError(BaseValidationError):
-    """Exception for when there's unexpected text around the payload."""
     def __init__(self, expected_file_format: str, text: str):
         # Generate dynamic message and hint
         message = f"Invalid {expected_file_format}: no valid {expected_file_format} payload is found in the text: {text}"
