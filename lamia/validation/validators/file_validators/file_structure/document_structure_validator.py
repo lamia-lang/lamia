@@ -308,6 +308,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
         return ValidationResult(
             is_valid=is_valid,
             result_type=model_instance,
+            validated_text=self.get_subtree_string(tree),
             error_message=error_message,
             info_loss=info_loss if info_loss else None
         )

@@ -335,7 +335,6 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         try:
             ast = self.parse(response)
             if self.model is None:
-                print(ast)
                 return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(ast))
         except Exception as e:
             error_msg = f"Invalid Markdown: {e}"
