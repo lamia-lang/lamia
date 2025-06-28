@@ -55,7 +55,7 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(error=e)
             )
         try:
             self.model.model_validate(data)
@@ -65,7 +65,7 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(error=e)
             )
 
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
@@ -75,7 +75,7 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(retry_hint=error_msg)
             )
         json_block = match.group(0)
         try:
@@ -85,7 +85,7 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(error=e)
             )
         try:
             self.model.model_validate(data)
@@ -95,5 +95,5 @@ class ObjectValidator(BaseValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(error=e)
             ) 

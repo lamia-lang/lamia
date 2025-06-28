@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 from dataclasses import dataclass
 import inspect
+import traceback
 
 @dataclass
 class ValidationResult:
@@ -74,12 +75,16 @@ class BaseValidator(ABC):
         """Initial hint for the LLM prompt, to be aggregated if multiple validators are used."""
         pass
 
-    def get_reply_hint(self, reply_hint: Optional[str] = None, error: Optional[str] = None) -> Optional[str]:
-        """Generate a reply hint when validation fails. Can be extended later for universal format."""
-        if self.generate_hints:
-            reply_hint = ""
-            if reply_hint:
-                reply_hint += f"{reply_hint}\n\n"
-            reply_hint += self.initial_hint
-            return reply_hint
-        return None 
+    def get_retry_hint(self, error: Optional[Exception] = None, retry_hint: Optional[str] = None) -> str:        
+        parts = []
+        
+        if error:
+            error_lines = traceback.format_exception_only(type(error), error)
+            parts.append(f"Error: {''.join(error_lines).strip()}")
+        
+        if retry_hint:
+            parts.append(retry_hint)
+        
+        parts.append(self.initial_hint)
+        
+        return '\n\n'.join(parts)

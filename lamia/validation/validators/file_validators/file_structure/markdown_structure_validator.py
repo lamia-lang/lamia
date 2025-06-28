@@ -338,11 +338,11 @@ class MarkdownStructureValidator(DocumentStructureValidator):
                 return ValidationResult(is_valid=True)
         except Exception as e:
             error_msg = f"Invalid Markdown: {e}"
-            return ValidationResult(is_valid=False, error_message=error_msg, hint=self.get_reply_hint(error_msg))
+            return ValidationResult(is_valid=False, error_message=error_msg, hint=self.get_retry_hint(error=e))
 
         valid, err, values = self._match_fields(ast, model=self.model, strict=strict)
         if not valid:
-            return ValidationResult(is_valid=False, error_message=err, hint=self.get_reply_hint(err))
+            return ValidationResult(is_valid=False, error_message=err, hint=self.get_retry_hint(retry_hint=err))
         
         # Create an instance of the model with converted values
         try:
@@ -352,7 +352,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=False, 
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(error=e)
             )
         
         return ValidationResult(

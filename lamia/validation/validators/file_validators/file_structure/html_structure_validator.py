@@ -119,7 +119,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(error=e)
             )
         # If the root has an <html> element, start validation from there
         if self.model is None:
@@ -137,7 +137,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(retry_hint=error_msg)
             )
         return self.validate_strict_recursive(tree, self.model)
 
@@ -151,7 +151,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(error=e)
             )
         if self.model is None:
             return ValidationResult(
@@ -169,7 +169,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=False,
                 error_message=error_msg,
-                hint=self.get_reply_hint(error_msg)
+                hint=self.get_retry_hint(retry_hint=error_msg)
             )
         return self.validate_permissive_recursive(tree, self.model)
 
