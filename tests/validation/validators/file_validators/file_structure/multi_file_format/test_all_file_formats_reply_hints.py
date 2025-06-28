@@ -8,6 +8,7 @@ from lamia.validation.validators import (
     CSVValidator, CSVStructureValidator,
     MarkdownValidator, MarkdownStructureValidator,
 )
+from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1
 
 # --- Test Models for Structure Validators ---
 class SimpleHTML(BaseModel):
@@ -27,7 +28,7 @@ class SimpleCSV(BaseModel):
     col2: int
 
 class SimpleMD(BaseModel):
-    heading: str
+    heading: Heading1
 
 # --- Test Payloads ---
 PAYLOADS = {
@@ -44,7 +45,7 @@ INVALID_PAYLOADS = {
     "json": '"message": "hello}',
     "xml": "root><message>hello</message></root>",
     "yaml": "invalid_map: { hello",
-    "csv": "col1col2\nhello,123",
+    "csv": "col1,col2\nhello123",
     "markdown": "# A Heading",
 }
 
@@ -94,12 +95,12 @@ async def test_reply_hint_generation_after_response_with_enclosing_texts(strict,
     
     assert result.is_valid is not strict
     if strict:
-        assert result.hint is not None, "A hint should be provided when generate_hints is True."
-        assert "Please ensure" in result.hint or "Please return only" in result.hint
+        assert result.error_message in result.hint
+        assert validator.initial_hint in result.hint
     else:
         assert result.hint is None
-        #assert result.validated_text == payload
-        #assert result.raw_text == chatty_response
+        assert result.validated_text == payload
+        assert result.raw_text == chatty_response
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -119,7 +120,11 @@ async def test_reply_hint_generation_for_invalid_payload(strict, is_markdown, va
     
     assert result.is_valid is False
     assert result.hint is not None
-    assert "Please ensure" in result.hint or "Please return only" in result.hint
+    assert result.error_message is not None
+    
+    # Check that the hint contains both the error message and initial hint
+    assert result.error_message in result.hint
+    assert validator.initial_hint in result.hint
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])

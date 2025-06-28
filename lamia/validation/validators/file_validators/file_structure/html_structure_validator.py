@@ -115,10 +115,11 @@ class HTMLStructureValidator(DocumentStructureValidator):
         try:
             tree = self.parse(response)
         except Exception as e:
+            error_msg = f"Invalid file: {e}"
             return ValidationResult(
                 is_valid=False,
-                error_message=f"Invalid file: {e}",
-                hint=self.initial_hint if self.generate_hints else None
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             )
         # If the root has an <html> element, start validation from there
         if self.model is None:
@@ -132,10 +133,11 @@ class HTMLStructureValidator(DocumentStructureValidator):
         if html_elem is not None:
             tree = html_elem
         else:
+            error_msg = "No <html> tag found"
             return ValidationResult(
                 is_valid=False,
-                error_message="No <html> tag found",
-                hint=self.initial_hint if self.generate_hints else None
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             )
         return self.validate_strict_recursive(tree, self.model)
 
@@ -145,10 +147,11 @@ class HTMLStructureValidator(DocumentStructureValidator):
         try:
             tree = self.parse(response)
         except Exception as e:
+            error_msg = f"Invalid file: {e}"
             return ValidationResult(
                 is_valid=False,
-                error_message=f"Invalid file: {e}",
-                hint=self.initial_hint if self.generate_hints else None
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             )
         if self.model is None:
             return ValidationResult(
@@ -162,10 +165,11 @@ class HTMLStructureValidator(DocumentStructureValidator):
         if html_elem is not None:
             tree = html_elem
         else:
+            error_msg = "No <html> tag found"
             return ValidationResult(
                 is_valid=False,
-                error_message="No <html> tag found",
-                hint=self.initial_hint if self.generate_hints else None
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             )
         return self.validate_permissive_recursive(tree, self.model)
 

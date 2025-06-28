@@ -51,44 +51,49 @@ class ObjectValidator(BaseValidator):
         try:
             data = _json.loads(response)
         except Exception as e:
+            error_msg = f"Response is not valid JSON: {e}"
             return ValidationResult(
                 is_valid=False,
-                error_message=f"Response is not valid JSON: {e}",
-                hint=self.initial_hint if self.generate_hints else None
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             )
         try:
             self.model.model_validate(data)
             return ValidationResult(is_valid=True)
         except ValidationError as e:
+            error_msg = f"Response does not match schema: {e}"
             return ValidationResult(
                 is_valid=False,
-                error_message=f"Response does not match schema: {e}",
-                hint=self.initial_hint if self.generate_hints else None
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             )
 
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         match = re.search(r'({[\s\S]*})', response)
         if not match:
+            error_msg = "No valid JSON object found."
             return ValidationResult(
                 is_valid=False,
-                error_message="No valid JSON object found.",
-                hint=self.initial_hint if self.generate_hints else None
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             )
         json_block = match.group(0)
         try:
             data = _json.loads(json_block)
         except Exception as e:
+            error_msg = f"Extracted JSON is not valid: {e}"
             return ValidationResult(
                 is_valid=False,
-                error_message=f"Extracted JSON is not valid: {e}",
-                hint=self.initial_hint if self.generate_hints else None
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             )
         try:
             self.model.model_validate(data)
             return ValidationResult(is_valid=True, validated_text=json_block)
         except ValidationError as e:
+            error_msg = f"Extracted JSON does not match schema: {e}"
             return ValidationResult(
                 is_valid=False,
-                error_message=f"Extracted JSON does not match schema: {e}",
-                hint=self.initial_hint if self.generate_hints else None
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             ) 

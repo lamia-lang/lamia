@@ -72,4 +72,14 @@ class BaseValidator(ABC):
     @abstractmethod
     def initial_hint(self) -> str:
         """Initial hint for the LLM prompt, to be aggregated if multiple validators are used."""
-        pass 
+        pass
+
+    def get_reply_hint(self, reply_hint: Optional[str] = None, error: Optional[str] = None) -> Optional[str]:
+        """Generate a reply hint when validation fails. Can be extended later for universal format."""
+        if self.generate_hints:
+            reply_hint = ""
+            if reply_hint:
+                reply_hint += f"{reply_hint}\n\n"
+            reply_hint += self.initial_hint
+            return reply_hint
+        return None 

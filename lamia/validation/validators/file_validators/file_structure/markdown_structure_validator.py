@@ -337,20 +337,22 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             if self.model is None:
                 return ValidationResult(is_valid=True)
         except Exception as e:
-            return ValidationResult(is_valid=False, error_message=f"Invalid Markdown: {e}", hint=self.initial_hint)
+            error_msg = f"Invalid Markdown: {e}"
+            return ValidationResult(is_valid=False, error_message=error_msg, hint=self.get_reply_hint(error_msg))
 
         valid, err, values = self._match_fields(ast, model=self.model, strict=strict)
         if not valid:
-            return ValidationResult(is_valid=False, error_message=err, hint=self.initial_hint)
+            return ValidationResult(is_valid=False, error_message=err, hint=self.get_reply_hint(err))
         
         # Create an instance of the model with converted values
         try:
             result_type = self.model(**values)
         except Exception as e:
+            error_msg = f"Model creation error: {e}"
             return ValidationResult(
                 is_valid=False, 
-                error_message=f"Model creation error: {e}", 
-                hint=self.initial_hint
+                error_message=error_msg,
+                hint=self.get_reply_hint(error_msg)
             )
         
         return ValidationResult(
