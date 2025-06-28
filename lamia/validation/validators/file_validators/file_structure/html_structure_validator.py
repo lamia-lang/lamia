@@ -126,7 +126,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=True,
                 result_type=None,
-                validated_text=response,
+                validated_text=self.get_subtree_string(tree),
                 raw_text=response
             )
         html_elem = self.find_element(tree, "html")
@@ -157,7 +157,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return ValidationResult(
                 is_valid=True,
                 result_type=None,
-                validated_text=response,
+                validated_text=self.get_subtree_string(tree),
                 raw_text=response
             )
         # If the root has an <html> element, start validation from there

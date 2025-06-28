@@ -76,6 +76,9 @@ class BaseValidator(ABC):
         pass
 
     def get_retry_hint(self, error: Optional[Exception] = None, retry_hint: Optional[str] = None) -> str:        
+        if not self.generate_hints:
+            return None
+
         parts = []
         
         if error:
