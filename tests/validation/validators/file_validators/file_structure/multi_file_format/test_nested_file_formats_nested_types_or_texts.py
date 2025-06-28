@@ -37,7 +37,7 @@ async def test_file_structure_validator_deep_nesting(strict, file_content, valid
     if not strict:
         assert result.result_type.p == "This is a paragraph."
         assert result.result_type.title == "Test"
-    else:
+    if strict:
         assert result.error_message == "Missing <title>; Missing <p>"
 
 
@@ -45,7 +45,7 @@ async def test_file_structure_validator_deep_nesting(strict, file_content, valid
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
-async def test_file_structure_validator_exact_nestig(strict, file_content, validator_class):
+async def test_file_structure_validator_exact_nesting(strict, file_content, validator_class):
     class Paragraph(BaseModel):
         p: str
 
@@ -61,6 +61,7 @@ async def test_file_structure_validator_exact_nestig(strict, file_content, valid
     assert result.is_valid is True
     assert result.result_type.body.p == "This is a paragraph."
     assert result.result_type.head.title == "Test"
+    assert result.validated_text == file_content
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])

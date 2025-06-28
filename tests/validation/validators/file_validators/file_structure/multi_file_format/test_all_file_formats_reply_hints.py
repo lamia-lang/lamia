@@ -87,10 +87,7 @@ def _contains_error_class_path(message: str) -> bool:
 @pytest.mark.parametrize("with_code_fences", [True, False])
 @pytest.mark.parametrize("validator_class, payload_key, model", VALIDATOR_CONFIGS)
 async def test_reply_hint_generation_after_response_with_enclosing_texts(strict, with_code_fences, validator_class, payload_key, model):
-    # Skip markdown validators without code fences since they require triple backticks
-    if (validator_class in [MarkdownValidator, MarkdownStructureValidator] and not with_code_fences):
-        assert True, "Markdown validators require triple backticks, skipping without code fences test"
-        return 
+
     
     if model is None:
         validator = validator_class(strict=strict, generate_hints=True)
@@ -102,6 +99,16 @@ async def test_reply_hint_generation_after_response_with_enclosing_texts(strict,
     chatty_response = create_chatty_response(payload, with_code_fences)
     
     result = await validator.validate(chatty_response)
+
+    # Markdown validators always need code fences and unlike other file types they will work
+    # the same for strict and permissive modes. They will work with fences and will fail withut
+    if (validator_class in [MarkdownValidator, MarkdownStructureValidator]):
+        if not with_code_fences:
+            assert result.is_valid is False, "Markdown validators require triple backticks, skipping without code fences test"
+            return 
+        else:
+            assert result.is_valid is True, "Markdown validators with code fences should be valid for strict and permissive modes"
+            return 
     
     assert result.is_valid is not strict
     if strict:
@@ -131,6 +138,7 @@ async def test_reply_hint_generation_for_invalid_payload(strict, is_markdown, va
     
     result = await validator.validate(chatty_response)
     
+    print(result)
     assert result.is_valid is False
     assert result.hint is not None
     assert result.error_message is not None

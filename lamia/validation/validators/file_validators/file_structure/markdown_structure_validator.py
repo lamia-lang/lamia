@@ -248,11 +248,13 @@ class MarkdownStructureValidator(DocumentStructureValidator):
 
     # Overrides the base class method because unlike other file structure validators, 
     # Markdown works with it's own predefined classes like Heading1, Paragraph, etc.
+    # Also, even in strict mode, we want to wait for a marddown wrapped in ```-s.
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         return await self._validate_common(response, strict=True, **kwargs)
 
     # Overrides the base class method because unlike other file structure validators, 
     # Markdown works with it's own predefined classes like Heading1, Paragraph, etc.
+    # Also, even in strict mode, we want to wait for a marddown wrapped in ```-s.
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         return await self._validate_common(response, strict=False, **kwargs)
 
@@ -332,13 +334,14 @@ class MarkdownStructureValidator(DocumentStructureValidator):
 
     async def _validate_common(self, response: str, strict: bool, **kwargs) -> ValidationResult:
         """Shared validation logic for both strict and permissive modes."""
-        try:
-            ast = self.parse(response)
-            if self.model is None:
-                return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(ast))
-        except Exception as e:
-            error_msg = f"Invalid Markdown: {e}"
-            return ValidationResult(is_valid=False, error_message=error_msg, hint=self.get_retry_hint(error=e))
+        # instead of parsing like others we need to extract and that's it
+        ast = self.extract_payload(response)
+        if ast is None:
+            error_msg = f"Invalid Markdown: {response}"
+            return ValidationResult(is_valid=False, error_message=error_msg, hint=self.get_retry_hint(retry_hint=error_msg))
+        
+        if self.model is None:
+            return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(ast))
 
         valid, err, values = self._match_fields(ast, model=self.model, strict=strict)
         if not valid:
@@ -362,24 +365,49 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         )
     
     def get_subtree_string(self, elem):
-        """Convert markdown AST back to string using mistune's MarkdownRenderer."""
-        import mistune
-        from mistune.renderers.markdown import MarkdownRenderer
-        
-        # Use mistune's MarkdownRenderer to convert AST back to markdown
-        renderer = MarkdownRenderer()
-        md_instance = mistune.create_markdown(renderer=MarkdownRenderer())
-        
-        # Create proper state for rendering
-        state = md_instance.inline.state_cls({})
-        
-        # Use the renderer's proper API to render AST tokens back to markdown
+        """Convert markdown AST back to string or return string as-is."""
+        # If elem is already a string (the markdown text), return it directly
+        if isinstance(elem, str):
+            return elem
+            
+        # If elem is a list of AST tokens, extract text content
         if isinstance(elem, list):
-            # For a list of tokens, use render_tokens with state
-            return renderer.render_tokens(elem, state)
-        else:
-            # For a single token, use render_token with state
-            return renderer.render_token(elem, state)
+            result = ""
+            for token in elem:
+                if isinstance(token, dict):
+                    if 'raw' in token:
+                        result += token['raw']
+                    elif token.get('type') == 'text' and 'raw' in token:
+                        result += token['raw']
+                    elif token.get('type') == 'heading' and 'children' in token:
+                        # Extract text from heading children and reconstruct heading
+                        level = token.get('attrs', {}).get('level', 1)
+                        heading_text = ""
+                        for child in token['children']:
+                            if child.get('type') == 'text' and 'raw' in child:
+                                heading_text += child['raw']
+                        if heading_text:
+                            result += f"{'#' * level} {heading_text}\n"
+            return result.strip()
+        
+        # If elem is a single AST token, extract its content
+        if isinstance(elem, dict):
+            if 'raw' in elem:
+                return elem['raw']
+            elif elem.get('type') == 'text' and 'raw' in elem:
+                return elem['raw']
+            elif elem.get('type') == 'heading' and 'children' in elem:
+                # Reconstruct heading from AST
+                level = elem.get('attrs', {}).get('level', 1)
+                heading_text = ""
+                for child in elem['children']:
+                    if child.get('type') == 'text' and 'raw' in child:
+                        heading_text += child['raw']
+                if heading_text:
+                    return f"{'#' * level} {heading_text}"
+        
+        # Fallback - return string representation
+        return str(elem)
 
     def _describe_structure(self, model, indent=0):
         """Describe structure using LLM-friendly markdown syntax descriptions instead of class names."""
