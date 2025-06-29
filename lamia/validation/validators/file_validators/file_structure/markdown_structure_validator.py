@@ -146,10 +146,15 @@ class MarkdownStructureValidator(DocumentStructureValidator):
 
     # Public methods
     def extract_payload(self, response: str) -> str:
-        markdown_match = re.search(r'```(?:markdown)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
-        if markdown_match:
-            return markdown_match.group(1).strip()
-        return None
+        if self.generate_hints:
+            # LLM mode - expect backticks
+            markdown_match = re.search(r'```(?:markdown)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
+            if markdown_match:
+                return markdown_match.group(1).strip()
+            return None
+        else:
+            # File mode - accept raw markdown
+            return response
 
     def load_payload(self, payload: str) -> any:
         # Parse markdown into an AST using mistune 3.x
@@ -316,27 +321,34 @@ class MarkdownStructureValidator(DocumentStructureValidator):
                 scan_idx += 1
 
             if not found:
-                if strict:
-                    return False, f"Missing element for field '{name}'", None
-                else:
-                    missing_fields.append(name)
-                    # In permissive mode, advance ast_idx to scan_idx for next field
+                # Both strict and permissive modes now collect all missing fields
+                missing_fields.append(name)
+                # In permissive mode, advance ast_idx to scan_idx for next field
             ast_idx = scan_idx
+        
+        # Check for missing fields (both modes)
+        if missing_fields:
+            return False, f"Missing element(s) for field(s): {', '.join(missing_fields)}", None
+            
         # In strict mode, ensure no extra nodes after last field
         if strict:
             while ast_idx < len(ast):
                 if ast[ast_idx]['type'] not in ('blank_line', 'thematic_break'):
                     return False, "Extra elements found after last expected field", None
                 ast_idx += 1
-        if not strict and missing_fields:
-            return False, f"Missing element(s) for field(s): {', '.join(missing_fields)}", None
+        
         return True, None, values
 
     async def _validate_common(self, response: str, strict: bool, **kwargs) -> ValidationResult:
         """Shared validation logic for both strict and permissive modes."""
         payload = self.extract_payload(response)
         if payload is None:
-            error_msg = f"Invalid Markdown: {response}"
+            if self.generate_hints:
+                # LLM mode - expected backticks but didn't find them
+                error_msg = f"Invalid Response: the markdown is not wrapped in triple backticks"
+            else:
+                # File mode - this shouldn't happen since extract_payload returns the raw response
+                error_msg = f"Invalid Response: empty or invalid markdown content"
             return ValidationResult(is_valid=False, error_message=error_msg, hint=self.get_retry_hint(retry_hint=error_msg))
 
         ast = self.load_payload(payload)  # Parse Markdown string into AST

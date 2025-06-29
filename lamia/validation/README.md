@@ -163,6 +163,14 @@ class MyComplexModel(BaseModel):
         ("col1", int),
         ("col2", str),
     ])
+
+# We can also be very generic with what we expected from the file by using Any and Optional[] types
+class OptionalModel(BaseModel):
+    id: int                    # Required field
+    name: str                  # Required field
+    score: Optional[int]       # Optional field (only strings and empty values)
+    description: Any           # Required field (The field can be either any string or a complex strucure, for the case of html it can be a html tag like <p>text</p>)
+    metadata: Optional[Any]    # Optional field of any kind
 ```
 
 This approach is extensible: you can use other mapping types or wrappers in the future to control more nuanced validation logic (such as enforcing order for only some fields).
