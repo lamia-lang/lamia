@@ -105,7 +105,7 @@ async def test_reply_hint_generation_after_response_with_enclosing_texts(strict,
     if (validator_class in [MarkdownValidator, MarkdownStructureValidator]):
         if not with_code_fences:
             assert result.is_valid is False, "Markdown validators require triple backticks, skipping without code fences test"
-            assert "unexpected text around payload" in result.hint
+            assert "Please provide your Markdown content wrapped in triple backticks" in result.hint
             return 
         else:
             assert result.is_valid is True, "Markdown validators with code fences should be valid for strict and permissive modes"
@@ -142,11 +142,12 @@ async def test_reply_hint_generation_for_invalid_payload(strict, with_code_fence
     if validator_class == MarkdownValidator:
         if not with_code_fences:
             assert result.is_valid is False, "Markdown validators require triple backticks, skipping without code fences test"
-            assert "unexpected text around payload" in result.hint
+            assert "Invalid Response: the markdown is not wrapped in triple backticks" in result.hint
+            return
         # it is actaully impossible to have invalid markdown if we have code fences
         else:
             assert result.is_valid is True, "Markdown validators with code fences should be valid for strict and permissive modes"
-            return 
+            return
  
     assert result.is_valid is False
     assert result.hint is not None
@@ -154,6 +155,17 @@ async def test_reply_hint_generation_for_invalid_payload(strict, with_code_fence
     # Ensure no error class paths leak through hints or error messages
     assert not _contains_error_class_path(result.hint), f"Hint contains error class path: {result.hint}"
     assert not _contains_error_class_path(result.error_message), f"Error message contains error class path: {result.error_message}"
+    if validator_class == MarkdownStructureValidator:
+        if with_code_fences:
+            assert result.is_valid is False, "Markdown validators with code fences should be valid for strict and permissive modes"
+            assert "Missing element(s) for field(s): heading" in result.hint
+            return 
+        else:
+            assert result.is_valid is False, "Markdown validators require triple backticks, skipping without code fences test"
+            assert "Invalid Response: the markdown is not wrapped in triple backticks" in result.hint
+            return
+
+    
     if strict:
         assert f"no valid {payload_key} payload is found in the text" in result.hint
         assert validator.initial_hint in result.hint
