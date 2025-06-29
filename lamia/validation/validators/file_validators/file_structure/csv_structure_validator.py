@@ -1,6 +1,6 @@
 import csv
 import io
-from collections import Counter
+from collections import Counter, OrderedDict
 from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator, BaseValidationError
@@ -33,22 +33,48 @@ class CSVStructureValidator(DocumentStructureValidator):
             resolved_model = create_model("CSVStructureModel", **schema)
         else:
             resolved_model = None
-        
         # Validate that model only contains primitive types
         if resolved_model is not None:
             self._validate_model_is_flat(resolved_model)
-            
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
+
+    def _get_model_fields(self):
+        """Get model fields as a list, handling both Pydantic models and OrderedDict"""
+        if isinstance(self.model, (dict, OrderedDict)):
+            return list(self.model.keys())
+        else:
+            return list(self.model.model_fields.keys())
+
+    def _get_model_field_items(self):
+        """Get model field items (name, type) as iterator, handling both Pydantic models and OrderedDict"""
+        if isinstance(self.model, (dict, OrderedDict)):
+            return self.model.items()
+        else:
+            return ((field, field_info.annotation) for field, field_info in self.model.model_fields.items())
+
+    def _is_field_optional(self, field_name):
+        """Check if a field is optional, handling both Pydantic models and OrderedDict"""
+        if isinstance(self.model, (dict, OrderedDict)):
+            return False  # All fields in dict/OrderedDict are required
+        else:
+            field_info = self.model.model_fields.get(field_name)
+            return field_info and is_optional(field_info)
 
     def _validate_model_is_flat(self, model):
         """Ensure model only contains primitive types"""
         non_primitive_fields = []
         
-        for field, field_info in model.model_fields.items():
-            field_type = field_info.annotation
-            # Check if it's a primitive type
-            if not (field_type in (str, int, float, bool) or field_type.__name__ in ('str', 'int', 'float', 'bool')):
-                non_primitive_fields.append(f"'{field}': {field_info.annotation.__name__}")
+        if isinstance(model, (dict, OrderedDict)):
+            # Handle OrderedDict or dict models
+            for field, field_type in model.items():
+                if not (field_type in (str, int, float, bool) or field_type.__name__ in ('str', 'int', 'float', 'bool')):
+                    non_primitive_fields.append(f"'{field}': {field_type.__name__}")
+        else:
+            # Handle Pydantic models
+            for field, field_info in model.model_fields.items():
+                field_type = field_info.annotation
+                if not (field_type in (str, int, float, bool) or field_type.__name__ in ('str', 'int', 'float', 'bool')):
+                    non_primitive_fields.append(f"'{field}': {field_info.annotation.__name__}")
         
         if non_primitive_fields:
             raise ValueError(
@@ -70,9 +96,9 @@ class CSVStructureValidator(DocumentStructureValidator):
             primitive_fields = []
             structure_lines = []
             
-            for field, field_info in self.model.model_fields.items():
+            for field, field_type in self._get_model_field_items():
                 primitive_fields.append(field)
-                structure_lines.append(f'{field}: {field_info.annotation.__name__}')
+                structure_lines.append(f'{field}: {field_type.__name__}')
             
             expected_header = ','.join(primitive_fields)
             hint = (
@@ -103,31 +129,57 @@ class CSVStructureValidator(DocumentStructureValidator):
             return self._extract_csv_generic(response)
     
     def _extract_csv_with_model(self, response: str) -> str:
-        """Extract CSV by looking for expected header - be strict about header and row structure"""
-        expected_headers = [",".join(self.model.model_fields.keys()), ";".join(self.model.model_fields.keys())]
-        model_fields = list(self.model.model_fields.keys())
+        """Extract CSV by looking for expected header - strict or permissive depending on mode, enforce order if OrderedDict model"""
+        model_fields = self._get_model_fields()
+        model_fields_set = set(model_fields)
         lines = response.split('\n')
 
         for i, line in enumerate(lines):
             header_line = line.strip()
-            if header_line in expected_headers:
-                separator = ',' if ',' in header_line else ';'
-                header_fields = [h.strip() for h in header_line.split(separator)]
-                # Check header fields match model fields exactly (order and names)
-                if header_fields != model_fields:
-                    continue  # Not a valid header, skip
-                # Found exact header, extract from here until empty line or end
+            # Determine separator
+            if ',' in header_line:
+                separator = ','
+            elif ';' in header_line:
+                separator = ';'
+            else:
+                continue
+            header_fields = [h.strip() for h in header_line.split(separator)]
+
+            if self.strict:
+                if isinstance(self.model, OrderedDict):
+                    # Enforce order and names exactly
+                    if header_fields != model_fields:
+                        continue
+                else:
+                    # Only require all fields present, no extras, order doesn't matter
+                    if set(header_fields) != model_fields_set or len(header_fields) != len(model_fields):
+                        continue
                 csv_lines = [header_line]
                 header_sep_count = self._count_separators_outside_quotes(header_line, separator)
                 for j in range(i + 1, len(lines)):
                     line_stripped = lines[j].strip()
                     if not line_stripped:
                         break
-                    # Check separator count matches header
                     if self._count_separators_outside_quotes(line_stripped, separator) != header_sep_count:
-                        break  # Row does not match header structure
+                        break
                     csv_lines.append(line_stripped)
-                # Only return if at least one data row is present
+                if len(csv_lines) > 1:
+                    extracted_csv = '\n'.join(csv_lines)
+                    return extracted_csv
+            else:
+                # Permissive: header must contain all model fields (order and extras don't matter)
+                if not model_fields_set.issubset(set(header_fields)):
+                    continue
+                csv_lines = [header_line]
+                header_sep_count = self._count_separators_outside_quotes(header_line, separator)
+                for j in range(i + 1, len(lines)):
+                    line_stripped = lines[j].strip()
+                    if not line_stripped:
+                        break
+                    # Row must have at least as many separators as model fields minus one
+                    if self._count_separators_outside_quotes(line_stripped, separator) < len(model_fields) - 1:
+                        break
+                    csv_lines.append(line_stripped)
                 if len(csv_lines) > 1:
                     extracted_csv = '\n'.join(csv_lines)
                     return extracted_csv
@@ -267,17 +319,20 @@ class CSVStructureValidator(DocumentStructureValidator):
     def _validate_csv_recursive(self, tree, model):
         """Common validation logic for both strict and permissive modes."""
         header, rows = tree
-        model_fields = list(model.model_fields.keys())
+        model_fields = self._get_model_fields()
         errors = []
         values = {}
         is_valid = True
         info_loss = {}
         
-        # Check that all required fields are present in the header (order does not matter)
-        missing_fields = [
-            field for field, field_info in model.model_fields.items()
-            if field not in header and not is_optional(field_info)
-        ]
+        # For OrderedDict, check order enforcement
+        if isinstance(model, OrderedDict) and header != model_fields:
+            errors.append(f"Field order mismatch: CSV header {header} does not match expected order {model_fields}")
+            is_valid = False
+        
+        # Check that all required fields are present in the header
+        missing_fields = [field for field in model_fields if field not in header and not self._is_field_optional(field)]
+        
         if missing_fields:
             errors.append(f"CSV header {header} is missing required columns {missing_fields}.")
             is_valid = False
@@ -287,11 +342,10 @@ class CSVStructureValidator(DocumentStructureValidator):
             is_valid = False
         else:
             row = rows[0]
-            for field, field_info in model.model_fields.items():
-                expected_type = field_info.annotation
+            for field, expected_type in self._get_model_field_items():
                 value = row.get(field)
                 if value is None:
-                    if not is_optional(field_info):
+                    if not self._is_field_optional(field):
                         errors.append(f"Row 1 is missing required field '{field}'")
                         is_valid = False
                     values[field] = None
@@ -311,7 +365,12 @@ class CSVStructureValidator(DocumentStructureValidator):
         model_instance = None
         if is_valid:
             try:
-                model_instance = model(**values)
+                if isinstance(model, (dict, OrderedDict)):
+                    # For OrderedDict, return the OrderedDict with validated values
+                    model_instance = OrderedDict((field, values[field]) for field in model_fields)
+                else:
+                    # For Pydantic models, instantiate the model
+                    model_instance = model(**values)
             except Exception as e:
                 errors.append(f"Model fill error: {e}")
                 is_valid = False
@@ -353,6 +412,6 @@ class CSVStructureValidator(DocumentStructureValidator):
 
     def _describe_structure(self, model, indent=0):
         lines = []
-        for field, field_info in model.model_fields.items():
-            lines.append(f'{field}: {field_info.annotation.__name__}')
+        for field, field_type in self._get_model_field_items():
+            lines.append(f'{field}: {field_type.__name__}')
         return lines

@@ -130,6 +130,47 @@ can be fetched these vlaidators will fetch it from the file so that you can use 
 
 ---
 
+## Model Types and Order Enforcement in File Structure Validators
+
+File structure validators (such as CSVStructureValidator, JSONStructureValidator, etc.) use the provided model to validate the structure and types of the file. The type of model you provide can also control whether the order of fields is enforced:
+
+- **dict or Pydantic BaseModel**: Order of fields/columns does NOT matter. The validator will check that all required fields are present (and, in strict mode, that there are no extra fields), but the order in the file can be different from the order in the model.
+- **OrderedDict**: Order of fields/columns IS enforced. The validator will require that the file's fields/columns appear in exactly the same order as in the OrderedDict model. This is especially useful for formats like CSV, where downstream workflows may depend on column order.
+
+**Example:**
+
+```python
+# Order does not matter
+class MyModel(BaseModel):
+    myint: int
+    mystr: str
+
+# Order matters (col1 must come before col2)
+ordered_model = OrderedDict([
+    ("col1", int),
+    ("col2", str),
+])
+
+# Nested tyoe enforced
+class MyComplexModel(BaseModel):
+    # the order is irrelevant for these 4 fields. but the myModel1 will be read with the values that appears the first in the file
+    myint: int
+    myModel1: MyModel
+    mystr: str
+    myModel2: MyModel
+    # but the col1 must always come with col2
+    OrderedDict([
+        ("col1", int),
+        ("col2", str),
+    ])
+```
+
+This approach is extensible: you can use other mapping types or wrappers in the future to control more nuanced validation logic (such as enforcing order for only some fields).
+
+**Note:** For most file formats (JSON, YAML, XML, HTML, Markdown), order is not semantically important for flat models, so order is only enforced if you explicitly use an OrderedDict model.
+
+---
+
 ## Ways of using validators
 
 1. From Python code: Lamia(..., validators=[...])
