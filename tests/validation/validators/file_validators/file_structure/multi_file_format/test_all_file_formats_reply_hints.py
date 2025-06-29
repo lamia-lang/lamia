@@ -191,6 +191,10 @@ async def test_no_hint_generation_when_hinting_disabled_for_invalid_payload(stri
     
     result = await validator.validate(chatty_response)
     
+    if validator_class == MarkdownValidator:
+        assert result.is_valid is True, "Markdown validators are always valid"
+        return 
+
     assert result.is_valid is False
     assert result.error_message is not None
     # Check that no error class paths leak through error messages
