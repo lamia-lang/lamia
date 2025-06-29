@@ -8,6 +8,7 @@ from ....base import ValidationResult
 from .utils import import_model_from_path
 from typing import Any
 import re
+from typing import Callable
 
 class DuplicateHeaderError(BaseValidationError):
     """Exception for duplicate headers in structured data."""
@@ -247,7 +248,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         return None
 
     def _is_valid_csv(self, csv_text: str) -> bool:
-        """Check if the CSV text can be parsed as CSV format (basic format check only)"""
+        """Check if the CSV text can be parsed as CSV format and has consistent structure"""
         try:
             # Basic check: ensure it has at least 2 lines (header + data)
             lines = csv_text.strip().split('\n')
@@ -265,14 +266,21 @@ class CSVStructureValidator(DocumentStructureValidator):
             # Try to create a reader - this will fail for completely malformed CSV
             reader = csv.reader(f, dialect=dialect)
             
-            # Try to read at least one row to ensure basic parseability
-            first_row = next(reader, None)
-            if first_row is None:
+            # Read all rows to check consistency
+            rows = list(reader)
+            if len(rows) == 0:
                 return False
                 
             # Basic sanity check: header should have at least one field
-            if len(first_row) == 0:
+            header = rows[0]
+            if len(header) == 0:
                 return False
+            
+            # Check that all rows have the same number of columns as header
+            header_col_count = len(header)
+            for i, row in enumerate(rows[1:], 2):  # Start from row 2
+                if len(row) != header_col_count:
+                    return False
                 
             return True
         except Exception:
@@ -375,9 +383,13 @@ class CSVStructureValidator(DocumentStructureValidator):
             row = rows[0]
             for field, expected_type in self._get_model_field_items():
                 value = row.get(field)
-                if value is None:
+                # Handle empty cells: None or empty string should be treated as None for optional fields
+                if value is None or (isinstance(value, str) and value.strip() == ""):
                     if not self._is_field_optional(field):
-                        errors.append(f"Row 1 is missing required field '{field}'")
+                        if value is None:
+                            errors.append(f"Row 1 is missing required field '{field}'")
+                        else:
+                            errors.append(f"Row 1, field '{field}' cannot be empty (required field)")
                         is_valid = False
                     values[field] = None
                     continue
@@ -446,3 +458,4 @@ class CSVStructureValidator(DocumentStructureValidator):
         for field, field_type in self._get_model_field_items():
             lines.append(f'{field}: {field_type.__name__}')
         return lines
+
