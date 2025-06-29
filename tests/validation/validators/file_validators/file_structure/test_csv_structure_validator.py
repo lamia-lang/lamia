@@ -50,7 +50,7 @@ async def test_csv_structure_validator_many_fields_with_same_name(strict):
     validator = CSVStructureValidator(model=DupHeaderModel, strict=False)
     result = await validator.validate(csv)
     assert result.is_valid is False
-    assert result.error_message == "Invalid file: Duplicate header found 'dup_header'"
+    assert result.error_message == "Invalid file: Duplicate header found: dup_header"
     #assert result.hint == "Duplicate header 'dup_header'. Duplicate headers are not supported please return the results in 'dup_header' column."
 
 @pytest.mark.asyncio
