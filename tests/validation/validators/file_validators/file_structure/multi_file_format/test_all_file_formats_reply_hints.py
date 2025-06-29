@@ -48,7 +48,7 @@ INVALID_PAYLOADS = {
     "xml": "root><message>hello</message></root>",
     "yaml": "invalid_map: { hello",
     "csv": "col1,col2\nhello123",
-    "markdown": "# A Heading",
+    "markdown": "## Heading2",
 }
 
 # --- Validator Configurations ---
@@ -105,6 +105,7 @@ async def test_reply_hint_generation_after_response_with_enclosing_texts(strict,
     if (validator_class in [MarkdownValidator, MarkdownStructureValidator]):
         if not with_code_fences:
             assert result.is_valid is False, "Markdown validators require triple backticks, skipping without code fences test"
+            assert "unexpected text around payload" in result.hint
             return 
         else:
             assert result.is_valid is True, "Markdown validators with code fences should be valid for strict and permissive modes"
@@ -124,9 +125,9 @@ async def test_reply_hint_generation_after_response_with_enclosing_texts(strict,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
-@pytest.mark.parametrize("is_markdown", [True, False])
+@pytest.mark.parametrize("with_code_fences", [True, False])
 @pytest.mark.parametrize("validator_class, payload_key, model", VALIDATOR_CONFIGS)
-async def test_reply_hint_generation_for_invalid_payload(strict, is_markdown, validator_class, payload_key, model):
+async def test_reply_hint_generation_for_invalid_payload(strict, with_code_fences, validator_class, payload_key, model):
     if model is None:
         validator = validator_class(strict=strict, generate_hints=True)
     else:
@@ -134,11 +135,19 @@ async def test_reply_hint_generation_for_invalid_payload(strict, is_markdown, va
     
     payload = INVALID_PAYLOADS[payload_key]
     
-    chatty_response = create_chatty_response(payload, is_markdown)
+    chatty_response = create_chatty_response(payload, with_code_fences)
     
     result = await validator.validate(chatty_response)
     
-    print(result)
+    if validator_class == MarkdownValidator:
+        if not with_code_fences:
+            assert result.is_valid is False, "Markdown validators require triple backticks, skipping without code fences test"
+            assert "unexpected text around payload" in result.hint
+        # it is actaully impossible to have invalid markdown if we have code fences
+        else:
+            assert result.is_valid is True, "Markdown validators with code fences should be valid for strict and permissive modes"
+            return 
+ 
     assert result.is_valid is False
     assert result.hint is not None
     assert result.error_message is not None
