@@ -393,8 +393,19 @@ class DocumentStructureValidator(BaseValidator, ABC):
         is_valid = True
         info_loss = {}
 
-        for field, field_info in model.model_fields.items():
-            expected_type = field_info.annotation
+        # Handle both Pydantic BaseModel and OrderedDict cases
+        if isinstance(model, dict):  # OrderedDict is a dict
+            model_fields = list(model.items())
+            is_ordered_dict = True
+        else:  # Pydantic BaseModel
+            model_fields = [(field, field_info) for field, field_info in model.model_fields.items()]
+            is_ordered_dict = False
+
+        for field, field_info_or_type in model_fields:
+            if is_ordered_dict:
+                expected_type = field_info_or_type  # For OrderedDict, it's directly the type
+            else:
+                expected_type = field_info_or_type.annotation  # For BaseModel, it's field_info.annotation
             if permissive:
                 elems = self.find_all(tree, field)
                 elem = elems[0] if elems else None
@@ -472,7 +483,15 @@ class DocumentStructureValidator(BaseValidator, ABC):
         model_instance = None
         if is_valid:
             try:
-                model_instance = model(**values)
+                if is_ordered_dict:
+                    from collections import OrderedDict
+                    # For OrderedDict, preserve the original field order
+                    model_instance = OrderedDict()
+                    for field, _ in model_fields:
+                        if field in values:
+                            model_instance[field] = values[field]
+                else:
+                    model_instance = model(**values)
             except Exception as e:
                 errors.append(f"Model fill error: {e}")
                 is_valid = False
