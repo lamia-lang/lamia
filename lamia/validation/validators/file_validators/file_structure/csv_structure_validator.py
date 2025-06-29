@@ -248,7 +248,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         return None
 
     def _is_valid_csv(self, csv_text: str) -> bool:
-        """Check if the CSV text can be parsed as CSV format and has consistent structure"""
+        """Check if the CSV text can be parsed as CSV format (basic format check only)"""
         try:
             # Basic check: ensure it has at least 2 lines (header + data)
             lines = csv_text.strip().split('\n')
@@ -266,21 +266,14 @@ class CSVStructureValidator(DocumentStructureValidator):
             # Try to create a reader - this will fail for completely malformed CSV
             reader = csv.reader(f, dialect=dialect)
             
-            # Read all rows to check consistency
-            rows = list(reader)
-            if len(rows) == 0:
+            # Try to read at least one row to ensure basic parseability
+            first_row = next(reader, None)
+            if first_row is None:
                 return False
                 
             # Basic sanity check: header should have at least one field
-            header = rows[0]
-            if len(header) == 0:
+            if len(first_row) == 0:
                 return False
-            
-            # Check that all rows have the same number of columns as header
-            header_col_count = len(header)
-            for i, row in enumerate(rows[1:], 2):  # Start from row 2
-                if len(row) != header_col_count:
-                    return False
                 
             return True
         except Exception:
