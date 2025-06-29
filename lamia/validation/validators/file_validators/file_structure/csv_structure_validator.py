@@ -61,24 +61,53 @@ class CSVStructureValidator(DocumentStructureValidator):
             return field_info and is_optional(field_info)
 
     def _validate_model_is_flat(self, model):
-        """Ensure model only contains primitive types"""
+        """Ensure model only contains primitive types, Any, or Optional primitive types"""
+        from typing import get_origin, get_args
         non_primitive_fields = []
+        
+        def is_supported_type(field_type):
+            """Check if a type is supported for CSV validation"""
+            # Direct primitive types
+            if field_type in (str, int, float, bool):
+                return True
+            
+            # Any type
+            if field_type is Any:
+                return True
+                
+            # Check by name for cases where type comparison fails
+            if hasattr(field_type, '__name__') and field_type.__name__ in ('str', 'int', 'float', 'bool', 'Any'):
+                return True
+            
+            # Optional types (Union with None)
+            origin = get_origin(field_type)
+            if origin is Union:
+                args = get_args(field_type)
+                # Check if it's Optional[T] (Union[T, None])
+                if len(args) == 2 and type(None) in args:
+                    # Get the non-None type
+                    non_none_type = next(arg for arg in args if arg is not type(None))
+                    return is_supported_type(non_none_type)
+            
+            return False
         
         if isinstance(model, (dict, OrderedDict)):
             # Handle OrderedDict or dict models
             for field, field_type in model.items():
-                if not (field_type in (str, int, float, bool) or field_type.__name__ in ('str', 'int', 'float', 'bool')):
-                    non_primitive_fields.append(f"'{field}': {field_type.__name__}")
+                if not is_supported_type(field_type):
+                    type_name = getattr(field_type, '__name__', str(field_type))
+                    non_primitive_fields.append(f"'{field}': {type_name}")
         else:
             # Handle Pydantic models
             for field, field_info in model.model_fields.items():
                 field_type = field_info.annotation
-                if not (field_type in (str, int, float, bool) or field_type.__name__ in ('str', 'int', 'float', 'bool')):
-                    non_primitive_fields.append(f"'{field}': {field_info.annotation.__name__}")
+                if not is_supported_type(field_type):
+                    type_name = getattr(field_type, '__name__', str(field_type))
+                    non_primitive_fields.append(f"'{field}': {type_name}")
         
         if non_primitive_fields:
             raise ValueError(
-                f"CSV validation only supports primitive types (str, int, float, bool). "
+                f"CSV validation only supports primitive types (str, int, float, bool), Any, and Optional[primitive]. "
                 f"Non-primitive fields found: {', '.join(non_primitive_fields)}. "
             )
 
@@ -167,8 +196,9 @@ class CSVStructureValidator(DocumentStructureValidator):
                     extracted_csv = '\n'.join(csv_lines)
                     return extracted_csv
             else:
-                # Permissive: header must contain all model fields (order and extras don't matter)
-                if not model_fields_set.issubset(set(header_fields)):
+                # Permissive: header must contain all required model fields (order and extras don't matter)
+                required_fields = [field for field in model_fields if not self._is_field_optional(field)]
+                if not set(required_fields).issubset(set(header_fields)):
                     continue
                 csv_lines = [header_line]
                 header_sep_count = self._count_separators_outside_quotes(header_line, separator)
@@ -176,8 +206,9 @@ class CSVStructureValidator(DocumentStructureValidator):
                     line_stripped = lines[j].strip()
                     if not line_stripped:
                         break
-                    # Row must have at least as many separators as model fields minus one
-                    if self._count_separators_outside_quotes(line_stripped, separator) < len(model_fields) - 1:
+                    # Row must have at least as many separators as required fields minus one
+                    min_required_separators = len(required_fields) - 1 if required_fields else 0
+                    if self._count_separators_outside_quotes(line_stripped, separator) < min_required_separators:
                         break
                     csv_lines.append(line_stripped)
                 if len(csv_lines) > 1:

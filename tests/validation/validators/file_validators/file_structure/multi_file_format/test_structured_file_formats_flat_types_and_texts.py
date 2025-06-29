@@ -73,7 +73,7 @@ async def test_file_structure_validator_possible_cross_numeric_type_validation_s
         title: str
         myboolen: bool
         myint: float
-        myfloat: int
+        myfloat: float
 
     validator = validator_class(model=ModelWithPrimitiveTypes, strict=strict)
     result = await validator.validate(file_content)
@@ -81,7 +81,7 @@ async def test_file_structure_validator_possible_cross_numeric_type_validation_s
     assert result.result_type.title == "Test"
     assert result.result_type.myboolen is True or result.result_type.myboolen == True  # Accept bool True
     assert abs(result.result_type.myint - 123.00) < 1e-6 
-    assert result.result_type.myfloat == 123
+    assert result.result_type.myfloat == 123.45
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -149,11 +149,17 @@ async def test_file_structure_validator_additional_fields(strict, file_content, 
         myint: int
         myfloat: float
         optional_extra: Optional[Any]
-        optional_extra: Optional[str]
+        optional_extra_typed: Optional[str]
 
     validator = validator_class(model=ModelWithAdditionalFields, strict=strict)
     result = await validator.validate(file_content)
     assert result.is_valid is True
+    assert result.result_type.optional_extra is None
+    assert result.result_type.optional_extra_typed is None
+    assert result.result_type.title == "Test"
+    assert result.result_type.myboolen is True or result.result_type.myboolen == True  # Accept bool True
+    assert result.result_type.myint == 123
+    assert abs(result.result_type.myfloat - 123.45) < 1e-6 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
