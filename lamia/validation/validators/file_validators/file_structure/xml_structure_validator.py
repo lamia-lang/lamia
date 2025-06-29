@@ -91,23 +91,8 @@ class XMLStructureValidator(DocumentStructureValidator):
                 return element
             else:
                 text = element.text.strip()
-                print(element, text)
-                # Try int
-                try:
-                    return int(text)
-                except ValueError:
-                    pass
-                # Try float
-                try:
-                    return float(text)
-                except ValueError:
-                    pass
-                # Try bool
-                lower = text.lower()
-                if lower == 'true':
-                    return True
-                if lower == 'false':
-                    return False
+                # Return text as-is, let TypeMatcher handle type conversions
+                # This makes behavior consistent with HTML validator
                 return text
         return None
 

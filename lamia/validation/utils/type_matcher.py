@@ -100,8 +100,17 @@ class TypeMatcher:
             if expected_type is str:
                 if isinstance(value, str):
                     return TypeMatchResult(True, value)
+                # Allow primitive-to-string conversion even in strict mode
+                # When user explicitly models a field as str, they want strings regardless of source format
+                if isinstance(value, (int, float, bool)):
+                    info_loss = {
+                        "conversion": f"{type(value).__name__} -> str",
+                        "original_value": value,
+                        "original_type": type(value).__name__
+                    }
+                    return TypeMatchResult(True, str(value), info_loss=info_loss)
                 if not self.strict:
-                    # Converting non-string to string can lose type information
+                    # Converting other types to string can lose type information
                     info_loss = {
                         "conversion": f"{type(value).__name__} -> str",
                         "original_value": value,
