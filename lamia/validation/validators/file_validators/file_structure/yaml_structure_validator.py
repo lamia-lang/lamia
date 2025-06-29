@@ -71,22 +71,57 @@ class YAMLStructureValidator(DocumentStructureValidator):
             except yaml.YAMLError:
                 return None
         else:
-            yaml_lines = []
-            for line in response.split('\n'):
-                line = line.strip()
-                # Simple YAML pattern: word characters followed by colon and value
-                if re.match(r'^[\w\s-]+:\s*.+$', line):
-                    yaml_lines.append(line)
+            # Try to parse the entire response as YAML first
+            try:
+                yaml.safe_load(response.strip())
+                return response.strip()
+            except yaml.YAMLError:
+                pass
             
-            if yaml_lines:
-                yaml_candidate = '\n'.join(yaml_lines)
+            # Fallback: extract YAML-like lines (including nested structure)
+            # Only use this fallback if there are lines that look like surrounding text
+            response_lines = response.split('\n')
+            non_empty_lines = [line for line in response_lines if line.strip()]
+            
+            # Check if all non-empty lines look like YAML
+            yaml_like_lines = []
+            non_yaml_lines = []
+            
+            for line in response_lines:
+                stripped_line = line.strip()
+                if not stripped_line:  # Empty line
+                    yaml_like_lines.append(line)
+                elif (re.match(r'^[\w\s-]+:\s*.*$', stripped_line) or  # key: value or key:
+                      re.match(r'^\s+[\w\s-]+:\s*.*$', line)):        # indented nested key: value
+                    yaml_like_lines.append(line)
+                else:
+                    non_yaml_lines.append(line)
+            
+            # If there are non-YAML lines, only extract if they seem like surrounding text
+            # (not if they look like malformed YAML)
+            if non_yaml_lines:
+                # Check if non-YAML lines look like malformed YAML keys
+                for line in non_yaml_lines:
+                    stripped = line.strip()
+                    # If it looks like a key without value (common YAML error), reject extraction
+                    if re.match(r'^[\w\s-]+$', stripped) and not re.match(r'^(true|false|null|\d+)$', stripped.lower()):
+                        return None
+                
+                # If we reach here, non-YAML lines seem like surrounding text, so extract YAML
+                yaml_candidate = '\n'.join(yaml_like_lines)
+            else:
+                # All lines are YAML-like, but original parsing failed - likely malformed YAML
+                return None
+            
+            if yaml_like_lines:
+                yaml_candidate = '\n'.join(yaml_like_lines)
                 try:
                     yaml.safe_load(yaml_candidate)
                     return yaml_candidate
                 except yaml.YAMLError:
                     return None
                 
-            return yaml_candidate
+            return None
 
     def load_payload(self, payload: str) -> any:
         return yaml.safe_load(payload)

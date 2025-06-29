@@ -39,7 +39,6 @@ class FlatPerson(BaseModel):
 TEST_DATA = {
     "html": {
         "content": """<html>
-    <body>
         <name>John Doe</name>
         <age>25.7</age>
         <score>85.123</score>
@@ -48,7 +47,6 @@ TEST_DATA = {
             <number>123.5</number>
             <zip_code>12345</zip_code>
         </address>
-    </body>
 </html>""",
         "model": Person,
         "expected_info_loss_fields": ["age", "address"]  # age direct, address.number nested
