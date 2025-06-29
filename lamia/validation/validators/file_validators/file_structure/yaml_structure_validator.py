@@ -4,6 +4,7 @@ import re
 from .document_structure_validator import DocumentStructureValidator
 from .utils import import_model_from_path
 
+
 class YAMLStructureValidator(DocumentStructureValidator):
     """Validates if the YAML matches a given Pydantic model structure."""
     def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
@@ -165,7 +166,7 @@ class YAMLStructureValidator(DocumentStructureValidator):
         return found
 
     def get_subtree_string(self, elem):
-        return yaml.dump(elem, allow_unicode=True)
+        return yaml.dump(elem, allow_unicode=True, sort_keys=False)
 
     def _describe_structure(self, model, indent=0):
         lines = []
