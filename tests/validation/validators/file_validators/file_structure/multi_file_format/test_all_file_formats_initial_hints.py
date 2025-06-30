@@ -181,6 +181,12 @@ class MinimalTxtStructureValidator(DocumentStructureValidator):
             return json.dumps(elem.__dict__, default=str)
         return str(elem)
 
+    def get_field_order(self, tree):
+        """Get field order for txt files - return keys in dictionary order."""
+        if isinstance(tree, dict):
+            return list(tree.keys())
+        return []
+
 # Define models once for all tests
 class SubModel(BaseModel):
     myint: int

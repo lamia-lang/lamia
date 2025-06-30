@@ -3,6 +3,7 @@ import pytest
 from pydantic import BaseModel
 from lamia.validation.validators.file_validators import *
 from typing import Any, Optional
+from collections import OrderedDict
 
 FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES = [
     (
@@ -179,8 +180,6 @@ async def test_file_structure_validator_missing_fields(strict, file_content, val
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
 async def test_file_structure_validator_ordered_fields_correct_order(strict, file_content, validator_class):
-    from collections import OrderedDict
-
     validator = validator_class(model=OrderedDict([
             ("title", str),
             ("myboolen", bool),
@@ -200,8 +199,6 @@ async def test_file_structure_validator_ordered_fields_correct_order(strict, fil
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
 async def test_file_structure_validator_ordered_fields_incorrect_order(strict, file_content, validator_class):
-    from collections import OrderedDict
-
     # incorrect order
     validator = validator_class(model=OrderedDict([
             ("myint", int),

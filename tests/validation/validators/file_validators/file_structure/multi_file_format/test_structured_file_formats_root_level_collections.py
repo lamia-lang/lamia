@@ -37,7 +37,6 @@ async def test_file_structure_validator_check_one_type_in_list(strict, file_cont
 
     validator = validator_class(model=List[Paragraph], strict=False)
     result = await validator.validate(file_content)
-    print(result)
     assert result.is_valid is True
     assert len(result.result_type) == 2
     assert result.result_type[0].p == "paragraph1"
