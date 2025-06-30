@@ -107,6 +107,12 @@ class JSONStructureValidator(DocumentStructureValidator):
 
     def get_subtree_string(self, elem):
         return json.dumps(elem, ensure_ascii=False, separators=(',', ':'))
+
+    def get_field_order(self, tree):
+        """Get the order of keys as they appear in the JSON object."""
+        if isinstance(tree, dict):
+            return list(tree.keys())
+        return []
     
     def _describe_structure(self, model, indent=0, strict_mode=True):
         lines = []

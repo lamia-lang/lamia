@@ -92,6 +92,19 @@ For file structure validators, these methods have specific contracts:
 - **When**: Called for error reporting and debugging
 - **Contract**: Must produce valid format-specific string
 
+#### `get_field_order(tree) -> List[str]`
+- **Returns**: List of field names in the order they appear in the document
+- **When**: Called during OrderedDict validation to check field order
+- **Contract**: 
+  - Must return field names in document order for the top-level structure
+  - Used only when model is an OrderedDict to enforce field ordering
+  - Should return empty list if tree has no ordered fields
+  - Examples:
+    - JSON `{"title": "Test", "count": 5}` → `["title", "count"]`
+    - XML `<root><title>Test</title><count>5</count></root>` → `["title", "count"]`
+    - HTML child elements → list of child tag names in order
+    - CSV header row → list of column names in order
+
 #### `_describe_structure(model, indent=0) -> List[str]`
 - **Returns**: List of strings describing expected structure
 - **When**: Called to generate helpful hints for users

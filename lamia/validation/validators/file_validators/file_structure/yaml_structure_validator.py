@@ -168,6 +168,12 @@ class YAMLStructureValidator(DocumentStructureValidator):
     def get_subtree_string(self, elem):
         return yaml.dump(elem, allow_unicode=True, sort_keys=False)
 
+    def get_field_order(self, tree):
+        """Get the order of keys as they appear in the YAML object."""
+        if isinstance(tree, dict):
+            return list(tree.keys())
+        return []
+
     def _describe_structure(self, model, indent=0):
         lines = []
         prefix = '  ' * indent

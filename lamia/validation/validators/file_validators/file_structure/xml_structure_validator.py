@@ -111,6 +111,10 @@ class XMLStructureValidator(DocumentStructureValidator):
     def get_subtree_string(self, elem):
         return ET.tostring(elem, encoding='unicode')
 
+    def get_field_order(self, tree):
+        """Get the order of child element tags as they appear in the XML."""
+        return [child.tag for child in tree]
+
     def _describe_structure(self, model, indent=0):
         lines = []
         prefix = '  ' * indent

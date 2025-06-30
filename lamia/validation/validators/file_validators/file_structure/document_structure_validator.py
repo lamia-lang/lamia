@@ -7,6 +7,7 @@ from lamia.validation.utils.type_matcher import TypeMatcher
 from lamia.validation.utils.pydantic_utils import get_pydantic_json_schema
 from pydantic import BaseModel
 from typing import Callable
+from collections import OrderedDict
 
 # TODO: we can configure type checking to be different from the file validator strict mode with this flag
 #STRICT_TYPE_MATCH = False
@@ -387,6 +388,26 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """
         pass
 
+    @abstractmethod
+    def get_field_order(self, tree: Any) -> List[str]:
+        """Get the order of fields/keys/tags as they appear in the parsed document.
+        
+        This method is used for OrderedDict validation to ensure that fields
+        appear in the expected order within the document structure.
+        
+        Args:
+            tree: The parsed data structure (root level for the validation)
+            
+        Returns:
+            List[str]: List of field names in the order they appear in the document
+            
+        Examples:
+            For JSON {"title": "Test", "count": 5}: returns ["title", "count"]
+            For XML <root><title>Test</title><count>5</count></root>: returns ["title", "count"]
+            For HTML with child elements: returns list of child tag names in order
+        """
+        pass
+
     def _validate_tree(self, tree, model, permissive=False):
         errors = []
         values = {}
@@ -400,6 +421,23 @@ class DocumentStructureValidator(BaseValidator, ABC):
         else:  # Pydantic BaseModel
             model_fields = [(field, field_info) for field, field_info in model.model_fields.items()]
             is_ordered_dict = False
+
+        # For OrderedDict, check field order enforcement
+        if is_ordered_dict and isinstance(model, OrderedDict):
+            # Get the actual field order from the parsed document using the abstract method
+            actual_field_order = self.get_field_order(tree)
+            expected_field_order = [field for field, _ in model_fields]
+            
+            # Check if actual fields match expected order (only for fields that exist)
+            if actual_field_order:
+                # Filter out fields that don't exist in the model
+                relevant_actual_fields = [f for f in actual_field_order if f in expected_field_order]
+                # Get the expected order for these fields
+                relevant_expected_fields = [f for f in expected_field_order if f in relevant_actual_fields]
+                
+                if relevant_actual_fields != relevant_expected_fields:
+                    errors.append(f"Field order mismatch: expected order {relevant_expected_fields} but found {relevant_actual_fields}")
+                    is_valid = False
 
         for field, field_info_or_type in model_fields:
             if is_ordered_dict:
@@ -484,7 +522,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
         if is_valid:
             try:
                 if is_ordered_dict:
-                    from collections import OrderedDict
                     # For OrderedDict, preserve the original field order
                     model_instance = OrderedDict()
                     for field, _ in model_fields:

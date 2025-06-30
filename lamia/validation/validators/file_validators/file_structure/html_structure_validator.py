@@ -114,6 +114,10 @@ class HTMLStructureValidator(DocumentStructureValidator):
         # For HTML, return the tag as a string
         return str(elem)
 
+    def get_field_order(self, tree):
+        """Get the order of child element names as they appear in the HTML."""
+        return [child.name for child in tree.children if hasattr(child, 'name') and child.name]
+
     # Overrides the base class method to add the <html> tag to the tree
     # TODO: Can be done by adding html field to the model, but this is a good demonstration that base class can be overridden
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:

@@ -446,6 +446,13 @@ class CSVStructureValidator(DocumentStructureValidator):
             
         return output.getvalue().strip()
 
+    def get_field_order(self, tree):
+        """Get the order of columns as they appear in the CSV header."""
+        if tree and len(tree) >= 1:
+            header, _ = tree
+            return header if header else []
+        return []
+
     def _describe_structure(self, model, indent=0):
         lines = []
         for field, field_type in self._get_model_field_items():
