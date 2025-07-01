@@ -127,20 +127,27 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
             if self.strict:
-                return (
+                base_hint = (
                     "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).\n"
                     "Ensure the Markdown matches the required structure exactly.\n"
                     "Expected structure:\n"
                     + '\n'.join(structure_lines)
                 )
             else:
-                return (
+                base_hint = (
                     "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).\n"
                     "Ensure the Markdown contains the required fields with the correct types.\n"
                     "The fields can be nested within other Markdown structures.\n"
                     "Required fields that must be present:\n"
                     + '\n'.join(structure_lines)
                 )
+            
+            # Add clean ordering information
+            ordering_hint = self._generate_field_ordering_hint(self.model)
+            if ordering_hint:
+                return base_hint + "\n\n" + ordering_hint
+            else:
+                return base_hint
         else:
             return "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```) and ensure it is well-formed."
 

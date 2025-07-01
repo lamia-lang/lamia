@@ -472,49 +472,28 @@ ORDERED_DICTS = {
 }
 
 def get_ordered_hints():
-    """Generate initial hints for ordered field models by systematically transforming base hints."""
+    """Generate initial hints for ordered field models by calling actual validators to get consistent output."""
     ordered_hints = {}
     
-    # Structure validator types that need ordering
-    structure_validators = ["html_structure", "json_structure", "xml_structure", "yaml_structure", "csv_structure", "markdown_structure", "txt_structure"]
+    # Map validator types to their classes and models
+    validator_mapping = {
+        "html_structure": (HTMLStructureValidator, CompoundOrderedModel),
+        "json_structure": (JSONStructureValidator, CompoundOrderedModel), 
+        "xml_structure": (XMLStructureValidator, CompoundOrderedModel),
+        "yaml_structure": (YAMLStructureValidator, CompoundOrderedModel),
+        "csv_structure": (CSVStructureValidator, CSVModelOrdered),
+        "markdown_structure": (MarkdownStructureValidator, MarkdownModelOrdered),
+        "txt_structure": (MinimalTxtStructureValidator, CompoundOrderedModel),
+    }
     
-    for validator_type in structure_validators:
-        if validator_type in INITIAL_HINTS:
-            ordered_hints[validator_type] = {}
-            
-            # Process both strict and permissive modes
-            for mode in ["strict", "permissive"]:
-                if mode in INITIAL_HINTS[validator_type]:
-                    base_hint = INITIAL_HINTS[validator_type][mode]
-                    
-                    # Replace CompoundModel with CompoundOrderedModel in JSON schema
-                    updated_hint = base_hint.replace('"title":"CompoundModel"', '"title":"CompoundOrderedModel"')
-                    
-                    # Add ordering text based on validator type
-                    if validator_type == "csv_structure":
-                        # For CSV, insert ordering text after the column types but before the CSV instructions
-                        lines = updated_hint.split('\n')
-                        insert_index = -1
-                        # Find where to insert - after the column types section
-                        for i, line in enumerate(lines):
-                            if "mybool: bool" in line:
-                                insert_index = i + 1
-                                break
-                        if insert_index > 0:
-                            lines.insert(insert_index, "")
-                            lines.insert(insert_index + 1, "COLUMN ORDERING: mystr, myint, myfloat, mybool - CSV columns must appear in exactly this order!")
-                            updated_hint = '\n'.join(lines)
-                    elif validator_type == "markdown_structure":
-                        # No ordering needed for markdown structural elements
-                        pass
-                    elif validator_type in ["html_structure", "xml_structure"]:
-                        # HTML and XML hints already end with a newline, add 3 more to get the expected format
-                        updated_hint += "\n\n\nORDERING: mystr should come before mysubmodel"
-                    else:
-                        # For JSON, YAML, TXT: append ordering with double newline
-                        updated_hint += "\n\nORDERING: mystr should come before mysubmodel"
-                    
-                    ordered_hints[validator_type][mode] = updated_hint
+    for validator_type, (validator_class, model_class) in validator_mapping.items():
+        ordered_hints[validator_type] = {}
+        
+        # Generate hints for both strict and permissive modes by calling actual validators
+        for strict in [True, False]:
+            validator = validator_class(model=model_class, strict=strict, generate_hints=True)
+            mode_key = "strict" if strict else "permissive"
+            ordered_hints[validator_type][mode_key] = validator.initial_hint
     
     return ordered_hints
 

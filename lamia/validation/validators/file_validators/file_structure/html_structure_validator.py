@@ -55,7 +55,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
                     json_schema_str
                 )
             
-            # Add clean ordering information
+            # Add clean ordering information  
             ordering_hint = self._generate_field_ordering_hint(self.model)
             if ordering_hint:
                 return base_hint + "\n\n" + ordering_hint
