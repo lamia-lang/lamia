@@ -9,6 +9,7 @@ from .utils import import_model_from_path
 from typing import Any
 import re
 from typing import Callable
+from ....utils.pydantic_utils import get_ordered_dict_fields
 
 class DuplicateHeaderError(BaseValidationError):
     """Exception for duplicate headers in structured data."""
@@ -40,26 +41,17 @@ class CSVStructureValidator(DocumentStructureValidator):
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     def _get_model_fields(self):
-        """Get model fields as a list, handling both Pydantic models and OrderedDict"""
-        if isinstance(self.model, (dict, OrderedDict)):
-            return list(self.model.keys())
-        else:
-            return list(self.model.model_fields.keys())
+        """Get model fields as a list from Pydantic models"""
+        return list(self.model.model_fields.keys())
 
     def _get_model_field_items(self):
-        """Get model field items (name, type) as iterator, handling both Pydantic models and OrderedDict"""
-        if isinstance(self.model, (dict, OrderedDict)):
-            return self.model.items()
-        else:
-            return ((field, field_info.annotation) for field, field_info in self.model.model_fields.items())
+        """Get model field items (name, type) as iterator from Pydantic models"""
+        return ((field, field_info.annotation) for field, field_info in self.model.model_fields.items())
 
     def _is_field_optional(self, field_name):
-        """Check if a field is optional, handling both Pydantic models and OrderedDict"""
-        if isinstance(self.model, (dict, OrderedDict)):
-            return False  # All fields in dict/OrderedDict are required
-        else:
-            field_info = self.model.model_fields.get(field_name)
-            return field_info and is_optional(field_info)
+        """Check if a field is optional in Pydantic models"""
+        field_info = self.model.model_fields.get(field_name)
+        return field_info and is_optional(field_info)
 
     def _validate_model_is_flat(self, model):
         """Ensure model only contains primitive types, Any, or Optional primitive types"""
@@ -92,19 +84,12 @@ class CSVStructureValidator(DocumentStructureValidator):
             
             return False
         
-        if isinstance(model, (dict, OrderedDict)):
-            # Handle OrderedDict or dict models
-            for field, field_type in model.items():
-                if not is_supported_type(field_type):
-                    type_name = getattr(field_type, '__name__', str(field_type))
-                    non_primitive_fields.append(f"'{field}': {type_name}")
-        else:
-            # Handle Pydantic models
-            for field, field_info in model.model_fields.items():
-                field_type = field_info.annotation
-                if not is_supported_type(field_type):
-                    type_name = getattr(field_type, '__name__', str(field_type))
-                    non_primitive_fields.append(f"'{field}': {type_name}")
+        # Handle Pydantic models only
+        for field, field_info in model.model_fields.items():
+            field_type = field_info.annotation
+            if not is_supported_type(field_type):
+                type_name = getattr(field_type, '__name__', str(field_type))
+                non_primitive_fields.append(f"'{field}': {type_name}")
         
         if non_primitive_fields:
             raise ValueError(
@@ -135,8 +120,16 @@ class CSVStructureValidator(DocumentStructureValidator):
                     "Please ensure the CSV matches the required structure exactly.\n"
                     f"Expected header row: {expected_header}\n"
                     "Expected columns and types:\n"
-                    + '\n'.join(structure_lines) + "\n\n"
+                    + '\n'.join(structure_lines) + "\n"
                 )
+            
+            # Add order warning for OrderedDict fields
+            ordered_fields = get_ordered_dict_fields(self.model)
+            if ordered_fields:
+                fields_str = ", ".join(ordered_fields)
+                hint += f"\n IMPORTANT: Fields [{fields_str}] require order preservation! The CSV columns for these fields must appear in exactly the order shown above.\n"
+            
+            hint += "\n"
         else:
             hint = ""
         hint += "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows."
@@ -176,10 +169,16 @@ class CSVStructureValidator(DocumentStructureValidator):
             header_fields = [h.strip() for h in header_line.split(separator)]
 
             if self.strict:
-                if isinstance(self.model, OrderedDict):
-                    # Enforce order and names exactly
-                    if header_fields != model_fields:
+                # Check if model has ordered fields that need order preservation
+                
+                ordered_fields = get_ordered_dict_fields(self.model)
+                
+                if ordered_fields:
+                    # For models with ordered fields, enforce exact order for those fields
+                    # Regular fields order doesn't matter
+                    if set(header_fields) != model_fields_set or len(header_fields) != len(model_fields):
                         continue
+                    # TODO: Add specific order checking for ordered_fields
                 else:
                     # Only require all fields present, no extras, order doesn't matter
                     if set(header_fields) != model_fields_set or len(header_fields) != len(model_fields):
@@ -457,5 +456,11 @@ class CSVStructureValidator(DocumentStructureValidator):
         lines = []
         for field, field_type in self._get_model_field_items():
             lines.append(f'{field}: {field_type.__name__}')
+        
+        # Add order warning for OrderedDict
+        if isinstance(model, OrderedDict):
+            lines.append("")
+            lines.append(" IMPORTANT: Column order matters! The CSV columns must appear in exactly the order shown above.")
+        
         return lines
 
