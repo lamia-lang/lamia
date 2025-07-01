@@ -3,9 +3,47 @@ Utility functions for generating JSON schemas with optional token optimization.
 """
 import json
 from typing import Dict, Any
-from pydantic import BaseModel
+from collections import OrderedDict
+from pydantic import BaseModel, create_model
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaValue
 from pydantic_core import core_schema
+
+
+def get_ordered_dict_fields(model) -> list[str]:
+    """Find fields that need order preservation in BaseModel classes.
+    
+    ONLY supports the __ordered_fields__ pattern:
+        class MyModel(BaseModel):
+            regular_field: str
+            __ordered_fields__ = OrderedDict([("ordered_field", int)])
+    
+    Returns:
+        List of field names that need order preservation.
+    """
+    # Fail fast for OrderedDict as entire model (legacy pattern no longer supported)
+    if isinstance(model, OrderedDict):
+        raise ValueError("OrderedDict as entire model is no longer supported. "
+                        "Use BaseModel with '__ordered_fields__' class attribute instead.")
+    
+    # Fail fast for OrderedDict field type annotations (NOT SUPPORTED)
+    if hasattr(model, 'model_fields'):
+        for field_name, field_info in model.model_fields.items():
+            field_type = field_info.annotation
+            
+            # Fail fast for OrderedDict as field type annotation
+            if hasattr(field_type, '__origin__') and field_type.__origin__ is OrderedDict:
+                raise ValueError(f"Field '{field_name}' uses OrderedDict as type annotation. "
+                               "Use '__ordered_fields__' class attribute instead.")
+            elif str(field_type).startswith('collections.OrderedDict') or str(field_type).startswith('typing.OrderedDict'):
+                raise ValueError(f"Field '{field_name}' uses OrderedDict as type annotation. "
+                               "Use '__ordered_fields__' class attribute instead.")
+    
+    # Only supported pattern: Look for __ordered_fields__ class attribute
+    ordered_fields = []
+    if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
+        ordered_fields.extend(model.__ordered_fields__.keys())
+    
+    return ordered_fields
 
 
 class TokenOptimizedGenerateJsonSchema(GenerateJsonSchema):

@@ -27,8 +27,19 @@ def is_optional(field_info):
 class CSVStructureValidator(DocumentStructureValidator):
     """Validates if the CSV matches a given Pydantic model structure (one field per column)."""
     def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
+        # FAIL FAST: OrderedDict patterns validation before anything else
+        if isinstance(model, OrderedDict):
+            raise ValueError("OrderedDict as entire model is no longer supported. "
+                           "Use BaseModel with '__ordered_fields__' class attribute instead.")
+        
         if model is not None:
             resolved_model = model
+            # Validate OrderedDict patterns early
+            try:
+                get_ordered_dict_fields(model)  # This will raise if invalid patterns are used
+            except ValueError as e:
+                # Re-raise with context that this happened during CSV validator initialization
+                raise e
         elif model_name is not None:
             resolved_model = import_model_from_path(model_name, default_module=model_module)
         elif schema is not None:
@@ -41,12 +52,23 @@ class CSVStructureValidator(DocumentStructureValidator):
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     def _get_model_fields(self):
-        """Get model fields as a list from Pydantic models"""
-        return list(self.model.model_fields.keys())
+        """Get model fields as a list from Pydantic models (includes both regular fields and OrderedDict fields)"""
+        fields = list(self.model.model_fields.keys())
+        # Add OrderedDict fields
+        ordered_fields = get_ordered_dict_fields(self.model)
+        fields.extend(ordered_fields)
+        return fields
 
     def _get_model_field_items(self):
-        """Get model field items (name, type) as iterator from Pydantic models"""
-        return ((field, field_info.annotation) for field, field_info in self.model.model_fields.items())
+        """Get model field items (name, type) as iterator from Pydantic models (includes both regular fields and OrderedDict fields)"""
+        # Regular Pydantic fields
+        for field, field_info in self.model.model_fields.items():
+            yield (field, field_info.annotation)
+        
+        # OrderedDict fields
+        if hasattr(self.model, '__ordered_fields__') and isinstance(self.model.__ordered_fields__, OrderedDict):
+            for field, field_type in self.model.__ordered_fields__.items():
+                yield (field, field_type)
 
     def _is_field_optional(self, field_name):
         """Check if a field is optional in Pydantic models"""
@@ -107,7 +129,10 @@ class CSVStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        if self.model is not None:
+        hint = ""
+        
+        # Only provide model-specific hints when generate_hints is True
+        if self.model is not None and self.generate_hints:
             primitive_fields = []
             structure_lines = []
             
@@ -130,8 +155,8 @@ class CSVStructureValidator(DocumentStructureValidator):
                 hint += f"\n IMPORTANT: Fields [{fields_str}] require order preservation! The CSV columns for these fields must appear in exactly the order shown above.\n"
             
             hint += "\n"
-        else:
-            hint = ""
+        
+        # Always provide basic CSV format instructions
         hint += "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows."
         hint += " Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes."
 

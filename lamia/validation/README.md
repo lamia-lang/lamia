@@ -148,48 +148,74 @@ can be fetched these vlaidators will fetch it from the file so that you can use 
 File structure validators (such as CSVStructureValidator, JSONStructureValidator, etc.) use the provided model to validate the structure and types of the file. The type of model you provide can also control whether the order of fields is enforced:
 
 - **dict or Pydantic BaseModel**: Order of fields/columns does NOT matter. The validator will check that all required fields are present (and, in strict mode, that there are no extra fields), but the order in the file can be different from the order in the model.
-- **OrderedDict**: Order of fields/columns IS enforced. The validator will require that the file's fields/columns appear in exactly the same order as in the OrderedDict model. This is especially useful for formats like CSV, where downstream workflows may depend on column order.
+- **BaseModel with `__ordered_fields__`**: Specific fields have order requirements. The validator will require that fields defined in the `__ordered_fields__` OrderedDict appear in the specified order in the file. This is especially useful for formats like CSV, where downstream workflows may depend on column order.
 
-**Example:**
+### OrderedDict Support
+
+To specify that certain fields must maintain order in your file, use the `__ordered_fields__` class attribute:
 
 ```python
+from collections import OrderedDict
+from pydantic import BaseModel
+
 # Order does not matter
 class MyModel(BaseModel):
     myint: int
     mystr: str
 
-# Order matters (col1 must come before col2
+# Order matters - col1 must come before col2 in the file
 class MyOrderedModel(BaseModel):
-    OrderedDict([
+    regular_field: str
+    __ordered_fields__ = OrderedDict([
         ("col1", int),
         ("col2", str),
     ])
 
-# Nested tyoe enforced
+# Mixed ordering requirements
 class MySemiOrderedModel(BaseModel):
-    # the order is irrelevant for these 4 fields. but the myModel1 will be read with the values that appears the first in the file
+    # Order is irrelevant for these regular fields
     myint: int
-    myModel1: MyModel
     mystr: str
-    myModel2: MyModel
-    # but the col1 must always come with col2
-    OrderedDict([
+    # But these fields must maintain specific order
+    __ordered_fields__ = OrderedDict([
         ("col1", int),
         ("col2", str),
     ])
 
-# We can also be very generic with what we expected from the file by using Any and Optional[] types
+# Generic model with optional fields
 class OptionalModel(BaseModel):
     id: int                    # Required field
     name: str                  # Required field
-    score: Optional[int]       # Optional field (only strings and empty values)
-    description: Any           # Required field (The field can be either any string or a complex strucure, for the case of html it can be a html tag like <p>text</p>)
+    score: Optional[int]       # Optional field
+    description: Any           # Required field (can be string or complex structure)
     metadata: Optional[Any]    # Optional field of any kind
 ```
 
-This approach is extensible: you can use other mapping types or wrappers in the future to control more nuanced validation logic (such as enforcing order for only some fields).
+### Order Validation Behavior
 
-**Note:** For most file formats (JSON, YAML, XML, HTML, Markdown), order is not semantically important for flat models, so order is only enforced if you explicitly use an OrderedDict model.
+When `__ordered_fields__` is present:
+
+1. **Initial Hints**: The LLM receives specific warnings about order requirements
+2. **Validation**: Files must have the ordered fields appear in the correct relative order
+3. **Extraction**: For CSV files, headers are validated to ensure ordered fields appear in sequence
+4. **Error Messages**: Clear feedback when order requirements are violated
+
+### Unsupported Patterns
+
+The following OrderedDict usage patterns will raise validation errors:
+
+```python
+# NOT SUPPORTED - OrderedDict as field type annotation
+class BadModel1(BaseModel):
+    my_field: OrderedDict[str, int]  # This will fail
+
+# NOT SUPPORTED - OrderedDict as entire model
+my_model = OrderedDict([("field1", int), ("field2", str)])  # This will fail
+```
+
+Use the `__ordered_fields__` pattern instead for order requirements.
+
+**Note:** For most file formats (JSON, YAML, XML, HTML, Markdown), order is not semantically important for flat models, so order is only enforced when you explicitly use the `__ordered_fields__` pattern.
 
 ---
 
