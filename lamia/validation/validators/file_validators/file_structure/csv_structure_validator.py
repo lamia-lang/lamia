@@ -47,23 +47,23 @@ class CSVStructureValidator(DocumentStructureValidator):
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     def _get_model_fields(self):
-        """Get model fields as a list from Pydantic models (includes both regular fields and OrderedDict fields)"""
-        fields = list(self.model.model_fields.keys())
-        # Add OrderedDict fields
-        ordered_fields = get_ordered_dict_fields(self.model)
-        fields.extend(ordered_fields)
-        return fields
+        """Get model fields as a list from Pydantic models, preferring ordered fields if available"""
+        # If model has ordered fields, use only those (don't combine with regular fields)
+        if hasattr(self.model, '__ordered_fields__') and isinstance(self.model.__ordered_fields__, OrderedDict):
+            return list(self.model.__ordered_fields__.keys())
+        else:
+            return list(self.model.model_fields.keys())
 
     def _get_model_field_items(self):
-        """Get model field items (name, type) as iterator from Pydantic models (includes both regular fields and OrderedDict fields)"""
-        # Regular Pydantic fields
-        for field, field_info in self.model.model_fields.items():
-            yield (field, field_info.annotation)
-        
-        # OrderedDict fields
+        """Get model field items (name, type) as iterator from Pydantic models, preferring ordered fields if available"""
+        # If model has ordered fields, use only those (don't combine with regular fields)
         if hasattr(self.model, '__ordered_fields__') and isinstance(self.model.__ordered_fields__, OrderedDict):
             for field, field_type in self.model.__ordered_fields__.items():
                 yield (field, field_type)
+        else:
+            # Regular Pydantic fields
+            for field, field_info in self.model.model_fields.items():
+                yield (field, field_info.annotation)
 
     def _is_field_optional(self, field_name):
         """Check if a field is optional in Pydantic models"""
@@ -143,11 +143,13 @@ class CSVStructureValidator(DocumentStructureValidator):
                     + '\n'.join(structure_lines) + "\n"
                 )
             
-            # Add order warning for OrderedDict fields
-            ordered_fields = get_ordered_dict_fields(self.model)
-            if ordered_fields:
-                fields_str = ", ".join(ordered_fields)
-                hint += f"\n IMPORTANT: Fields [{fields_str}] require order preservation! The CSV columns for these fields must appear in exactly the order shown above.\n"
+            # Add clean ordering information
+            ordering_hint = self._generate_field_ordering_hint(self.model)
+            if ordering_hint:
+                # For CSV, convert the generic ordering hint to CSV-specific language
+                csv_ordering_hint = ordering_hint.replace("ORDERING:", "COLUMN ORDERING:")
+                csv_ordering_hint = csv_ordering_hint.replace("key order within these fields must be preserved", "CSV columns must appear in exactly this order")
+                hint += f"\n{csv_ordering_hint}\n"
             
             hint += "\n"
         

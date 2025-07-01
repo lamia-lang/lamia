@@ -480,3 +480,25 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         # Fallback for unknown types
         type_name = getattr(field_type, '__name__', str(field_type))
         return f"{type_name} (custom type)"
+
+    def get_field_order(self, tree):
+        """Get field order for markdown - extract structure elements in order they appear."""
+        if not isinstance(tree, list):
+            return []
+        
+        order = []
+        for node in tree:
+            if node.get('type') == 'heading':
+                level = node.get('attrs', {}).get('level', 1)
+                order.append(f"heading_{level}")
+            elif node.get('type') == 'paragraph':
+                order.append("paragraph")
+            elif node.get('type') in ['block_code', 'code_block']:
+                order.append("code_block")
+            elif node.get('type') == 'list_item':
+                order.append("list_item")
+            elif node.get('type') == 'block_quote':
+                order.append("blockquote")
+            # Add more types as needed
+        
+        return order

@@ -193,33 +193,95 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Describe the expected structure from a Pydantic model for this file format."""
         pass
 
+    def _generate_field_ordering_hint(self, model: BaseModel, prefix: str = "") -> str:
+        """Generate user-friendly field ordering information.
+        
+        Args:
+            model: The Pydantic model to analyze
+            prefix: Prefix for nested fields (e.g., "mysubmodel.")
+            
+        Returns:
+            Clean ordering hint text or empty string if no ordering needed
+        """
+        ordered_fields = get_ordered_dict_fields(model)
+        if not ordered_fields:
+            return ""
+        
+        hints = []
+        
+        # Generate simple ordering hint for top-level fields
+        if len(ordered_fields) > 1:
+            # Add prefix to field names for nested structures
+            prefixed_fields = [f"{prefix}{field}" for field in ordered_fields]
+            field_list = ", ".join(prefixed_fields)
+            
+            # Generate pairwise ordering relationships
+            ordering_pairs = []
+            for i in range(len(prefixed_fields) - 1):
+                ordering_pairs.append(f"{prefixed_fields[i]} should come before {prefixed_fields[i+1]}")
+            
+            if len(ordering_pairs) == 1:
+                hints.append(f"ORDERING: {ordering_pairs[0]}")
+            else:
+                hints.append(f"ORDERING: {field_list} - key order within these fields must be preserved!")
+        
+        # Recursively check nested models for additional ordering requirements
+        for field_name in ordered_fields:
+            if hasattr(model, 'model_fields') and field_name in model.model_fields:
+                field_info = model.model_fields[field_name]
+                field_type = field_info.annotation
+                
+                # Handle direct BaseModel subclasses
+                if is_pydantic_model(field_type):
+                    nested_prefix = f"{prefix}{field_name}."
+                    nested_hint = self._generate_field_ordering_hint(field_type, nested_prefix)
+                    if nested_hint:
+                        hints.append(nested_hint)
+                
+                # Handle Optional[BaseModel] types
+                elif hasattr(field_type, '__args__'):
+                    for arg in field_type.__args__:
+                        if is_pydantic_model(arg):
+                            nested_prefix = f"{prefix}{field_name}."
+                            nested_hint = self._generate_field_ordering_hint(arg, nested_prefix)
+                            if nested_hint:
+                                hints.append(nested_hint)
+        
+        return "\n".join(hints)
+
     @property
     def initial_hint(self) -> str:
         if self.model is not None:
-            # Generate structure description
+            # Generate original structure description (unchanged)
             structure_lines = self._describe_structure(self.model)
             
-            # Generate JSON schema
+            # Generate JSON schema (unchanged)
             schema = get_pydantic_json_schema(self.model)
             
-            # Check for OrderedDict fields and generate warnings
-            ordered_fields = get_ordered_dict_fields(self.model)
-            order_warning = ""
-            if ordered_fields:
-                fields_str = ", ".join(ordered_fields)
-                order_warning = f"IMPORTANT: Field(s) [{fields_str}] use OrderedDict - key order within these fields must be preserved!\n"
-            
-            # Combine all sections with proper spacing
-            return (
+            # Build the base hint exactly as before, but without ordering warnings
+            base_hint = (
                 f"Please ensure the {self.file_type()} matches the required structure.\n"
                 "Expected structure:\n"
-                + '\n'.join(structure_lines) + "\n"
-                + order_warning + "\n"
+                + '\n'.join(structure_lines) + "\n\n"
                 + f"Expected target pydantic type in JSON format to be extracted from the {self.file_type().upper()}:\n"
                 + schema
             )
+            
+            # Generate clean ordering information to append
+            ordering_hint = self._generate_field_ordering_hint(self.model)
+            if ordering_hint:
+                return base_hint + "\n\n" + ordering_hint
+            else:
+                return base_hint
         else:
             return f"Please return only valid {self.file_type()}, with no explanation or extra text."
+
+    def _get_model_schema_hint(self) -> str:
+        """Generate the JSON schema hint for this model."""
+        if self.model is not None:
+            schema = get_pydantic_json_schema(self.model)
+            return f"Expected target pydantic type in JSON format to be extracted from the {self.file_type().upper()}:\n{schema}"
+        return ""
 
     @abstractmethod
     def extract_payload(self, response: str) -> str | None:

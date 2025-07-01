@@ -37,21 +37,30 @@ class HTMLStructureValidator(DocumentStructureValidator):
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
             json_schema_str = self._get_model_schema_hint()
+            
+            # Build base hint
             if self.strict:
-                return (
+                base_hint = (
                     "Please ensure the HTML matches the required structure exactly.\n" +
                     "Expected structure (as direct children under <html>):\n" +
                     '\n'.join(structure_lines) + "\n" +
                     json_schema_str
                 )
             else:
-                return (
+                base_hint = (
                     "Please ensure the HTML contains the required fields somewhere in the structure.\n" +
                     "The fields can be nested within other HTML elements like <body>, <div>, etc.\n" +
                     "Required fields that must be present somewhere under <html> root tags:\n" +
                     '\n'.join(structure_lines) + "\n" +
                     json_schema_str
                 )
+            
+            # Add clean ordering information
+            ordering_hint = self._generate_field_ordering_hint(self.model)
+            if ordering_hint:
+                return base_hint + "\n\n" + ordering_hint
+            else:
+                return base_hint
         else:
             return "Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text."
 

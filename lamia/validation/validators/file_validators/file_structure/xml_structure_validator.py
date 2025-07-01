@@ -30,21 +30,30 @@ class XMLStructureValidator(DocumentStructureValidator):
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
             schema_hint = self._get_model_schema_hint()
+            
+            # Build base hint
             if self.strict:
-                return (
+                base_hint = (
                     "Please ensure the XML matches the required structure exactly.\n"
                     "Expected structure (as direct children under root):\n"
                     + '\n'.join(structure_lines) + "\n" +
                     schema_hint
                 )
             else:
-                return (
+                base_hint = (
                     "Please ensure the XML contains the required elements somewhere in the structure.\n"
                     "The elements can be nested within other XML elements.\n"
                     "Required elements that must be present somewhere:\n"
                     + '\n'.join(structure_lines) + "\n" +
                     schema_hint
                 )
+            
+            # Add clean ordering information
+            ordering_hint = self._generate_field_ordering_hint(self.model)
+            if ordering_hint:
+                return base_hint + "\n\n" + ordering_hint
+            else:
+                return base_hint
         else:
             return "Please return only valid XML, with no explanation or extra text."
     
