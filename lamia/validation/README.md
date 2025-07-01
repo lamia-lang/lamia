@@ -158,14 +158,15 @@ class MyModel(BaseModel):
     myint: int
     mystr: str
 
-# Order matters (col1 must come before col2)
-ordered_model = OrderedDict([
-    ("col1", int),
-    ("col2", str),
-])
+# Order matters (col1 must come before col2
+class MyOrderedModel(BaseModel):
+    OrderedDict([
+        ("col1", int),
+        ("col2", str),
+    ])
 
 # Nested tyoe enforced
-class MyComplexModel(BaseModel):
+class MySemiOrderedModel(BaseModel):
     # the order is irrelevant for these 4 fields. but the myModel1 will be read with the values that appears the first in the file
     myint: int
     myModel1: MyModel

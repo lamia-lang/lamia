@@ -11,6 +11,7 @@ from lamia.validation.validators import (
 from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1, Paragraph
 from lamia.validation.validators.file_validators.file_structure.document_structure_validator import DocumentStructureValidator
 import json
+from collections import OrderedDict
 
 # Minimal derivative class that doesn't override initial_hint - for .txt files
 class MinimalTxtStructureValidator(DocumentStructureValidator):
@@ -240,7 +241,7 @@ MODEL_CLASSES = {
 }
 
 # --- Test Payloads ---
-ERROR_MESSAGES = {
+INITIAL_HINTS = {
     "html": "Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text.",
     "json": "Please return only valid JSON, with no explanation or extra text. The response must be a single JSON object or array.",
     "xml": "Please return only valid XML, with no explanation or extra text.",
@@ -400,7 +401,6 @@ Expected target pydantic type in JSON format to be extracted from the TXT:
     }
 }
 
-
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("validator_type", [
     "html",
@@ -429,8 +429,64 @@ def test_structure_validator_initial_hint_exact(strict, validator_type):
     # Get the appropriate message based on strict/permissive mode
     if validator_type.endswith('_structure'):
         message_key = "strict" if strict else "permissive"
-        expected_message = ERROR_MESSAGES[validator_type][message_key]
+        expected_message = INITIAL_HINTS[validator_type][message_key]
     else:
-        expected_message = ERROR_MESSAGES[validator_type]
+        expected_message = INITIAL_HINTS[validator_type]
+
+    assert validator.initial_hint.strip() == expected_message.strip()
+
+class CompoundOrderedModel(BaseModel):
+    OrderedDict([
+        ("mystr", str),
+        ("mysubmodel", SubModel),
+    ])
+
+# CSV-specific model with only primitive types
+class CSVModelOrdered(BaseModel):
+    OrderedDict([
+        ("mystr", str),
+        ("myint", int),
+        ("myfloat", float),
+        ("mybool", bool),
+    ])
+
+# Markdown-specific model using proper markdown classes
+class MarkdownModelOrdered(BaseModel):
+    OrderedDict([
+        ("title", Heading1),
+        ("content", Paragraph),
+    ])
+
+ORDERED_DICTS = {
+    "html_structure": CompoundOrderedModel,
+    "json_structure": CompoundOrderedModel,
+    "xml_structure": CompoundOrderedModel,
+    "yaml_structure": CompoundOrderedModel,
+    "csv_structure": CSVModelOrdered,
+    "markdown_structure": MarkdownModelOrdered,
+    "txt_structure": CompoundOrderedModel,
+}
+
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("validator_type", [
+    "html_structure",
+    "json_structure",
+    "xml_structure",
+    "yaml_structure",
+    "csv_structure",
+    "markdown_structure",
+    "txt_structure"
+])
+def test_structure_validator_initial_hint_exact(strict, validator_type):
+    validator_class = VALIDATOR_CLASSES[validator_type]
+
+    model = ORDERED_DICTS[validator_type]
+    if model is not None:
+        validator = validator_class(model=model, strict=strict, generate_hints=True)
+    else:
+        validator = validator_class(strict=strict, generate_hints=True)
+
+    message_key = "strict" if strict else "permissive"
+    expected_message = INITIAL_HINTS[validator_type][message_key]
 
     assert validator.initial_hint.strip() == expected_message.strip()
