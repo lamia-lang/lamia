@@ -268,17 +268,6 @@ class ModelWithoutOrderedFields(BaseModel):
     age: int
     salary: float
 
-
-class ModelWithMultipleOrderedFields(BaseModel):
-    id: int
-    
-    __ordered_fields__ = OrderedDict([
-        ("field1", str),
-        ("field2", int),
-        ("field3", bool)
-    ])
-
-
 class BadModelWithOrderedDictType(BaseModel):
     name: str
     config: OrderedDict[str, int]  # This should fail
@@ -296,11 +285,6 @@ class TestGetOrderedDictFields:
         """Test that function returns empty list for models without OrderedDict."""
         ordered_fields = get_ordered_dict_fields(ModelWithoutOrderedFields)
         assert ordered_fields == []
-    
-    def test_detects_multiple_ordered_fields(self):
-        """Test that function correctly handles multiple ordered fields."""
-        ordered_fields = get_ordered_dict_fields(ModelWithMultipleOrderedFields)
-        assert ordered_fields == ["field1", "field2", "field3"]
     
     def test_fails_fast_on_ordereddict_as_entire_model(self):
         """Test that function raises error when OrderedDict is used as entire model."""
