@@ -4,10 +4,11 @@ import typing
 import re
 from typing import get_origin, get_args, Any, Union, Optional, List, Iterator
 from lamia.validation.utils.type_matcher import TypeMatcher
-from lamia.validation.utils.pydantic_utils import get_pydantic_json_schema
+from lamia.validation.utils.pydantic_utils import get_pydantic_json_schema, get_ordered_dict_fields
 from pydantic import BaseModel
 from typing import Callable
 from collections import OrderedDict
+import json
 
 # TODO: we can configure type checking to be different from the file validator strict mode with this flag
 #STRICT_TYPE_MATCH = False
@@ -91,6 +92,68 @@ def is_list_of_models(field_type: Any) -> bool:
     args = get_args(field_type)
     return origin in (list, typing.List) and args and is_pydantic_model(args[0])
 
+def _is_ordered_dict_model(model: Any) -> bool:
+    """Check if a model is or contains OrderedDict definitions."""
+    if isinstance(model, OrderedDict):
+        return True
+    if hasattr(model, 'model_fields'):
+        # Check if any field in a Pydantic model is an OrderedDict
+        for field_name, field_info in model.model_fields.items():
+            field_type = field_info.annotation
+            if isinstance(field_type, OrderedDict):
+                return True
+            # Recursively check nested models
+            elif is_pydantic_model(field_type) and _is_ordered_dict_model(field_type):
+                return True
+            elif is_list_of_models(field_type):
+                item_type = get_args(field_type)[0]
+                if _is_ordered_dict_model(item_type):
+                    return True
+    return False
+
+def _find_ordered_dict_fields(model: Any) -> List[str]:
+    """Find all field paths that use OrderedDict, including nested ones."""
+    ordered_fields = []
+    
+    def _scan_model(current_model, path=""):
+        # Get OrderedDict fields at current level
+        current_ordered = get_ordered_dict_fields(current_model)
+        for field_name in current_ordered:
+            field_path = f"{path}.{field_name}" if path else field_name
+            ordered_fields.append(field_path)
+            
+        # Recursively scan nested models
+        if hasattr(current_model, 'model_fields'):
+            for field_name, field_info in current_model.model_fields.items():
+                field_path = f"{path}.{field_name}" if path else field_name
+                field_type = field_info.annotation
+                
+                # Check if field is a nested model that might contain OrderedDict
+                if is_pydantic_model(field_type):
+                    _scan_model(field_type, field_path)
+                # Check if field is a list of models
+                elif is_list_of_models(field_type):
+                    item_type = get_args(field_type)[0]
+                    _scan_model(item_type, f"{field_path}[]")
+    
+    _scan_model(model)
+    return ordered_fields
+
+def _generate_order_warning(ordered_fields: List[str], file_type: str) -> str:
+    """Generate a warning message about field ordering requirements."""
+    if not ordered_fields:
+        return ""
+    
+    if len(ordered_fields) == 1 and ordered_fields[0] == "root":
+        warning = f"\n⚠️  IMPORTANT: Field order matters for this {file_type}! " \
+                 f"The fields must appear in exactly the order specified."
+    else:
+        fields_str = ", ".join(ordered_fields)
+        warning = f"\n⚠️  IMPORTANT: Field order matters for these sections: {fields_str}. " \
+                 f"Fields in these sections must appear in exactly the order specified."
+    
+    return warning
+
 class DocumentStructureValidator(BaseValidator, ABC):
     def __init__(self, model: Optional[BaseModel] = None, strict: bool = True, generate_hints: bool = False) -> None:
         super().__init__(strict=strict, generate_hints=generate_hints)
@@ -154,6 +217,11 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """Get the JSON schema hint for the model. Child classes can use this instead of directly importing schema functions."""
         if self.model is not None:
             schema = get_pydantic_json_schema(self.model)
+            ordered_fields = get_ordered_dict_fields(self.model)
+            
+            if ordered_fields:
+                fields_str = ", ".join(ordered_fields)
+                return f"Expected target pydantic type in JSON format to be extracted from the {self.file_type().upper()}:\n{schema}\n⚠️ IMPORTANT: Field(s) [{fields_str}] use OrderedDict - key order within these fields must be preserved!"
             return f"Expected target pydantic type in JSON format to be extracted from the {self.file_type().upper()}:\n{schema}"
         return ""
 
@@ -162,10 +230,19 @@ class DocumentStructureValidator(BaseValidator, ABC):
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
             schema_hint = self._get_model_schema_hint()
+            
+            # Check for OrderedDict usage and add warnings
+            ordered_fields = _find_ordered_dict_fields(self.model)
+            order_warning = _generate_order_warning(ordered_fields, self.file_type())
+            
+            # Build the warning section with proper spacing
+            warning_section = order_warning + "\n" if order_warning else ""
+            
             return (
                 f"Please ensure the {self.file_type()} matches the required structure.\n"
                 "Expected structure:\n"
                 + '\n'.join(structure_lines) + "\n"
+                + warning_section  # Always include empty line before schema
                 + f"Expected target pydantic type in JSON format to be extracted from the {self.file_type().upper()}:\n"
                 + schema_hint
             )

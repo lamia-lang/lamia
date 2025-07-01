@@ -477,7 +477,7 @@ ORDERED_DICTS = {
     "markdown_structure",
     "txt_structure"
 ])
-def test_structure_validator_initial_hint_exact(strict, validator_type):
+def test_structure_validator_initial_hint_exact_for_ordered_fields(strict, validator_type):
     validator_class = VALIDATOR_CLASSES[validator_type]
 
     model = ORDERED_DICTS[validator_type]
