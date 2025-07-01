@@ -5,13 +5,15 @@ Unit tests for pydantic_utils module.
 import json
 import pytest
 from typing import Optional, List
+from collections import OrderedDict
 from pydantic import BaseModel
 
 from lamia.validation.utils.pydantic_utils import (
     TokenOptimizedGenerateJsonSchema,
     _get_json_schema,
     get_pydantic_json_schema,
-    get_formatted_json_schema_human_readable
+    get_formatted_json_schema_human_readable,
+    get_ordered_dict_fields
 )
 
 
@@ -249,3 +251,103 @@ class TestIntegration:
             normal_field_no_title = {k: v for k, v in normal_field.items() if k != 'title'}
             
             assert optimized_field == normal_field_no_title
+
+# Test models for OrderedDict functionality
+class ModelWithOrderedFields(BaseModel):
+    name: str
+    age: int
+    
+    __ordered_fields__ = OrderedDict([
+        ("col1", int),
+        ("col2", str),
+    ])
+
+
+class ModelWithoutOrderedFields(BaseModel):
+    name: str
+    age: int
+    salary: float
+
+
+class ModelWithMultipleOrderedFields(BaseModel):
+    id: int
+    
+    __ordered_fields__ = OrderedDict([
+        ("field1", str),
+        ("field2", int),
+        ("field3", bool)
+    ])
+
+
+class BadModelWithOrderedDictType(BaseModel):
+    name: str
+    config: OrderedDict[str, int]  # This should fail
+
+
+class TestGetOrderedDictFields:
+    """Test the get_ordered_dict_fields function."""
+    
+    def test_detects_ordered_fields_correctly(self):
+        """Test that function correctly identifies __ordered_fields__ attributes."""
+        ordered_fields = get_ordered_dict_fields(ModelWithOrderedFields)
+        assert ordered_fields == ["col1", "col2"]
+    
+    def test_returns_empty_for_regular_models(self):
+        """Test that function returns empty list for models without OrderedDict."""
+        ordered_fields = get_ordered_dict_fields(ModelWithoutOrderedFields)
+        assert ordered_fields == []
+    
+    def test_detects_multiple_ordered_fields(self):
+        """Test that function correctly handles multiple ordered fields."""
+        ordered_fields = get_ordered_dict_fields(ModelWithMultipleOrderedFields)
+        assert ordered_fields == ["field1", "field2", "field3"]
+    
+    def test_fails_fast_on_ordereddict_as_entire_model(self):
+        """Test that function raises error when OrderedDict is used as entire model."""
+        ordered_model = OrderedDict([
+            ("name", str),
+            ("age", int),
+        ])
+        
+        with pytest.raises(ValueError, match="OrderedDict as entire model is no longer supported"):
+            get_ordered_dict_fields(ordered_model)
+    
+    def test_fails_fast_on_ordereddict_field_type(self):
+        """Test that function raises error when OrderedDict is used as field type annotation."""
+        with pytest.raises(ValueError, match="uses OrderedDict as type annotation"):
+            get_ordered_dict_fields(BadModelWithOrderedDictType)
+    
+    def test_maintains_field_order(self):
+        """Test that function preserves the order of fields from OrderedDict."""
+        # Test with a model that has specific order
+        class OrderedModel(BaseModel):
+            regular_field: str
+            
+            __ordered_fields__ = OrderedDict([
+                ("third", int),
+                ("first", str), 
+                ("second", bool),
+            ])
+        
+        ordered_fields = get_ordered_dict_fields(OrderedModel)
+        assert ordered_fields == ["third", "first", "second"]  # Order should be preserved
+    
+    def test_handles_model_with_no_model_fields(self):
+        """Test that function handles edge case of model with only ordered fields."""
+        class OnlyOrderedModel(BaseModel):
+            __ordered_fields__ = OrderedDict([
+                ("field1", str),
+                ("field2", int),
+            ])
+        
+        ordered_fields = get_ordered_dict_fields(OnlyOrderedModel)
+        assert ordered_fields == ["field1", "field2"]
+    
+    def test_handles_model_with_no_ordered_fields_attribute(self):
+        """Test that function handles models without __ordered_fields__ attribute."""
+        class SimpleModel(BaseModel):
+            name: str
+            age: int
+        
+        ordered_fields = get_ordered_dict_fields(SimpleModel)
+        assert ordered_fields == []
