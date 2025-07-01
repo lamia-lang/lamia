@@ -178,7 +178,16 @@ class CSVStructureValidator(DocumentStructureValidator):
                     # Regular fields order doesn't matter
                     if set(header_fields) != model_fields_set or len(header_fields) != len(model_fields):
                         continue
-                    # TODO: Add specific order checking for ordered_fields
+                    
+                    # Check that ordered fields appear in correct relative order
+                    ordered_positions = []
+                    for field in ordered_fields:
+                        if field in header_fields:
+                            ordered_positions.append(header_fields.index(field))
+                    
+                    # Verify ordered fields appear in ascending order (maintaining relative order)
+                    if ordered_positions != sorted(ordered_positions):
+                        continue  # Skip this header - ordered fields not in correct order
                 else:
                     # Only require all fields present, no extras, order doesn't matter
                     if set(header_fields) != model_fields_set or len(header_fields) != len(model_fields):
