@@ -472,122 +472,49 @@ ORDERED_DICTS = {
 }
 
 def get_ordered_hints():
-    """Generate initial hints for ordered field models using the new clean format."""
+    """Generate initial hints for ordered field models by systematically transforming base hints."""
     ordered_hints = {}
     
-    # JSON structure hints with clean ordering information
-    ordered_hints["json_structure"] = {
-        "strict": '''Please ensure the json matches the required structure exactly.
-Expected structure:
-{
-  "mystr": ...,
-  "mysubmodel": {
-    "myint": ...
-  }
-}
-Expected target pydantic type in json format to be extracted from the JSON:
-{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundOrderedModel","type":"object"}
-
-ORDERING: mystr should come before mysubmodel''',
-        "permissive": '''Please ensure the JSON contains the required fields with the correct types.
-The fields can be nested within other JSON objects.
-Required fields that must be present:
-{
-  "mystr": ...,
-  "mysubmodel": {
-    "myint": ...
-  }
-}
-Expected target pydantic type in JSON format to be extracted from the JSON:
-{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundOrderedModel","type":"object"}
-
-ORDERING: mystr should come before mysubmodel'''
-    }
+    # Structure validator types that need ordering
+    structure_validators = ["html_structure", "json_structure", "xml_structure", "yaml_structure", "csv_structure", "markdown_structure", "txt_structure"]
     
-    # HTML, XML structure hints (using base class implementation)
-    for validator_type in ["html_structure", "xml_structure"]:
-        ordered_hints[validator_type] = {}
-        for mode in ["strict", "permissive"]:
-            base_hint = INITIAL_HINTS[validator_type][mode]
-            # Replace CompoundModel with CompoundOrderedModel in the JSON schema
-            updated_hint = base_hint.replace('"title":"CompoundModel"', '"title":"CompoundOrderedModel"')
-            # Add clean ordering information at the end (base hints already end with \n, so just add \nORDERING:)
-            ordered_hints[validator_type][mode] = updated_hint + "\nORDERING: mystr should come before mysubmodel"
-    
-    # YAML structure hints with clean base class implementation  
-    ordered_hints["yaml_structure"] = {
-        "strict": '''Please ensure the yaml matches the required structure.
-Expected structure:
-mystr: ...
-mysubmodel:
-  myint: ...
-
-Expected target pydantic type in JSON format to be extracted from the YAML:
-{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundOrderedModel","type":"object"}
-
-ORDERING: mystr should come before mysubmodel''',
-        "permissive": '''Please ensure the yaml matches the required structure.
-Expected structure:
-mystr: ...
-mysubmodel:
-  myint: ...
-
-Expected target pydantic type in JSON format to be extracted from the YAML:
-{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundOrderedModel","type":"object"}
-
-ORDERING: mystr should come before mysubmodel'''
-    }
-    
-    # CSV structure hints with clean ordering
-    ordered_hints["csv_structure"] = {
-        "strict": '''Please ensure the CSV matches the required structure exactly.
-Expected header row: mystr,myint,myfloat,mybool
-Expected columns and types:
-mystr: str
-myint: int
-myfloat: float
-mybool: bool
-
-COLUMN ORDERING: mystr, myint, myfloat, mybool - CSV columns must appear in exactly this order!
-
-Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.''',
-        "permissive": '''Please ensure the CSV matches the required structure exactly.
-Expected header row: mystr,myint,myfloat,mybool
-Expected columns and types:
-mystr: str
-myint: int
-myfloat: float
-mybool: bool
-
-COLUMN ORDERING: mystr, myint, myfloat, mybool - CSV columns must appear in exactly this order!
-
-Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.'''
-    }
-    
-    # Markdown structure hints (unchanged - no ordering needed for markdown structural elements)
-    ordered_hints["markdown_structure"] = INITIAL_HINTS["markdown_structure"]
-    
-    # TXT structure hints with clean ordering
-    ordered_hints["txt_structure"] = {
-        "strict": '''Please ensure the txt matches the required structure.
-Expected structure:
-mystr (str)
-mysubmodel (JSON: SubModel)
-
-Expected target pydantic type in JSON format to be extracted from the TXT:
-{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundOrderedModel","type":"object"}
-
-ORDERING: mystr should come before mysubmodel''',
-        "permissive": '''Please ensure the txt matches the required structure.
-Expected structure:
-mystr (str)
-mysubmodel (JSON: SubModel)
-
-Expected target pydantic type in JSON format to be extracted from the TXT:
-{"$defs":{"SubModel":{"properties":{"myint":{"title":"Myint","type":"integer"}},"required":["myint"],"title":"SubModel","type":"object"}},"properties":{"mystr":{"title":"Mystr","type":"string"},"mysubmodel":{"$ref":"#/$defs/SubModel"}},"required":["mystr","mysubmodel"],"title":"CompoundOrderedModel","type":"object"}
-
-ORDERING: mystr should come before mysubmodel'''
-    }
+    for validator_type in structure_validators:
+        if validator_type in INITIAL_HINTS:
+            ordered_hints[validator_type] = {}
+            
+            # Process both strict and permissive modes
+            for mode in ["strict", "permissive"]:
+                if mode in INITIAL_HINTS[validator_type]:
+                    base_hint = INITIAL_HINTS[validator_type][mode]
+                    
+                    # Replace CompoundModel with CompoundOrderedModel in JSON schema
+                    updated_hint = base_hint.replace('"title":"CompoundModel"', '"title":"CompoundOrderedModel"')
+                    
+                    # Add ordering text based on validator type
+                    if validator_type == "csv_structure":
+                        # For CSV, insert ordering text after the column types but before the CSV instructions
+                        lines = updated_hint.split('\n')
+                        insert_index = -1
+                        # Find where to insert - after the column types section
+                        for i, line in enumerate(lines):
+                            if "mybool: bool" in line:
+                                insert_index = i + 1
+                                break
+                        if insert_index > 0:
+                            lines.insert(insert_index, "")
+                            lines.insert(insert_index + 1, "COLUMN ORDERING: mystr, myint, myfloat, mybool - CSV columns must appear in exactly this order!")
+                            updated_hint = '\n'.join(lines)
+                    elif validator_type == "markdown_structure":
+                        # No ordering needed for markdown structural elements
+                        pass
+                    elif validator_type in ["html_structure", "xml_structure"]:
+                        # HTML and XML hints already end with a newline, add 3 more to get the expected format
+                        updated_hint += "\n\n\nORDERING: mystr should come before mysubmodel"
+                    else:
+                        # For JSON, YAML, TXT: append ordering with double newline
+                        updated_hint += "\n\nORDERING: mystr should come before mysubmodel"
+                    
+                    ordered_hints[validator_type][mode] = updated_hint
     
     return ordered_hints
 
