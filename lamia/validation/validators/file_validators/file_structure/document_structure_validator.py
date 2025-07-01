@@ -99,8 +99,46 @@ def is_list_of_models(field_type: Any) -> bool:
 class DocumentStructureValidator(BaseValidator, ABC):
     def __init__(self, model: Optional[BaseModel] = None, strict: bool = True, generate_hints: bool = False) -> None:
         super().__init__(strict=strict, generate_hints=generate_hints)
+        
+        # FAIL FAST: OrderedDict patterns validation before anything else
+        if model is not None:
+            self._validate_no_raw_ordered_dict_patterns(model, "model")
+        
         self.model = model
         self.type_matcher = TypeMatcher(strict=strict, get_text_func=self.get_text)
+
+    def _validate_no_raw_ordered_dict_patterns(self, obj: Any, context: str = "model") -> None:
+        """Recursively validate that OrderedDict is not used as entire model or in type annotations.
+        
+        OrderedDict as entire model is no longer supported. Use BaseModel with '__ordered_fields__' 
+        class attribute instead.
+        
+        Args:
+            obj: The object/type to validate (can be BaseModel, OrderedDict, type annotation, etc.)
+            context: Description of where this object is found (for error messages)
+            
+        Raises:
+            ValueError: If OrderedDict is found as entire model at any nesting level
+        """
+        # Check if the object is OrderedDict (either instance or type)
+        if isinstance(obj, OrderedDict) or obj is OrderedDict:
+            raise ValueError(f"OrderedDict in {context} is not supported. "
+                           "Use BaseModel with '__ordered_fields__' class attribute instead.")
+        
+        # If it's a Pydantic model class, check its fields recursively
+        if isinstance(obj, type) and issubclass(obj, BaseModel):
+            for field_name, field_info in obj.model_fields.items():
+                field_type = field_info.annotation
+                self._validate_no_raw_ordered_dict_patterns(field_type, f"field '{field_name}'")
+        
+        # Handle generic types (Union, List, Optional, etc.)
+        origin = get_origin(obj)
+        args = get_args(obj)
+        
+        if origin is not None and args:
+            # Check each type argument recursively
+            for arg in args:
+                self._validate_no_raw_ordered_dict_patterns(arg, context)
 
     def parse(self, response: str) -> Any:
         stripped = response.strip()

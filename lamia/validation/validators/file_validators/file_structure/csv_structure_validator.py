@@ -27,11 +27,6 @@ def is_optional(field_info):
 class CSVStructureValidator(DocumentStructureValidator):
     """Validates if the CSV matches a given Pydantic model structure (one field per column)."""
     def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
-        # FAIL FAST: OrderedDict patterns validation before anything else
-        if isinstance(model, OrderedDict):
-            raise ValueError("OrderedDict as entire model is no longer supported. "
-                           "Use BaseModel with '__ordered_fields__' class attribute instead.")
-        
         if model is not None:
             resolved_model = model
             # Validate OrderedDict patterns early
