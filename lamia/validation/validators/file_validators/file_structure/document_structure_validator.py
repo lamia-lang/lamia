@@ -5,7 +5,7 @@ import re
 from typing import get_origin, get_args, Any, Union, Optional, List, Iterator
 from lamia.validation.utils.type_matcher import TypeMatcher
 from lamia.validation.utils.pydantic_utils import get_pydantic_json_schema, get_ordered_dict_fields
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 from typing import Callable
 from collections import OrderedDict
 import json
@@ -558,13 +558,20 @@ class DocumentStructureValidator(BaseValidator, ABC):
             # Check if model has __ordered_fields__ but no regular model fields
             if not model_fields and hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
                 # Create FieldInfo-like objects for __ordered_fields__
-                from pydantic import Field
+                from pydantic import create_model
                 from pydantic.fields import FieldInfo
                 model_fields = []
                 for field_name, field_type in model.__ordered_fields__.items():
                     # Create a minimal FieldInfo with the type annotation
                     field_info = FieldInfo(annotation=field_type, default=...)
                     model_fields.append((field_name, field_info))
+
+                # Dynamically create a model that explicitly declares the ordered fields
+                dynamic_model_fields = {name: (typ, ...) for name, typ in model.__ordered_fields__.items()}
+                original_ordered_fields = model.__ordered_fields__
+                model = create_model(f"{model.__name__}Dynamic", **dynamic_model_fields)
+                # Preserve ordering information on the new model
+                model.__ordered_fields__ = original_ordered_fields
             
             is_ordered_dict = False
 
@@ -572,7 +579,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
         needs_order_check = (is_ordered_dict and isinstance(model, OrderedDict)) or \
                            (not is_ordered_dict and hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict))
         
-        if needs_order_check:
+        if needs_order_check and self.strict:
             # Get the actual field order from the parsed document using the abstract method
             actual_field_order = self.get_field_order(tree)
             
@@ -592,16 +599,71 @@ class DocumentStructureValidator(BaseValidator, ABC):
                     errors.append(f"Field order mismatch: expected order {relevant_expected_fields} but found {relevant_actual_fields}")
                     is_valid = False
 
+        # --- Support ordered field selection in permissive mode ---
+        last_selected_position = -1
+        ordered_fields_seq = None
+        tree_string_cache = None
+        if permissive and not is_ordered_dict and hasattr(model, "__ordered_fields__") and isinstance(model.__ordered_fields__, OrderedDict):
+            ordered_fields_seq = list(model.__ordered_fields__.keys())
+            try:
+                # Use validator-specific string conversion for reliable ordering checks
+                tree_string_cache = self.get_subtree_string(tree)
+            except Exception:
+                tree_string_cache = None
+
         for field, field_info_or_type in model_fields:
             if is_ordered_dict:
                 expected_type = field_info_or_type  # For OrderedDict, it's directly the type
             else:
                 expected_type = field_info_or_type.annotation  # For BaseModel, it's field_info.annotation
+
             if permissive:
                 elems = self.find_all(tree, field)
+                # For string fields, prefer leaf nodes (no nested content)
+                if expected_type is str:
+                    elems = [elem for elem in elems if not self.has_nested(elem)]
+
+                # When multiple matches exist, prefer a direct child of the current tree (root-level field)
+                prefer_direct = isinstance(tree, dict) or last_selected_position >= 0
+                if len(elems) > 1 and prefer_direct:
+                    direct_candidate = self.find_element(tree, field)
+                    if direct_candidate is not None and direct_candidate in elems:
+                        # Apply same leaf filtering constraint for strings
+                        if not (expected_type is str and self.has_nested(direct_candidate)):
+                            elems = [direct_candidate]
+
+                # When ordered fields are defined, ensure we only consider elements that appear after the last selected one
+                if ordered_fields_seq is not None and tree_string_cache is not None and last_selected_position >= 0:
+                    valid_elems = []
+                    for elem in elems:
+                        try:
+                            elem_str = self.get_subtree_string(elem)
+                        except Exception:
+                            elem_str = None
+                        if elem_str:
+                            pos = tree_string_cache.find(elem_str)
+                            if pos > last_selected_position:
+                                valid_elems.append(elem)
+                    # If filtering removes all candidates, fall back to original list to avoid false negatives
+                    elems = valid_elems if valid_elems else elems
+
                 elem = elems[0] if elems else None
             else:
                 elem = self.find_element(tree, field)
+                
+                # For string fields, ensure it's a leaf node
+                if elem and expected_type is str and self.has_nested(elem):
+                    elem = None
+
+            # --- Update last_selected_position for ordered field traversal ---
+            if elem is not None and ordered_fields_seq is not None and tree_string_cache is not None:
+                try:
+                    elem_str_pos = self.get_subtree_string(elem)
+                    pos = tree_string_cache.find(elem_str_pos)
+                    if pos >= 0:
+                        last_selected_position = pos + len(elem_str_pos)
+                except Exception:
+                    pass
 
             if elem is None:
                 if is_optional(expected_type):
@@ -682,6 +744,11 @@ class DocumentStructureValidator(BaseValidator, ABC):
                             model_instance[field] = values[field]
                 else:
                     model_instance = model(**values)
+                    # Ensure ordered field values are accessible as attributes even if they are not declared
+                    if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
+                        for field_name in model.__ordered_fields__.keys():
+                            if field_name in values and not hasattr(model_instance, field_name):
+                                setattr(model_instance, field_name, values[field_name])
             except Exception as e:
                 errors.append(f"Model fill error: {e}")
                 is_valid = False
