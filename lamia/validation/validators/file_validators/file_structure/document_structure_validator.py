@@ -531,13 +531,32 @@ class DocumentStructureValidator(BaseValidator, ABC):
             is_ordered_dict = True
         else:  # Pydantic BaseModel
             model_fields = [(field, field_info) for field, field_info in model.model_fields.items()]
+            
+            # Check if model has __ordered_fields__ but no regular model fields
+            if not model_fields and hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
+                # Create FieldInfo-like objects for __ordered_fields__
+                from pydantic import Field
+                from pydantic.fields import FieldInfo
+                model_fields = []
+                for field_name, field_type in model.__ordered_fields__.items():
+                    # Create a minimal FieldInfo with the type annotation
+                    field_info = FieldInfo(annotation=field_type, default=...)
+                    model_fields.append((field_name, field_info))
+            
             is_ordered_dict = False
 
-        # For OrderedDict, check field order enforcement
-        if is_ordered_dict and isinstance(model, OrderedDict):
+        # Check field order enforcement for OrderedDict or BaseModel with __ordered_fields__
+        needs_order_check = (is_ordered_dict and isinstance(model, OrderedDict)) or \
+                           (not is_ordered_dict and hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict))
+        
+        if needs_order_check:
             # Get the actual field order from the parsed document using the abstract method
             actual_field_order = self.get_field_order(tree)
-            expected_field_order = [field for field, _ in model_fields]
+            
+            if is_ordered_dict:
+                expected_field_order = [field for field, _ in model_fields]
+            else:  # BaseModel with __ordered_fields__
+                expected_field_order = list(model.__ordered_fields__.keys())
             
             # Check if actual fields match expected order (only for fields that exist)
             if actual_field_order:

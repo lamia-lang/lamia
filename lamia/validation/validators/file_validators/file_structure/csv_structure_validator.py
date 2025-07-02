@@ -485,13 +485,10 @@ class CSVStructureValidator(DocumentStructureValidator):
 
     def _describe_structure(self, model, indent=0):
         lines = []
-        for field, field_type in self._get_model_field_items():
-            lines.append(f'{field}: {field_type.__name__}')
-        
-        # Add order warning for OrderedDict
-        if isinstance(model, OrderedDict):
-            lines.append("")
-            lines.append(" IMPORTANT: Column order matters! The CSV columns must appear in exactly the order shown above.")
-        
+        prefix = '  ' * indent
+        for field, field_info in model.model_fields.items():
+            lines.append(f'{prefix}{field}: {field_info.annotation.__name__}')
         return lines
+
+
 
