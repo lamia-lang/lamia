@@ -9,6 +9,8 @@ from lamia.validation.validators import (
     HTMLStructureValidator,
     MarkdownStructureValidator
 )
+from typing import Any
+from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading2, Heading1
 
 # Flat structure models for testing ordered fields
 class ModelWithOrderedFields(BaseModel):
@@ -19,6 +21,15 @@ class ModelWithOrderedFields(BaseModel):
     __ordered_fields__ = OrderedDict([
         ("field1", int),
         ("field2", str),
+    ])
+
+class MarkdownWithOrderedFields(BaseModel):
+    name: Heading1
+    
+    # These fields must maintain order
+    __ordered_fields__ = OrderedDict([
+        ("bio", Heading2),
+        ("contact", Heading2),
     ])
 
 # Nested structure models for testing ordered fields in complex scenarios
@@ -36,182 +47,47 @@ class NestedModelWithOrderedFields(BaseModel):
         ("ordered_field2", str),
     ])
 
-# Test data generators for each format
-def get_csv_test_data():
-    valid_cases = [
-        "field1,field2\n1,test",  # Ordered fields in correct order
-        "field1,field2\n42,hello",  # Another valid case with correct order
-    ]
-    invalid_cases = [
-        "field2,field1\ntest,1",  # Ordered fields reversed
-        "field2,field1\nhello,42",  # Another invalid case with reversed order
-    ]
-    return valid_cases, invalid_cases
+# --- Test Payloads for Flat Structure Ordering ---
+VALID_FLAT_PAYLOADS = {
+    "csv": "field1,field2\n1,test",
+    "json": '{"name": "John", "field1": 1, "age": 25, "field2": "test"}',
+    "yaml": "name: John\nfield1: 1\nage: 25\nfield2: test",
+    "xml": "<root><name>John</name><field1>1</field1><age>25</age><field2>test</field2></root>",
+    "html": "<html><name>John</name><field1>1</field1><age>25</age><field2>test</field2></html>",
+    "markdown": "## Contact \n\n# John Smith\n\n John is a great person\n\n## Biography\n\n",
+}
 
-def get_json_test_data():
-    valid_cases = [
-        '{"name": "John", "field1": 1, "age": 25, "field2": "test"}',  # Ordered fields in correct order
-        '{"field1": 1, "field2": "test", "name": "John", "age": 25}',  # Ordered fields first
-        '{"name": "John", "age": 25, "field1": 1, "field2": "test"}',  # Ordered fields at end
-        '{"field1": 1, "name": "John", "field2": "test", "age": 25}',  # Ordered fields separated but in order
-    ]
-    invalid_cases = [
-        '{"name": "John", "field2": "test", "age": 25, "field1": 1}',  # Ordered fields reversed
-        '{"field2": "test", "field1": 1, "name": "John", "age": 25}',  # Ordered fields completely reversed
-        '{"name": "John", "age": 25, "field2": "test", "field1": 1}',  # Ordered fields at end but reversed
-    ]
-    return valid_cases, invalid_cases
+INVALID_FLAT_PAYLOADS = {
+    "csv": "field2,field1\ntest,1",
+    "json": '{"name": "John", "field2": "test", "age": 25, "field1": 1}',
+    "yaml": "name: John\nfield2: test\nage: 25\nfield1: 1",
+    "xml": "<root><name>John</name><field2>test</field2><age>25</age><field1>1</field1></root>",
+    "html": "<html><name>John</name><field2>test</field2><age>25</age><field1>1</field1></html>",
+    "markdown": "# John Smith\n\n John is a great person ## Biography\n\n ## Contact",
+}
 
-def get_yaml_test_data():
-    valid_cases = [
-        "name: John\nfield1: 1\nage: 25\nfield2: test",  # Ordered fields in correct order
-        "field1: 1\nfield2: test\nname: John\nage: 25",  # Ordered fields first
-        "name: John\nage: 25\nfield1: 1\nfield2: test",  # Ordered fields at end
-        "field1: 1\nname: John\nfield2: test\nage: 25",  # Ordered fields separated but in order
-    ]
-    invalid_cases = [
-        "name: John\nfield2: test\nage: 25\nfield1: 1",  # Ordered fields reversed
-        "field2: test\nfield1: 1\nname: John\nage: 25",  # Ordered fields completely reversed
-        "name: John\nage: 25\nfield2: test\nfield1: 1",  # Ordered fields at end but reversed
-    ]
-    return valid_cases, invalid_cases
+# --- Test Payloads for Nested Structure Ordering ---
+VALID_NESTED_PAYLOADS = {
+    "json": '{"simple_field": "test", "ordered_field1": 1, "nested_data": {"nested_field1": "nested", "nested_field2": 42}, "ordered_field2": "second"}',
+    "yaml": "simple_field: test\nordered_field1: 1\nnested_data:\n  nested_field1: nested\n  nested_field2: 42\nordered_field2: second",
+    "xml": "<root><simple_field>test</simple_field><ordered_field1>1</ordered_field1><nested_data><nested_field1>nested</nested_field1><nested_field2>42</nested_field2></nested_data><ordered_field2>second</ordered_field2></root>",
+}
 
-def get_xml_test_data():
-    valid_cases = [
-        "<root><name>John</name><field1>1</field1><age>25</age><field2>test</field2></root>",
-        "<root><field1>1</field1><field2>test</field2><name>John</name><age>25</age></root>",
-        "<root><name>John</name><age>25</age><field1>1</field1><field2>test</field2></root>",
-        "<root><field1>1</field1><name>John</name><field2>test</field2><age>25</age></root>",
-    ]
-    invalid_cases = [
-        "<root><name>John</name><field2>test</field2><age>25</age><field1>1</field1></root>",
-        "<root><field2>test</field2><field1>1</field1><name>John</name><age>25</age></root>",
-        "<root><name>John</name><age>25</age><field2>test</field2><field1>1</field1></root>",
-    ]
-    return valid_cases, invalid_cases
+INVALID_NESTED_PAYLOADS = {
+    "json": '{"simple_field": "test", "ordered_field2": "second", "nested_data": {"nested_field1": "nested", "nested_field2": 42}, "ordered_field1": 1}',
+    "yaml": "simple_field: test\nordered_field2: second\nnested_data:\n  nested_field1: nested\n  nested_field2: 42\nordered_field1: 1",
+    "xml": "<root><simple_field>test</simple_field><ordered_field2>second</ordered_field2><nested_data><nested_field1>nested</nested_field1><nested_field2>42</nested_field2></nested_data><ordered_field1>1</ordered_field1></root>",
+}
 
-def get_html_test_data():
-    valid_cases = [
-        "<html><name>John</name><field1>1</field1><age>25</age><field2>test</field2></html>",
-        "<html><field1>1</field1><field2>test</field2><name>John</name><age>25</age></html>", 
-        "<html><name>John</name><age>25</age><field1>1</field1><field2>test</field2></html>",
-        "<html><field1>1</field1><name>John</name><field2>test</field2><age>25</age></html>",
-    ]
-    invalid_cases = [
-        "<html><name>John</name><field2>test</field2><age>25</age><field1>1</field1></html>",
-        "<html><field2>test</field2><field1>1</field1><name>John</name><age>25</age></html>",
-        "<html><name>John</name><age>25</age><field2>test</field2><field1>1</field1></html>",
-    ]
-    return valid_cases, invalid_cases
+# Special HTML payload for nested structure test
+NESTED_HTML_PAYLOAD = """
+<html>
 
-def get_markdown_test_data():
-    valid_cases = [
-        "# John\n\nfield1: 1\n\nage: 25\n\nfield2: test",  # Ordered fields in correct order
-        "field1: 1\n\nfield2: test\n\n# John\n\nage: 25",  # Ordered fields first
-        "# John\n\nage: 25\n\nfield1: 1\n\nfield2: test",  # Ordered fields at end
-        "field1: 1\n\n# John\n\nfield2: test\n\nage: 25",  # Ordered fields separated but in order
-    ]
-    invalid_cases = [
-        "# John\n\nfield2: test\n\nage: 25\n\nfield1: 1",  # Ordered fields reversed
-        "field2: test\n\nfield1: 1\n\n# John\n\nage: 25",  # Ordered fields completely reversed
-        "# John\n\nage: 25\n\nfield2: test\n\nfield1: 1",  # Ordered fields at end but reversed
-    ]
-    return valid_cases, invalid_cases
-
-@pytest.mark.parametrize("strict", [True, False])
-@pytest.mark.parametrize("validator_class,model_class,test_data_func", [
-    (CSVStructureValidator, ModelWithOrderedFields, get_csv_test_data),
-    (JSONStructureValidator, ModelWithOrderedFields, get_json_test_data),
-    (YAMLStructureValidator, ModelWithOrderedFields, get_yaml_test_data),
-    (XMLStructureValidator, ModelWithOrderedFields, get_xml_test_data),
-    (HTMLStructureValidator, ModelWithOrderedFields, get_html_test_data),
-    (MarkdownStructureValidator, ModelWithOrderedFields, get_markdown_test_data),
-])
-@pytest.mark.asyncio
-async def test_flat_structure_order_validation_all_formats(strict, validator_class, model_class, test_data_func):
-    """Test that all file format validators properly validate field order during extraction for flat structures"""
-    validator = validator_class(model=model_class, strict=strict, generate_hints=True)
-    
-    valid_cases, invalid_cases = test_data_func()
-    
-    # Test valid cases - ordered fields maintain relative order
-    for valid_case in valid_cases:
-        result = await validator.validate(valid_case)
-        assert result.is_valid is True, f"Valid case failed for {validator_class.__name__} in {'strict' if strict else 'non-strict'} mode: {valid_case}"
-    
-    # Test invalid cases - ordered fields in wrong relative order  
-    for invalid_case in invalid_cases:
-        result = await validator.validate(invalid_case)
-        assert result.is_valid is False, f"Invalid case passed for {validator_class.__name__} in {'strict' if strict else 'non-strict'} mode: {invalid_case}"
-
-def get_nested_json_test_data():
-    valid_cases = [
-        '{"simple_field": "test", "ordered_field1": 1, "nested_data": {"nested_field1": "nested", "nested_field2": 42}, "ordered_field2": "second"}',
-        '{"ordered_field1": 1, "ordered_field2": "second", "simple_field": "test", "nested_data": {"nested_field1": "nested", "nested_field2": 42}}',
-        '{"simple_field": "test", "nested_data": {"nested_field1": "nested", "nested_field2": 42}, "ordered_field1": 1, "ordered_field2": "second"}',
-    ]
-    invalid_cases = [
-        '{"simple_field": "test", "ordered_field2": "second", "nested_data": {"nested_field1": "nested", "nested_field2": 42}, "ordered_field1": 1}',
-        '{"ordered_field2": "second", "ordered_field1": 1, "simple_field": "test", "nested_data": {"nested_field1": "nested", "nested_field2": 42}}',
-    ]
-    return valid_cases, invalid_cases
-
-def get_nested_yaml_test_data():
-    valid_cases = [
-        "simple_field: test\nordered_field1: 1\nnested_data:\n  nested_field1: nested\n  nested_field2: 42\nordered_field2: second",
-        "ordered_field1: 1\nordered_field2: second\nsimple_field: test\nnested_data:\n  nested_field1: nested\n  nested_field2: 42",
-        "simple_field: test\nnested_data:\n  nested_field1: nested\n  nested_field2: 42\nordered_field1: 1\nordered_field2: second",
-    ]
-    invalid_cases = [
-        "simple_field: test\nordered_field2: second\nnested_data:\n  nested_field1: nested\n  nested_field2: 42\nordered_field1: 1",
-        "ordered_field2: second\nordered_field1: 1\nsimple_field: test\nnested_data:\n  nested_field1: nested\n  nested_field2: 42",
-    ]
-    return valid_cases, invalid_cases
-
-def get_nested_xml_test_data():
-    valid_cases = [
-        "<root><simple_field>test</simple_field><ordered_field1>1</ordered_field1><nested_data><nested_field1>nested</nested_field1><nested_field2>42</nested_field2></nested_data><ordered_field2>second</ordered_field2></root>",
-        "<root><ordered_field1>1</ordered_field1><ordered_field2>second</ordered_field2><simple_field>test</simple_field><nested_data><nested_field1>nested</nested_field1><nested_field2>42</nested_field2></nested_data></root>",
-    ]
-    invalid_cases = [
-        "<root><simple_field>test</simple_field><ordered_field2>second</ordered_field2><nested_data><nested_field1>nested</nested_field1><nested_field2>42</nested_field2></nested_data><ordered_field1>1</ordered_field1></root>",
-        "<root><ordered_field2>second</ordered_field2><ordered_field1>1</ordered_field1><simple_field>test</simple_field><nested_data><nested_field1>nested</nested_field1><nested_field2>42</nested_field2></nested_data></root>",
-    ]
-    return valid_cases, invalid_cases
-
-@pytest.mark.parametrize("strict", [True, False])
-@pytest.mark.parametrize("validator_class,test_data_func", [
-    (JSONStructureValidator, get_nested_json_test_data),
-    (YAMLStructureValidator, get_nested_yaml_test_data),
-    (XMLStructureValidator, get_nested_xml_test_data),
-])
-@pytest.mark.asyncio
-async def test_nested_structure_order_validation(strict, validator_class, test_data_func):
-    """Test that file format validators properly validate field order in nested structures"""
-    validator = validator_class(model=NestedModelWithOrderedFields, strict=strict, generate_hints=True)
-    
-    valid_cases, invalid_cases = test_data_func()
-    
-    # Test valid cases - ordered fields maintain relative order even with nested structures
-    for valid_case in valid_cases:
-        result = await validator.validate(valid_case)
-        assert result.is_valid is True, f"Valid nested case failed for {validator_class.__name__} in {'strict' if strict else 'non-strict'} mode: {valid_case}"
-    
-    # Test invalid cases - ordered fields in wrong relative order with nested structures
-    for invalid_case in invalid_cases:
-        result = await validator.validate(invalid_case)
-        # Currently, JSON, YAML, XML validators do not enforce field ordering
-        # This test documents the current behavior - ordering validation may be added in the future
-        # For now, we expect these validators to pass regardless of field order
-        pass  # No assertions since ordering is not currently enforced for these formats
-
-
-get_nested_html_test_data = """
     <article class="card">
         <div class="card-header">
             <div class="author">
                 <img src="/avatar.jpg" alt="Author">
-                <span class="name">John Doe</span>
+                <div class="name">John Doe</div>
             </div>
         </div>
         <div class="card-content">
@@ -231,30 +107,231 @@ get_nested_html_test_data = """
             </div>
         </div>
     </article>
+    </body>
+</html>
     """
 
+# Special XML payload for nested structure test  
+NESTED_XML_PAYLOAD = """
+<root>
+    <article class="card">
+        <div class="card-header">
+            <div class="author">
+                <img src="/avatar.jpg" alt="Author"/>
+                <div class="name">John Doe</div>
+            </div>
+        </div>
+        <div class="card-content">
+            <h2>Title</h2>
+            <p>Content with <span class="highlight">nested</span> elements</p>
+        </div>
+        <div class="comments">
+            <div class="comment">
+                <div class="author">User 1</div>
+                <p>Comment content</p>
+                <div class="replies">
+                    <div class="reply">
+                        <span class="author">User 2</span>
+                        <p>Reply content</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </article>
+</root>
+    """
+
+# Special YAML payload for nested structure test
+NESTED_YAML_PAYLOAD = """
+article:
+  class: "card"
+  div:
+    - class: "card-header"
+      div:
+        class: "author"
+        img:
+          src: "/avatar.jpg"
+          alt: "Author"
+        div:
+          class: "name"
+          content: "John Doe"
+    - class: "card-content"
+      h2: "Title"
+      p: "Content with nested elements"
+      span:
+        class: "highlight"
+        content: "nested"
+    - class: "comments"
+      div:
+        class: "comment"
+        div:
+          class: "author"
+          content: "User 1"
+        p: "Comment content"
+        div:
+          class: "replies"
+          div:
+            class: "reply"
+            span:
+              class: "author"
+              content: "User 2"
+p: "Comment content"
+span: "User 2"
+    """
+
+# Special JSON payload for nested structure test
+NESTED_JSON_PAYLOAD = """{
+  "article": {
+    "class": "card",
+    "div": [
+      {
+        "class": "card-header",
+        "div": {
+          "class": "author",
+          "img": {
+            "src": "/avatar.jpg",
+            "alt": "Author"
+          },
+          "div": {
+            "class": "name",
+            "content": "John Doe"
+          }
+        }
+      },
+      {
+        "class": "card-content",
+        "h2": "Title",
+        "p": "Content with nested elements",
+        "span": {
+          "class": "highlight",
+          "content": "nested"
+        }
+      },
+      {
+        "class": "comments",
+        "div": {
+          "class": "comment",
+          "div": {
+            "class": "author",
+            "content": "User 1"
+          },
+          "p": "Comment content",
+          "div": {
+            "class": "replies",
+            "div": {
+              "class": "reply",
+              "span": {
+                "class": "author",
+                "content": "User 2"
+              },
+              "p": "Reply content"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "p": "Comment content",
+  "span": "User 2"
+}"""
+
+# --- Validator Configurations ---
+FLAT_VALIDATOR_CONFIGS = [
+    (CSVStructureValidator, "csv", ModelWithOrderedFields),
+    (JSONStructureValidator, "json", ModelWithOrderedFields),
+    (YAMLStructureValidator, "yaml", ModelWithOrderedFields),
+    (XMLStructureValidator, "xml", ModelWithOrderedFields),
+    (HTMLStructureValidator, "html", ModelWithOrderedFields),
+    (MarkdownStructureValidator, "markdown", MarkdownWithOrderedFields),
+]
+
+NESTED_VALIDATOR_CONFIGS = [
+    (JSONStructureValidator, "json", NestedModelWithOrderedFields),
+    (YAMLStructureValidator, "yaml", NestedModelWithOrderedFields),
+    (XMLStructureValidator, "xml", NestedModelWithOrderedFields),
+]
 
 @pytest.mark.parametrize("strict", [True, False])
-@pytest.mark.parametrize("validator_class,test_data_func", [
-    (HTMLStructureValidator, get_nested_html_test_data),
-])
+@pytest.mark.parametrize("validator_class, payload_key, model", FLAT_VALIDATOR_CONFIGS)
 @pytest.mark.asyncio
-async def test_nested_structure_order_validation(strict, validator_class, test_data):
+async def test_flat_structure_order_validation_all_formats(strict, validator_class, payload_key, model):
+    """Test that all file format validators properly validate field order during extraction for flat structures"""
+    validator = validator_class(model=model, strict=strict, generate_hints=False)
+    
+    # Test valid case - ordered fields maintain relative order
+    valid_payload = VALID_FLAT_PAYLOADS[payload_key]
+    result = await validator.validate(valid_payload)
+    assert result.is_valid is True, f"Valid case failed for {validator_class.__name__} in {'strict' if strict else 'non-strict'} mode: {valid_payload}"
+    
+    # Test invalid case - ordered fields in wrong relative order  
+    invalid_payload = INVALID_FLAT_PAYLOADS[payload_key]
+    result = await validator.validate(invalid_payload)
+    assert result.is_valid is False, f"Invalid case passed for {validator_class.__name__} in {'strict' if strict else 'non-strict'} mode: {invalid_payload}"
 
-    class ParapgraphAndSpan(BaseModel):        
-        # These fields must maintain order
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "validator_class, payload_key",
+    [
+        (HTMLStructureValidator, "html"),
+        (XMLStructureValidator, "xml"),
+        (YAMLStructureValidator, "yaml"),
+        (JSONStructureValidator, "json"),
+    ],
+)
+async def test_complex_structure_order_validation(validator_class, payload_key):
+    """Parametrised version of the complex nested-structure ordering test for multiple file formats."""
+    payload_map = {
+        "html": NESTED_HTML_PAYLOAD,
+        "xml": NESTED_XML_PAYLOAD,
+        "yaml": NESTED_YAML_PAYLOAD,
+        "json": NESTED_JSON_PAYLOAD,
+    }
+    payload = payload_map[payload_key]
+
+    # --- First scenario: p comes before span ---
+    class ParagraphBeforeSpanRequest(BaseModel):
         __ordered_fields__ = OrderedDict([
             ("p", str),
             ("span", str),
         ])
-    
-    """Test that file format validators properly validate field order in nested structures"""
-    validator = validator_class(model=ParapgraphAndSpan, strict=strict, generate_hints=True)
-    
-    result = await validator.validate(test_data)
+
+    validator = validator_class(model=ParagraphBeforeSpanRequest, strict=False, generate_hints=True)
+    result = await validator.validate(payload)
     assert result.is_valid is True
-    assert result.result_type is not None
-    assert result.result.p == "Content with "
-    assert result.result.span == "nested"
-        
+    assert hasattr(result.result_type, "p")
+    assert hasattr(result.result_type, "span")
+    # Allow slight formatting differences by checking substrings
+    assert "Comment content" in str(result.result_type.p)
+    assert "User 2" in str(result.result_type.span)
+
+    # --- Second scenario: span comes before p ---
+    class SpanBeforeParagraphRequest(BaseModel):
+        __ordered_fields__ = OrderedDict([
+            ("span", str),
+            ("p", str),
+        ])
+
+    validator = validator_class(model=SpanBeforeParagraphRequest, strict=False, generate_hints=True)
+    result = await validator.validate(payload)
+    assert result.is_valid is True
+    assert hasattr(result.result_type, "p")
+    assert hasattr(result.result_type, "span")
+    assert "nested" in str(result.result_type.span)
+    assert "Comment content" in str(result.result_type.p)
+
+    # --- Third scenario: p is Any (capture subtree) then span str ---
+    class NestedSpanInComplexParagraphShouldNotBeIncluded(BaseModel):
+        __ordered_fields__ = OrderedDict([
+            ("p", Any),
+            ("span", str),
+        ])
+
+    validator = validator_class(model=NestedSpanInComplexParagraphShouldNotBeIncluded, strict=False, generate_hints=True)
+    result = await validator.validate(payload)
+    assert result.is_valid is True
+    assert hasattr(result.result_type, "p")
+    assert hasattr(result.result_type, "span")
+    # .p should contain the complex paragraph with the nested span/highlight
+    assert "Content with" in str(result.result_type.p)
+    assert "User 2" in str(result.result_type.span)
 
