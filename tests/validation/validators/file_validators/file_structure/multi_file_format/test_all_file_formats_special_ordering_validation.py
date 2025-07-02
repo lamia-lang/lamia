@@ -146,93 +146,65 @@ NESTED_YAML_PAYLOAD = """
 article:
   class: "card"
   div:
-    - class: "card-header"
       div:
-        class: "author"
         img:
           src: "/avatar.jpg"
           alt: "Author"
         div:
-          class: "name"
           content: "John Doe"
-    - class: "card-content"
       h2: "Title"
-      p: "Content with nested elements"
-      span:
-        class: "highlight"
-        content: "nested"
-    - class: "comments"
+      p:
+        - "Content with "
+        - span:
+            class: "highlight"
+            content: "nested"
+        - " elements"
       div:
-        class: "comment"
         div:
-          class: "author"
           content: "User 1"
         p: "Comment content"
         div:
-          class: "replies"
           div:
-            class: "reply"
             span:
-              class: "author"
               content: "User 2"
-p: "Comment content"
-span: "User 2"
-    """
+"""
 
 # Special JSON payload for nested structure test
 NESTED_JSON_PAYLOAD = """{
   "article": {
-    "class": "card",
     "div": [
       {
-        "class": "card-header",
         "div": {
-          "class": "author",
           "img": {
             "src": "/avatar.jpg",
             "alt": "Author"
           },
           "div": {
-            "class": "name",
             "content": "John Doe"
           }
         }
       },
       {
-        "class": "card-content",
         "h2": "Title",
-        "p": "Content with nested elements",
-        "span": {
-          "class": "highlight",
-          "content": "nested"
-        }
+        "p": [
+          "Content with ",
+          {"span": "nested"},
+          " elements"
+        ]
       },
       {
-        "class": "comments",
         "div": {
-          "class": "comment",
-          "div": {
-            "class": "author",
-            "content": "User 1"
-          },
           "p": "Comment content",
           "div": {
-            "class": "replies",
             "div": {
-              "class": "reply",
-              "span": {
-                "class": "author",
-                "content": "User 2"
-              },
+              "span": "User 2",
               "p": "Reply content"
             }
           }
         }
       }
     ]
-  },
-  "p": "Comment content",
-  "span": "User 2"
+  }
 }"""
 
 # --- Validator Configurations ---
