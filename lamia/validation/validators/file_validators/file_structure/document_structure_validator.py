@@ -226,26 +226,54 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 hints.append(f"ORDERING: {field_list} - key order within these fields must be preserved!")
         
         # Recursively check nested models for additional ordering requirements
-        for field_name in ordered_fields:
-            if hasattr(model, 'model_fields') and field_name in model.model_fields:
-                field_info = model.model_fields[field_name]
-                field_type = field_info.annotation
+        # We need to map __ordered_fields__ keys to actual model fields
+        if hasattr(model, '__ordered_fields__') and hasattr(model, 'model_fields'):
+            ordered_dict = model.__ordered_fields__
+            model_fields = model.model_fields
+            
+            # Create mapping between ordered fields and actual model fields by type matching
+            for ordered_key, ordered_type in ordered_dict.items():
+                # Find matching actual field by type
+                matching_actual_field = None
+                for actual_field_name, field_info in model_fields.items():
+                    if field_info.annotation == ordered_type:
+                        matching_actual_field = actual_field_name
+                        break
                 
-                # Handle direct BaseModel subclasses
-                if is_pydantic_model(field_type):
-                    nested_prefix = f"{prefix}{field_name}."
-                    nested_hint = self._generate_field_ordering_hint(field_type, nested_prefix)
-                    if nested_hint:
-                        hints.append(nested_hint)
+                if matching_actual_field and is_pydantic_model(ordered_type):
+                    # First generate the top-level ordering for the nested model itself (no prefix)
+                    top_level_hint = self._generate_field_ordering_hint(ordered_type, "")
+                    if top_level_hint:
+                        hints.append(top_level_hint)
+                    
+                    # Generate nested hints with both actual field name and ordered field key as prefixes
+                    actual_prefix = f"{prefix}{matching_actual_field}."
+                    ordered_prefix = f"{prefix}{ordered_key}."
+                    
+                    # Get nested hints with actual field name prefix
+                    actual_nested_hint = self._generate_field_ordering_hint(ordered_type, actual_prefix)
+                    if actual_nested_hint:
+                        hints.append(actual_nested_hint)
+                    
+                    # Get nested hints with ordered field key prefix
+                    ordered_nested_hint = self._generate_field_ordering_hint(ordered_type, ordered_prefix)
+                    if ordered_nested_hint:
+                        hints.append(ordered_nested_hint)
                 
                 # Handle Optional[BaseModel] types
-                elif hasattr(field_type, '__args__'):
-                    for arg in field_type.__args__:
+                elif matching_actual_field and hasattr(ordered_type, '__args__'):
+                    for arg in ordered_type.__args__:
                         if is_pydantic_model(arg):
-                            nested_prefix = f"{prefix}{field_name}."
-                            nested_hint = self._generate_field_ordering_hint(arg, nested_prefix)
-                            if nested_hint:
-                                hints.append(nested_hint)
+                            actual_prefix = f"{prefix}{matching_actual_field}."
+                            ordered_prefix = f"{prefix}{ordered_key}."
+                            
+                            actual_nested_hint = self._generate_field_ordering_hint(arg, actual_prefix)
+                            if actual_nested_hint:
+                                hints.append(actual_nested_hint)
+                            
+                            ordered_nested_hint = self._generate_field_ordering_hint(arg, ordered_prefix)
+                            if ordered_nested_hint:
+                                hints.append(ordered_nested_hint)
         
         return "\n".join(hints)
 
