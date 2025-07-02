@@ -513,12 +513,46 @@ def test_structure_validator_initial_hint_exact_for_ordered_fields(strict, valid
     validator_class = VALIDATOR_CLASSES[validator_type]
 
     model = ORDERED_DICTS[validator_type]
-    if model is not None:
-        validator = validator_class(model=model, strict=strict, generate_hints=True)
-    else:
-        validator = validator_class(strict=strict, generate_hints=True)
+    validator = validator_class(model=model, strict=strict, generate_hints=True)
 
     message_key = "strict" if strict else "permissive"
     expected_message = INITIAL_HINTS_ORDERED[validator_type][message_key]
 
     assert validator.initial_hint.strip() == expected_message.strip()
+
+
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("validator_type", [
+    "html_structure",
+    "json_structure",
+    "xml_structure",
+    "yaml_structure",
+])
+def test_structure_validator_initial_hint_for_ordered_nested_fields(strict, validator_type):
+    validator_class = VALIDATOR_CLASSES[validator_type]
+
+    class NestedOrderedModel(BaseModel):
+        mystr: str
+        myint: int
+        
+        __ordered_fields__ = OrderedDict([
+            ("myorderedstr", str),
+            ("myorderedint", int),
+        ])
+
+    class UpperOrderedModel(BaseModel):
+        mysubmodel: NestedOrderedModel
+        
+        __ordered_fields__ = OrderedDict([
+            ("mystr", str),
+            ("mysubmodel_inside_ordereddict", NestedOrderedModel),
+        ])
+    
+    # Use the UpperOrderedModel that was defined in the test
+    validator = validator_class(model=UpperOrderedModel, strict=strict, generate_hints=True)
+    
+    assert "myorderedstr should come before myorderedint" in validator.initial_hint
+    assert "mysubmodel.myorderedstr should come before mysubmodel.myorderedint" in validator.initial_hint
+    assert "mysubmodel_inside_ordereddict.myorderedstr should come before mysubmodel_inside_ordereddict.myorderedint" in validator.initial_hint
+
+

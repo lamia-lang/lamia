@@ -2,6 +2,7 @@ import pytest
 from pydantic import BaseModel
 from lamia.validation.validators.file_validators.file_structure.csv_structure_validator import CSVStructureValidator
 from lamia.validation.base import ValidationResult
+from collections import OrderedDict
 
 # The tests that are common to all file structure validators should go to multi_file_format folder
 # Tests exclusive to CSV format should go here
@@ -107,3 +108,31 @@ def test_csv_structure_validator_rejects_non_primitive_model():
     assert "'items': list" in error_message
     assert "'another_model': SimpleModel" in error_message
 
+class CSVModelWithOrderedFields(BaseModel):
+    name: str
+    age: int
+    
+    # These fields must maintain order in CSV
+    __ordered_fields__ = OrderedDict([
+        ("col1", int),
+        ("col2", str),
+    ])
+
+def test_csv_order_validation_in_extract_payload():
+    """Test that CSV validator properly validates field order during extraction"""
+    validator = CSVStructureValidator(model=CSVModelWithOrderedFields, strict=True, generate_hints=True)
+    
+    # Valid cases - ordered fields maintain relative order
+    valid_cases = [
+        "name,col1,age,col2\nJohn,1,25,test",  # Ordered fields in correct order
+        "col1,col2,name,age\n1,test,John,25",  # Ordered fields first
+        "name,age,col1,col2\nJohn,25,1,test",  # Ordered fields at end
+        "col1,name,col2,age\n1,John,test,25",  # Ordered fields separated but in order
+    ]
+    
+    # Invalid cases - ordered fields in wrong relative order  
+    invalid_cases = [
+        "name,col2,age,col1\nJohn,test,25,1",  # Ordered fields reversed
+        "col2,col1,name,age\ntest,1,John,25",  # Ordered fields completely reversed
+        "name,age,col2,col1\nJohn,25,test,1",  # Ordered fields at end but reversed
+    ]
