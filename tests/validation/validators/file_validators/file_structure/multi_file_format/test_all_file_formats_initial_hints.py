@@ -551,8 +551,11 @@ def test_structure_validator_initial_hint_for_ordered_nested_fields(strict, vali
     # Use the UpperOrderedModel that was defined in the test
     validator = validator_class(model=UpperOrderedModel, strict=strict, generate_hints=True)
     
-    assert "myorderedstr should come before myorderedint" in validator.initial_hint
     assert "mysubmodel.myorderedstr should come before mysubmodel.myorderedint" in validator.initial_hint
+    assert "mystr should come before mysubmodel_inside_ordereddict" in validator.initial_hint
     assert "mysubmodel_inside_ordereddict.myorderedstr should come before mysubmodel_inside_ordereddict.myorderedint" in validator.initial_hint
-
+    
+    # Ensure there are exactly 3 ordering messages (no more, no less)
+    ordering_lines = [line for line in validator.initial_hint.split('\n') if 'ORDERING:' in line]
+    assert len(ordering_lines) == 3, f"Expected exactly 3 ordering messages, but found {len(ordering_lines)}: {ordering_lines}"
 

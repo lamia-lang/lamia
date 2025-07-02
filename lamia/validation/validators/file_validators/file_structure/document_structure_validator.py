@@ -241,11 +241,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
                         break
                 
                 if matching_actual_field and is_pydantic_model(ordered_type):
-                    # First generate the top-level ordering for the nested model itself (no prefix)
-                    top_level_hint = self._generate_field_ordering_hint(ordered_type, "")
-                    if top_level_hint:
-                        hints.append(top_level_hint)
-                    
                     # Generate nested hints with both actual field name and ordered field key as prefixes
                     actual_prefix = f"{prefix}{matching_actual_field}."
                     ordered_prefix = f"{prefix}{ordered_key}."
