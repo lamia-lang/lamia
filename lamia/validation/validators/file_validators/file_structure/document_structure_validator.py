@@ -553,26 +553,16 @@ class DocumentStructureValidator(BaseValidator, ABC):
             model_fields = list(model.items())
             is_ordered_dict = True
         else:  # Pydantic BaseModel
-            model_fields = [(field, field_info) for field, field_info in model.model_fields.items()]
-            
-            # Check if model has __ordered_fields__ but no regular model fields
-            if not model_fields and hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
-                # Create FieldInfo-like objects for __ordered_fields__
+            # PATCH: If model has __ordered_fields__, always create a dynamic model with only those fields
+            if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
                 from pydantic import create_model
-                from pydantic.fields import FieldInfo
-                model_fields = []
-                for field_name, field_type in model.__ordered_fields__.items():
-                    # Create a minimal FieldInfo with the type annotation
-                    field_info = FieldInfo(annotation=field_type, default=...)
-                    model_fields.append((field_name, field_info))
-
-                # Dynamically create a model that explicitly declares the ordered fields
                 dynamic_model_fields = {name: (typ, ...) for name, typ in model.__ordered_fields__.items()}
                 original_ordered_fields = model.__ordered_fields__
                 model = create_model(f"{model.__name__}Dynamic", **dynamic_model_fields)
-                # Preserve ordering information on the new model
                 model.__ordered_fields__ = original_ordered_fields
-            
+                model_fields = [(field, type_) for field, type_ in model.__ordered_fields__.items()]
+            else:
+                model_fields = [(field, field_info) for field, field_info in model.model_fields.items()]
             is_ordered_dict = False
 
         # Check field order enforcement for OrderedDict or BaseModel with __ordered_fields__
@@ -612,8 +602,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 tree_string_cache = None
 
         for field, field_info_or_type in model_fields:
-            if is_ordered_dict:
-                expected_type = field_info_or_type  # For OrderedDict, it's directly the type
+            if is_ordered_dict or isinstance(field_info_or_type, type):
+                expected_type = field_info_or_type  # For OrderedDict or __ordered_fields__, it's directly the type
             else:
                 expected_type = field_info_or_type.annotation  # For BaseModel, it's field_info.annotation
 
@@ -640,38 +630,11 @@ class DocumentStructureValidator(BaseValidator, ABC):
                         try:
                             elem_str = self.get_subtree_string(elem)
                             pos = tree_string_cache.find(elem_str)
-                            
-                            # If direct string search fails for YAML, try alternatives
-                            if pos < 0 and hasattr(self, 'file_type') and self.file_type() == 'yaml':
-                                if isinstance(elem, (str, int, float, bool)):
-                                    # Try searching for the value itself
-                                    value_str = str(elem)
-                                    pos = tree_string_cache.find(value_str, last_selected_position + 1)
-                                    if pos >= 0:
-                                        elem_str = value_str
-                                    
-                                    # Try searching for YAML key-value patterns
-                                    if pos < 0:
-                                        patterns = [
-                                            f"{field}: {elem}",  # key: value
-                                            f"{field}: '{elem}'",  # key: 'value'
-                                            f"{field}: \"{elem}\"",  # key: "value"
-                                            f"  {field}: {elem}",  # indented key: value
-                                            f"    {field}: {elem}",  # more indented
-                                        ]
-                                        for pattern in patterns:
-                                            pos = tree_string_cache.find(pattern, last_selected_position + 1)
-                                            if pos >= 0:
-                                                elem_str = pattern
-                                                break
-                                    
-                                    # Final fallback: search for value without position constraint, then check if it's after last_selected_position
-                                    if pos < 0:
-                                        pos = tree_string_cache.find(value_str)
-                                        if pos >= 0:
-                                            elem_str = value_str
-                            
-                            print(f"  Candidate {i}: {elem} -> string: '{elem_str}' -> position: {pos}")
+                            # PATCH: fallback for YAML scalar key-value
+                            if pos == -1 and self.__class__.__name__ == "YAMLStructureValidator":
+                                # Try to find key: value pattern
+                                key_value_pattern = f"{field}: {elem_str}".strip()
+                                pos = tree_string_cache.find(key_value_pattern)
                             if pos > last_selected_position:
                                 valid_elems.append(elem)
                                 print(f"    -> ACCEPTED (pos {pos} > {last_selected_position})")
@@ -684,6 +647,26 @@ class DocumentStructureValidator(BaseValidator, ABC):
                     print(f"DEBUG: After filtering: {len(valid_elems)} valid elements")
                     elems = valid_elems if valid_elems else elems
 
+                    # Additional tie-breaker: if multiple candidates remain and this model
+                    # has an ordered field sequence, pick the first candidate that
+                    # actually appears *after* the last_selected_position. This fixes the
+                    # YAML case where find_all returns both ``nested`` and ``User 2`` but
+                    # only the latter is located after the captured paragraph block.
+                    if (
+                        ordered_fields_seq is not None
+                        and tree_string_cache is not None
+                        and last_selected_position >= 0
+                        and len(elems) > 1
+                    ):
+                        for cand in elems:
+                            try:
+                                cand_pos = tree_string_cache.find(self.get_subtree_string(cand))
+                            except Exception:
+                                cand_pos = -1
+                            if cand_pos > last_selected_position:
+                                elems = [cand]
+                                break
+
                 elem = elems[0] if elems else None
             else:
                 elem = self.find_element(tree, field)
@@ -695,103 +678,22 @@ class DocumentStructureValidator(BaseValidator, ABC):
             # --- Update last_selected_position for ordered field traversal ---
             if elem is not None and ordered_fields_seq is not None and tree_string_cache is not None:
                 try:
-                    print(f"DEBUG: Updating position for field '{field}', elem: {elem}, current last_pos: {last_selected_position}")
-                    elem_str = self.get_subtree_string(elem)
-                    pos = tree_string_cache.find(elem_str)
-                    print(f"DEBUG: Initial search for '{elem_str}' found position: {pos}")
-                    
-                    # If direct string search fails, try alternative approaches for YAML/JSON
-                    if pos < 0:
-                        print("DEBUG: Direct search failed, trying alternatives...")
-                        
-                        # Special handling for Any fields that return complex structures
-                        if expected_type is Any and hasattr(self, 'file_type') and self.file_type() == 'yaml':
-                            # For YAML Any fields, try to find the key that contains this structure
-                            key_patterns = [
-                                f"{field}:",
-                                f"  {field}:",
-                                f"    {field}:",
-                            ]
-                            for pattern in key_patterns:
-                                search_start = last_selected_position + 1 if last_selected_position >= 0 else 0
-                                pos = tree_string_cache.find(pattern, search_start)
-                                print(f"DEBUG: Searching for Any field pattern '{pattern}' from pos {search_start}: {pos}")
-                                if pos >= 0:
-                                    # Compute indent of the 'p:' line in original text
-                                    line_start = tree_string_cache.rfind('\n', 0, pos) + 1  # 0 if not found, else index after \n
-                                    pattern_indent = pos - line_start
-                                    lines_after_key = tree_string_cache[pos:].split('\n')
-                                    structure_end_pos = pos + len(pattern)
-                                    cumulative_len = 0
-                                    for i, line in enumerate(lines_after_key[1:], 1):
-                                        cumulative_len += len(lines_after_key[i-1]) + 1  # previous line + newline
-                                        stripped = line.lstrip()
-                                        if stripped:  # non-empty line
-                                            indent = len(line) - len(stripped)
-                                            if indent < pattern_indent:
-                                                structure_end_pos = pos + cumulative_len
-                                                break
-                                            else:
-                                                structure_end_pos = pos + cumulative_len + len(line)
-                                    elem_str = tree_string_cache[pos:structure_end_pos]
-                                    print(f"DEBUG: Any field structure from {pos} to {structure_end_pos}, length: {len(elem_str)}")
-                                    print(f"DEBUG: Structure content: '{elem_str}'")
-                                    print(f"DEBUG: Text after structure: '{tree_string_cache[structure_end_pos:structure_end_pos+50]}'")
-                                    pos = structure_end_pos
-                                    elem_str = ""  # avoid double count
-                                    break
-                        
-                        # For primitive values, try searching for the value itself
-                        if pos < 0 and isinstance(elem, (str, int, float, bool)):
-                            # Try searching for the value as it might appear in the original
-                            value_str = str(elem)
-                            search_start = last_selected_position + 1 if last_selected_position >= 0 else 0
-                            pos = tree_string_cache.find(value_str, search_start)
-                            print(f"DEBUG: Searching for value '{value_str}' from pos {search_start}: {pos}")
-                            if pos >= 0:
-                                elem_str = value_str
-                        
-                        # For YAML, try searching for the value with common YAML patterns
-                        if pos < 0 and hasattr(self, 'file_type') and self.file_type() == 'yaml':
-                            if isinstance(elem, str):
-                                search_start = last_selected_position + 1 if last_selected_position >= 0 else 0
-                                # Try different YAML value patterns
-                                patterns = [
-                                    f"{field}: {elem}",  # key: value
-                                    f"{field}:{elem}",   # key:value (no space)
-                                    f'"{elem}"',         # quoted value
-                                    f"'{elem}'",         # single quoted value
-                                    elem.strip()         # plain value
-                                ]
-                                for pattern in patterns:
-                                    pos = tree_string_cache.find(pattern, search_start)
-                                    print(f"DEBUG: Trying pattern '{pattern}' from pos {search_start}: {pos}")
-                                    if pos >= 0:
-                                        elem_str = pattern
-                                        break
-                        
-                        # If still not found and we have a start position, ensure we only search after it
-                        if pos < 0 and last_selected_position >= 0:
-                            search_start = last_selected_position + 1
-                            pos = tree_string_cache.find(str(elem), search_start)
-                            print(f"DEBUG: Final fallback search for '{str(elem)}' from pos {search_start}: {pos}")
-                            if pos >= 0:
-                                elem_str = str(elem)
-                    
-                    # If we found a position but it's before our last position, find the next occurrence
-                    elif last_selected_position >= 0 and pos <= last_selected_position:
-                        search_start = last_selected_position + 1
-                        pos = tree_string_cache.find(elem_str, search_start)
-                        print(f"DEBUG: Position {pos} <= {last_selected_position}, searching for next occurrence from {search_start}: {pos}")
-                    
-                    if pos >= 0:
-                        old_pos = last_selected_position
-                        last_selected_position = pos + len(elem_str)
-                        print(f"DEBUG: Updated last_selected_position from {old_pos} to {last_selected_position}")
+                    # PATCH: For YAML, if elem is a list, set position to end of last item's string
+                    if self.__class__.__name__ == "YAMLStructureValidator" and isinstance(elem, list) and elem:
+                        last_item_str = self.get_subtree_string(elem[-1])
+                        pos = tree_string_cache.find(last_item_str)
+                        if pos >= 0:
+                            last_selected_position = pos + len(last_item_str)
                     else:
-                        print(f"DEBUG: Could not find position for element {elem}")
-                except Exception as e:
-                    print(f"DEBUG: Exception in position update: {e}")
+                        elem_str_pos = self.get_subtree_string(elem)
+                        pos = tree_string_cache.find(elem_str_pos)
+                        # PATCH: fallback for YAML scalar key-value
+                        if pos == -1 and self.__class__.__name__ == "YAMLStructureValidator":
+                            key_value_pattern = f"{field}: {elem_str_pos}".strip()
+                            pos = tree_string_cache.find(key_value_pattern)
+                        if pos >= 0:
+                            last_selected_position = pos + len(elem_str_pos)
+                except Exception:
                     pass
         
             print("elem2", elem, last_selected_position, tree_string_cache[last_selected_position:])
@@ -874,6 +776,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
                         if field in values:
                             model_instance[field] = values[field]
                 else:
+                    # Always use the dynamic model instance for __ordered_fields__
                     model_instance = model(**values)
                     # Ensure ordered field values are accessible as attributes even if they are not declared
                     if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
