@@ -624,7 +624,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
                 # When ordered fields are defined, ensure we only consider elements that appear after the last selected one
                 if ordered_fields_seq is not None and tree_string_cache is not None and last_selected_position >= 0:
-                    print(f"DEBUG: Filtering {len(elems)} candidates for field '{field}' after position {last_selected_position}")
                     valid_elems = []
                     for i, elem in enumerate(elems):
                         try:
@@ -632,35 +631,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
                             pos = tree_string_cache.find(elem_str)
                             if pos > last_selected_position:
                                 valid_elems.append(elem)
-                                print(f"    -> ACCEPTED (pos {pos} > {last_selected_position})")
-                            else:
-                                print(f"    -> REJECTED (pos {pos} <= {last_selected_position})")
                         except Exception as e:
-                            print(f"    -> ERROR: {e}")
                             pass
                     # If filtering removes all candidates, fall back to original list to avoid false negatives
-                    print(f"DEBUG: After filtering: {len(valid_elems)} valid elements")
                     elems = valid_elems if valid_elems else elems
-
-                    # Additional tie-breaker: if multiple candidates remain and this model
-                    # has an ordered field sequence, pick the first candidate that
-                    # actually appears *after* the last_selected_position. This fixes the
-                    # YAML case where find_all returns both ``nested`` and ``User 2`` but
-                    # only the latter is located after the captured paragraph block.
-                    if (
-                        ordered_fields_seq is not None
-                        and tree_string_cache is not None
-                        and last_selected_position >= 0
-                        and len(elems) > 1
-                    ):
-                        for cand in elems:
-                            try:
-                                cand_pos = tree_string_cache.find(self.get_subtree_string(cand))
-                            except Exception:
-                                cand_pos = -1
-                            if cand_pos > last_selected_position:
-                                elems = [cand]
-                                break
 
                 elem = elems[0] if elems else None
             else:
@@ -686,8 +660,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
                             last_selected_position = pos + len(elem_str_pos)
                 except Exception:
                     pass
-        
-            print("elem2", elem, last_selected_position, tree_string_cache[last_selected_position:])
 
             if elem is None:
                 if is_optional(expected_type):
