@@ -6,6 +6,7 @@ from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
 from .utils import import_model_from_path
 import re
+from collections import OrderedDict
 
 # Marker classes for semantic mapping
 class MarkdownStr(str):
@@ -295,7 +296,14 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         return node.get('raw', '')
 
     def _match_fields(self, ast, model, strict: bool):
+        # Start with statically annotated model fields
         fields = list(model.__annotations__.items())
+
+        if hasattr(model, "__ordered_fields__") and isinstance(model.__ordered_fields__, OrderedDict):
+            for fname, ftype in model.__ordered_fields__.items():
+                if fname not in model.__annotations__:
+                    fields.append((fname, ftype))
+
         ast_idx = 0
         values = {}
         missing_fields = []
@@ -367,16 +375,14 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         if not valid:
             return ValidationResult(is_valid=False, error_message=err, hint=self.get_retry_hint(retry_hint=err))
         
-        # Create an instance of the model with converted values
-        try:
-            result_type = self.model(**values)
-        except Exception as e:
-            error_msg = f"Model creation error: {e}"
-            return ValidationResult(
-                is_valid=False, 
-                error_message=error_msg,
-                hint=self.get_retry_hint(error=e)
-            )
+        model_kwargs = {k: v for k, v in values.items() if k in self.model.model_fields}
+        result_type = self.model(**model_kwargs)
+
+        if hasattr(self.model, "__ordered_fields__") and isinstance(self.model.__ordered_fields__, OrderedDict):
+            for field_name in self.model.__ordered_fields__.keys():
+                if field_name in values and not hasattr(result_type, field_name):
+                    # Use __dict__ to bypass Pydantic's field validation
+                    result_type.__dict__[field_name] = values[field_name]
         
         return ValidationResult(
             is_valid=True, 
