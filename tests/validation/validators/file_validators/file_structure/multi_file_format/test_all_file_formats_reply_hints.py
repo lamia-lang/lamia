@@ -252,6 +252,9 @@ class DummyThrowingNestedExceptionValidator(DocumentStructureValidator):
     
     def get_subtree_string(self, elem):
         return ""
+    
+    def get_field_order(self, tree):    
+        return []
 
 @pytest.mark.asyncio
 async def test_nested_exception_messages_in_hints():

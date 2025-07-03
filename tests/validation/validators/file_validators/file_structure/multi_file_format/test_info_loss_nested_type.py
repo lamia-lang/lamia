@@ -256,41 +256,42 @@ Jane Smith,30.2,92.456"""
                  # Create test data where only some fields need conversion
         if validator_type == "json":
             content = """{
-    "name": "John Doe",
-    "age": 25,
-    "score": 85.123,
-    "address": {
-        "street": "Main St",
-        "number": "123.5",
-        "zip_code": "12345"
-    }
-}"""
+                "name": "John Doe",
+                "age": 25,
+                "score": 85.123,
+                "address": {
+                    "street": "Main St",
+                    "number": "123.5",
+                    "zip_code": "12345"
+                }
+            }"""
         elif validator_type == "html":
             content = """<html>
-    <body>
-        <name>John Doe</name>
-        <age>25</age>
-        <score>85.123</score>
-        <address>
-            <street>Main St</street>
-            <number>123.5</number>
-            <zip_code>12345</zip_code>
-        </address>
-    </body>
-</html>"""
+                <body>
+                    <name>John Doe</name>
+                    <age>25</age>
+                    <score>85.123</score>
+                    <address>
+                        <street>Main St</street>
+                        <number>123.5</number>
+                        <zip_code>12345</zip_code>
+                    </address>
+                </body>
+            </html>"""
         elif validator_type == "xml":
             content = """<root>
-<name>John Doe</name>
-<age>25</age>
-<score>85.123</score>
-<address>
-    <street>Main St</street>
-    <number>123.5</number>
-    <zip_code>12345</zip_code>
-</address>
-</root>"""
+                <name>John Doe</name>
+                <age>25</age>
+                <score>85.123</score>
+                <address>
+                    <street>Main St</street>
+                    <number>123.5</number>
+                    <zip_code>12345</zip_code>
+                </address>
+                </root>"""
         elif validator_type == "yaml":
-            content = """name: John Doe
+            content = """
+name: John Doe
 age: 25
 score: 85.123
 address:
@@ -312,13 +313,5 @@ address:
         assert "address" in result.info_loss   # address.number=123.5 -> 123, conversion
         
         address_info_loss = result.info_loss["address"]
+        assert len(address_info_loss) == 1
         assert "number" in address_info_loss
-        assert "street" not in address_info_loss  # No conversion needed for street
-        
-        # For XML, zip_code might have info_loss due to int->str conversion (XML parses numbers as int)
-        if validator_type == "xml":
-            # XML parses "12345" as int, then converts to str for zip_code field
-            assert "zip_code" in address_info_loss
-            assert address_info_loss["zip_code"]["conversion"] == "int -> str"
-        else:
-            assert "zip_code" not in address_info_loss  # No conversion needed for zip_code 
