@@ -79,6 +79,45 @@ INVALID_NESTED_PAYLOADS = {
     "xml": "<root><simple_field>test</simple_field><ordered_field2>second</ordered_field2><nested_data><nested_field1>nested</nested_field1><nested_field2>42</nested_field2></nested_data><ordered_field1>1</ordered_field1></root>",
 }
 
+# --- Validator Configurations ---
+FLAT_VALIDATOR_CONFIGS = [
+    (CSVStructureValidator, "csv", ModelWithOrderedFields),
+    (JSONStructureValidator, "json", ModelWithOrderedFields),
+    (YAMLStructureValidator, "yaml", ModelWithOrderedFields),
+    (XMLStructureValidator, "xml", ModelWithOrderedFields),
+    (HTMLStructureValidator, "html", ModelWithOrderedFields),
+    (MarkdownStructureValidator, "markdown", MarkdownWithOrderedFields),
+]
+
+NESTED_VALIDATOR_CONFIGS = [
+    (JSONStructureValidator, "json", NestedModelWithOrderedFields),
+    (YAMLStructureValidator, "yaml", NestedModelWithOrderedFields),
+    (XMLStructureValidator, "xml", NestedModelWithOrderedFields),
+]
+
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("validator_class, payload_key, model", FLAT_VALIDATOR_CONFIGS)
+@pytest.mark.asyncio
+async def test_flat_structure_order_validation_all_formats_valids(strict, validator_class, payload_key, model):
+    """Test that all file format validators properly validate field order during extraction for flat structures"""
+    validator = validator_class(model=model, strict=strict, generate_hints=False)
+    
+    valid_payload = VALID_FLAT_PAYLOADS[payload_key]
+    result = await validator.validate(valid_payload)
+    assert result.is_valid is True
+
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("validator_class, payload_key, model", FLAT_VALIDATOR_CONFIGS)
+@pytest.mark.asyncio
+async def test_flat_structure_order_validation_all_formats_invalids(strict, validator_class, payload_key, model):
+    """Test that all file format validators properly validate field order during extraction for flat structures"""
+    validator = validator_class(model=model, strict=strict, generate_hints=False)
+     
+    invalid_payload = INVALID_FLAT_PAYLOADS[payload_key]
+    result = await validator.validate(invalid_payload)
+    assert result.is_valid is False 
+
+
 # Special HTML payload for nested structure test
 NESTED_HTML_PAYLOAD = """
 <html>
@@ -146,27 +185,22 @@ NESTED_YAML_PAYLOAD = """
 article:
   class: "card"
   div:
-      div:
+    - div:
         img:
           src: "/avatar.jpg"
           alt: "Author"
         div:
           content: "John Doe"
-      h2: "Title"
+    - h2: "Title"
       p:
         - "Content with "
-        - span:
-            class: "highlight"
-            content: "nested"
+        - span: "nested"
         - " elements"
-      div:
-        div:
-          content: "User 1"
+    - div:
         p: "Comment content"
         div:
           div:
-            span:
-              content: "User 2"
+            span: "User 2"
 """
 
 # Special JSON payload for nested structure test
@@ -207,38 +241,12 @@ NESTED_JSON_PAYLOAD = """{
   }
 }"""
 
-# --- Validator Configurations ---
-FLAT_VALIDATOR_CONFIGS = [
-    (CSVStructureValidator, "csv", ModelWithOrderedFields),
-    (JSONStructureValidator, "json", ModelWithOrderedFields),
-    (YAMLStructureValidator, "yaml", ModelWithOrderedFields),
-    (XMLStructureValidator, "xml", ModelWithOrderedFields),
-    (HTMLStructureValidator, "html", ModelWithOrderedFields),
-    (MarkdownStructureValidator, "markdown", MarkdownWithOrderedFields),
-]
-
-NESTED_VALIDATOR_CONFIGS = [
-    (JSONStructureValidator, "json", NestedModelWithOrderedFields),
-    (YAMLStructureValidator, "yaml", NestedModelWithOrderedFields),
-    (XMLStructureValidator, "xml", NestedModelWithOrderedFields),
-]
-
-@pytest.mark.parametrize("strict", [True, False])
-@pytest.mark.parametrize("validator_class, payload_key, model", FLAT_VALIDATOR_CONFIGS)
-@pytest.mark.asyncio
-async def test_flat_structure_order_validation_all_formats(strict, validator_class, payload_key, model):
-    """Test that all file format validators properly validate field order during extraction for flat structures"""
-    validator = validator_class(model=model, strict=strict, generate_hints=False)
-    
-    # Test valid case - ordered fields maintain relative order
-    valid_payload = VALID_FLAT_PAYLOADS[payload_key]
-    result = await validator.validate(valid_payload)
-    assert result.is_valid is True, f"Valid case failed for {validator_class.__name__} in {'strict' if strict else 'non-strict'} mode: {valid_payload}"
-    
-    # Test invalid case - ordered fields in wrong relative order  
-    invalid_payload = INVALID_FLAT_PAYLOADS[payload_key]
-    result = await validator.validate(invalid_payload)
-    assert result.is_valid is False, f"Invalid case passed for {validator_class.__name__} in {'strict' if strict else 'non-strict'} mode: {invalid_payload}"
+payload_map = {
+    "html": NESTED_HTML_PAYLOAD,
+    "xml": NESTED_XML_PAYLOAD,
+    "yaml": NESTED_YAML_PAYLOAD,
+    "json": NESTED_JSON_PAYLOAD,
+}
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -250,17 +258,9 @@ async def test_flat_structure_order_validation_all_formats(strict, validator_cla
         (JSONStructureValidator, "json"),
     ],
 )
-async def test_complex_structure_order_validation(validator_class, payload_key):
-    """Parametrised version of the complex nested-structure ordering test for multiple file formats."""
-    payload_map = {
-        "html": NESTED_HTML_PAYLOAD,
-        "xml": NESTED_XML_PAYLOAD,
-        "yaml": NESTED_YAML_PAYLOAD,
-        "json": NESTED_JSON_PAYLOAD,
-    }
+async def test_complex_structure_order_validation_p_before_span(validator_class, payload_key):
     payload = payload_map[payload_key]
 
-    # --- First scenario: p comes before span ---
     class ParagraphBeforeSpanRequest(BaseModel):
         __ordered_fields__ = OrderedDict([
             ("p", str),
@@ -276,7 +276,19 @@ async def test_complex_structure_order_validation(validator_class, payload_key):
     assert "Comment content" in str(result.result_type.p)
     assert "User 2" in str(result.result_type.span)
 
-    # --- Second scenario: span comes before p ---
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "validator_class, payload_key",
+    [
+        (HTMLStructureValidator, "html"),
+        (XMLStructureValidator, "xml"),
+        (YAMLStructureValidator, "yaml"),
+        (JSONStructureValidator, "json"),
+    ],
+)
+async def test_complex_structure_order_validation_span_before_p(validator_class, payload_key):
+    payload = payload_map[payload_key]
+
     class SpanBeforeParagraphRequest(BaseModel):
         __ordered_fields__ = OrderedDict([
             ("span", str),
@@ -291,7 +303,19 @@ async def test_complex_structure_order_validation(validator_class, payload_key):
     assert "nested" in str(result.result_type.span)
     assert "Comment content" in str(result.result_type.p)
 
-    # --- Third scenario: p is Any (capture subtree) then span str ---
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "validator_class, payload_key",
+    [
+        (HTMLStructureValidator, "html"),
+        (XMLStructureValidator, "xml"),
+        (YAMLStructureValidator, "yaml"),
+        (JSONStructureValidator, "json"),
+    ],
+)
+async def test_complex_structure_order_validation_nested_span_in_non_primitive_paragraph(validator_class, payload_key):
+    payload = payload_map[payload_key]
+
     class NestedSpanInComplexParagraphShouldNotBeIncluded(BaseModel):
         __ordered_fields__ = OrderedDict([
             ("p", Any),
@@ -303,7 +327,7 @@ async def test_complex_structure_order_validation(validator_class, payload_key):
     assert result.is_valid is True
     assert hasattr(result.result_type, "p")
     assert hasattr(result.result_type, "span")
-    # .p should contain the complex paragraph with the nested span/highlight
+
     assert "Content with" in str(result.result_type.p)
     assert "User 2" in str(result.result_type.span)
 
