@@ -8,6 +8,7 @@ from lamia.validation.utils.pydantic_utils import get_pydantic_json_schema, get_
 from pydantic import BaseModel, create_model
 from typing import Callable
 from collections import OrderedDict
+from pydantic import create_model
 import json
 
 # TODO: we can configure type checking to be different from the file validator strict mode with this flag
@@ -555,12 +556,21 @@ class DocumentStructureValidator(BaseValidator, ABC):
         else:  # Pydantic BaseModel
             # PATCH: If model has __ordered_fields__, always create a dynamic model with only those fields
             if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
-                from pydantic import create_model
-                dynamic_model_fields = {name: (typ, ...) for name, typ in model.__ordered_fields__.items()}
+                dynamic_model_fields: dict[str, tuple[type, Any]] = {}
+                for field_name, field_info in model.model_fields.items():
+                    dynamic_model_fields[field_name] = (getattr(field_info, "annotation", field_info), ...)
+
+                for field_name, field_type in model.__ordered_fields__.items():
+                    dynamic_model_fields[field_name] = (field_type, ...)
+
+                # Create a brand-new model class that merges both sets.
                 original_ordered_fields = model.__ordered_fields__
-                model = create_model(f"{model.__name__}Dynamic", **dynamic_model_fields)
-                model.__ordered_fields__ = original_ordered_fields
-                model_fields = [(field, type_) for field, type_ in model.__ordered_fields__.items()]
+                model = create_model(f"{model.__name__}Dynamic", **dynamic_model_fields)  # type: ignore[arg-type]
+                model.__ordered_fields__ = original_ordered_fields  # type: ignore[attr-defined]
+                model_fields = [(fname, finfo) for fname, finfo in model.model_fields.items()]
+                for fname, ftype in model.__ordered_fields__.items():
+                    if fname not in {name for name, _ in model_fields}:  # avoid duplicates
+                        model_fields.append((fname, ftype))
             else:
                 model_fields = [(field, field_info) for field, field_info in model.model_fields.items()]
             is_ordered_dict = False
@@ -594,6 +604,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
         last_selected_position = -1
         ordered_fields_seq = None
         tree_string_cache = None
+
         if permissive and not is_ordered_dict and hasattr(model, "__ordered_fields__") and isinstance(model.__ordered_fields__, OrderedDict):
             ordered_fields_seq = list(model.__ordered_fields__.keys())
             try:
@@ -752,6 +763,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 is_valid = False
 
         error_message = '; '.join(errors) if errors else None
+
         return ValidationResult(
             is_valid=is_valid,
             result_type=model_instance,
