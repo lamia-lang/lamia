@@ -1,5 +1,6 @@
 import pytest
 from pydantic import BaseModel
+from collections import OrderedDict
 from lamia.validation.validators.file_validators import MarkdownStructureValidator
 from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1, Heading2, Paragraph
 
@@ -25,7 +26,6 @@ This is the intro paragraph.
 This is the body paragraph.
 """
     result = await validator.validate(md)
-    print(result)
     assert result.is_valid
     # Check raw text values
     assert result.validated_text['title'] == "My Title"
@@ -136,3 +136,63 @@ This is another text.
     result = await validator.validate(md)
     assert result.is_valid is True
     assert result.result_type.intro == "This is the intro paragraph."
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+async def test_markdown_structure_validator_ordered_fields_correct_order(strict):
+    """Test that OrderedDict validation passes when markdown elements are in correct order."""
+    markdown_content = """# Test Title
+
+This is a paragraph.
+
+## Subsection
+
+Another paragraph here.
+"""
+
+    class RequestModel(BaseModel):
+        __ordered_fields__ = OrderedDict([
+            ("title", Heading1),
+            ("intro", Paragraph),
+            ("subtitle", Heading2),
+            ("body", Paragraph),
+        ])
+    
+    validator = MarkdownStructureValidator(model=RequestModel, strict=strict)
+    
+    result = await validator.validate(markdown_content)
+    assert result.is_valid is True
+    assert result.result_type.title.text == "Test Title"
+    assert result.result_type.intro.text == "This is a paragraph."
+    assert result.result_type.subtitle.text == "Subsection"
+    assert result.result_type.body.text == "Another paragraph here."
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+async def test_markdown_structure_validator_ordered_fields_incorrect_order(strict):
+    """Test that OrderedDict validation fails when markdown elements are in wrong order."""
+    # Content has Heading2 before Heading1 (wrong order)
+    markdown_content = """## Subsection First
+
+This is a paragraph.
+
+# Test Title
+
+Another paragraph here.
+"""
+
+    class RequestModel(BaseModel):
+        __ordered_fields__ = OrderedDict([
+            ("title", Heading1),
+            ("intro", Paragraph),
+            ("subtitle", Heading2),
+            ("body", Paragraph),
+        ])
+    
+    # Model expects Heading1 first, then Paragraph, then Heading2, then Paragraph
+    validator = MarkdownStructureValidator(model=RequestModel, strict=strict)
+    
+    result = await validator.validate(markdown_content)
+    # Should fail because field order doesn't match expected order
+    assert result.is_valid is False
+    assert "field order" in result.error_message.lower()
