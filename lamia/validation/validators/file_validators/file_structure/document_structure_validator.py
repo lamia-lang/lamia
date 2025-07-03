@@ -630,11 +630,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
                         try:
                             elem_str = self.get_subtree_string(elem)
                             pos = tree_string_cache.find(elem_str)
-                            # PATCH: fallback for YAML scalar key-value
-                            if pos == -1 and self.__class__.__name__ == "YAMLStructureValidator":
-                                # Try to find key: value pattern
-                                key_value_pattern = f"{field}: {elem_str}".strip()
-                                pos = tree_string_cache.find(key_value_pattern)
                             if pos > last_selected_position:
                                 valid_elems.append(elem)
                                 print(f"    -> ACCEPTED (pos {pos} > {last_selected_position})")
@@ -678,8 +673,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
             # --- Update last_selected_position for ordered field traversal ---
             if elem is not None and ordered_fields_seq is not None and tree_string_cache is not None:
                 try:
-                    # PATCH: For YAML, if elem is a list, set position to end of last item's string
-                    if self.__class__.__name__ == "YAMLStructureValidator" and isinstance(elem, list) and elem:
+                    # Generalize: if elem is a non-empty list, use last item's string; else use elem's string
+                    if isinstance(elem, list) and elem:
                         last_item_str = self.get_subtree_string(elem[-1])
                         pos = tree_string_cache.find(last_item_str)
                         if pos >= 0:
@@ -687,10 +682,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
                     else:
                         elem_str_pos = self.get_subtree_string(elem)
                         pos = tree_string_cache.find(elem_str_pos)
-                        # PATCH: fallback for YAML scalar key-value
-                        if pos == -1 and self.__class__.__name__ == "YAMLStructureValidator":
-                            key_value_pattern = f"{field}: {elem_str_pos}".strip()
-                            pos = tree_string_cache.find(key_value_pattern)
                         if pos >= 0:
                             last_selected_position = pos + len(elem_str_pos)
                 except Exception:

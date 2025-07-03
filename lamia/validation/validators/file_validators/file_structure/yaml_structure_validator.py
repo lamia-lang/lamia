@@ -158,7 +158,13 @@ class YAMLStructureValidator(DocumentStructureValidator):
         return found
 
     def get_subtree_string(self, elem):
-        return yaml.dump(elem, allow_unicode=True, sort_keys=False)
+        # For primitives return the raw value so that the text exactly
+        # matches the representation inside ``yaml.dump`` of the whole tree.
+        # (``yaml.dump('Ny text')`` would add a trailing newline and '...' which
+        #   do **not** appear in the full-document dump and break ``find``).
+        if isinstance(elem, (str, int, float, bool)) or elem is None:
+            return str(elem)
+        return yaml.dump(elem, allow_unicode=True, sort_keys=False).rstrip()
 
     def get_field_order(self, tree):
         """Get the order of keys as they appear in the YAML object."""
