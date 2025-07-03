@@ -66,7 +66,9 @@ class HTMLStructureValidator(DocumentStructureValidator):
             return "Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text."
 
     def extract_payload(self, response: str) -> str:
-        match = re.search(r'(<html[\s\S]*?</html>)', response, re.IGNORECASE)
+        # This regex matches optional doctype, comments, whitespace, and the <html>...</html> block
+        pattern = r'((?:\s*<!--.*?-->\s*)*(?:<!DOCTYPE[^>]*>\s*)?(?:<!--.*?-->\s*)*<html[\s\S]*?</html>)(?:(?:\s*<!--.*?-->\s*)*)'
+        match = re.search(pattern, response, re.IGNORECASE | re.DOTALL)
         return match.group(1) if match else None
 
     def load_payload(self, payload: str) -> Any:
@@ -83,15 +85,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
                 )
             else:
                 html_content = html_match.group(1)
-                # Check if there's extra text around the HTML content
-                if payload.strip() != html_content.strip():
-                    raise TextAroundPayloadError(
-                        expected_file_format=self.file_type(),
-                        original_text=payload,
-                        payload_text=html_content
-                    )
-                else:
-                    return BeautifulSoup(html_content, "html.parser")
+                return BeautifulSoup(html_content, "html.parser")
         else:
             return BeautifulSoup(payload, "html.parser")
 
