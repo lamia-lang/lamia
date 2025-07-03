@@ -387,8 +387,27 @@ class CSVStructureValidator(DocumentStructureValidator):
         is_valid = True
         info_loss = {}
         
-        # For OrderedDict, check order enforcement
-        if isinstance(model, OrderedDict) and header != model_fields:
+        # Check field order enforcement for models with __ordered_fields__
+        if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
+            # Extract only the ordered fields and their positions in the header
+            ordered_field_names = list(model.__ordered_fields__.keys())
+            ordered_positions = []
+            for field in ordered_field_names:
+                if field in header:
+                    ordered_positions.append(header.index(field))
+                else:
+                    # If an ordered field is missing, we'll catch it later in missing_fields check
+                    pass
+            
+            # Verify ordered fields appear in ascending order (maintaining relative order)
+            if len(ordered_positions) > 1 and ordered_positions != sorted(ordered_positions):
+                actual_order = [header[pos] for pos in ordered_positions]
+                expected_order = [field for field in ordered_field_names if field in header]
+                errors.append(f"Field order mismatch: ordered fields appear as {actual_order} but must be in order {expected_order}")
+                is_valid = False
+                
+        # For pure OrderedDict models, check complete order enforcement  
+        elif isinstance(model, OrderedDict) and header != model_fields:
             errors.append(f"Field order mismatch: CSV header {header} does not match expected order {model_fields}")
             is_valid = False
         
