@@ -180,32 +180,36 @@ async def test_file_structure_validator_missing_fields(strict, file_content, val
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
 async def test_file_structure_validator_ordered_fields_correct_order(strict, file_content, validator_class):
-    validator = validator_class(model=OrderedDict([
-            ("title", str),
-            ("myboolen", bool),
-            ("myint", int),
-            ("myfloat", float),
-        ]), strict=strict)
+    class ModelWithOrderedFields(BaseModel):
+        __ordered_fields__ = OrderedDict([
+                ("title", str),
+                ("myboolen", bool),
+                ("myint", int),
+                ("myfloat", float),
+            ])
+    
+    validator = validator_class(model=ModelWithOrderedFields, strict=strict)
     result = await validator.validate(file_content)
     # Should fail if fields are in different order than declared
     assert result.is_valid is True
-    assert isinstance(result.result_type, OrderedDict)
-    assert result.result_type["title"] == "Test"
-    assert result.result_type["myboolen"] is True or result.result_type["myboolen"] == True  # Accept bool True
-    assert result.result_type["myint"] == 123
-    assert abs(result.result_type["myfloat"] - 123.45) < 1e-6 
+    assert result.result_type.title == "Test"
+    assert result.result_type.myboolen == True  # Accept bool True
+    assert result.result_type.myint == 123
+    assert abs(result.result_type.myfloat - 123.45) < 1e-6 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("file_content, validator_class", FILE_CONTENT_VALIDATOR_PAIR_WITH_PRIMITIVES_TYPES)
 async def test_file_structure_validator_ordered_fields_incorrect_order(strict, file_content, validator_class):
-    # incorrect order
-    validator = validator_class(model=OrderedDict([
-            ("myint", int),
-            ("title", str),
-            ("myfloat", float),
-            ("myboolen", bool)
-        ]), strict=strict)
+    class ModelWithOrderedFields(BaseModel):
+        __ordered_fields__ = OrderedDict([
+                ("myint", int),
+                ("title", str),
+                ("myfloat", float),
+                ("myboolen", bool)
+            ])
+
+    validator = validator_class(model=ModelWithOrderedFields, strict=strict)
     result = await validator.validate(file_content)
     # Should fail if fields are in different order than declared
     assert result.is_valid is False
