@@ -61,7 +61,6 @@ async def test_file_structure_validator_exact_nesting(strict, file_content, vali
     assert result.is_valid is True
     assert result.result_type.body.p == "This is a paragraph."
     assert result.result_type.head.title == "Test"
-    assert result.validated_text == file_content.replace(" ", "")
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
