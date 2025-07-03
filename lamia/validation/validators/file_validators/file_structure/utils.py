@@ -1,5 +1,4 @@
 import importlib
-from pydantic import BaseModel, create_model
 
 def import_model_from_path(path: str, default_module: str = "models"):
     """Import a Pydantic model from a dotted path or module name."""
@@ -11,4 +10,4 @@ def import_model_from_path(path: str, default_module: str = "models"):
         return getattr(mod, class_name)
     else:
         mod = importlib.import_module(default_module)
-        return getattr(mod, path) 
+        return getattr(mod, path)
