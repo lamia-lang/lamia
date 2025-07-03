@@ -2,9 +2,8 @@ import yaml
 
 from pydantic import BaseModel, create_model
 import re
-from .document_structure_validator import DocumentStructureValidator
+from .document_structure_validator import DocumentStructureValidator, DuplicateKeyError
 from .utils import import_model_from_path
-from yaml.constructor import ConstructorError
 
 
 class YAMLStructureValidator(DocumentStructureValidator):
@@ -101,12 +100,8 @@ class YAMLStructureValidator(DocumentStructureValidator):
             for key_node, value_node in node.value:
                 key = loader.construct_object(key_node, deep=deep)
                 if key in mapping:
-                    raise ConstructorError(
-                        "while constructing a mapping",
-                        node.start_mark,
-                        f"found duplicate key {key!r}",
-                        key_node.start_mark,
-                    )
+                    # Raise our custom error for duplicate keys
+                    raise DuplicateKeyError(key, filetype="YAML object")
                 value = loader.construct_object(value_node, deep=deep)
                 mapping[key] = value
             return mapping

@@ -51,6 +51,10 @@ class InvalidPayloadError(BaseValidationError):
         
         super().__init__(message, hint=hint)
 
+class DuplicateKeyError(BaseValidationError):
+    def __init__(self, key, filetype="object"):
+        super().__init__(f"Duplicate key detected in {filetype}: '{key}'") 
+
 def is_optional(field_type: Any) -> bool:
     return get_origin(field_type) is Union and type(None) in get_args(field_type)
 

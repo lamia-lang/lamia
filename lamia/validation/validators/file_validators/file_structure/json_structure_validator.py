@@ -2,10 +2,11 @@ import json
 import re
 from collections import OrderedDict
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError, InvalidPayloadError
+from .document_structure_validator import DocumentStructureValidator, DuplicateKeyError
 from ....base import ValidationResult
 from .utils import import_model_from_path
 from collections import OrderedDict
+from .document_structure_validator import DocumentStructureValidator
 
 
 class JSONStructureValidator(DocumentStructureValidator):
@@ -84,7 +85,7 @@ class JSONStructureValidator(DocumentStructureValidator):
             for k, v in pairs:
                 if k in obj:
                     # Raise descriptive error which will be caught by the validator framework
-                    raise ValueError(f"Duplicate key detected in JSON object: '{k}'")
+                    raise DuplicateKeyError(k, filetype="JSON object")
                 obj[k] = v
             return obj
 
