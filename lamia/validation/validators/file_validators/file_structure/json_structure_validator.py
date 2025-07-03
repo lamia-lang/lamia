@@ -5,7 +5,7 @@ from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError, InvalidPayloadError
 from ....base import ValidationResult
 from .utils import import_model_from_path
-
+from collections import OrderedDict
 
 
 class JSONStructureValidator(DocumentStructureValidator):
@@ -78,7 +78,17 @@ class JSONStructureValidator(DocumentStructureValidator):
         return match.group(0) if match else None
 
     def load_payload(self, payload: str) -> any:
-        return json.loads(payload)
+        # Detect and disallow duplicate keys to prevent silent data loss
+        def _reject_duplicates(pairs):
+            obj = OrderedDict()
+            for k, v in pairs:
+                if k in obj:
+                    # Raise descriptive error which will be caught by the validator framework
+                    raise ValueError(f"Duplicate key detected in JSON object: '{k}'")
+                obj[k] = v
+            return obj
+
+        return json.loads(payload, object_pairs_hook=_reject_duplicates)
 
     def find_element(self, tree, key):
         # Only direct children for strict mode

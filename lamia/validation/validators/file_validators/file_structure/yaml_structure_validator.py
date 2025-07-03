@@ -4,6 +4,7 @@ from pydantic import BaseModel, create_model
 import re
 from .document_structure_validator import DocumentStructureValidator
 from .utils import import_model_from_path
+from yaml.constructor import ConstructorError
 
 
 class YAMLStructureValidator(DocumentStructureValidator):
@@ -92,7 +93,31 @@ class YAMLStructureValidator(DocumentStructureValidator):
             return None
 
     def load_payload(self, payload: str) -> any:
-        return yaml.safe_load(payload)
+        class _DupCheckLoader(yaml.SafeLoader):
+            pass
+
+        def _construct_mapping(loader, node, deep=False):
+            mapping = {}
+            for key_node, value_node in node.value:
+                key = loader.construct_object(key_node, deep=deep)
+                if key in mapping:
+                    raise ConstructorError(
+                        "while constructing a mapping",
+                        node.start_mark,
+                        f"found duplicate key {key!r}",
+                        key_node.start_mark,
+                    )
+                value = loader.construct_object(value_node, deep=deep)
+                mapping[key] = value
+            return mapping
+
+        # Attach the custom constructor for mappings
+        _DupCheckLoader.add_constructor(
+            yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+            _construct_mapping,
+        )
+
+        return yaml.load(payload, Loader=_DupCheckLoader)
 
     def find_element(self, tree, key):
         if isinstance(tree, dict):

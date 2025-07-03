@@ -634,17 +634,54 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
                 # When ordered fields are defined, ensure we only consider elements that appear after the last selected one
                 if ordered_fields_seq is not None and tree_string_cache is not None and last_selected_position >= 0:
+                    print(f"DEBUG: Filtering {len(elems)} candidates for field '{field}' after position {last_selected_position}")
                     valid_elems = []
-                    for elem in elems:
+                    for i, elem in enumerate(elems):
                         try:
                             elem_str = self.get_subtree_string(elem)
-                        except Exception:
-                            elem_str = None
-                        if elem_str:
                             pos = tree_string_cache.find(elem_str)
+                            
+                            # If direct string search fails for YAML, try alternatives
+                            if pos < 0 and hasattr(self, 'file_type') and self.file_type() == 'yaml':
+                                if isinstance(elem, (str, int, float, bool)):
+                                    # Try searching for the value itself
+                                    value_str = str(elem)
+                                    pos = tree_string_cache.find(value_str, last_selected_position + 1)
+                                    if pos >= 0:
+                                        elem_str = value_str
+                                    
+                                    # Try searching for YAML key-value patterns
+                                    if pos < 0:
+                                        patterns = [
+                                            f"{field}: {elem}",  # key: value
+                                            f"{field}: '{elem}'",  # key: 'value'
+                                            f"{field}: \"{elem}\"",  # key: "value"
+                                            f"  {field}: {elem}",  # indented key: value
+                                            f"    {field}: {elem}",  # more indented
+                                        ]
+                                        for pattern in patterns:
+                                            pos = tree_string_cache.find(pattern, last_selected_position + 1)
+                                            if pos >= 0:
+                                                elem_str = pattern
+                                                break
+                                    
+                                    # Final fallback: search for value without position constraint, then check if it's after last_selected_position
+                                    if pos < 0:
+                                        pos = tree_string_cache.find(value_str)
+                                        if pos >= 0:
+                                            elem_str = value_str
+                            
+                            print(f"  Candidate {i}: {elem} -> string: '{elem_str}' -> position: {pos}")
                             if pos > last_selected_position:
                                 valid_elems.append(elem)
+                                print(f"    -> ACCEPTED (pos {pos} > {last_selected_position})")
+                            else:
+                                print(f"    -> REJECTED (pos {pos} <= {last_selected_position})")
+                        except Exception as e:
+                            print(f"    -> ERROR: {e}")
+                            pass
                     # If filtering removes all candidates, fall back to original list to avoid false negatives
+                    print(f"DEBUG: After filtering: {len(valid_elems)} valid elements")
                     elems = valid_elems if valid_elems else elems
 
                 elem = elems[0] if elems else None
@@ -658,12 +695,106 @@ class DocumentStructureValidator(BaseValidator, ABC):
             # --- Update last_selected_position for ordered field traversal ---
             if elem is not None and ordered_fields_seq is not None and tree_string_cache is not None:
                 try:
-                    elem_str_pos = self.get_subtree_string(elem)
-                    pos = tree_string_cache.find(elem_str_pos)
+                    print(f"DEBUG: Updating position for field '{field}', elem: {elem}, current last_pos: {last_selected_position}")
+                    elem_str = self.get_subtree_string(elem)
+                    pos = tree_string_cache.find(elem_str)
+                    print(f"DEBUG: Initial search for '{elem_str}' found position: {pos}")
+                    
+                    # If direct string search fails, try alternative approaches for YAML/JSON
+                    if pos < 0:
+                        print("DEBUG: Direct search failed, trying alternatives...")
+                        
+                        # Special handling for Any fields that return complex structures
+                        if expected_type is Any and hasattr(self, 'file_type') and self.file_type() == 'yaml':
+                            # For YAML Any fields, try to find the key that contains this structure
+                            key_patterns = [
+                                f"{field}:",
+                                f"  {field}:",
+                                f"    {field}:",
+                            ]
+                            for pattern in key_patterns:
+                                search_start = last_selected_position + 1 if last_selected_position >= 0 else 0
+                                pos = tree_string_cache.find(pattern, search_start)
+                                print(f"DEBUG: Searching for Any field pattern '{pattern}' from pos {search_start}: {pos}")
+                                if pos >= 0:
+                                    # Compute indent of the 'p:' line in original text
+                                    line_start = tree_string_cache.rfind('\n', 0, pos) + 1  # 0 if not found, else index after \n
+                                    pattern_indent = pos - line_start
+                                    lines_after_key = tree_string_cache[pos:].split('\n')
+                                    structure_end_pos = pos + len(pattern)
+                                    cumulative_len = 0
+                                    for i, line in enumerate(lines_after_key[1:], 1):
+                                        cumulative_len += len(lines_after_key[i-1]) + 1  # previous line + newline
+                                        stripped = line.lstrip()
+                                        if stripped:  # non-empty line
+                                            indent = len(line) - len(stripped)
+                                            if indent < pattern_indent:
+                                                structure_end_pos = pos + cumulative_len
+                                                break
+                                            else:
+                                                structure_end_pos = pos + cumulative_len + len(line)
+                                    elem_str = tree_string_cache[pos:structure_end_pos]
+                                    print(f"DEBUG: Any field structure from {pos} to {structure_end_pos}, length: {len(elem_str)}")
+                                    print(f"DEBUG: Structure content: '{elem_str}'")
+                                    print(f"DEBUG: Text after structure: '{tree_string_cache[structure_end_pos:structure_end_pos+50]}'")
+                                    pos = structure_end_pos
+                                    elem_str = ""  # avoid double count
+                                    break
+                        
+                        # For primitive values, try searching for the value itself
+                        if pos < 0 and isinstance(elem, (str, int, float, bool)):
+                            # Try searching for the value as it might appear in the original
+                            value_str = str(elem)
+                            search_start = last_selected_position + 1 if last_selected_position >= 0 else 0
+                            pos = tree_string_cache.find(value_str, search_start)
+                            print(f"DEBUG: Searching for value '{value_str}' from pos {search_start}: {pos}")
+                            if pos >= 0:
+                                elem_str = value_str
+                        
+                        # For YAML, try searching for the value with common YAML patterns
+                        if pos < 0 and hasattr(self, 'file_type') and self.file_type() == 'yaml':
+                            if isinstance(elem, str):
+                                search_start = last_selected_position + 1 if last_selected_position >= 0 else 0
+                                # Try different YAML value patterns
+                                patterns = [
+                                    f"{field}: {elem}",  # key: value
+                                    f"{field}:{elem}",   # key:value (no space)
+                                    f'"{elem}"',         # quoted value
+                                    f"'{elem}'",         # single quoted value
+                                    elem.strip()         # plain value
+                                ]
+                                for pattern in patterns:
+                                    pos = tree_string_cache.find(pattern, search_start)
+                                    print(f"DEBUG: Trying pattern '{pattern}' from pos {search_start}: {pos}")
+                                    if pos >= 0:
+                                        elem_str = pattern
+                                        break
+                        
+                        # If still not found and we have a start position, ensure we only search after it
+                        if pos < 0 and last_selected_position >= 0:
+                            search_start = last_selected_position + 1
+                            pos = tree_string_cache.find(str(elem), search_start)
+                            print(f"DEBUG: Final fallback search for '{str(elem)}' from pos {search_start}: {pos}")
+                            if pos >= 0:
+                                elem_str = str(elem)
+                    
+                    # If we found a position but it's before our last position, find the next occurrence
+                    elif last_selected_position >= 0 and pos <= last_selected_position:
+                        search_start = last_selected_position + 1
+                        pos = tree_string_cache.find(elem_str, search_start)
+                        print(f"DEBUG: Position {pos} <= {last_selected_position}, searching for next occurrence from {search_start}: {pos}")
+                    
                     if pos >= 0:
-                        last_selected_position = pos + len(elem_str_pos)
-                except Exception:
+                        old_pos = last_selected_position
+                        last_selected_position = pos + len(elem_str)
+                        print(f"DEBUG: Updated last_selected_position from {old_pos} to {last_selected_position}")
+                    else:
+                        print(f"DEBUG: Could not find position for element {elem}")
+                except Exception as e:
+                    print(f"DEBUG: Exception in position update: {e}")
                     pass
+        
+            print("elem2", elem, last_selected_position, tree_string_cache[last_selected_position:])
 
             if elem is None:
                 if is_optional(expected_type):
