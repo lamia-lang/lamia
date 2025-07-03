@@ -569,25 +569,26 @@ class DocumentStructureValidator(BaseValidator, ABC):
         needs_order_check = (is_ordered_dict and isinstance(model, OrderedDict)) or \
                            (not is_ordered_dict and hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict))
         
-        if needs_order_check and self.strict:
+        if needs_order_check:
             # Get the actual field order from the parsed document using the abstract method
             actual_field_order = self.get_field_order(tree)
-            
             if is_ordered_dict:
                 expected_field_order = [field for field, _ in model_fields]
             else:  # BaseModel with __ordered_fields__
                 expected_field_order = list(model.__ordered_fields__.keys())
-            
-            # Check if actual fields match expected order (only for fields that exist)
-            if actual_field_order:
-                # Filter out fields that don't exist in the model
-                relevant_actual_fields = [f for f in actual_field_order if f in expected_field_order]
-                # Get the expected order for these fields
-                relevant_expected_fields = [f for f in expected_field_order if f in relevant_actual_fields]
-                
-                if relevant_actual_fields != relevant_expected_fields:
-                    errors.append(f"Field order mismatch: expected order {relevant_expected_fields} but found {relevant_actual_fields}")
-                    is_valid = False
+            # Only consider fields that are present in both expected and actual
+            relevant_actual_fields = [f for f in actual_field_order if f in expected_field_order]
+            relevant_expected_fields = [f for f in expected_field_order if f in relevant_actual_fields]
+            if relevant_actual_fields != relevant_expected_fields:
+                errors.append(f"Field order mismatch: expected order {relevant_expected_fields} but found {relevant_actual_fields}")
+                is_valid = False
+                return ValidationResult(
+                    is_valid=is_valid,
+                    result_type=None,
+                    validated_text=self.get_subtree_string(tree),
+                    error_message='; '.join(errors),
+                    info_loss=None
+                )
 
         # --- Support ordered field selection in permissive mode ---
         last_selected_position = -1
