@@ -392,8 +392,28 @@ class CSVStructureValidator(DocumentStructureValidator):
             errors.append(f"Field order mismatch: CSV header {header} does not match expected order {model_fields}")
             is_valid = False
         
+        # Build list of all fields to validate: regular model fields + ordered fields
+        all_fields_to_validate = []
+        
+        # Start with regular model fields
+        for field, field_info in model.model_fields.items():
+            field_type = field_info.annotation
+            all_fields_to_validate.append((field, field_type, True))  # True = from model
+        
+        # Add ordered fields that are not already in regular fields
+        if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
+            for field, field_type in model.__ordered_fields__.items():
+                if field not in model.model_fields:
+                    all_fields_to_validate.append((field, field_type, False))  # False = from ordered_fields
+        
         # Check that all required fields are present in the header
-        missing_fields = [field for field in model_fields if field not in header and not self._is_field_optional(field)]
+        missing_fields = []
+        for field, field_type, is_model_field in all_fields_to_validate:
+            if field not in header:
+                if is_model_field and not self._is_field_optional(field):
+                    missing_fields.append(field)
+                elif not is_model_field:  # ordered fields are always required
+                    missing_fields.append(field)
         
         if missing_fields:
             errors.append(f"CSV header {header} is missing required columns {missing_fields}.")
@@ -404,15 +424,18 @@ class CSVStructureValidator(DocumentStructureValidator):
             is_valid = False
         else:
             row = rows[0]
-            for field, expected_type in self._get_model_field_items():
+            for field, expected_type, is_model_field in all_fields_to_validate:
                 value = row.get(field)
                 # Handle empty cells: None or empty string should be treated as None for optional fields
                 if value is None or (isinstance(value, str) and value.strip() == ""):
-                    if not self._is_field_optional(field):
+                    if is_model_field and not self._is_field_optional(field):
                         if value is None:
                             errors.append(f"Row 1 is missing required field '{field}'")
                         else:
                             errors.append(f"Row 1, field '{field}' cannot be empty (required field)")
+                        is_valid = False
+                    elif not is_model_field:  # ordered fields are always required
+                        errors.append(f"Row 1 is missing required field '{field}' from __ordered_fields__")
                         is_valid = False
                     values[field] = None
                     continue
@@ -435,8 +458,16 @@ class CSVStructureValidator(DocumentStructureValidator):
                     # For OrderedDict, return the OrderedDict with validated values
                     model_instance = OrderedDict((field, values[field]) for field in model_fields)
                 else:
-                    # For Pydantic models, instantiate the model
-                    model_instance = model(**values)
+                    # For Pydantic models, only pass fields that exist in the static model
+                    model_kwargs = {k: v for k, v in values.items() if k in model.model_fields}
+                    model_instance = model(**model_kwargs)
+                    
+                    # Add ordered fields as dynamic attributes
+                    if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
+                        for field_name in model.__ordered_fields__.keys():
+                            if field_name in values and not hasattr(model_instance, field_name):
+                                # Use __dict__ to bypass Pydantic's field validation
+                                model_instance.__dict__[field_name] = values[field_name]
             except Exception as e:
                 errors.append(f"Model fill error: {e}")
                 is_valid = False
