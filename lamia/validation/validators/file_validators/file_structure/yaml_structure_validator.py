@@ -95,16 +95,19 @@ class YAMLStructureValidator(DocumentStructureValidator):
         class _DupCheckLoader(yaml.SafeLoader):
             pass
 
-        def _construct_mapping(loader, node, deep=False):
-            mapping = {}
-            for key_node, value_node in node.value:
-                key = loader.construct_object(key_node, deep=deep)
-                if key in mapping:
-                    # Raise our custom error for duplicate keys
+        def _construct_mapping(loader, node):
+            # Use SafeLoader's built-in merge key support
+            loader.flatten_mapping(node)
+            pairs = loader.construct_pairs(node)
+            
+            # Check for duplicate keys
+            seen_keys = set()
+            for key, value in pairs:
+                if key in seen_keys:
                     raise DuplicateKeyError(key, filetype="YAML object")
-                value = loader.construct_object(value_node, deep=deep)
-                mapping[key] = value
-            return mapping
+                seen_keys.add(key)
+            
+            return dict(pairs)
 
         # Attach the custom constructor for mappings
         _DupCheckLoader.add_constructor(
