@@ -117,6 +117,25 @@ def test_file_validator_inheriting_from_document_structure_with_all_abstract_met
                     if isinstance(value, dict):
                         results.extend(self.find_all(value, key))
             return results
+        
+        def _describe_structure(self, model, indent=0):
+            return []
+
+        def extract_payload(self, response: str):
+            return response
+
+        @classmethod
+        def file_type(cls):
+            return "test"
+
+        def get_field_order(self, tree):
+            return []
+
+        def get_subtree_string(self, elem):
+            return str(elem)
+
+        def load_payload(self, payload: str):
+            return payload
     
     # Should instantiate successfully
     validator = CompleteFileValidator(model=SampleModel, strict=True)

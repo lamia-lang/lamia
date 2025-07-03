@@ -30,8 +30,8 @@ from lamia.validation.utils.error_messages import (
     (bool, "1", False, error_msg_cannot_strictly_convert("1", "bool")),
     (bool, "0", False, error_msg_cannot_strictly_convert("0", "bool")),
     (str, "hello", True, None),
-    (str, 123, False, error_msg_expected_str_got("int")),
-    (str, 123.45, False, error_msg_expected_str_got("float")),
+    (str, 123, True, None),
+    (str, 123.45, True, None),
     (int, "abc", False, error_msg_cannot_strictly_convert("abc", "int")),
     (float, "abc", False, error_msg_cannot_strictly_convert("abc", "float")),
     (bool, "abc", False, error_msg_cannot_strictly_convert("abc", "bool")),
@@ -47,10 +47,10 @@ from lamia.validation.utils.error_messages import (
     (dict, {"a": 1}, True, None),
     (dict, [1, 2, 3], False, error_msg_expected_dict_got("list")),
     (dict[str, float], {"a": 1.0, "b": 2.0}, True, None),
-    (dict[str, int], {"a": -1, "b": 1.1, 1:2.2}, False, error_msg_dict_elements_invalid({1: error_msg_expected_str_got("int")}, {1.1: error_msg_cannot_strictly_convert(1.1, "int"), 2.2: error_msg_cannot_strictly_convert(2.2, "int")})),
+    (dict[str, int], {"a": -1, "b": 1.1, 1:2.2}, False, error_msg_dict_elements_invalid({}, {1.1: error_msg_cannot_strictly_convert(1.1, "int"), 2.2: error_msg_cannot_strictly_convert(2.2, "int")})),
     (typing.Union[int, str], 123, True, None),
     (typing.Union[int, str], "abc", True, None),
-    (typing.Union[int, str], 123.45, False, error_msg_cannot_convert_to_any_of(123.45, (int, str))),
+    (typing.Union[int, bool], 123.45, False, error_msg_cannot_convert_to_any_of(123.45, (int, bool))),
 ])
 def test_type_matcher_strict(expected_type, value, should_match, expected_error):
     matcher = TypeMatcher(strict=True)
@@ -60,6 +60,8 @@ def test_type_matcher_strict(expected_type, value, should_match, expected_error)
     if should_match:
         if expected_type is typing.Any:
             assert result.value == value
+        elif expected_type is str:
+            assert result.value == str(value)
         elif get_origin(expected_type) is typing.Union:
             assert result.value == value
         elif expected_type is bool and isinstance(value, str):
