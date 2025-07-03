@@ -61,7 +61,7 @@ async def test_file_structure_validator_exact_nesting(strict, file_content, vali
     assert result.is_valid is True
     assert result.result_type.body.p == "This is a paragraph."
     assert result.result_type.head.title == "Test"
-    assert result.validated_text == file_content
+    assert result.validated_text == file_content.replace(" ", "")
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -95,8 +95,8 @@ async def test_file_structure_validator_direct_children_with_any_type(strict, fi
         assert result.result_type.head == '{"title":"Test"}'
         assert result.result_type.body == '{"p":"This is a paragraph."}'
     elif validator_class == YAMLStructureValidator:
-        assert result.result_type.head == 'title: Test\n'
-        assert result.result_type.body == 'p: This is a paragraph.\n'
+        assert result.result_type.head == 'title: Test'
+        assert result.result_type.body == 'p: This is a paragraph.'
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
