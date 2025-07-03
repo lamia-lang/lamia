@@ -24,11 +24,11 @@ class ModelWithOrderedFields(BaseModel):
     ])
 
 class MarkdownWithOrderedFields(BaseModel):
-    name: Heading1
+    bio: Heading2
     
     # These fields must maintain order
     __ordered_fields__ = OrderedDict([
-        ("bio", Heading2),
+        ("name", Heading1),
         ("contact", Heading2),
     ])
 
@@ -49,21 +49,21 @@ class NestedModelWithOrderedFields(BaseModel):
 
 # --- Test Payloads for Flat Structure Ordering ---
 VALID_FLAT_PAYLOADS = {
-    "csv": "field1,field2\n1,test",
+    "csv": "name,age,field1,field2\nJohn,25,1,test",
     "json": '{"name": "John", "field1": 1, "age": 25, "field2": "test"}',
     "yaml": "name: John\nfield1: 1\nage: 25\nfield2: test",
     "xml": "<root><name>John</name><field1>1</field1><age>25</age><field2>test</field2></root>",
     "html": "<html><name>John</name><field1>1</field1><age>25</age><field2>test</field2></html>",
-    "markdown": "## Contact \n\n# John Smith\n\n John is a great person\n\n## Biography\n\n",
+    "markdown": "## Biography\n\n# John\n\n## Contact \n\n",
 }
 
 INVALID_FLAT_PAYLOADS = {
-    "csv": "field2,field1\ntest,1",
+    "csv": "name,age,field2,field1\nJohn,25,test,1",
     "json": '{"name": "John", "field2": "test", "age": 25, "field1": 1}',
     "yaml": "name: John\nfield2: test\nage: 25\nfield1: 1",
     "xml": "<root><name>John</name><field2>test</field2><age>25</age><field1>1</field1></root>",
     "html": "<html><name>John</name><field2>test</field2><age>25</age><field1>1</field1></html>",
-    "markdown": "# John Smith\n\n John is a great person ## Biography\n\n ## Contact",
+    "markdown": "## Biography\n\n ## Contact\n\n# John\n\n ",
 }
 
 # --- Test Payloads for Nested Structure Ordering ---
@@ -105,6 +105,17 @@ async def test_flat_structure_order_validation_all_formats_valids(strict, valida
     valid_payload = VALID_FLAT_PAYLOADS[payload_key]
     result = await validator.validate(valid_payload)
     assert result.is_valid is True
+    assert result.result_type is not None
+
+    if validator_class == MarkdownStructureValidator:
+        assert result.result_type.name == "John"
+        assert result.result_type.contact == "Contact"
+        assert result.result_type.bio == "Biography" 
+    else:
+        assert result.result_type.name == "John"
+        assert result.result_type.age == 25
+        assert result.result_type.field1 == 1
+        assert result.result_type.field2 == "test"
 
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("validator_class, payload_key, model", FLAT_VALIDATOR_CONFIGS)
