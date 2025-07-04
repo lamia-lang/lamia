@@ -8,7 +8,7 @@ import lamia.adapters.llm.strategy as strategy
 
 
 @pytest.mark.asyncio
-async def test_generate_calls_execute_with_retries_once():
+async def test_generate_calls_execute_with_retries_once(monkeypatch):
     """Ensure LamiaEngine.generate delegates to ValidationStrategy.execute_with_retries when validation is enabled."""
 
     config = {
@@ -35,8 +35,8 @@ async def test_generate_calls_execute_with_retries_once():
     stub_adapter.close = AsyncMock()
     stub_adapter.has_context_memory = True
 
-    # Ensure OPENAI_API_KEY is present to bypass API key checks
-    os.environ.setdefault("OPENAI_API_KEY", "dummy")
+    # Ensure OPENAI_API_KEY is present to bypass API key checks without leaking to other tests
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy")
 
     with patch("lamia.engine.llm_manager.create_adapter_from_config", return_value=stub_adapter), \
          patch("lamia.engine.engine.create_adapter_from_config", return_value=stub_adapter):
@@ -58,7 +58,7 @@ async def test_generate_calls_execute_with_retries_once():
 
 
 @pytest.mark.asyncio
-async def test_generate_propagates_errors_from_execute_with_retries():
+async def test_generate_propagates_errors_from_execute_with_retries(monkeypatch):
     """If ValidationStrategy.execute_with_retries raises, LamiaEngine.generate should propagate the error."""
 
     config = {
@@ -77,8 +77,8 @@ async def test_generate_propagates_errors_from_execute_with_retries():
     stub_adapter.close = AsyncMock()
     stub_adapter.has_context_memory = True
 
-    # Ensure OPENAI_API_KEY is present to bypass API key checks
-    os.environ.setdefault("OPENAI_API_KEY", "dummy")
+    # Ensure OPENAI_API_KEY is present for this test only
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy")
 
     with patch("lamia.engine.llm_manager.create_adapter_from_config", return_value=stub_adapter), \
          patch("lamia.engine.engine.create_adapter_from_config", return_value=stub_adapter):

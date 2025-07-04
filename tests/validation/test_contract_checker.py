@@ -137,6 +137,9 @@ class ValidDocumentStructureValidator(DocumentStructureValidator):
     def get_subtree_string(self, elem):
         return str(elem)
     
+    def get_field_order(self, tree):
+        return []  # Test implementation - return empty list
+    
     def _describe_structure(self, model, indent=0):
         return ["structure description"]
 
@@ -181,6 +184,9 @@ class InvalidExtractPayloadValidator(DocumentStructureValidator):
     
     def get_subtree_string(self, elem):
         return str(elem)
+    
+    def get_field_order(self, tree):
+        return []  # Test implementation - return empty list
     
     def _describe_structure(self, model, indent=0):
         return []

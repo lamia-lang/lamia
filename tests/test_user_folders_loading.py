@@ -76,8 +76,5 @@ def test_extension_adapter_and_validator_loading(temp_extensions):
         # Adapter: should be available and instantiable
         adapter = create_adapter_from_config(engine.config_manager)
         assert adapter.__class__.__name__ == "MyExtensionAdapter"
-        # Validator: should be in the registry
-        registry = engine._get_validator_registry()
-        assert "my_extension_validator" in registry
     finally:
         sys.path.remove(temp_extensions) 

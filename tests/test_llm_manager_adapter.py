@@ -78,7 +78,9 @@ def test_unsupported_model():
     with pytest.raises(ValueError, match="Unsupported model type: unsupported"):
         create_adapter_from_config(cm)
 
-def test_create_openai_adapter_throws_on_missing_key():
+def test_create_openai_adapter_throws_on_missing_key(monkeypatch):
+    monkeypatch.delenv("LAMIA_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     config = {
         "default_model": "openai",
         "models": {
@@ -90,10 +92,8 @@ def test_create_openai_adapter_throws_on_missing_key():
         "validation": {"fallback_models": []}
     }
     cm = ConfigManager.from_dict(config)
-    with patch.dict(os.environ, {}, clear=True), \
-         patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True):
-        with pytest.raises(MissingAPIKeysError):
-            create_adapter_from_config(cm)
+    with pytest.raises(MissingAPIKeysError):
+        create_adapter_from_config(cm)
 
 def test_create_anthropic_adapter_missing_key():
     config = {
