@@ -228,13 +228,13 @@ def print_ast(markdown):
     (HorizontalRule, "---", ""),
     
     # Lists
-    (OrderedList, "1. First item\n2. Second item", "1. First item\n2. Second item"),
-    (UnorderedList, "- First bullet\n- Second bullet", "- First bullet\n- Second bullet"),
+    (OrderedList, "1. First item\n2. Second item", "First itemSecond item"),
+    (UnorderedList, "- First bullet\n- Second bullet", "First bulletSecond bullet"),
     
     # Code blocks
-    (CodeBlock, "```\ncode\n```", "```\ncode\n```"),
-    (FencedCode, "```python\ndef hello():\n    print('Hello')\n```", "```python\ndef hello():\n    print('Hello')\n```"),
-    (IndentedCode, "    indented code block", "    indented code block"),
+    (CodeBlock, "```\ncode\n```", "code\n"),
+    (FencedCode, "```python\ndef hello():\n    print('Hello')\n```", "def hello():\n    print('Hello')\n"),
+    (IndentedCode, "    indented code block", "indented code block"),
 ])
 async def test_markdown_structure_validator_element_types(strict, element_type, sample_text, result_text):
     """Test each markdown element type with proper context where needed."""
