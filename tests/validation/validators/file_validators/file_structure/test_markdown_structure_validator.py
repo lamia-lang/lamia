@@ -2,7 +2,14 @@ import pytest
 from pydantic import BaseModel
 from collections import OrderedDict
 from lamia.validation.validators.file_validators import MarkdownStructureValidator
-from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1, Heading2, Paragraph
+from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import (
+    Heading1, Heading2, Heading3, Heading4, Heading5, Heading6,
+    Paragraph, Blockquote, OrderedList, UnorderedList, ListItem,
+    DefinitionList, DefinitionTerm, DefinitionDescription,
+    CodeBlock, FencedCode, IndentedCode,
+    Table, TableRow, TableCell, HorizontalRule,
+)
+import mistune
 
 # Markdown is not a structured format, and in Lamia it is treated as a structured format by predefined classes like Heading1, Heading2, Paragraph, etc.
 
@@ -195,3 +202,70 @@ Another paragraph here.
     # Should fail because field order doesn't match expected order
     assert result.is_valid is False
     assert "field order" in result.error_message.lower()
+
+def print_ast(markdown):
+    """Helper function to print the AST for debugging."""
+    ast = mistune.create_markdown(renderer='ast')(markdown)
+    print(f"\nAST for markdown:\n{markdown}\n")
+    print("AST structure:")
+    print(ast)
+    return ast
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("element_type,sample_text,context", [
+    # Headers (no context needed)
+    (Heading1, "# Heading 1", None),
+    (Heading2, "## Heading 2", None),
+    (Heading3, "### Heading 3", None),
+    (Heading4, "#### Heading 4", None),
+    (Heading5, "##### Heading 5", None),
+    (Heading6, "###### Heading 6", None),
+    
+    # Block elements (no context needed)
+    (Paragraph, "This is a paragraph.", None),
+    (Blockquote, "> This is a blockquote.", None),
+    (HorizontalRule, "---", None),
+    
+    # Lists
+    (OrderedList, "1. First item\n2. Second item", None),
+    (UnorderedList, "- First bullet\n- Second bullet", None),
+    
+    # Code blocks
+    (CodeBlock, "```\ncode\n```", None),
+    (FencedCode, "```python\ndef hello():\n    print('Hello')\n```", None),
+    (IndentedCode, "    indented code block", None),
+])
+async def test_markdown_structure_validator_element_types(strict, element_type, sample_text, context):
+    """Test each markdown element type with proper context where needed."""
+    class SingleElementModel(BaseModel):
+        content: element_type
+
+    validator = MarkdownStructureValidator(model=SingleElementModel, strict=strict)
+    
+    # If context is provided, insert the sample text into it
+    test_text = context.format(content=sample_text) if context else sample_text
+    
+    # Print AST for debugging
+    ast = print_ast(test_text)
+    
+    result = await validator.validate(test_text)
+    assert result.is_valid is True, f"Failed to validate {element_type.__name__} with text:\n{test_text}\nError: {result.error_message}"
+    
+    # Verify type and content
+    assert isinstance(result.result_type.content, element_type)
+    assert result.result_type.content.text.strip(), f"Empty text for {element_type.__name__}"
+    
+    # Test invalid format
+    if element_type in [Heading1, Heading2, Heading3, Heading4, Heading5, Heading6]:
+        invalid_text = f"#{element_type.__name__}"  # No space after #
+    elif element_type == Blockquote:
+        invalid_text = "Not a blockquote"  # Missing >
+    else:
+        invalid_text = ""  # Empty text for other types
+    
+    if invalid_text:
+        result = await validator.validate(invalid_text)
+        assert result.is_valid is False, f"Invalid format not caught for {element_type.__name__}"
+        assert "Missing element(s)" in result.error_message
+

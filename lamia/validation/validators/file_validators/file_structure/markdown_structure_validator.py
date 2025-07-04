@@ -30,6 +30,7 @@ class MarkdownStr(str):
     def __str__(self):
         return self._text
 
+# Headers
 class Heading1(MarkdownStr): pass
 class Heading2(MarkdownStr): pass
 class Heading3(MarkdownStr): pass
@@ -37,34 +38,60 @@ class Heading4(MarkdownStr): pass
 class Heading5(MarkdownStr): pass
 class Heading6(MarkdownStr): pass
 
-# Block elements (can contain other blocks)
+# Block elements
 class Paragraph(MarkdownStr): pass
 class Blockquote(MarkdownStr): pass
+class OrderedList(MarkdownStr): pass  # Numbered lists
+class UnorderedList(MarkdownStr): pass  # Bullet lists
 class ListItem(MarkdownStr): pass
+class DefinitionList(MarkdownStr): pass  # Term: definition lists
+class DefinitionTerm(MarkdownStr): pass
+class DefinitionDescription(MarkdownStr): pass
 
-# Atomic elements (no nesting)
+# Code and preformatted
 class CodeBlock(MarkdownStr): pass
+class FencedCode(MarkdownStr): pass  # ```language code blocks
+class IndentedCode(MarkdownStr): pass  # 4-space indented code
+
+# Tables and dividers
 class Table(MarkdownStr): pass
+class TableRow(MarkdownStr): pass
+class TableCell(MarkdownStr): pass
 class HorizontalRule(MarkdownStr): pass
 
 # Mapping of semantic types to mistune AST node types
 MARKDOWN_TYPE_MAPPING = OrderedDict({
+    # Headers
     Heading1: ("heading", 1),
     Heading2: ("heading", 2),
     Heading3: ("heading", 3),
     Heading4: ("heading", 4),
     Heading5: ("heading", 5),
     Heading6: ("heading", 6),
+    
+    # Block elements
     Paragraph: ("paragraph", None),
     Blockquote: ("block_quote", None),
+    OrderedList: ("list", "ordered"),
+    UnorderedList: ("list", "bullet"),
     ListItem: ("list_item", None),
+    
+    # Code blocks
     CodeBlock: ("block_code", None),
-    Table: ("table", None),
+    FencedCode: ("block_code", "fenced"),
+    IndentedCode: ("block_code", "indented"),
+    
+    # Special elements
     HorizontalRule: ("thematic_break", None),
 })
 
 # Currently, markdown is treated as a flat structure, in the future we might want to support nested structures
 # like detecting bold text, italic text, etc. in the top level elements.
+#
+# NOTE: The following elements are not supported because they require special handling:
+# - Definition lists (mistune parses them as paragraphs)
+# - Tables (mistune parses them as paragraphs)
+# - Table rows and cells (mistune doesn't separate them)
 class MarkdownStructureValidator(DocumentStructureValidator):
     """Validates if the Markdown matches a given Pydantic model structure, or just checks for well-formed Markdown if no model/schema is provided."""
     
@@ -304,7 +331,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             while scan_idx < len(ast):
                 found = False
                 node = ast[scan_idx]
-                if node['type'] in ('blank_line', 'thematic_break'):
+                if node['type'] in ('blank_line'):
                     scan_idx += 1
                     continue
                 if node['type'] == ast_type:
@@ -365,7 +392,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         # In strict mode, ensure no extra nodes after last field
         if strict:
             while ast_idx < len(ast):
-                if ast[ast_idx]['type'] not in ('blank_line', 'thematic_break'):
+                if ast[ast_idx]['type'] not in ('blank_line'):
                     return False, "Extra elements found after last expected field", None
                 ast_idx += 1
         
@@ -502,9 +529,18 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             Heading6: "###### Level 6 heading (starts with ######)",
             Paragraph: "Regular paragraph text (plain text without special formatting)",
             Blockquote: "> Blockquote (line starting with >)",
+            OrderedList: "Ordered list (numbered list)",
+            UnorderedList: "- List item (bullet point starting with dash)",
             ListItem: "- List item (bullet point starting with dash)",
+            DefinitionList: "Definition list (term: definition pairs)",
+            DefinitionTerm: "Definition term",
+            DefinitionDescription: "Definition description",
             CodeBlock: "```code block``` (fenced code block with triple backticks)",
+            FencedCode: "```language code block``` (fenced code block with triple backticks)",
+            IndentedCode: "4-space indented code block",
             Table: "| Table | with | columns | (pipe-separated values)",
+            TableRow: "Table row",
+            TableCell: "Table cell",
             HorizontalRule: "--- (horizontal rule with three dashes)",
         }
         
