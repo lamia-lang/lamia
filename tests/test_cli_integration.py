@@ -27,6 +27,7 @@ api:
   api_key: dummy_key
 """
 
+@pytest.mark.integration
 @pytest.mark.parametrize("cli_args", [
     ["sum.py"],
     ["--file", "sum.py"]
@@ -54,5 +55,6 @@ def test_cli_file_modes(tmp_path, cli_args):
         if os.path.exists(test_dir / "config.yaml"):
             os.remove(test_dir / "config.yaml")
 
+@pytest.mark.integration
 def test_import_cli():
     assert cli_mod is not None 

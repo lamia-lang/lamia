@@ -3,8 +3,8 @@ from ..base import BaseValidator, ValidationResult
 
 class LengthValidator(BaseValidator):
     """Validates the response length."""
-    def __init__(self, min_length: Optional[int] = None, max_length: Optional[int] = None, strict: bool = True):
-        super().__init__(strict=strict)
+    def __init__(self, min_length: Optional[int] = None, max_length: Optional[int] = None, strict: bool = True, generate_hints: bool = False):
+        super().__init__(strict=strict, generate_hints=generate_hints)
         self.min_length = min_length
         self.max_length = max_length
 

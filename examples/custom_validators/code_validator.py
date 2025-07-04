@@ -6,7 +6,7 @@ from lamia.validation.base import BaseValidator, ValidationResult
 class CodeValidator(BaseValidator):
     """Validates if the response is valid code in the specified language."""
     
-    def __init__(self, language: str = "python", strict: bool = True):
+    def __init__(self, language: str = "python", strict: bool = True, generate_hints: bool = False):
         super().__init__(strict=strict)
         self.language = language.lower()
     

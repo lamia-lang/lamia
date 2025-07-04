@@ -9,7 +9,7 @@ async def test_config_loading_builtin_validators():
         fallback_models=[],
         validators=[
             {"type": "html"},
-            {"type": "length", "max_length": 10}
+            {"type": "length", "max_length": 20}
         ]
     )
     registry = {
@@ -17,9 +17,9 @@ async def test_config_loading_builtin_validators():
         "length": LengthValidator
     }
     strategy = ValidationStrategy(config, registry)
-    result = await strategy.validate_response("<b>short</b>")
+    result = await strategy.validate_response("<html>short</html>")
     assert result.is_valid
-    result = await strategy.validate_response("<b>this is a very long html string</b>")
+    result = await strategy.validate_response("<html>this is a very long html string</html>")
     assert not result.is_valid
 
 async def test_config_loading_custom_class_validator():
