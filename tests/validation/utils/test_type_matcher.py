@@ -530,8 +530,9 @@ class TestInfoLossTracking:
     (conlist(int, max_length=2), [1, 2], True, None),
     (conlist(int, max_length=2), [1, 2, 3], False, "at most 2 items"),
 ])
-def test_type_matcher_field_constraints(expected_type, value, is_valid, expected_error):
-    matcher = TypeMatcher(strict=True)
+@pytest.mark.parametrize("strict", [True, False])
+def test_type_matcher_field_constraints(expected_type, value, is_valid, expected_error, strict):
+    matcher = TypeMatcher(strict=strict)
     result = matcher.validate_and_convert(value, expected_type)
     print(result)
     assert result.is_valid == is_valid
