@@ -2,7 +2,7 @@ import pytest
 from pydantic import BaseModel
 from collections import OrderedDict
 from lamia.validation.validators.file_validators import MarkdownStructureValidator
-from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1, Heading2, Paragraph
+from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1, Heading2, Paragraph, BoldText
 
 # Markdown is not a structured format, and in Lamia it is treated as a structured format by predefined classes like Heading1, Heading2, Paragraph, etc.
 
@@ -50,16 +50,23 @@ This is the body paragraph.
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
 async def test_markdown_structure_validator_invalid_md_file(strict):
-    class TitleOnlyModel(BaseModel):
-        title: str
+    class BoldTextModel(BaseModel):
+        bold_text: BoldText
 
-    validator = MarkdownStructureValidator(model=TitleOnlyModel, strict=strict)
+    validator = MarkdownStructureValidator(model=BoldTextModel, strict=strict)
     invalid_md1 = '**not closed bold text'
     result = await validator.validate(invalid_md1)
-    assert not result.is_valid  
-    invalid_md2 = '##title text must be whitespaced after the hash in markdown'
-    result = await validator.validate(invalid_md2)
     assert not result.is_valid
+    assert "Missing element(s) for field(s): bold_text" in result.error_message
+
+    class TitleOnlyModel(BaseModel):
+        title: Heading2
+
+    validator2 = MarkdownStructureValidator(model=TitleOnlyModel, strict=strict)
+    invalid_md2 = '##title text must be whitespaced after the hash in markdown'
+    result2 = await validator2.validate(invalid_md2)
+    assert not result2.is_valid
+    assert "Missing element(s) for field(s): title" in result2.error_message
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -162,6 +169,7 @@ Another paragraph here.
     
     result = await validator.validate(markdown_content)
     assert result.is_valid is True
+    print(result)
     assert result.result_type.title.text == "Test Title"
     assert result.result_type.intro.text == "This is a paragraph."
     assert result.result_type.subtitle.text == "Subsection"
