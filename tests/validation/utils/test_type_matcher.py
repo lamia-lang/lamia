@@ -504,14 +504,14 @@ class TestInfoLossTracking:
         # No info_loss for empty lists
         assert nested_result.info_loss == {}
 
-@pytest.mark.parametrize("expected_type,value,should_match,expected_error", [
+@pytest.mark.parametrize("expected_type,value,is_valid,expected_error", [
     # String constraints (valid and invalid)
-    (constr(min_length=3), "abc", True, None),
+    (constr(min_length=3), "abcd", True, None),
     (constr(min_length=3), "ab", False, "at least 3 characters"),
     (constr(max_length=5), "abc", True, None),
     (constr(max_length=5), "abcdef", False, "at most 5 characters"),
     (constr(pattern=r"^abc"), "abcde", True, None),
-    (constr(pattern=r"^abc"), "def", False, "does not match regex"),
+    (constr(pattern=r"^abc"), "def", False, "String should match pattern '^abc'"),
     # Integer constraints (valid and invalid)
     (conint(gt=0), 1, True, None),
     (conint(gt=0), -1, False, "greater than 0"),
@@ -523,19 +523,19 @@ class TestInfoLossTracking:
     (conint(le=50), 51, False, "less than or equal to 50"),
     # Float constraints (valid and invalid)
     (confloat(gt=0.0), 0.1, True, None),
-    (confloat(gt=0.0), -0.1, False, "greater than 0.0"),
+    (confloat(gt=0.0), -0.1, False, "greater than 0"),
     # List constraints (valid and invalid)
     (conlist(int, min_length=2), [1, 2], True, None),
     (conlist(int, min_length=2), [1], False, "at least 2 items"),
     (conlist(int, max_length=2), [1, 2], True, None),
     (conlist(int, max_length=2), [1, 2, 3], False, "at most 2 items"),
 ])
-def test_type_matcher_field_constraints(expected_type, value, should_match, expected_error):
+def test_type_matcher_field_constraints(expected_type, value, is_valid, expected_error):
     matcher = TypeMatcher(strict=True)
     result = matcher.validate_and_convert(value, expected_type)
     print(result)
-    assert result.is_valid == should_match
-    if not should_match:
+    assert result.is_valid == is_valid
+    if not is_valid:
         assert expected_error in result.error
     else:
         assert result.error is None

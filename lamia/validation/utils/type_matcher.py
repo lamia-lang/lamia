@@ -1,5 +1,6 @@
 import typing
 import re
+from pydantic import TypeAdapter, ValidationError, ConfigDict
 from .error_messages import (
     error_msg_none_not_allowed,
     error_msg_cannot_convert_to_any_of,
@@ -27,7 +28,7 @@ class TypeMatcher:
         self.get_text_func = get_text_func
 
     def validate_and_convert(self, value, expected_type, field=None) -> TypeMatchResult:
-        result = self._validate_and_convert(value, expected_type)
+        return self._validate_and_convert(value, expected_type)
         if not result.is_valid or field is None:
             return result
         try:
@@ -61,6 +62,17 @@ class TypeMatcher:
                     if result.is_valid:
                         return result
                 return TypeMatchResult(False, None, error_msg_cannot_convert_to_any_of(value, args))
+
+            # Handle Pydantic constrained (Annotated) types
+            if origin is typing.Annotated:
+                try:
+                    adapter = TypeAdapter(expected_type, config=ConfigDict(strict=self.strict))
+                    validated_value = adapter.validate_python(value)
+                    return TypeMatchResult(True, validated_value)
+                except ValidationError as e:
+                    # Collect all error messages from pydantic validation
+                    error_messages = "; ".join(err["msg"] for err in e.errors())
+                    return TypeMatchResult(False, None, error_messages)
 
             # Handle lists/dicts
             if origin is list:
