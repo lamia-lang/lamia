@@ -306,6 +306,18 @@ class MarkdownStructureValidator(DocumentStructureValidator):
     def _extract_text(self, node):
         if node is None:
             return None
+        if node.get('type') == 'list':
+            # Handle lists by joining items with commas in array format
+            items = []
+            for item in node.get('children', []):
+                if item.get('type') == 'list_item':
+                    # Navigate through block_text to get to text nodes
+                    for block in item.get('children', []):
+                        if block.get('type') == 'block_text':
+                            for text_node in block.get('children', []):
+                                if text_node.get('type') == 'text':
+                                    items.append(text_node.get('raw', '').strip())
+            return f"[{', '.join(items)}]"
         if node.get('type') == 'text':
             return node.get('raw', '')
         if 'children' in node:

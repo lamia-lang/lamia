@@ -4,14 +4,10 @@ from collections import OrderedDict
 from lamia.validation.validators.file_validators import MarkdownStructureValidator
 from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import (
     Heading1, Heading2, Heading3, Heading4, Heading5, Heading6,
-    Paragraph, Blockquote, OrderedList, UnorderedList, ListItem,
-    DefinitionList, DefinitionTerm, DefinitionDescription,
+    Paragraph, Blockquote, OrderedList, UnorderedList,
     CodeBlock, FencedCode, IndentedCode,
-    Table, TableRow, TableCell, HorizontalRule,
+    HorizontalRule,
 )
-import mistune
-
-# Markdown is not a structured format, and in Lamia it is treated as a structured format by predefined classes like Heading1, Heading2, Paragraph, etc.
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -203,14 +199,6 @@ Another paragraph here.
     assert result.is_valid is False
     assert "field order" in result.error_message.lower()
 
-def print_ast(markdown):
-    """Helper function to print the AST for debugging."""
-    ast = mistune.create_markdown(renderer='ast')(markdown)
-    print(f"\nAST for markdown:\n{markdown}\n")
-    print("AST structure:")
-    print(ast)
-    return ast
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("element_type,sample_text,result_text", [
@@ -228,8 +216,8 @@ def print_ast(markdown):
     (HorizontalRule, "---", ""),
     
     # Lists
-    (OrderedList, "1. First item\n2. Second item", "First itemSecond item"),
-    (UnorderedList, "- First bullet\n- Second bullet", "First bulletSecond bullet"),
+    (OrderedList, "1. First item\n2. Second item", "[First item, Second item]"),
+    (UnorderedList, "- First bullet\n- Second bullet", "[First bullet, Second bullet]"),
     
     # Code blocks
     (CodeBlock, "```\ncode\n```", "code\n"),
