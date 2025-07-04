@@ -12,20 +12,33 @@ from .error_messages import (
     error_msg_cannot_strictly_convert,
     error_msg_cannot_convert,
 )
+from dataclasses import dataclass, field
 
+@dataclass
 class TypeMatchResult:
-    def __init__(self, is_valid: bool, value: any = None, error: str = None, info_loss: dict = None):
-        self.is_valid = is_valid
-        self.value = value
-        self.error = error
-        self.info_loss = info_loss or {}
+    is_valid: bool
+    value: any = None
+    error: str = None
+    info_loss: dict = field(default_factory=dict)
 
 class TypeMatcher:
     def __init__(self, strict: bool = False, get_text_func=None):
         self.strict = strict
         self.get_text_func = get_text_func
 
-    def validate_and_convert(self, value, expected_type) -> TypeMatchResult:
+    def validate_and_convert(self, value, expected_type, field=None) -> TypeMatchResult:
+        result = self._validate_and_convert(value, expected_type)
+        if not result.is_valid or field is None:
+            return result
+        try:
+            validated_value, errors = field.validate(result.value, {}, loc="value")
+            if errors:
+                return TypeMatchResult(False, validated_value, str(errors), result.info_loss)
+            return TypeMatchResult(True, validated_value, None, result.info_loss)
+        except Exception as e:
+            return TypeMatchResult(False, result.value, str(e), result.info_loss) 
+
+    def _validate_and_convert(self, value, expected_type) -> TypeMatchResult:
         try:
             # Handle Optionals
             if value is None:
@@ -44,7 +57,7 @@ class TypeMatcher:
             args = typing.get_args(expected_type)
             if origin is typing.Union:
                 for arg in args:
-                    result = self.validate_and_convert(value, arg)
+                    result = self._validate_and_convert(value, arg)
                     if result.is_valid:
                         return result
                 return TypeMatchResult(False, None, error_msg_cannot_convert_to_any_of(value, args))
@@ -59,7 +72,7 @@ class TypeMatcher:
                 invalid_elems = {}
                 combined_info_loss = {}
                 for index, v in enumerate(value):
-                    result = self.validate_and_convert(v, args[0])
+                    result = self._validate_and_convert(v, args[0])
                     if not result.is_valid:
                         invalid_elems[index] = result.error
                     coerced.append(result.value)
@@ -78,10 +91,10 @@ class TypeMatcher:
                 invalid_values = {}
                 combined_info_loss = {}
                 for k, v in value.items():
-                    k_result = self.validate_and_convert(k, args[0])
+                    k_result = self._validate_and_convert(k, args[0])
                     if not k_result.is_valid:
                         invalid_keys[k] = k_result.error
-                    v_result = self.validate_and_convert(v, args[1])
+                    v_result = self._validate_and_convert(v, args[1])
                     if not v_result.is_valid:
                         invalid_values[v] = v_result.error
                     coerced[k_result.value] = v_result.value
@@ -205,4 +218,4 @@ class TypeMatcher:
                 return TypeMatchResult(True, True)
             if v in ("false", "0"):
                 return TypeMatchResult(True, False)
-        return TypeMatchResult(False, None, error_msg_cannot_convert(value, "bool")) 
+        return TypeMatchResult(False, None, error_msg_cannot_convert(value, "bool"))
