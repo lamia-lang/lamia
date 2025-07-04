@@ -47,7 +47,6 @@ def check_api_key(model_type: str, config_manager: ConfigManager) -> Optional[st
     # Proxy logic: if 'lamia' API key is present, use it for non-local APIs
     if model_type in ('openai', 'anthropic'):
         lamia_api_key = config.get('api_keys', {}).get('lamia')
-        print("api_key:",lamia_api_key)
         if lamia_api_key:
             return lamia_api_key
     # Otherwise, get the specific API key
@@ -253,7 +252,15 @@ def create_adapter_from_config(config_manager: ConfigManager, override_model: st
                 has_context_memory=has_context_memory
             )
         else:
-            # For extension adapters, try to instantiate with config_manager and model_name
-            return AdapterClass(config_manager=config_manager, model=model_name)
+            # For extension adapters, try to instantiate with api_key and model_name
+            # Inspect the adapter __init__ signature and pass only the supported params
+            import inspect  # local import to avoid global overhead if not needed
+            init_sig = inspect.signature(AdapterClass.__init__)
+            init_kwargs = {}
+            if 'api_key' in init_sig.parameters:
+                init_kwargs['api_key'] = check_api_key(provider_name, config_manager)
+            if 'model' in init_sig.parameters:
+                init_kwargs['model'] = model_name
+            return AdapterClass(**init_kwargs)
     else:
         raise ValueError(f"Unsupported model type: {provider_name}")
