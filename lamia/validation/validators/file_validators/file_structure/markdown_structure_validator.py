@@ -36,22 +36,19 @@ class Heading3(MarkdownStr): pass
 class Heading4(MarkdownStr): pass
 class Heading5(MarkdownStr): pass
 class Heading6(MarkdownStr): pass
+
+# Block elements (can contain other blocks)
 class Paragraph(MarkdownStr): pass
-class BoldText(MarkdownStr): pass
-class ItalicText(MarkdownStr): pass
-class Strikethrough(MarkdownStr): pass
-class Url(MarkdownStr): pass
-class CodeBlock(MarkdownStr): pass
-class InlineCode(MarkdownStr): pass
-class ListItem(MarkdownStr): pass
 class Blockquote(MarkdownStr): pass
+class ListItem(MarkdownStr): pass
+
+# Atomic elements (no nesting)
+class CodeBlock(MarkdownStr): pass
 class Table(MarkdownStr): pass
-class Image(MarkdownStr): pass
-class TaskListItem(MarkdownStr): pass
-class Footnote(MarkdownStr): pass
 class HorizontalRule(MarkdownStr): pass
 
-MARKDOWN_TYPE_MAPPING = {
+# Mapping of semantic types to mistune AST node types
+MARKDOWN_TYPE_MAPPING = OrderedDict({
     Heading1: ("heading", 1),
     Heading2: ("heading", 2),
     Heading3: ("heading", 3),
@@ -59,22 +56,15 @@ MARKDOWN_TYPE_MAPPING = {
     Heading5: ("heading", 5),
     Heading6: ("heading", 6),
     Paragraph: ("paragraph", None),
-    CodeBlock: ("block_code", None),
-    InlineCode: ("codespan", None),
-    ListItem: ("list_item", None),
     Blockquote: ("block_quote", None),
+    ListItem: ("list_item", None),
+    CodeBlock: ("block_code", None),
     Table: ("table", None),
-    Image: ("image", None),
-    TaskListItem: ("task_list_item", None),
-    Footnote: ("footnote", None),
     HorizontalRule: ("thematic_break", None),
-    BoldText: ("strong", None),
-    ItalicText: ("emphasis", None),
-    Strikethrough: ("strikethrough", None),
-    Url: ("link", None),
-}
-# Add more markdown types as needed
+})
 
+# Currently, markdown is treated as a flat structure, in the future we might want to support nested structures
+# like detecting bold text, italic text, etc. in the top level elements.
 class MarkdownStructureValidator(DocumentStructureValidator):
     """Validates if the Markdown matches a given Pydantic model structure, or just checks for well-formed Markdown if no model/schema is provided."""
     
@@ -511,19 +501,11 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             Heading5: "##### Level 5 heading (starts with #####)",
             Heading6: "###### Level 6 heading (starts with ######)",
             Paragraph: "Regular paragraph text (plain text without special formatting)",
-            BoldText: "**Bold text** (surrounded by double asterisks)",
-            ItalicText: "*Italic text* (surrounded by single asterisks)",
-            Strikethrough: "~~Strikethrough text~~ (surrounded by double tildes)",
-            CodeBlock: "```code block``` (fenced code block with triple backticks)",
-            InlineCode: "`inline code` (surrounded by single backticks)",
-            ListItem: "- List item (bullet point starting with dash)",
             Blockquote: "> Blockquote (line starting with >)",
+            ListItem: "- List item (bullet point starting with dash)",
+            CodeBlock: "```code block``` (fenced code block with triple backticks)",
             Table: "| Table | with | columns | (pipe-separated values)",
-            Image: "![Alt text](image-url) (image syntax)",
-            TaskListItem: "- [ ] Task list item (checkbox list item)",
-            Footnote: "[^footnote] (footnote reference)",
             HorizontalRule: "--- (horizontal rule with three dashes)",
-            Url: "[Link text](url) (link syntax)",
         }
         
         # Handle generic types like str, int, etc.

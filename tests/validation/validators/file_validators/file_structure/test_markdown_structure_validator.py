@@ -2,7 +2,7 @@ import pytest
 from pydantic import BaseModel
 from collections import OrderedDict
 from lamia.validation.validators.file_validators import MarkdownStructureValidator
-from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1, Heading2, Paragraph, BoldText
+from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import Heading1, Heading2, Paragraph
 
 # Markdown is not a structured format, and in Lamia it is treated as a structured format by predefined classes like Heading1, Heading2, Paragraph, etc.
 
@@ -50,15 +50,6 @@ This is the body paragraph.
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
 async def test_markdown_structure_validator_invalid_md_file(strict):
-    class BoldTextModel(BaseModel):
-        bold_text: BoldText
-
-    validator = MarkdownStructureValidator(model=BoldTextModel, strict=strict)
-    invalid_md1 = '**not closed bold text'
-    result = await validator.validate(invalid_md1)
-    assert not result.is_valid
-    assert "Missing element(s) for field(s): bold_text" in result.error_message
-
     class TitleOnlyModel(BaseModel):
         title: Heading2
 
