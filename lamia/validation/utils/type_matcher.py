@@ -14,6 +14,9 @@ from .error_messages import (
     error_msg_cannot_convert,
 )
 from dataclasses import dataclass, field
+import logging
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class TypeMatchResult:
@@ -64,11 +67,13 @@ class TypeMatcher:
                 return TypeMatchResult(False, None, error_msg_cannot_convert_to_any_of(value, args))
 
             # Handle Pydantic constrained (Annotated) types
+            # To check if pydantic constraints are not violated
             if origin is typing.Annotated:
                 try:
-                    adapter = TypeAdapter(expected_type, config=ConfigDict(strict=self.strict))
-                    validated_value = adapter.validate_python(value)
-                    return TypeMatchResult(True, validated_value)
+                    adapter = TypeAdapter(expected_type, config=ConfigDict(strict=self.strict)) # Pass lamia strictness flag to pydantic
+                    validated_value = adapter.validate_python(value, strict=self) # To make sure it is used
+                    # the validated_value is a pydantic model we ignore it to continue typed validation to record info_loss, etc. 
+                    logger.debug(f"Pydantic's validated_value (not used by lamia): {validated_value}")
                 except ValidationError as e:
                     # Collect all error messages from pydantic validation
                     error_messages = "; ".join(err["msg"] for err in e.errors())

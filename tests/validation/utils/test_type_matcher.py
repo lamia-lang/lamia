@@ -534,7 +534,7 @@ class TestInfoLossTracking:
 def test_type_matcher_field_constraints(expected_type, value, is_valid, expected_error, strict):
     matcher = TypeMatcher(strict=strict)
     result = matcher.validate_and_convert(value, expected_type)
-    print(result)
+
     assert result.is_valid == is_valid
     if not is_valid:
         assert expected_error in result.error

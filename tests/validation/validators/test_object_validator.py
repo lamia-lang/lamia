@@ -185,6 +185,7 @@ async def test_pydantic_field_constraints_are_enforced_on_objects(strict):
     validator2 = ObjectValidator(schema=MyModelWithConstr, strict=strict)
     valid_json = '{"mystr": "abcd"}'
     invalid_json = '{"mystr": "a"}'
+
     result = await validator.validate(valid_json)
     result2 = await validator2.validate(valid_json)
     assert result.is_valid
@@ -196,3 +197,21 @@ async def test_pydantic_field_constraints_are_enforced_on_objects(strict):
     assert not result2.is_valid
     assert "at least 3 characters" in result.error_message
     assert "at least 3 characters" in result2.error_message
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+async def test_pydantic_fields_with_multiple_constraints(strict):
+    class MyModel(BaseModel):
+        mystr: str = Field(..., min_length=3, pattern=r"^abc")
+
+    validator = ObjectValidator(schema=MyModel, strict=strict)
+    valid_json = '{"mystr": "abcd"}'
+    invalid_json = '{"mystr": "a"}'
+
+    result = await validator.validate(valid_json)
+    assert result.is_valid
+
+    result = await validator.validate(invalid_json)
+    assert not result.is_valid
+    assert "at least 3 characters" in result.error_message
+    assert "String should match pattern '^abc'" in result.error_message
