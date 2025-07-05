@@ -235,7 +235,7 @@ async def test_pydantic_fields_with_multiple_constraints(strict):
 
     validator = ObjectValidator(schema=MyModel, strict=strict)
     valid_json = '{"mystr": "abcd"}'
-    invalid_json_short = '{"mystr": "a"}'
+    invalid_json_short_and_pattern = '{"mystr": "a"}'
     invalid_json_pattern = '{"mystr": "def"}'
 
     result = await validator.validate(valid_json)
@@ -244,7 +244,7 @@ async def test_pydantic_fields_with_multiple_constraints(strict):
     assert result.info_loss is None
 
     # Test short string (should report length constraint error)
-    result = await validator.validate(invalid_json_short)
+    result = await validator.validate(invalid_json_short_and_pattern)
     assert not result.is_valid
     assert "at least 3 characters" in result.error_message
     assert result.result_type is None
@@ -253,6 +253,7 @@ async def test_pydantic_fields_with_multiple_constraints(strict):
     # Test pattern violation (should report pattern constraint error)  
     result = await validator.validate(invalid_json_pattern)
     assert not result.is_valid
-    assert "String should match pattern" in result.error_message
+
+    assert "String should match pattern '^abc'" in result.error_message
     assert result.result_type is None
     assert result.info_loss is None
