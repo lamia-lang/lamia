@@ -19,9 +19,7 @@ class OpenAIAdapter(BaseLLMAdapter):
     async def initialize(self) -> None:
         """Initialize client - will try SDK first, fallback to HTTP."""
         if self._use_sdk:
-            print("called")
             self.client = openai.AsyncOpenAI(api_key=self.api_key)
-            print( self.client )
         else:
             self.session = aiohttp.ClientSession(
                 headers={

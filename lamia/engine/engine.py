@@ -66,6 +66,7 @@ class LamiaEngine:
                 self.adapter = create_adapter_from_config(self.config_manager)
                 await self.adapter.initialize()
             else:
+                # It takes time to initialize local models, so we will initialize it lazily when it is needed
                 self.adapter = None  # Will be lazily initialized in generate()
             # Set up validation if enabled
             await self._setup_validation()
