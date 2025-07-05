@@ -60,10 +60,13 @@ class TypeMatcher:
             # To check if pydantic constraints are not violated
             if origin is typing.Annotated:
                 try:
-                    adapter = TypeAdapter(expected_type, config=ConfigDict(strict=self.strict)) # Pass lamia strictness flag to pydantic
-                    validated_value = adapter.validate_python(value, strict=self.strict) # To make sure it is used
-                    # the validated_value is a pydantic model we ignore it to continue typed validation to record info_loss, etc. 
-                    logger.debug(f"Pydantic's validated_value (not used by lamia): {validated_value}")
+                    adapter = TypeAdapter(expected_type, config=ConfigDict(strict=self.strict))  # Pass lamia strictness flag to pydantic
+                    validated_value = adapter.validate_python(value, strict=self.strict)
+                    # If validation succeeds, we can safely return here; no need for further isinstance checks
+                    logger.debug(
+                        "Pydantic validated value (ignored for lamia type matching): %s", validated_value
+                    )
+                    return TypeMatchResult(True, value)
                 except ValidationError as e:
                     # Collect all error messages from pydantic validation
                     error_messages = "; ".join(err["msg"] for err in e.errors())

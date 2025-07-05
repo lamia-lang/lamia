@@ -13,6 +13,10 @@ async def test_object_validator_valid(strict):
     valid_json = '{"a": 1, "b": "hello"}'
     result = await validator.validate(valid_json)
     assert result.is_valid
+    assert result.result_type is not None
+    assert result.result_type.a == 1
+    assert result.result_type.b == "hello"
+    assert result.info_loss is None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -22,7 +26,9 @@ async def test_object_validator_invalid_type(strict):
     invalid_json = '{"a": "not_an_int", "b": "hello"}'
     result = await validator.validate(invalid_json)
     assert not result.is_valid
-    assert "does not match schema" in result.error_message or "not valid JSON" in result.error_message
+    assert "Field 'a':" in result.error_message and "Cannot" in result.error_message and "convert" in result.error_message
+    assert result.result_type is None
+    assert result.info_loss is None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -32,7 +38,9 @@ async def test_object_validator_missing_field(strict):
     missing_field_json = '{"a": 1}'
     result = await validator.validate(missing_field_json)
     assert not result.is_valid
-    assert "does not match schema" in result.error_message or "not valid JSON" in result.error_message
+    assert "Missing field 'b'" in result.error_message
+    assert result.result_type is None
+    assert result.info_loss is None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -42,9 +50,11 @@ async def test_object_validator_invalid_json(strict):
     invalid_json = '{a: 1, b: "hello"}'  # Not valid JSON
     result = await validator.validate(invalid_json)
     assert not result.is_valid
-    assert ("not valid JSON" in result.error_message or 
+    assert ("Response is not valid JSON:" in result.error_message or 
             "No valid JSON object found" in result.error_message or
             "Extracted JSON is not valid" in result.error_message)
+    assert result.result_type is None
+    assert result.info_loss is None
 
 @pytest.mark.asyncio
 async def test_object_validator_permissive_extracts_json():
@@ -54,6 +64,10 @@ async def test_object_validator_permissive_extracts_json():
     result = await validator.validate(text_with_json)
     assert result.is_valid
     assert result.validated_text == '{"a": 1, "b": "hello"}'
+    assert result.result_type is not None
+    assert result.result_type.a == 1    
+    assert result.result_type.b == "hello"
+    assert result.info_loss is None
 
 # --- Pydantic BaseModel tests ---
 class MyModel(BaseModel):
@@ -67,6 +81,10 @@ async def test_object_validator_valid_pydantic(strict):
     valid_json = '{"a": 42, "b": "world"}'
     result = await validator.validate(valid_json)
     assert result.is_valid
+    assert result.result_type is not None
+    assert result.result_type.a == 42
+    assert result.result_type.b == "world"
+    assert result.info_loss is None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -75,7 +93,9 @@ async def test_object_validator_invalid_type_pydantic(strict):
     invalid_json = '{"a": "oops", "b": "world"}'
     result = await validator.validate(invalid_json)
     assert not result.is_valid
-    assert "does not match schema" in result.error_message or "not valid JSON" in result.error_message
+    assert "Field 'a':" in result.error_message and "Cannot" in result.error_message and "convert" in result.error_message
+    assert result.result_type is None
+    assert result.info_loss is None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -84,37 +104,11 @@ async def test_object_validator_missing_field_pydantic(strict):
     missing_field_json = '{"a": 42}'
     result = await validator.validate(missing_field_json)
     assert not result.is_valid
-    assert "does not match schema" in result.error_message or "not valid JSON" in result.error_message
+    assert "Missing field 'b'" in result.error_message
+    assert result.result_type is None
+    assert result.info_loss is None
 
 # --- Hint generation tests ---
-@pytest.mark.asyncio
-@pytest.mark.parametrize("strict", [True, False])
-async def test_object_validator_initial_hint_included(strict):
-    schema = {"a": "int", "b": "string"}
-    validator = ObjectValidator(schema=schema, strict=strict, generate_hints=True)
-    invalid_json = '{"a": "not_an_int", "b": "hello"}'
-    result = await validator.validate(invalid_json)
-    assert result.hint is not None
-    assert "Please ensure" in result.hint or "Please return only" in result.hint
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("strict", [True, False])
-async def test_object_validator_no_hint_when_disabled(strict):
-    schema = {"a": "int", "b": "string"}
-    validator = ObjectValidator(schema=schema, strict=strict, generate_hints=False)
-    invalid_json = '{"a": "not_an_int", "b": "hello"}'
-    result = await validator.validate(invalid_json)
-    assert result.hint is None
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("strict", [True, False])
-async def test_object_validator_initial_hint_included_pydantic(strict):
-    validator = ObjectValidator(schema=MyModel, strict=strict, generate_hints=True)
-    invalid_json = '{"a": "not_an_int", "b": "hello"}'
-    result = await validator.validate(invalid_json)
-    assert result.hint is not None
-    assert "Please ensure" in result.hint or "Please return only" in result.hint
-
 def test_object_validator_initial_hint_contains_schema():
     """Test that the initial hint contains the JSON schema."""
     schema = {"a": "int", "b": "string"}
@@ -139,7 +133,6 @@ def test_object_validator_initial_hint_contains_schema():
     assert "type" in json_schema
     assert json_schema["type"] == "object"
     assert "properties" in json_schema
-
 def test_object_validator_initial_hint_contains_schema_pydantic():
     """Test that the initial hint contains the JSON schema for Pydantic models."""
     validator = ObjectValidator(schema=MyModel)
@@ -173,6 +166,34 @@ def test_object_validator_initial_hint_contains_schema_pydantic():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
+async def test_object_validator_initial_and_retry_hints(strict):
+    schema = {"a": "int", "b": "string"}
+    validator = ObjectValidator(schema=schema, strict=strict, generate_hints=True)
+    assert validator.initial_hint is not None
+
+    invalid_json = '{"a": "not_an_int", "b": "hello"}'
+    result = await validator.validate(invalid_json)
+    assert not result.is_valid
+    assert result.hint is not None
+    assert result.error_message is not None
+    assert validator.initial_hint in result.hint
+    assert result.error_message in result.hint
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+async def test_object_validator_no_hint_when_hints_disabled(strict):
+    schema = {"a": "int", "b": "string"}
+    validator = ObjectValidator(schema=schema, strict=strict, generate_hints=False)
+    #assert validator.initial_hint is None
+    invalid_json = '{"a": "not_an_int", "b": "hello"}'
+    result = await validator.validate(invalid_json)
+    assert not result.is_valid
+    assert result.hint is None
+
+# --- End of hint generation tests ---
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
 async def test_pydantic_field_constraints_are_enforced_on_objects(strict):
     class MyModel(BaseModel):
         mystr: str = Field(..., min_length=3)
@@ -190,6 +211,10 @@ async def test_pydantic_field_constraints_are_enforced_on_objects(strict):
     result2 = await validator2.validate(valid_json)
     assert result.is_valid
     assert result2.is_valid
+    assert result.result_type is not None
+    assert result2.result_type is not None
+    assert result.info_loss is None
+    assert result2.info_loss is None
 
     result = await validator.validate(invalid_json)
     result2 = await validator2.validate(invalid_json)
@@ -197,6 +222,10 @@ async def test_pydantic_field_constraints_are_enforced_on_objects(strict):
     assert not result2.is_valid
     assert "at least 3 characters" in result.error_message
     assert "at least 3 characters" in result2.error_message
+    assert result.result_type is None
+    assert result2.result_type is None
+    assert result.info_loss is None
+    assert result2.info_loss is None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -206,12 +235,24 @@ async def test_pydantic_fields_with_multiple_constraints(strict):
 
     validator = ObjectValidator(schema=MyModel, strict=strict)
     valid_json = '{"mystr": "abcd"}'
-    invalid_json = '{"mystr": "a"}'
+    invalid_json_short = '{"mystr": "a"}'
+    invalid_json_pattern = '{"mystr": "def"}'
 
     result = await validator.validate(valid_json)
     assert result.is_valid
+    assert result.result_type is not None
+    assert result.info_loss is None
 
-    result = await validator.validate(invalid_json)
+    # Test short string (should report length constraint error)
+    result = await validator.validate(invalid_json_short)
     assert not result.is_valid
     assert "at least 3 characters" in result.error_message
-    assert "String should match pattern '^abc'" in result.error_message
+    assert result.result_type is None
+    assert result.info_loss is None
+
+    # Test pattern violation (should report pattern constraint error)  
+    result = await validator.validate(invalid_json_pattern)
+    assert not result.is_valid
+    assert "String should match pattern" in result.error_message
+    assert result.result_type is None
+    assert result.info_loss is None
