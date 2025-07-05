@@ -30,19 +30,9 @@ class TypeMatcher:
         self.strict = strict
         self.get_text_func = get_text_func
 
-    def validate_and_convert(self, value, expected_type, field=None) -> TypeMatchResult:
-        return self._validate_and_convert(value, expected_type)
-        if not result.is_valid or field is None:
-            return result
-        try:
-            validated_value, errors = field.validate(result.value, {}, loc="value")
-            if errors:
-                return TypeMatchResult(False, validated_value, str(errors), result.info_loss)
-            return TypeMatchResult(True, validated_value, None, result.info_loss)
-        except Exception as e:
-            return TypeMatchResult(False, result.value, str(e), result.info_loss) 
 
-    def _validate_and_convert(self, value, expected_type) -> TypeMatchResult:
+
+    def validate_and_convert(self, value, expected_type) -> TypeMatchResult:
         try:
             # Handle Optionals
             if value is None:
@@ -61,7 +51,7 @@ class TypeMatcher:
             args = typing.get_args(expected_type)
             if origin is typing.Union:
                 for arg in args:
-                    result = self._validate_and_convert(value, arg)
+                    result = self.validate_and_convert(value, arg)
                     if result.is_valid:
                         return result
                 return TypeMatchResult(False, None, error_msg_cannot_convert_to_any_of(value, args))
@@ -71,7 +61,7 @@ class TypeMatcher:
             if origin is typing.Annotated:
                 try:
                     adapter = TypeAdapter(expected_type, config=ConfigDict(strict=self.strict)) # Pass lamia strictness flag to pydantic
-                    validated_value = adapter.validate_python(value, strict=self) # To make sure it is used
+                    validated_value = adapter.validate_python(value, strict=self.strict) # To make sure it is used
                     # the validated_value is a pydantic model we ignore it to continue typed validation to record info_loss, etc. 
                     logger.debug(f"Pydantic's validated_value (not used by lamia): {validated_value}")
                 except ValidationError as e:
@@ -89,7 +79,7 @@ class TypeMatcher:
                 invalid_elems = {}
                 combined_info_loss = {}
                 for index, v in enumerate(value):
-                    result = self._validate_and_convert(v, args[0])
+                    result = self.validate_and_convert(v, args[0])
                     if not result.is_valid:
                         invalid_elems[index] = result.error
                     coerced.append(result.value)
@@ -108,10 +98,10 @@ class TypeMatcher:
                 invalid_values = {}
                 combined_info_loss = {}
                 for k, v in value.items():
-                    k_result = self._validate_and_convert(k, args[0])
+                    k_result = self.validate_and_convert(k, args[0])
                     if not k_result.is_valid:
                         invalid_keys[k] = k_result.error
-                    v_result = self._validate_and_convert(v, args[1])
+                    v_result = self.validate_and_convert(v, args[1])
                     if not v_result.is_valid:
                         invalid_values[v] = v_result.error
                     coerced[k_result.value] = v_result.value
