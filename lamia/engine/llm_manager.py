@@ -15,6 +15,7 @@ from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter
 from lamia.adapters.llm.local import OllamaAdapter
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from .config_manager import ConfigManager
+# Ollama utility functions moved to ollama_utils.py
 
 class MissingAPIKeysError(Exception):
     """Raised when one or more required API keys are missing for LLM engines."""
@@ -87,94 +88,6 @@ def check_all_required_api_keys(config_manager: ConfigManager):
     
     if missing:
         raise MissingAPIKeysError(missing)
-
-def is_ollama_running() -> bool:
-    """Check if Ollama service is running by trying to connect to its API."""
-    try:
-        response = requests.get("http://localhost:11434/api/version", timeout=2)
-        return response.status_code == 200
-    except requests.exceptions.RequestException:
-        return False
-
-def list_available_ollama_models() -> list[str]:
-    """
-    Get list of available local Ollama models.
-    Returns empty list if service is not running or no models found.
-    """
-    if not is_ollama_running():
-        print("⚠️  Ollama service is not running. Start it with 'ollama serve'")
-        return []
-        
-    try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if response.status_code == 200:
-            models = response.json().get('models', [])
-            return [model['name'] for model in models]
-        return []
-    except requests.exceptions.RequestException:
-        return []
-
-def start_ollama_service() -> bool:
-    """
-    Start the Ollama service if it's not running.
-    
-    Returns:
-        bool: True if service started successfully or was already running
-    """
-    if is_ollama_running():
-        print("✓ Ollama service is running")
-        return True
-
-    print("Starting Ollama service...")
-    try:
-        # Start Ollama in the background
-        subprocess.Popen(["ollama", "serve"], 
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
-        
-        # Wait for service to start (max 30 seconds)
-        for i in range(30):
-            if is_ollama_running():
-                print("✓ Ollama service started successfully")
-                return True
-            if i % 5 == 0:  # Show progress every 5 seconds
-                print(".", end="", flush=True)
-            time.sleep(1)
-        
-        print("\n❌ Timeout waiting for Ollama service to start")
-        return False
-    except FileNotFoundError:
-        print("\n❌ Ollama is not installed. Please install it first: https://ollama.ai/download")
-        raise RuntimeError("Ollama is not installed")
-    except Exception as e:
-        print(f"\n❌ Failed to start Ollama service: {str(e)}")
-        return False
-
-def ensure_ollama_model_pulled(model_name: str) -> bool:
-    """
-    Ensure the specified Ollama model is pulled and available.
-    
-    Args:
-        model_name: Name of the Ollama model to check/pull
-        
-    Returns:
-        bool: True if model is available
-    """
-    try:
-        # Check if model exists
-        response = requests.get(f"http://localhost:11434/api/show", 
-                              json={"name": model_name})
-        
-        if response.status_code == 200:
-            return True
-            
-        # If model doesn't exist, pull it
-        pull_response = requests.post(f"http://localhost:11434/api/pull", 
-                                    json={"name": model_name})
-        
-        return pull_response.status_code == 200
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"Failed to check/pull Ollama model: {str(e)}")
 
 def _discover_adapters_in_path(path: str) -> dict:
     """Discover all adapter classes in a given filesystem path."""

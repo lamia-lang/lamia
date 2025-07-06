@@ -59,6 +59,7 @@ async def test_start_with_local_provider():
     mock_local_adapter = Mock()
     mock_local_adapter.initialize = AsyncMock()
     mock_local_adapter.close = AsyncMock()
+    mock_local_adapter.generate = AsyncMock(return_value=None)
 
     with patch('lamia.engine.engine.create_adapter_from_config', return_value=mock_local_adapter):
       result = await engine.generate("Hello")
@@ -308,7 +309,6 @@ async def test_generate_calls_execute_with_retries_once():
         model="openai",
     )
 
-    # Stub adapter
     stub_adapter = MagicMock()
     stub_adapter.initialize = AsyncMock()
     stub_adapter.close = AsyncMock()
