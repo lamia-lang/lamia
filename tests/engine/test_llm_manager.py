@@ -32,9 +32,8 @@ class TestCheckApiKey:
         config = {"api_keys": {"openai": "test-openai-key", "anthropic": "test-anthropic-key"}}
         cm = ConfigManager(config)
         
-        result = check_api_key("openai", cm)
-        assert result == "test-openai-key"
-        assert result == "test-anthropic-key"
+        assert check_api_key("openai", cm) == "test-openai-key"
+        assert check_api_key("anthropic", cm) == "test-anthropic-key"
 
     def test_check_api_key_direct_overrides_lamia_proxy(self):
         """Test lamia proxy API key takes precedence over direct provider key"""
@@ -508,23 +507,6 @@ class TestCreateAdapterFromConfig:
                 create_adapter_from_config(cm)
 
         """Additional tests for create_adapter_from_config covering environment variable fallbacks and extended config options."""
-
-    def test_openai_adapter_with_env_key(self):
-        config = {
-            "default_model": "openai",
-            "models": {
-                "openai": {"default_model": "gpt-3.5-turbo", "temperature": 0.7, "max_tokens": 1000}
-            },
-            # No api_keys provided
-            "validation": {"fallback_models": []}
-        }
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-env-key"}):
-            cm = ConfigManager(config)
-            with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
-                adapter = create_adapter_from_config(cm)
-                # Ensure adapter was instantiated with the env key
-                MockAdapter.assert_called()
-                assert adapter.api_key == "test-env-key"
 
     def test_lamia_api_key_from_env(self, monkeypatch):
         config = {

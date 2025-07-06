@@ -36,28 +36,57 @@ def check_api_key(model_type: str, config_manager: ConfigManager) -> Optional[st
     """
     Get and validate API key from config_manager config.
     Returns the API key if found, otherwise raises MissingAPIKeysError.
-    If a 'lamia' API key is present in config, use it to proxy non-local APIs.
+    Priority: specific provider key > lamia key (for remote providers) > env var fallback.
     """
     env_vars = {
         'openai': 'OPENAI_API_KEY',
         'anthropic': 'ANTHROPIC_API_KEY',
         'lamia': 'LAMIA_API_KEY'
     }
-    config = config_manager.get_config()
-    # Proxy logic: if 'lamia' API key is present, use it for non-local APIs
+    
+    # First priority: specific provider API key
+    api_key = config_manager.get_api_key(model_type)
+    if api_key:
+        return api_key
+    
+    # Second priority: lamia API key (for remote providers only)
     if model_type in ('openai', 'anthropic'):
-        lamia_api_key = config.get('api_keys', {}).get('lamia')
+        lamia_api_key = config_manager.get_api_key('lamia')
         if lamia_api_key:
             return lamia_api_key
-    # Otherwise, get the specific API key
-    api_key = config.get('api_keys', {}).get(model_type)
-    if not api_key:
-        # For backward compatibility, try env var as fallback
-        env_var = env_vars.get(model_type)
-        api_key = os.getenv(env_var) if env_var else None
-    if not api_key:
-        raise MissingAPIKeysError([(model_type, env_vars.get(model_type, 'API_KEY'))])
-    return api_key
+    
+    # Third priority: environment variable fallback for backward compatibility
+    env_var = env_vars.get(model_type)
+    if env_var:
+        env_api_key = os.getenv(env_var)
+        if env_api_key:
+            return env_api_key
+    
+    # No API key found
+    raise MissingAPIKeysError([(model_type, env_vars.get(model_type, 'API_KEY'))])
+
+def check_all_required_api_keys(config_manager: ConfigManager):
+    """
+    Check that all required API keys for default and fallback engines are present.
+    If any are missing, raise MissingAPIKeysError.
+    Reuses check_api_key for consistent logic and priority handling.
+    """
+    config = config_manager.get_config()
+    default_model = config.get('default_model')
+    fallback_models = config.get('validation', {}).get('fallback_models', [])
+    required_engines = set([default_model] + fallback_models)
+    
+    missing = []
+    for engine in required_engines:
+        if ConfigManager.is_remote_provider(engine):
+            try:
+                check_api_key(engine, config_manager)
+            except MissingAPIKeysError as e:
+                # Extract the missing key info from the exception
+                missing.extend(e.missing)
+    
+    if missing:
+        raise MissingAPIKeysError(missing)
 
 def is_ollama_running() -> bool:
     """Check if Ollama service is running by trying to connect to its API."""
@@ -146,26 +175,6 @@ def ensure_ollama_model_pulled(model_name: str) -> bool:
         return pull_response.status_code == 200
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Failed to check/pull Ollama model: {str(e)}")
-
-def check_all_required_api_keys(config_manager: ConfigManager):
-    """
-    Check that all required API keys for default and fallback engines are present.
-    If any are missing, raise MissingAPIKeysError.
-    Accepts LAMIA_API_KEY as a valid key for any remote provider.
-    """
-    config = config_manager.get_config()
-    default_model = config.get('default_model')
-    fallback_models = config.get('validation', {}).get('fallback_models', [])
-    required_engines = set([default_model] + fallback_models)
-    missing = []
-    lamia_key = config_manager.get_api_key('lamia')
-    for engine in required_engines:
-        if ConfigManager.is_remote_provider(engine):
-            if not (config_manager.get_api_key(engine) or lamia_key):
-                env_var = ConfigManager.get_env_var_name(engine)
-                missing.append((engine, env_var))
-    if missing:
-        raise MissingAPIKeysError(missing)
 
 def _discover_adapters_in_path(path: str) -> dict:
     """Discover all adapter classes in a given filesystem path."""
