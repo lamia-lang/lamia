@@ -2,8 +2,6 @@ import os
 from typing import Dict, Any, Optional
 import yaml
 
-from .providers import get_env_var_names, get_api_key_from_env, is_remote
-
 
 class ConfigManager:
     """
@@ -25,18 +23,6 @@ class ConfigManager:
         
         # Enrich api_keys from env if missing
         api_keys = config.get('api_keys', {}).copy() if config.get('api_keys') else {}
-        
-        # Check known providers for env vars (with precedence)
-        from .providers import get_all_providers
-        for provider in get_all_providers():
-            if provider not in api_keys:
-                env_api_key = get_api_key_from_env(provider)
-                if env_api_key:
-                    api_keys[provider] = env_api_key
-        
-        # Also check for LAMIA_API_KEY
-        if 'lamia' not in api_keys and os.getenv('LAMIA_API_KEY'):
-            api_keys['lamia'] = os.getenv('LAMIA_API_KEY')
             
         config['api_keys'] = api_keys
         self.config: Dict[str, Any] = config
@@ -44,21 +30,6 @@ class ConfigManager:
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]):
         return cls(config_dict)
-
-    @staticmethod
-    def is_remote_provider(provider: str) -> bool:
-        return is_remote(provider)
-
-    @staticmethod
-    def get_env_var_name(provider: str) -> Optional[str]:
-        """Legacy method - returns first env var name or None."""
-        env_vars = get_env_var_names(provider)
-        return env_vars[0] if env_vars else None
-
-    @staticmethod
-    def get_env_var_names(provider: str) -> list[str]:
-        """Get list of environment variable names for provider."""
-        return get_env_var_names(provider)
 
     def get_config(self) -> Dict[str, Any]:
         """Get the entire configuration dictionary."""
