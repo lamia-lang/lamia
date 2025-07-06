@@ -2,25 +2,8 @@ import os
 from typing import Dict, Any, Optional
 import yaml
 
-PROVIDER_REGISTRY = {
-    "openai": {
-        "is_remote": True,
-        "env_var": "OPENAI_API_KEY"
-    },
-    "anthropic": {
-        "is_remote": True,
-        "env_var": "ANTHROPIC_API_KEY"
-    },
-    "lamia": {
-        "is_remote": True,
-        "env_var": "LAMIA_API_KEY"
-    },
-    "ollama": {
-        "is_remote": False,
-        "env_var": None
-    },
-    # Add more providers here as needed
-}
+from .providers import get_env_var_names, get_api_key_from_env, is_remote
+
 
 class ConfigManager:
     """
@@ -39,12 +22,22 @@ class ConfigManager:
         """
         if not isinstance(config, dict):
             raise ValueError("ConfigManager expects a config dict.")
+        
         # Enrich api_keys from env if missing
         api_keys = config.get('api_keys', {}).copy() if config.get('api_keys') else {}
-        for provider in PROVIDER_REGISTRY:
-            env_var = self.get_env_var_name(provider)
-            if provider not in api_keys and env_var and os.getenv(env_var):
-                api_keys[provider] = os.getenv(env_var)
+        
+        # Check known providers for env vars (with precedence)
+        from .providers import get_all_providers
+        for provider in get_all_providers():
+            if provider not in api_keys:
+                env_api_key = get_api_key_from_env(provider)
+                if env_api_key:
+                    api_keys[provider] = env_api_key
+        
+        # Also check for LAMIA_API_KEY
+        if 'lamia' not in api_keys and os.getenv('LAMIA_API_KEY'):
+            api_keys['lamia'] = os.getenv('LAMIA_API_KEY')
+            
         config['api_keys'] = api_keys
         self.config: Dict[str, Any] = config
 
@@ -54,11 +47,18 @@ class ConfigManager:
 
     @staticmethod
     def is_remote_provider(provider: str) -> bool:
-        return PROVIDER_REGISTRY.get(provider, {}).get("is_remote", False)
+        return is_remote(provider)
 
     @staticmethod
     def get_env_var_name(provider: str) -> Optional[str]:
-        return PROVIDER_REGISTRY.get(provider, {}).get("env_var")
+        """Legacy method - returns first env var name or None."""
+        env_vars = get_env_var_names(provider)
+        return env_vars[0] if env_vars else None
+
+    @staticmethod
+    def get_env_var_names(provider: str) -> list[str]:
+        """Get list of environment variable names for provider."""
+        return get_env_var_names(provider)
 
     def get_config(self) -> Dict[str, Any]:
         """Get the entire configuration dictionary."""
@@ -114,3 +114,14 @@ class ConfigManager:
     def get_extensions_folder(self) -> str:
         """Get the path to the extensions folder from config, defaulting to 'extensions' if not set."""
         return self.config.get('extensions_folder', 'extensions') 
+
+
+# Provider registry for backward compatibility
+PROVIDER_REGISTRY = {
+    "openai": {"is_remote": True, "env_var": "OPENAI_API_KEY"},
+    "anthropic": {"is_remote": True, "env_var": "ANTHROPIC_API_KEY"},
+    "azure-openai": {"is_remote": True, "env_var": "AZURE_OPENAI_API_KEY"},
+    "lamia": {"is_remote": True, "env_var": "LAMIA_API_KEY"},
+    "ollama": {"is_remote": False, "env_var": None},
+    "llama": {"is_remote": False, "env_var": None}
+} 

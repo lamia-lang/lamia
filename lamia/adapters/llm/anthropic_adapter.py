@@ -11,6 +11,19 @@ class AnthropicAdapter(BaseLLMAdapter):
     API_URL = "https://api.anthropic.com/v1/messages"
     API_VERSION = "2023-06-01"
     
+    @classmethod
+    def name(cls) -> str:
+        return "anthropic"
+    
+    @classmethod
+    def env_var_names(cls) -> list[str]:
+        """Anthropic uses the standard ANTHROPIC_API_KEY that most applications use."""
+        return ["ANTHROPIC_API_KEY"]
+    
+    @classmethod
+    def is_remote(cls) -> bool:
+        return True
+    
     def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
         self.api_key = api_key
         self.model = model

@@ -10,12 +10,9 @@ import importlib.util
 
 from dotenv import load_dotenv
 
-from lamia.adapters.llm.openai_adapter import OpenAIAdapter
-from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter
-from lamia.adapters.llm.local import OllamaAdapter
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from .config_manager import ConfigManager
-# Ollama utility functions moved to ollama_utils.py
+from .providers import get_adapter_class, get_env_var_names, get_api_key_from_env, supports_lamia_proxy
 
 class MissingAPIKeysError(Exception):
     """Raised when one or more required API keys are missing for LLM engines."""
@@ -23,7 +20,7 @@ class MissingAPIKeysError(Exception):
         self.missing = missing
         message = (
             "\n❌ The following engines are missing required API keys:\n" +
-            "\n".join([f"- {engine}: missing {env_var}" for engine, env_var in missing]) +
+            "\n".join([f"- {engine}: missing {env_vars}" for engine, env_vars in missing]) +
             "\n\nPlease provide the missing API keys in one of the following ways:\n"
             "- As environment variables (e.g., export OPENAI_API_KEY=...)\n"
             "- In your config file under api_keys (e.g., api_keys: {openai: ...})\n"
@@ -33,44 +30,41 @@ class MissingAPIKeysError(Exception):
         )
         super().__init__(message)
 
-def check_api_key(model_type: str, config_manager: ConfigManager) -> Optional[str]:
+def check_api_key(provider_name: str, config_manager: ConfigManager) -> Optional[str]:
     """
     Get and validate API key from config_manager config.
     Returns the API key if found, otherwise raises MissingAPIKeysError.
-    Priority: specific provider key > lamia key (for remote providers) > env var fallback.
+    Priority: specific provider key > lamia key (for remote providers) > env var fallback (with precedence).
     """
-    env_vars = {
-        'openai': 'OPENAI_API_KEY',
-        'anthropic': 'ANTHROPIC_API_KEY',
-        'lamia': 'LAMIA_API_KEY'
-    }
-    
     # First priority: specific provider API key
-    api_key = config_manager.get_api_key(model_type)
+    api_key = config_manager.get_api_key(provider_name)
     if api_key:
         return api_key
     
-    # Second priority: lamia API key (for remote providers only)
-    if model_type in ('openai', 'anthropic'):
+    # Second priority: lamia API key (for providers that support proxy)
+    if supports_lamia_proxy(provider_name):
         lamia_api_key = config_manager.get_api_key('lamia')
         if lamia_api_key:
             return lamia_api_key
     
-    # Third priority: environment variable fallback for backward compatibility
-    env_var = env_vars.get(model_type)
-    if env_var:
-        env_api_key = os.getenv(env_var)
-        if env_api_key:
-            return env_api_key
+    # Third priority: environment variable fallback (with precedence)
+    env_api_key = get_api_key_from_env(provider_name)
+    if env_api_key:
+        return env_api_key
     
-    # No API key found
-    raise MissingAPIKeysError([(model_type, env_vars.get(model_type, 'API_KEY'))])
+    # No API key found - but only raise error if this provider needs one
+    env_var_names = get_env_var_names(provider_name)
+    if env_var_names:
+        env_vars_str = " or ".join(env_var_names)
+        raise MissingAPIKeysError([(provider_name, env_vars_str)])
+    
+    # Provider doesn't need an API key (e.g., local models)
+    return None
 
 def check_all_required_api_keys(config_manager: ConfigManager):
     """
     Check that all required API keys for default and fallback engines are present.
     If any are missing, raise MissingAPIKeysError.
-    Reuses check_api_key for consistent logic and priority handling.
     """
     config = config_manager.get_config()
     default_model = config.get('default_model')
@@ -79,50 +73,24 @@ def check_all_required_api_keys(config_manager: ConfigManager):
     
     missing = []
     for engine in required_engines:
-        if ConfigManager.is_remote_provider(engine):
-            try:
-                check_api_key(engine, config_manager)
-            except MissingAPIKeysError as e:
-                # Extract the missing key info from the exception
-                missing.extend(e.missing)
+        try:
+            check_api_key(engine, config_manager)
+        except MissingAPIKeysError as e:
+            missing.extend(e.missing)
     
     if missing:
         raise MissingAPIKeysError(missing)
 
-def _discover_adapters_in_path(path: str) -> dict:
-    """Discover all adapter classes in a given filesystem path."""
-    import inspect
-    from lamia.adapters.llm.base import BaseLLMAdapter
-    adapter_class_map = {}
-    if not os.path.isdir(path):
-        return adapter_class_map
-    sys.path.insert(0, path)
-    for file in os.listdir(path):
-        if file.endswith(".py") and not file.startswith("__"):
-            module_name = file[:-3]
-            try:
-                spec = importlib.util.spec_from_file_location(module_name, os.path.join(path, file))
-                if not spec or not spec.loader:
-                    continue
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                for _, cls in inspect.getmembers(module, inspect.isclass):
-                    if (
-                        issubclass(cls, BaseLLMAdapter)
-                        and cls is not BaseLLMAdapter
-                        and hasattr(cls, '__name__')
-                    ):
-                        adapter_class_map[cls.__name__] = cls
-            except Exception as e:
-                print(f"Warning: Could not import adapter from {file}: {e}")
-    sys.path.pop(0)
-    return adapter_class_map
-
 def create_adapter_from_config(config_manager: ConfigManager, override_model: str = None) -> BaseLLMAdapter:
-    """Create an adapter instance based on the active configuration. Local engines are not started here."""
+    """Create an adapter instance based on the active configuration."""
     check_all_required_api_keys(config_manager)
     provider_name = override_model or config_manager.get_default_model()
     provider_config = config_manager.get_model_config(provider_name)
+
+    # Get the adapter class
+    ext_folder = config_manager.get_extensions_folder()
+    ext_adapters_path = os.path.join(os.getcwd(), ext_folder, "adapters")
+    adapter_class = get_adapter_class(provider_name, [ext_adapters_path])
 
     # Determine the model name
     model_name = provider_config.get('default_model')
@@ -138,51 +106,36 @@ def create_adapter_from_config(config_manager: ConfigManager, override_model: st
     # Extract has_context_memory from config if present
     has_context_memory = config_manager.get_has_context_memory(provider_name, model_name)
 
-    # Discover extension adapters
-    ext_folder = config_manager.get_extensions_folder()
-    ext_adapters_path = os.path.join(os.getcwd(), ext_folder, "adapters")
-    ext_adapter_class_map = _discover_adapters_in_path(ext_adapters_path)
-    # Built-in mapping
-    builtin_adapters = {
-        "openai": OpenAIAdapter,
-        "anthropic": AnthropicAdapter,
-        "ollama": OllamaAdapter,
-    }
-    # Check for name conflicts
-    conflict_names = set(builtin_adapters.keys()) & set(ext_adapter_class_map.keys())
-    if conflict_names:
-        raise RuntimeError(f"User-defined adapter name(s) conflict with built-in adapters: {', '.join(conflict_names)}")
-    # Merge
-    all_adapters = {**builtin_adapters, **ext_adapter_class_map}
-    # Use the adapter by provider_name
-    if provider_name in all_adapters:
-        AdapterClass = all_adapters[provider_name]
-        # Pass config as needed (assume same signature as built-ins)
-        if provider_name == "openai":
-            return AdapterClass(
-                api_key=check_api_key('openai', config_manager),
-                model=model_name,
-            )
-        elif provider_name == "anthropic":
-            return AdapterClass(
-                api_key=check_api_key('anthropic', config_manager),
-                model=model_name,
-            )
-        elif provider_name == "ollama":
-            return AdapterClass(
-                model=model_name,
-                has_context_memory=has_context_memory
-            )
-        else:
-            # For extension adapters, try to instantiate with api_key and model_name
-            # Inspect the adapter __init__ signature and pass only the supported params
-            import inspect  # local import to avoid global overhead if not needed
-            init_sig = inspect.signature(AdapterClass.__init__)
-            init_kwargs = {}
-            if 'api_key' in init_sig.parameters:
-                init_kwargs['api_key'] = check_api_key(provider_name, config_manager)
-            if 'model' in init_sig.parameters:
-                init_kwargs['model'] = model_name
-            return AdapterClass(**init_kwargs)
-    else:
-        raise ValueError(f"Unsupported model type: {provider_name}")
+    # Create adapter instance based on its requirements
+    init_kwargs = {}
+    
+    # Add API key if needed
+    env_var_names = get_env_var_names(provider_name)
+    if env_var_names:  # Provider needs an API key
+        init_kwargs['api_key'] = check_api_key(provider_name, config_manager)
+    
+    # Add model name
+    init_kwargs['model'] = model_name
+    
+    # Add provider-specific parameters
+    if provider_name == "ollama":
+        init_kwargs['has_context_memory'] = has_context_memory
+        # Add any other ollama-specific config from provider_config
+        for key in ['base_url', 'temperature', 'max_tokens', 'context_size', 'num_ctx', 'num_gpu', 'num_thread', 'repeat_penalty', 'top_k', 'top_p']:
+            if key in provider_config:
+                init_kwargs[key] = provider_config[key]
+    
+    return adapter_class(**init_kwargs)
+
+# Legacy function for backward compatibility
+def _discover_adapters_in_path(path: str) -> dict:
+    """Legacy function - use providers module instead."""
+    from .providers import get_all_providers, get_adapter_class
+    result = {}
+    for provider_name in get_all_providers([path] if os.path.isdir(path) else None):
+        try:
+            adapter_cls = get_adapter_class(provider_name, [path] if os.path.isdir(path) else None)
+            result[adapter_cls.__name__] = adapter_cls
+        except ValueError:
+            continue
+    return result

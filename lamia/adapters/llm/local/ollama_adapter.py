@@ -17,6 +17,19 @@ class OllamaAdapter(BaseLLMAdapter):
     but can be overridden by passing has_context_memory in model_params.
     """
     
+    @classmethod
+    def name(cls) -> str:
+        return "ollama"
+    
+    @classmethod
+    def env_var_names(cls) -> list[str]:
+        """Ollama is local and doesn't need API keys."""
+        return []  # No environment variables needed
+    
+    @classmethod
+    def is_remote(cls) -> bool:
+        return False  # Local model
+    
     def __init__(
         self,
         model: str = "llama2",

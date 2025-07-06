@@ -1,35 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, TypeVar, Callable, Tuple
-from functools import wraps
-import importlib
-
-T = TypeVar('T')
-
-def lazy_import(module_name: str) -> Callable:
-    """
-    Decorator for lazy importing of optional dependencies.
-    Will try HTTP fallback if import fails.
-    
-    Usage:
-        @lazy_import("openai")
-        def some_function(self, ...):
-            # use openai here
-    """
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                # Only import when the function is actually called
-                globals()[module_name] = importlib.import_module(module_name)
-                return func(*args, **kwargs)
-            except ImportError:
-                # Function should handle the case when self._use_sdk is False
-                if hasattr(args[0], '_use_sdk'):
-                    args[0]._use_sdk = False
-                return func(*args, **kwargs)
-        return wrapper
-    return decorator
+from typing import Any, Dict, Optional
 
 @dataclass
 class LLMResponse:
@@ -41,6 +12,27 @@ class LLMResponse:
 
 class BaseLLMAdapter(ABC):
     """Base interface for all LLM adapters."""
+    
+    @classmethod
+    @abstractmethod
+    def name(cls) -> str:
+        """Return the provider name (e.g., 'openai', 'anthropic', 'ollama')."""
+        pass
+    
+    @classmethod
+    def env_var_names(cls) -> list[str]:
+        """Return list of environment variable names to try, in order of precedence.
+        
+        Default implementation generates from provider name: {PROVIDER_NAME}_API_KEY
+        Override this method for providers that use different or multiple env var names.
+        """
+        return [f"{cls.name().upper()}_API_KEY"]
+    
+    @classmethod
+    @abstractmethod
+    def is_remote(cls) -> bool:
+        """Return True if this adapter makes network calls, False for local."""
+        pass
     
     @abstractmethod
     async def initialize(self) -> None:

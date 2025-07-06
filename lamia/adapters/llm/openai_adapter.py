@@ -1,12 +1,25 @@
 from typing import Optional, Dict, Any
 import aiohttp
 import openai
-from .base import BaseLLMAdapter, LLMResponse, lazy_import
+from .base import BaseLLMAdapter, LLMResponse
 
 class OpenAIAdapter(BaseLLMAdapter):
     """OpenAI API adapter with SDK support and HTTP fallback."""
     
     API_URL = "https://api.openai.com/v1/chat/completions"
+    
+    @classmethod
+    def name(cls) -> str:
+        return "openai"
+    
+    @classmethod
+    def env_var_names(cls) -> list[str]:
+        """OpenAI uses the standard OPENAI_API_KEY that most applications use."""
+        return ["OPENAI_API_KEY"]
+    
+    @classmethod
+    def is_remote(cls) -> bool:
+        return True
     
     def __init__(self, api_key: str, model: str = "gpt-3.5-turbo"):
         self.api_key = api_key
@@ -29,7 +42,6 @@ class OpenAIAdapter(BaseLLMAdapter):
             )
         return self
     
-    @lazy_import("openai")
     async def generate(self, 
                       prompt: str, 
                       temperature: float = 0.7, 
