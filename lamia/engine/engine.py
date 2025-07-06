@@ -34,6 +34,7 @@ class LamiaEngine:
         self.config_manager = ConfigManager(config)
         self.adapter = None
         self.validation_strategy = None
+        self._adapter_initialized = False
     
     async def _setup_validation(self):
         """Set up the validation strategy if enabled in config."""
@@ -58,16 +59,18 @@ class LamiaEngine:
             logger.info("Validation strategy disabled")
     
     async def start(self):
-        """Start the Lamia engine. Only initialize the adapter if the default model is not a local provider."""
+        """Start the Lamia engine. Only initialize the adapter if it's a remote provider."""
         try:
             model_name = self.config_manager.get_default_model()
             logger.info(f"Starting Lamia with {model_name} model")
-            if self.config_manager.is_remote_provider(model_name):
-                self.adapter = create_adapter_from_config(self.config_manager)
+            
+            # Always create the adapter, but only initialize remote ones immediately
+            self.adapter = create_adapter_from_config(self.config_manager)
+            if self.adapter.is_remote():
                 await self.adapter.initialize()
-            else:
-                # It takes time to initialize local models, so we will initialize it lazily when it is needed
-                self.adapter = None  # Will be lazily initialized in generate()
+                self._adapter_initialized = True
+            # Local adapters will be initialized lazily in generate() when needed
+            
             # Set up validation if enabled
             await self._setup_validation()
             logger.info("Engine started successfully")
@@ -108,9 +111,9 @@ class LamiaEngine:
         temperature = temperature if temperature is not None else config.get('temperature')
         max_tokens = max_tokens if max_tokens is not None else config.get('max_tokens')
         # Lazily initialize the adapter if needed (for local models)
-        if self.adapter is None:
-            self.adapter = create_adapter_from_config(self.config_manager)
+        if not self._adapter_initialized:
             await self.adapter.initialize()
+            self._adapter_initialized = True
         # If validation is enabled, use the validation strategy
         if self.validation_strategy:
             return await self.validation_strategy.execute_with_retries(
