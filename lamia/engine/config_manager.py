@@ -115,13 +115,3 @@ class ConfigManager:
         """Get the path to the extensions folder from config, defaulting to 'extensions' if not set."""
         return self.config.get('extensions_folder', 'extensions') 
 
-
-# Provider registry for backward compatibility
-PROVIDER_REGISTRY = {
-    "openai": {"is_remote": True, "env_var": "OPENAI_API_KEY"},
-    "anthropic": {"is_remote": True, "env_var": "ANTHROPIC_API_KEY"},
-    "azure-openai": {"is_remote": True, "env_var": "AZURE_OPENAI_API_KEY"},
-    "lamia": {"is_remote": True, "env_var": "LAMIA_API_KEY"},
-    "ollama": {"is_remote": False, "env_var": None},
-    "llama": {"is_remote": False, "env_var": None}
-} 
