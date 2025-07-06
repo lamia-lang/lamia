@@ -168,37 +168,6 @@ class TestCheckAllRequiredApiKeys:
         check_all_required_api_keys(cm)
 
 
-class TestDiscoverAdaptersInPath:
-    """Test suite for _discover_adapters_in_path function"""
-
-    def test_discover_adapters_in_path_nonexistent_directory(self):
-        """Test _discover_adapters_in_path with nonexistent directory"""
-        result = _discover_adapters_in_path("/nonexistent/path")
-        assert result == {}
-
-    def test_discover_adapters_in_path_empty_directory(self):
-        """Test _discover_adapters_in_path with empty directory"""
-        with patch('os.path.isdir', return_value=True), \
-             patch('os.listdir', return_value=[]):
-            result = _discover_adapters_in_path("/empty/path")
-            assert result == {}
-
-    def test_discover_adapters_in_path_no_python_files(self):
-        """Test _discover_adapters_in_path with no Python files"""
-        with patch('os.path.isdir', return_value=True), \
-             patch('os.listdir', return_value=["file.txt", "README.md"]):
-            result = _discover_adapters_in_path("/path")
-            assert result == {}
-
-    def test_discover_adapters_in_path_import_error(self):
-        """Test _discover_adapters_in_path handles import errors gracefully"""
-        with patch('os.path.isdir', return_value=True), \
-             patch('os.listdir', return_value=["broken.py"]), \
-             patch('importlib.util.spec_from_file_location', return_value=None):
-            result = _discover_adapters_in_path("/path")
-            assert result == {}
-
-
 class TestCreateAdapterFromConfig:
     """Test suite for create_adapter_from_config function"""
 

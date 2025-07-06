@@ -179,7 +179,7 @@ async def test_generate_with_existing_adapter():
     }
     engine = LamiaEngine(config)
     
-    mock_adapter = Mock()
+    mock_adapter = AsyncMock()
     expected_response = LLMResponse(
         text="Hello world",
         raw_response=None,
@@ -282,7 +282,7 @@ async def test_generate_with_parameter_overrides():
     }
     engine = LamiaEngine(config)
     
-    mock_adapter = Mock()
+    mock_adapter = AsyncMock()
     expected_response = LLMResponse(
         text="Hello world",
         raw_response=None,
@@ -316,7 +316,7 @@ async def test_generate_with_validation_strategy():
     }
     engine = LamiaEngine(config)
     
-    mock_adapter = Mock()
+    mock_adapter = AsyncMock()
     mock_strategy = Mock()
     expected_response = LLMResponse(
         text="Validated response",
@@ -459,7 +459,7 @@ async def test_generate_fails_if_fallback_adapter_fails_to_initialize():
     }
 
     # Primary adapter always fails validation
-    primary_adapter = MagicMock()
+    primary_adapter = AsyncMock()
     primary_adapter.generate = AsyncMock(return_value=LLMResponse(
         text="bad response",
         raw_response=None,
@@ -483,11 +483,15 @@ async def test_generate_fails_if_fallback_adapter_fails_to_initialize():
             raise RuntimeError(f"Unknown model: {override_model}")
 
     # Patch validator registry and strategy
+    class DummyValidator:
+        name = "html"
+        async def validate(self, response):
+            return type('Result', (), {"is_valid": False, "error_message": "fail", "hint": "fix", "validated_text": None})()
     with patch("lamia.engine.engine.create_adapter_from_config", side_effect=create_adapter_side_effect), \
          patch("lamia.engine.engine.ValidatorRegistry") as MockRegistry, \
          patch("lamia.engine.engine.ValidationStrategy") as MockStrategy:
         mock_registry_instance = Mock()
-        mock_registry_instance.get_registry = AsyncMock(return_value={"html": Mock()})
+        mock_registry_instance.get_registry = AsyncMock(return_value={"html": DummyValidator})
         MockRegistry.return_value = mock_registry_instance
 
         # Use the real ValidationStrategy for fallback logic
