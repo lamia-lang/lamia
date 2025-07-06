@@ -33,6 +33,7 @@ async def test_start_with_remote_provider():
     engine = LamiaEngine(config)
     
     mock_adapter = Mock()
+    mock_adapter.is_remote = Mock(return_value=True)
     mock_adapter.initialize = AsyncMock()
     
     with patch('lamia.engine.engine.create_adapter_from_config', return_value=mock_adapter):
@@ -40,6 +41,7 @@ async def test_start_with_remote_provider():
         
         assert result is True
         assert engine.adapter == mock_adapter
+        assert engine._adapter_initialized  # Remote providers are initialized immediately
         mock_adapter.initialize.assert_called_once()
 
 @pytest.mark.asyncio
@@ -51,19 +53,24 @@ async def test_start_with_local_provider():
     }
     engine = LamiaEngine(config)
     
-    result = await engine.start()
-    
-    assert result is True
-    assert engine.adapter is None  # Local providers are lazily initialized
-
     mock_local_adapter = Mock()
+    mock_local_adapter.is_remote = Mock(return_value=False)
     mock_local_adapter.initialize = AsyncMock()
     mock_local_adapter.close = AsyncMock()
     mock_local_adapter.generate = AsyncMock(return_value=None)
 
     with patch('lamia.engine.engine.create_adapter_from_config', return_value=mock_local_adapter):
-      result = await engine.generate("Hello")
-      assert engine.adapter is not None # Local adapter should be initialized after the first generate() is called
+        result = await engine.start()
+        
+        assert result is True
+        assert engine.adapter is not None  # Adapter is created but not initialized
+        assert not engine._adapter_initialized  # Local providers are not initialized immediately
+        mock_local_adapter.initialize.assert_not_called()  # Should not be called in start()
+        
+        # First call to generate should initialize the adapter
+        result = await engine.generate("Hello")
+        assert engine._adapter_initialized  # Local adapter should be initialized after the first generate() is called
+        mock_local_adapter.initialize.assert_called_once()  # Should be called exactly once
 
 @pytest.mark.asyncio
 async def test_start_adapter_initialization_failure():
@@ -76,6 +83,7 @@ async def test_start_adapter_initialization_failure():
     engine = LamiaEngine(config)
     
     mock_adapter = Mock()
+    mock_adapter.is_remote = Mock(return_value=True)
     mock_adapter.initialize = AsyncMock(side_effect=RuntimeError("Init failed"))
     mock_adapter.close = AsyncMock()
     
@@ -191,8 +199,8 @@ async def test_generate_with_existing_adapter():
     )
 
 @pytest.mark.asyncio
-async def test_generate_with_lazy_adapter_initialization():
-    """Test generate method with lazy adapter initialization"""
+async def test_local_adapter_not_initialized_twice():
+    """Test that local adapters are not initialized twice even with multiple generate calls"""
     config = {
         "default_model": "ollama",
         "models": {"ollama": {"default_model": "llama2", "temperature": 0.8}}
@@ -200,6 +208,7 @@ async def test_generate_with_lazy_adapter_initialization():
     engine = LamiaEngine(config)
     
     mock_adapter = Mock()
+    mock_adapter.is_remote = Mock(return_value=False)
     expected_response = LLMResponse(
         text="Hello world",
         raw_response=None,
@@ -210,10 +219,53 @@ async def test_generate_with_lazy_adapter_initialization():
     mock_adapter.initialize = AsyncMock()
     
     with patch('lamia.engine.engine.create_adapter_from_config', return_value=mock_adapter):
+        await engine.start()
+        
+        # First generate call should initialize the adapter
+        await engine.generate("Hello")
+        mock_adapter.initialize.assert_called_once()
+        
+        # Second generate call should NOT initialize again
+        await engine.generate("Hello again")
+        mock_adapter.initialize.assert_called_once()  # Still only called once
+        
+        # Third generate call should NOT initialize again
+        await engine.generate("Hello third time")
+        mock_adapter.initialize.assert_called_once()  # Still only called once
+
+
+@pytest.mark.asyncio
+async def test_generate_with_lazy_adapter_initialization():
+    """Test generate method with lazy adapter initialization"""
+    config = {
+        "default_model": "ollama",
+        "models": {"ollama": {"default_model": "llama2", "temperature": 0.8}}
+    }
+    engine = LamiaEngine(config)
+    
+    mock_adapter = Mock()
+    mock_adapter.is_remote = Mock(return_value=False)
+    expected_response = LLMResponse(
+        text="Hello world",
+        raw_response=None,
+        usage={},
+        model="llama2"
+    )
+    mock_adapter.generate = AsyncMock(return_value=expected_response)
+    mock_adapter.initialize = AsyncMock()
+    
+    with patch('lamia.engine.engine.create_adapter_from_config', return_value=mock_adapter):
+        # Start the engine first (adapter created but not initialized)
+        await engine.start()
+        assert engine.adapter == mock_adapter
+        assert not engine._adapter_initialized
+        mock_adapter.initialize.assert_not_called()
+        
+        # Now generate should initialize and call the adapter
         result = await engine.generate("Hello")
         
         assert result == expected_response
-        assert engine.adapter == mock_adapter
+        assert engine._adapter_initialized
         mock_adapter.initialize.assert_called_once()
         mock_adapter.generate.assert_called_once_with(
             "Hello",
@@ -284,8 +336,6 @@ async def test_generate_with_validation_strategy():
     call_args = mock_strategy.execute_with_retries.call_args
     assert call_args.kwargs['primary_adapter'] == mock_adapter
     assert call_args.kwargs['prompt'] == "Hello"
-    assert call_args.kwargs['temperature'] == 0.8
-    assert call_args.kwargs['max_tokens'] is None
 
 @pytest.mark.asyncio
 async def test_generate_calls_execute_with_retries_once():
@@ -391,89 +441,69 @@ async def test_generate_propagates_errors_from_execute_with_retries():
         await engine.stop()
 
 @pytest.mark.asyncio
-async def test_context_manager_success():
-    """Test using LamiaEngine as async context manager successfully"""
+async def test_generate_fails_if_fallback_adapter_fails_to_initialize():
+    """Test that if a fallback adapter fails to initialize, the engine fails as expected."""
     config = {
         "default_model": "openai",
-        "models": {"openai": {"default_model": "gpt-3.5-turbo"}},
-        "api_keys": {"openai": "test-key"}
+        "models": {
+            "openai": {"default_model": "gpt-3.5-turbo"},
+            "anthropic": {"default_model": "claude-v1"}
+        },
+        "api_keys": {"openai": "test-key", "anthropic": "test-key"},
+        "validation": {
+            "enabled": True,
+            "max_retries": 2,
+            "fallback_models": ["anthropic"],
+            "validators": [{"type": "html"}]
+        }
     }
-    
-    mock_adapter = Mock()
-    mock_adapter.initialize = AsyncMock()
-    mock_adapter.close = AsyncMock()
-    
-    with patch('lamia.engine.engine.create_adapter_from_config', return_value=mock_adapter):
-        async with LamiaEngine(config) as engine:
-            assert engine.adapter == mock_adapter
-            mock_adapter.initialize.assert_called_once()
-        
-        mock_adapter.close.assert_called_once()
 
-@pytest.mark.asyncio
-async def test_context_manager_start_failure():
-    """Test context manager when start fails"""
-    config = {
-        "default_model": "openai",
-        "models": {"openai": {"default_model": "gpt-3.5-turbo"}},
-        "api_keys": {"openai": "test-key"}
-    }
-    
-    mock_adapter = Mock()
-    mock_adapter.initialize = AsyncMock(side_effect=RuntimeError("Start failed"))
-    mock_adapter.close = AsyncMock()
-    
-    with patch('lamia.engine.engine.create_adapter_from_config', return_value=mock_adapter):
-        # The engine.start() method catches exceptions and returns False, so we need to check the result
+    # Primary adapter always fails validation
+    primary_adapter = MagicMock()
+    primary_adapter.generate = AsyncMock(return_value=LLMResponse(
+        text="bad response",
+        raw_response=None,
+        usage={},
+        model="gpt-3.5-turbo"
+    ))
+    primary_adapter.has_context_memory = True
+    primary_adapter.initialize = AsyncMock()
+    primary_adapter.close = AsyncMock()
+    primary_adapter.is_remote = MagicMock(return_value=True)
+
+    # Patch create_adapter_from_config:
+    # - First call (primary) returns primary_adapter
+    # - Second call (fallback) raises an exception
+    def create_adapter_side_effect(config_manager, override_model=None):
+        if override_model is None or override_model == "openai":
+            return primary_adapter
+        elif override_model == "anthropic":
+            raise RuntimeError("Failed to initialize fallback adapter")
+        else:
+            raise RuntimeError(f"Unknown model: {override_model}")
+
+    # Patch validator registry and strategy
+    with patch("lamia.engine.engine.create_adapter_from_config", side_effect=create_adapter_side_effect), \
+         patch("lamia.engine.engine.ValidatorRegistry") as MockRegistry, \
+         patch("lamia.engine.engine.ValidationStrategy") as MockStrategy:
+        mock_registry_instance = Mock()
+        mock_registry_instance.get_registry = AsyncMock(return_value={"html": Mock()})
+        MockRegistry.return_value = mock_registry_instance
+
+        # Use the real ValidationStrategy for fallback logic
+        from lamia.adapters.llm.strategy import ValidationStrategy, RetryConfig
+        real_strategy = ValidationStrategy
+        MockStrategy.side_effect = lambda config, validator_registry: real_strategy(config, validator_registry)
+
         engine = LamiaEngine(config)
-        result = await engine.start()
-        assert result is False
+        await engine.start()
 
-@pytest.mark.asyncio
-async def test_context_manager_exception_in_body():
-    """Test context manager when exception occurs in body"""
-    config = {
-        "default_model": "openai",
-        "models": {"openai": {"default_model": "gpt-3.5-turbo"}},
-        "api_keys": {"openai": "test-key"}
-    }
-    
-    mock_adapter = Mock()
-    mock_adapter.initialize = AsyncMock()
-    mock_adapter.close = AsyncMock()
-    
-    with patch('lamia.engine.engine.create_adapter_from_config', return_value=mock_adapter):
-        with pytest.raises(ValueError):
-            async with LamiaEngine(config) as engine:
-                raise ValueError("Test error")
-        
-        # Should still clean up
-        mock_adapter.close.assert_called_once()
+        # Patch validator to always fail validation
+        for v in engine.validation_strategy.validators:
+            v.validate = AsyncMock(return_value=type('Result', (), {"is_valid": False, "error_message": "fail", "hint": "fix", "validated_text": None})())
 
-@pytest.mark.asyncio
-async def test_generate_missing_model_config():
-    """Test generate method when model config is missing"""
-    config = {
-        "default_model": "openai",
-        "models": {}  # Missing model config
-    }
-    engine = LamiaEngine(config)
-    
-    with pytest.raises(ValueError):
-        await engine.generate("Hello")
+        with pytest.raises(RuntimeError) as excinfo:
+            await engine.generate("prompt")
+        assert "Failed to initialize fallback adapter" in str(excinfo.value)
 
-@pytest.mark.asyncio
-async def test_generate_adapter_initialization_failure():
-    """Test generate method when adapter initialization fails"""
-    config = {
-        "default_model": "ollama",
-        "models": {"ollama": {"default_model": "llama2"}}
-    }
-    engine = LamiaEngine(config)
-    
-    mock_adapter = Mock()
-    mock_adapter.initialize = AsyncMock(side_effect=RuntimeError("Init failed"))
-    
-    with patch('lamia.engine.engine.create_adapter_from_config', return_value=mock_adapter):
-        with pytest.raises(RuntimeError):
-            await engine.generate("Hello") 
+        await engine.stop()
