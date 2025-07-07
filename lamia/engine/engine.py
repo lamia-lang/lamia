@@ -2,28 +2,16 @@ import asyncio
 from typing import Optional, Dict, Type, Any, Union
 import logging
 from pathlib import Path
-import importlib
-import pkgutil
-import inspect
-import sys
-import os
 
 from .config_manager import ConfigManager
-from .llm.llm_manager import create_adapter_from_config
+from .llm.llm_manager import LLMManager
+from .validation_manager import ValidationManager
 from lamia.adapters.llm.base import LLMResponse
-from lamia.validation.base import BaseValidator
-from lamia.validation.custom_loader import (
-    load_validator_from_file,
-    load_validator_from_function
-)
-from lamia.adapters.llm.strategy import ValidationStrategy, RetryConfig
-from lamia.validation import validators as validators_pkg
-from lamia.validation.validator_registry import ValidatorRegistry
 
 logger = logging.getLogger(__name__)
 
 class LamiaEngine:
-    """Main engine for Lamia that handles runtime configuration and execution."""
+    """Main engine for Lamia that orchestrates different domain managers."""
     
     def __init__(self, config: Dict[str, Any]):
         """Initialize the Lamia engine.
@@ -32,47 +20,36 @@ class LamiaEngine:
             config: Configuration dictionary.
         """
         self.config_manager = ConfigManager(config)
-        self.adapter = None
-        self.validation_strategy = None
-        self._adapter_initialized = False
+        
+        # Initialize domain managers
+        self.llm_manager = LLMManager(self.config_manager)
+        self.validation_manager = ValidationManager(self.config_manager)
+        # TODO: Add other managers as they're implemented
+        # self.fs_manager = FSManager(self.config_manager)
+        # self.web_manager = WebManager(self.config_manager)
+        
+        self._initialized = False
     
     async def _setup_validation(self):
-        """Set up the validation strategy if enabled in config."""
-        validation_config = self.config_manager.config.get('validation', {})
-        if validation_config.get('enabled'):
-            retry_config = RetryConfig(
-                max_retries=validation_config.get('max_retries'),
-                fallback_models=validation_config.get('fallback_models'),
-                validators=validation_config.get('validators')
-            )
-            # Use ValidatorRegistry for registry
-            ext_folder = self.config_manager.get_extensions_folder()
-            validator_registry = ValidatorRegistry(self.config_manager.config, ext_folder)
-            registry = await validator_registry.get_registry()
-            self.validation_strategy = ValidationStrategy(
-                config=retry_config,
-                validator_registry=registry
-            )
-            logger.info("Validation strategy enabled")
+        """Set up the validation manager."""
+        await self.validation_manager.initialize()
+        if self.validation_manager.enabled:
+            logger.info("Validation enabled")
         else:
-            self.validation_strategy = None
-            logger.info("Validation strategy disabled")
+            logger.info("Validation disabled")
     
     async def start(self):
-        """Start the Lamia engine. Only initialize the adapter if it's a remote provider."""
+        """Start the Lamia engine and initialize all managers."""
         try:
-            model_name = self.config_manager.get_default_model()
-            logger.info(f"Starting Lamia with {model_name} model")
+            logger.info("Starting Lamia engine")
             
-            # Always create the adapter, but only initialize remote ones immediately
-            self.adapter = create_adapter_from_config(self.config_manager)
-            if self.adapter.is_remote():
-                await self.adapter.initialize()
-                self._adapter_initialized = True
-            # Local adapters will be initialized lazily in generate() when needed
+            # Check API keys early
+            self.llm_manager.check_all_required_api_keys()
             
             # Set up validation if enabled
             await self._setup_validation()
+            
+            self._initialized = True
             logger.info("Engine started successfully")
             return True
         except Exception as e:
@@ -81,21 +58,49 @@ class LamiaEngine:
     
     async def stop(self):
         """Stop the Lamia engine and cleanup resources."""
-        if self.adapter:
-            try:
-                await self.adapter.close()
-                logger.info("Engine stopped successfully")
-            except Exception as e:
-                logger.error(f"Error stopping engine: {str(e)}")
+        try:
+            # Stop all managers
+            await self.llm_manager.close()
+            await self.validation_manager.close()
+            # TODO: Stop other managers when implemented
+            logger.info("Engine stopped successfully")
+        except Exception as e:
+            logger.error(f"Error stopping engine: {str(e)}")
     
-    async def generate(
+    async def execute(
+        self,
+        request_type: str,
+        content: str,
+        **kwargs
+    ) -> Any:
+        """Execute a request using the appropriate domain manager.
+        
+        Args:
+            request_type: Type of request ('llm', 'fs', 'web', etc.)
+            content: The content to process
+            **kwargs: Additional parameters for the specific manager
+            
+        Returns:
+            Response from the appropriate manager
+        """
+        if request_type == 'llm':
+            return await self._execute_llm_request(content, **kwargs)
+        # TODO: Add other request types
+        # elif request_type == 'fs':
+        #     return await self._execute_fs_request(content, **kwargs)
+        # elif request_type == 'web':
+        #     return await self._execute_web_request(content, **kwargs)
+        else:
+            raise ValueError(f"Unsupported request type: {request_type}")
+    
+    async def _execute_llm_request(
         self,
         prompt: str,
         *,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None
     ) -> LLMResponse:
-        """Generate a response using the configured model.
+        """Execute an LLM request using the LLM manager.
         
         Args:
             prompt: The input prompt
@@ -105,33 +110,40 @@ class LamiaEngine:
         Returns:
             LLMResponse containing the generated text and metadata
         """
+        if not self._initialized:
+            raise RuntimeError("Engine not initialized. Call start() first.")
+            
         model_name = self.config_manager.get_default_model()
         config = self.config_manager.get_model_config(model_name)
+        
         # Use config values if not overridden
         temperature = temperature if temperature is not None else config.get('temperature')
         max_tokens = max_tokens if max_tokens is not None else config.get('max_tokens')
-        # Lazily initialize the adapter if needed (for local models)
-        if not self._adapter_initialized:
-            await self.adapter.initialize()
-            self._adapter_initialized = True
-        # If validation is enabled, use the validation strategy
-        if self.validation_strategy:
-            return await self.validation_strategy.execute_with_retries(
-                primary_adapter=self.adapter,
+        
+        # Check if validation is enabled
+        if self.validation_manager.enabled:
+            # Use validation manager for validated responses
+            return await self.validation_manager.validate_llm_response(
+                llm_manager=self.llm_manager,
                 prompt=prompt,
-                create_adapter_fn=lambda model: create_adapter_from_config(
-                    self.config_manager,
-                    override_model=model
-                ),
                 temperature=temperature,
                 max_tokens=max_tokens
             )
-        # Otherwise, just generate normally
-        return await self.adapter.generate(
-            prompt,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+        else:
+            # Use LLM manager directly (no validation)
+            return await self.llm_manager.generate(
+                prompt,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+    def get_validation_stats(self):
+        """Get validation statistics from the validation manager."""
+        return self.validation_manager.get_validation_stats()
+    
+    def get_recent_validation_results(self, limit: Optional[int] = None):
+        """Get recent validation results from the validation manager."""
+        return self.validation_manager.get_recent_results(limit)
 
     async def __aenter__(self):
         """Allow using the engine as an async context manager."""

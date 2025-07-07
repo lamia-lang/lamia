@@ -187,7 +187,8 @@ class Lamia:
         await self._ensure_initialized()
         
         # Generate LLM response
-        response = await self._engine.generate(
+        response = await self._engine.execute(
+            'llm',
             prompt,
             temperature=temperature,
             max_tokens=max_tokens
@@ -215,6 +216,18 @@ class Lamia:
                     logger.warning(f"Validator error: {e}")
         
         return response.text
+
+    def get_validation_stats(self) -> Optional[Any]:
+        """Get validation statistics if the engine is initialized."""
+        if self._initialized:
+            return self._engine.get_validation_stats()
+        return None
+    
+    def get_recent_validation_results(self, limit: Optional[int] = None) -> Optional[List[Any]]:
+        """Get recent validation results if the engine is initialized."""
+        if self._initialized:
+            return self._engine.get_recent_validation_results(limit)
+        return None
 
     def run(
         self,

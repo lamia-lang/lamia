@@ -46,6 +46,10 @@ class LLMManager:
         ext_folder = self.config_manager.get_extensions_folder()
         ext_adapters_path = os.path.join(os.getcwd(), ext_folder, "adapters")
         self.provider_registry.add_user_adapters([ext_adapters_path])
+        
+        # Adapter lifecycle management
+        self._primary_adapter = None
+        self._adapter_initialized = False
     
     def _get_needed_providers(self) -> Set[str]:
         """Get the set of providers that are actually needed based on config."""
@@ -199,21 +203,43 @@ class LLMManager:
         
         return adapter_class(**init_kwargs)
 
+    async def _get_primary_adapter(self) -> BaseLLMAdapter:
+        """Get the primary adapter, creating and initializing it if needed."""
+        if self._primary_adapter is None:
+            self._primary_adapter = self.create_adapter_from_config()
+        
+        if not self._adapter_initialized:
+            await self._primary_adapter.initialize()
+            self._adapter_initialized = True
+            
+        return self._primary_adapter
 
-# Legacy functions for backward compatibility (these should be removed eventually)
-def check_api_key(provider_name: str, config_manager: ConfigManager) -> Optional[str]:
-    """Legacy function - creates temporary LLMManager for backward compatibility."""
-    llm_manager = LLMManager(config_manager)
-    return llm_manager.check_api_key(provider_name)
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None
+    ) -> LLMResponse:
+        """Generate a response using the managed adapter.
+        
+        Args:
+            prompt: The input prompt
+            temperature: Optional temperature override
+            max_tokens: Optional max tokens override
+            
+        Returns:
+            LLMResponse containing the generated text and metadata
+        """
+        adapter = await self._get_primary_adapter()
+        return await adapter.generate(
+            prompt,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
 
-
-def check_all_required_api_keys(config_manager: ConfigManager):
-    """Legacy function - creates temporary LLMManager for backward compatibility."""
-    llm_manager = LLMManager(config_manager)
-    llm_manager.check_all_required_api_keys()
-
-
-def create_adapter_from_config(config_manager: ConfigManager, override_model: str = None) -> BaseLLMAdapter:
-    """Legacy function - creates temporary LLMManager for backward compatibility."""
-    llm_manager = LLMManager(config_manager)
-    return llm_manager.create_adapter_from_config(override_model)
+    async def close(self):
+        """Close and cleanup the managed adapter."""
+        if self._primary_adapter and self._adapter_initialized:
+            await self._primary_adapter.close()
+            self._adapter_initialized = False
