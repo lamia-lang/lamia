@@ -5,7 +5,6 @@ import yaml
 import logging
 import ast
 from lamia.engine.llm.llm_manager import MissingAPIKeysError
-import weakref
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +35,8 @@ class Lamia:
         # Store validators for manual validation
         self._validators = validators if validators is not None else []
         
-        # Initialize engine
+        # Initialize engine - ready to use immediately!
         self._engine = LamiaEngine(self._config_dict)
-        self._initialized = False
-        
-        # Register a finalizer that makes sure resources are released even if
-        # this object becomes part of a reference cycle. We keep a weak
-        # reference to *self* so that the Lamia instance can still be
-        # garbage-collected. The callback is idempotent, so calling it
-        # multiple times (from __del__ or elsewhere) is safe.
-        self._finalizer = weakref.finalize(self, Lamia._cleanup, weakref.ref(self))
         
         logger.info("Lamia instance created")
 
@@ -87,11 +78,7 @@ class Lamia:
             
         return config_dict
 
-    async def _ensure_initialized(self):
-        """Ensure engine is initialized"""
-        if not self._initialized:
-            await self._engine.start()
-            self._initialized = True
+    # No more ceremony needed - engine is ready on creation!
 
     def is_python_code(self, code: str) -> bool:
         """
@@ -183,9 +170,6 @@ class Lamia:
         if success:
             return str(result) if result is not None else ""
         
-        # Ensure engine is initialized
-        await self._ensure_initialized()
-        
         # Generate LLM response
         response = await self._engine.execute(
             'llm',
@@ -218,16 +202,12 @@ class Lamia:
         return response.text
 
     def get_validation_stats(self) -> Optional[Any]:
-        """Get validation statistics if the engine is initialized."""
-        if self._initialized:
-            return self._engine.get_validation_stats()
-        return None
+        """Get validation statistics."""
+        return self._engine.get_validation_stats()
     
     def get_recent_validation_results(self, limit: Optional[int] = None) -> Optional[List[Any]]:
-        """Get recent validation results if the engine is initialized."""
-        if self._initialized:
-            return self._engine.get_recent_validation_results(limit)
-        return None
+        """Get recent validation results."""
+        return self._engine.get_recent_validation_results(limit)
 
     def run(
         self,
@@ -262,56 +242,9 @@ class Lamia:
 
     async def __aenter__(self):
         """Async context manager entry"""
-        await self._ensure_initialized()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit"""
-        if self._initialized:
-            await self._engine.stop()
-
-    def __del__(self):
-        """Destructor – ensure engine is stopped.
-
-        Delegates to the same weakref finalizer used for cyclic-GC safe
-        cleanup. The finalizer returns ``True`` if it had not yet run.
-        """
-        try:
-            self._finalizer()
-        except Exception:
-            # Never allow exceptions to propagate from a destructor – they
-            # would be ignored and generate warnings.
-            pass
-
-    @staticmethod
-    def _cleanup(self_ref):
-        """Finalizer callback that stops the underlying engine.
-
-        It attempts to shut down the engine in the most appropriate way
-        depending on whether an event loop is running. This method is
-        safe to call multiple times.
-        """
-        lamia = self_ref()
-        if lamia is None:
-            return  # Object already gone
-
-        if not getattr(lamia, "_initialized", False):
-            return  # Engine was never started – nothing to do
-
-        try:
-            loop = asyncio.get_running_loop()
-            if loop.is_running():
-                # Schedule the coroutine in the running loop from whichever
-                # thread we are in.
-                loop.call_soon_threadsafe(lambda: asyncio.create_task(lamia._engine.stop()))
-                return
-        except RuntimeError:
-            # No running event loop – we'll try a synchronous shutdown below.
-            pass
-
-        # Fall back to running the coroutine in a new temporary loop.
-        try:
-            asyncio.run(lamia._engine.stop())
-        except Exception:
-            # Interpreter shutdown may have torn down asyncio – ignore errors.
-            logger.debug("Failed to stop engine during finalization", exc_info=True)
+        # Engine cleans up automatically via __del__
+        pass

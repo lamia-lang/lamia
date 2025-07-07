@@ -119,5 +119,4 @@ class ValidationManager:
     
     async def close(self):
         """Cleanup validation manager resources."""
-        # ValidationFactory handles cleanup of individual strategies
         logger.info("ValidationManager closed") 

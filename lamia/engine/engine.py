@@ -1,25 +1,16 @@
+from typing import Optional, Dict, Any
 import asyncio
-from typing import Optional, Dict, Type, Any, Union
-import logging
-from pathlib import Path
 
 from .config_manager import ConfigManager
 from .interfaces import DomainType
 from .factories import ManagerFactory, ValidationStrategyFactory
 from .validation_manager import ValidationManager
-from lamia.adapters.llm.base import LLMResponse
-
-logger = logging.getLogger(__name__)
 
 class LamiaEngine:
     """Main engine for Lamia that orchestrates different domain managers."""
     
     def __init__(self, config: Dict[str, Any]):
-        """Initialize the Lamia engine.
-        
-        Args:
-            config: Configuration dictionary.
-        """
+        """Initialize the Lamia engine."""
         self.config_manager = ConfigManager(config)
         
         # Initialize factories (DIP compliance)
@@ -29,37 +20,11 @@ class LamiaEngine:
         # Initialize validation manager for centralized coordination and statistics
         self.validation_manager = ValidationManager(self.validation_factory)
         self._validation_enabled = self._is_validation_enabled()
-        
-        self._initialized = False
     
     def _is_validation_enabled(self) -> bool:
         """Check if validation is enabled in config."""
         validation_config = self.config_manager.config.get('validation', {})
         return validation_config.get('enabled', False)
-    
-    async def start(self):
-        """Start the Lamia engine and initialize all managers."""
-        try:
-            logger.info("Starting Lamia engine")
-
-
-            self._initialized = True
-            logger.info("Engine started successfully")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to start engine: {e}")
-            return False
-    
-    async def stop(self):
-        """Stop the Lamia engine and cleanup resources."""
-        try:
-            # Stop all managers, strategies, and validation manager
-            await self.manager_factory.close_all()
-            await self.validation_factory.close_all()
-            await self.validation_manager.close()
-            logger.info("Engine stopped successfully")
-        except Exception as e:
-            logger.error(f"Error stopping engine: {str(e)}")
     
     async def execute(
         self,
@@ -77,9 +42,6 @@ class LamiaEngine:
         Returns:
             Response from the appropriate manager
         """
-        if not self._initialized:
-            raise RuntimeError("Engine not initialized. Call start() first.")
-        
         # Convert string to DomainType enum
         try:
             domain_type = DomainType(request_type)
@@ -114,11 +76,16 @@ class LamiaEngine:
         """Get recent validation results from the validation manager."""
         return self.validation_manager.get_recent_results(limit)
 
-    async def __aenter__(self):
-        """Allow using the engine as an async context manager."""
-        await self.start()
-        return self
+    def __del__(self):
+        """Cleanup resources automatically."""
+        try:
+            asyncio.run(self._cleanup())
+        except Exception:
+            # Ignore cleanup errors during shutdown
+            pass
     
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Cleanup when exiting the context manager."""
-        await self.stop() 
+    async def _cleanup(self):
+        """Internal cleanup method."""
+        await self.manager_factory.close_all()
+        await self.validation_factory.close_all()
+        await self.validation_manager.close() 
