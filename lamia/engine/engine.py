@@ -77,15 +77,9 @@ class LamiaEngine:
         return self.validation_manager.get_recent_results(limit)
 
     def __del__(self):
-        """Cleanup resources automatically."""
-        try:
-            asyncio.run(self._cleanup())
-        except Exception:
-            # Ignore cleanup errors during shutdown
-            pass
-    
-    async def _cleanup(self):
-        """Internal cleanup method."""
-        await self.manager_factory.close_all()
-        await self.validation_factory.close_all()
-        await self.validation_manager.close() 
+        """Cleanup is now handled automatically by individual components."""
+        # No more complex async cleanup needed!
+        # - Adapters clean themselves up via the resource manager
+        # - ValidationManager handles its own cleanup
+        # - Factories handle their own cleanup
+        pass 

@@ -104,6 +104,7 @@ class OpenAIAdapter(BaseLLMAdapter):
         return False
     
     async def close(self) -> None:
+        """Cleanup any resources used by the adapter."""
         if self._use_sdk and self.client:
             await self.client.close()
         elif self.session:

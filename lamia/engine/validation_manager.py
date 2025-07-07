@@ -117,6 +117,10 @@ class ValidationManager:
             return self.recent_results.copy()
         return self.recent_results[-limit:]
     
-    async def close(self):
-        """Cleanup validation manager resources."""
-        logger.info("ValidationManager closed") 
+    def __del__(self):
+        """Automatic cleanup - save stats to file or database if needed."""
+        # Since this class doesn't have async resources, we can do
+        # simple cleanup in the destructor
+        if self.stats.total_validations > 0:
+            logger.info(f"ValidationManager processed {self.stats.total_validations} validations") 
+        # Future: could save stats to a file here 
