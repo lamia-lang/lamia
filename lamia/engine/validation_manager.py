@@ -4,7 +4,6 @@ import logging
 from datetime import datetime
 from dataclasses import dataclass, field
 
-from .config_manager import ConfigManager
 from .interfaces import DomainType, ValidationStrategy, Manager
 from .factories import ValidationStrategyFactory
 from lamia.validation.base import ValidationResult
@@ -24,20 +23,13 @@ class ValidationStats:
 class ValidationManager:
     """Manages validation across all domains and tracks centralized statistics."""
     
-    def __init__(self, config_manager: ConfigManager, validation_factory: ValidationStrategyFactory):
-        self.config_manager = config_manager
+    def __init__(self, validation_factory: ValidationStrategyFactory):
         self.validation_factory = validation_factory
-        self.enabled = self._is_validation_enabled()
         
         # Centralized statistics tracking
         self.stats = ValidationStats()
         self.recent_results: List[ValidationResult] = []
         self.max_recent_results = 100  # Keep last 100 results
-        
-    def _is_validation_enabled(self) -> bool:
-        """Check if validation is enabled in config."""
-        validation_config = self.config_manager.config.get('validation', {})
-        return validation_config.get('enabled', False)
     
     async def validate(self, domain_type: DomainType, manager: Manager, content: str, **kwargs) -> Any:
         """Coordinate validation using the appropriate domain strategy.
@@ -51,10 +43,6 @@ class ValidationManager:
         Returns:
             Validated response from the domain
         """
-        if not self.enabled:
-            # If validation disabled, use manager directly
-            return await manager.execute(content, **kwargs)
-        
         start_time = asyncio.get_event_loop().time()
         
         try:

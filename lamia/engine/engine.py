@@ -27,22 +27,22 @@ class LamiaEngine:
         self.validation_factory = ValidationStrategyFactory(self.config_manager)
         
         # Initialize validation manager for centralized coordination and statistics
-        self.validation_manager = ValidationManager(self.config_manager, self.validation_factory)
+        self.validation_manager = ValidationManager(self.validation_factory)
+        self._validation_enabled = self._is_validation_enabled()
         
         self._initialized = False
+    
+    def _is_validation_enabled(self) -> bool:
+        """Check if validation is enabled in config."""
+        validation_config = self.config_manager.config.get('validation', {})
+        return validation_config.get('enabled', False)
     
     async def start(self):
         """Start the Lamia engine and initialize all managers."""
         try:
             logger.info("Starting Lamia engine")
 
-            # Initialize validation strategies if enabled
-            if self.validation_manager.enabled:
-                await self.validation_factory.get_strategy(DomainType.LLM)
-                logger.info("Validation enabled")
-            else:
-                logger.info("Validation disabled")
-            
+
             self._initialized = True
             logger.info("Engine started successfully")
             return True
@@ -98,8 +98,14 @@ class LamiaEngine:
             kwargs['temperature'] = kwargs.get('temperature') or config.get('temperature')
             kwargs['max_tokens'] = kwargs.get('max_tokens') or config.get('max_tokens')
         
-        # Use validation manager for coordination (handles validation enabled/disabled internally)
-        return await self.validation_manager.validate(domain_type, manager, content, **kwargs)
+        # Engine makes routing decision based on validation enabled flag
+        if self._validation_enabled:
+            # Use validation manager for coordination and statistics
+            return await self.validation_manager.validate(domain_type, manager, content, **kwargs)
+        else:
+            # Use manager directly (no validation)
+            return await manager.execute(content, **kwargs)
+    
     def get_validation_stats(self):
         """Get validation statistics from the validation manager."""
         return self.validation_manager.get_validation_stats()
