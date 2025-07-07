@@ -7,11 +7,10 @@ import sys
 from pathlib import Path
 import importlib.util
 
-from lamia.engine.llm_manager import (
+from lamia.engine.llm.llm_manager import (
     check_api_key,
     check_all_required_api_keys,
     create_adapter_from_config,
-    _discover_adapters_in_path,
     MissingAPIKeysError
 )
 from lamia.engine.config_manager import ConfigManager

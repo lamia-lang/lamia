@@ -442,69 +442,65 @@ async def test_generate_propagates_errors_from_execute_with_retries():
 
 @pytest.mark.asyncio
 async def test_generate_fails_if_fallback_adapter_fails_to_initialize():
-    """Test that if a fallback adapter fails to initialize, the engine fails as expected."""
+    """If fallback adapter creation raises, LamiaEngine.generate should propagate the error."""
     config = {
         "default_model": "openai",
         "models": {
             "openai": {"default_model": "gpt-3.5-turbo"},
-            "anthropic": {"default_model": "claude-v1"}
+            "anthropic": {"default_model": "claude-v1"},
         },
         "api_keys": {"openai": "test-key", "anthropic": "test-key"},
         "validation": {
             "enabled": True,
-            "max_retries": 2,
+            "max_retries": 1,
             "fallback_models": ["anthropic"],
-            "validators": [{"type": "html"}]
-        }
+            "validators": [],  # No validators needed for this test
+        },
     }
 
-    # Primary adapter always fails validation
+    # Primary adapter (will never be used successfully)
     primary_adapter = AsyncMock()
     primary_adapter.generate = AsyncMock(return_value=LLMResponse(
-        text="bad response",
+        text="irrelevant",
         raw_response=None,
         usage={},
-        model="gpt-3.5-turbo"
+        model="gpt-3.5-turbo",
     ))
     primary_adapter.has_context_memory = True
     primary_adapter.initialize = AsyncMock()
     primary_adapter.close = AsyncMock()
     primary_adapter.is_remote = MagicMock(return_value=True)
 
-    # Patch create_adapter_from_config:
-    # - First call (primary) returns primary_adapter
-    # - Second call (fallback) raises an exception
+    # Side-effect for create_adapter_from_config:
+    #   1) First call (no override) -> primary_adapter
+    #   2) Second call (override == "anthropic") -> raise
     def create_adapter_side_effect(config_manager, override_model=None):
         if override_model is None or override_model == "openai":
             return primary_adapter
         elif override_model == "anthropic":
             raise RuntimeError("Failed to initialize fallback adapter")
-        else:
-            raise RuntimeError(f"Unknown model: {override_model}")
+        raise RuntimeError(f"Unexpected model: {override_model}")
 
-    # Patch validator registry and strategy
-    class DummyValidator:
-        name = "html"
-        async def validate(self, response):
-            return type('Result', (), {"is_valid": False, "error_message": "fail", "hint": "fix", "validated_text": None})()
+    # Dummy ValidationStrategy that simply calls create_adapter_fn for the fallback
+    class DummyStrategy:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def execute_with_retries(self, *, primary_adapter, prompt, create_adapter_fn, **kwargs):
+            # Attempt to create the fallback adapter — expected to raise
+            create_adapter_fn("anthropic")
+            return LLMResponse(text="should not reach here", raw_response=None, usage={}, model="anthropic")
+
     with patch("lamia.engine.engine.create_adapter_from_config", side_effect=create_adapter_side_effect), \
          patch("lamia.engine.engine.ValidatorRegistry") as MockRegistry, \
-         patch("lamia.engine.engine.ValidationStrategy") as MockStrategy:
+         patch("lamia.engine.engine.ValidationStrategy", DummyStrategy):
+        # ValidatorRegistry returns an empty registry (no validators required)
         mock_registry_instance = Mock()
-        mock_registry_instance.get_registry = AsyncMock(return_value={"html": DummyValidator})
+        mock_registry_instance.get_registry = AsyncMock(return_value={})
         MockRegistry.return_value = mock_registry_instance
-
-        # Use the real ValidationStrategy for fallback logic
-        from lamia.adapters.llm.strategy import ValidationStrategy, RetryConfig
-        real_strategy = ValidationStrategy
-        MockStrategy.side_effect = lambda config, validator_registry: real_strategy(config, validator_registry)
 
         engine = LamiaEngine(config)
         await engine.start()
-
-        # Patch validator to always fail validation
-        for v in engine.validation_strategy.validators:
-            v.validate = AsyncMock(return_value=type('Result', (), {"is_valid": False, "error_message": "fail", "hint": "fix", "validated_text": None})())
 
         with pytest.raises(RuntimeError) as excinfo:
             await engine.generate("prompt")

@@ -9,7 +9,7 @@ import sys
 import os
 
 from .config_manager import ConfigManager
-from .llm_manager import create_adapter_from_config
+from .llm.llm_manager import create_adapter_from_config
 from lamia.adapters.llm.base import LLMResponse
 from lamia.validation.base import BaseValidator
 from lamia.validation.custom_loader import (

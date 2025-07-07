@@ -4,7 +4,7 @@ from typing import Any, Optional, List, Dict, Union
 import yaml
 import logging
 import ast
-from lamia.engine.llm_manager import MissingAPIKeysError
+from lamia.engine.llm.llm_manager import MissingAPIKeysError
 import weakref
 
 logger = logging.getLogger(__name__)

@@ -7,11 +7,11 @@ import inspect
 import os
 from pathlib import Path
 
-from ..adapters.llm.base import BaseLLMAdapter
-from ..adapters.llm.openai_adapter import OpenAIAdapter
-from ..adapters.llm.anthropic_adapter import AnthropicAdapter
-from ..adapters.llm.local.ollama_adapter import OllamaAdapter
-from ..adapters.llm.lamia_adapter import LamiaAdapter
+from ...adapters.llm.base import BaseLLMAdapter
+from ...adapters.llm.openai_adapter import OpenAIAdapter
+from ...adapters.llm.anthropic_adapter import AnthropicAdapter
+from ...adapters.llm.local.ollama_adapter import OllamaAdapter
+from ...adapters.llm.lamia_adapter import LamiaAdapter
 
 
 class ProviderRegistry:

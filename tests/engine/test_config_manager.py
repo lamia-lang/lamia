@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 import os
-from lamia.engine.config_manager import ConfigManager, PROVIDER_REGISTRY
+from lamia.engine.config_manager import ConfigManager
 
 
 class TestConfigManager:
@@ -244,40 +244,3 @@ class TestConfigManager:
         cm = ConfigManager(config)
         
         assert cm.get_extensions_folder() == "custom_extensions"
-
-
-class TestProviderRegistry:
-    """Test suite for PROVIDER_REGISTRY constant"""
-
-    def test_provider_registry_structure(self):
-        """Test that PROVIDER_REGISTRY has correct structure"""
-        assert isinstance(PROVIDER_REGISTRY, dict)
-        
-        for provider, config in PROVIDER_REGISTRY.items():
-            assert isinstance(provider, str)
-            assert isinstance(config, dict)
-            assert "is_remote" in config
-            assert "env_var" in config
-            assert isinstance(config["is_remote"], bool)
-            assert config["env_var"] is None or isinstance(config["env_var"], str)
-
-    def test_provider_registry_known_providers(self):
-        """Test that known providers are in registry"""
-        assert "openai" in PROVIDER_REGISTRY
-        assert "anthropic" in PROVIDER_REGISTRY
-        assert "lamia" in PROVIDER_REGISTRY
-        assert "ollama" in PROVIDER_REGISTRY
-
-    def test_provider_registry_remote_flags(self):
-        """Test that remote flags are correct"""
-        assert PROVIDER_REGISTRY["openai"]["is_remote"] is True
-        assert PROVIDER_REGISTRY["anthropic"]["is_remote"] is True
-        assert PROVIDER_REGISTRY["lamia"]["is_remote"] is True
-        assert PROVIDER_REGISTRY["ollama"]["is_remote"] is False
-
-    def test_provider_registry_env_vars(self):
-        """Test that env vars are correct"""
-        assert PROVIDER_REGISTRY["openai"]["env_var"] == "OPENAI_API_KEY"
-        assert PROVIDER_REGISTRY["anthropic"]["env_var"] == "ANTHROPIC_API_KEY"
-        assert PROVIDER_REGISTRY["lamia"]["env_var"] == "LAMIA_API_KEY"
-        assert PROVIDER_REGISTRY["ollama"]["env_var"] is None 

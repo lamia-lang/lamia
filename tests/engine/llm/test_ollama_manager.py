@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 import subprocess
 import requests
-from lamia.engine.ollama_manager import OllamaManager
+from lamia.engine.llm.ollama_manager import OllamaManager
 
 
 def test_is_running_true():

@@ -11,7 +11,7 @@ import logging
 import runpy
 
 from lamia.lamia import Lamia
-from lamia.engine.llm_manager import MissingAPIKeysError
+from lamia.engine.llm.llm_manager import MissingAPIKeysError
 from lamia.utils import scaffold
 
 async def interactive_mode(lamia: Lamia):
