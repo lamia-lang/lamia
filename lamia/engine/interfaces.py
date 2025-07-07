@@ -62,13 +62,3 @@ class ValidationStrategy(ABC):
             Validated response from the domain
         """
         pass
-    
-    @abstractmethod
-    async def initialize(self) -> None:
-        """Initialize the validation strategy."""
-        pass
-    
-    @abstractmethod
-    async def close(self) -> None:
-        """Close and cleanup validation strategy resources."""
-        pass 

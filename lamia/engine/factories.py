@@ -66,7 +66,7 @@ class ValidationStrategyFactory:
     def _register_strategies(self):
         """Register available validation strategy implementations."""
         # Import here to avoid circular imports
-        from .llm.llm_validation_strategy import LLMValidationStrategy
+        from lamia.adapters.llm.strategy import ValidationStrategy as LLMValidationStrategy
         
         self._strategy_registry[DomainType.LLM] = LLMValidationStrategy
         # TODO: Register other strategies as they're implemented
@@ -92,12 +92,42 @@ class ValidationStrategyFactory:
         if domain_type in self._strategy_instances:
             return self._strategy_instances[domain_type]
         
-        # Create new instance
+        # Create new instance with proper dependencies
         strategy_class = self._strategy_registry[domain_type]
-        strategy = strategy_class(self.config_manager)
-        await strategy.initialize()
-        self._strategy_instances[domain_type] = strategy
         
+        if domain_type == DomainType.LLM:
+            # Create LLM validation strategy with proper dependencies
+            strategy = await self._create_llm_validation_strategy(strategy_class)
+        else:
+            # For other domains, use the config_manager approach
+            strategy = strategy_class(self.config_manager)
+            await strategy.initialize()
+        
+        self._strategy_instances[domain_type] = strategy
+        return strategy
+    
+    async def _create_llm_validation_strategy(self, strategy_class):
+        """Create LLM validation strategy with proper dependencies."""
+        from lamia.adapters.llm.strategy import RetryConfig
+        from lamia.validation.validator_registry import ValidatorRegistry
+        
+        validation_config = self.config_manager.config.get('validation', {})
+        retry_config = RetryConfig(
+            max_retries=validation_config.get('max_retries'),
+            fallback_models=validation_config.get('fallback_models'),
+            validators=validation_config.get('validators')
+        )
+        
+        # Use ValidatorRegistry for registry
+        ext_folder = self.config_manager.get_extensions_folder()
+        validator_registry = ValidatorRegistry(self.config_manager.config, ext_folder)
+        registry = await validator_registry.get_registry()
+        
+        strategy = strategy_class(
+            config=retry_config,
+            validator_registry=registry
+        )
+        await strategy.initialize()
         return strategy
     
     async def close_all(self):

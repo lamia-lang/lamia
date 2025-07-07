@@ -6,6 +6,7 @@ import sys
 from .base import BaseLLMAdapter, LLMResponse
 from ...validation.base import BaseValidator, ValidationResult
 from ...validation.validators import CONFLICTING_VALIDATOR_GROUPS
+from ...engine.interfaces import ValidationStrategy as IValidationStrategy, Manager, DomainType
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class RetryConfig:
     fallback_models: List[str] = None  # List of model names to try if primary fails
     validators: List[Dict[str, Any]] = None  # List of validator configs
 
-class ValidationStrategy:
+class ValidationStrategy(IValidationStrategy):
     """Handles response validation and retry logic."""
     
     def __init__(
@@ -39,6 +40,37 @@ class ValidationStrategy:
         self.config = config
         self.validator_registry = validator_registry
         self.validators = self._setup_validators()
+        self._initialized = True
+    
+    @property
+    def domain_type(self) -> DomainType:
+        """Return the domain type this strategy validates."""
+        return DomainType.LLM
+    
+    async def validate(self, manager: Manager, content: str, **kwargs) -> LLMResponse:
+        """Validate LLM content using this strategy.
+        
+        Args:
+            manager: The LLM manager to use
+            content: The prompt to validate
+            **kwargs: LLM generation parameters
+            
+        Returns:
+            Validated LLMResponse
+        """
+        if manager.domain_type != DomainType.LLM:
+            raise ValueError(f"Expected LLM manager, got {manager.domain_type}")
+        
+        # Get the primary adapter through the manager
+        primary_adapter = await manager._get_primary_adapter()
+        
+        # Use the existing validation logic
+        return await self.execute_with_retries(
+            primary_adapter=primary_adapter,
+            prompt=content,
+            create_adapter_fn=lambda model: manager.create_adapter_from_config(override_model=model),
+            **kwargs
+        )
         
     def _setup_validators(self) -> List[BaseValidator]:
         """Set up validators from configuration."""
