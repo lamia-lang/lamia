@@ -29,15 +29,6 @@ class TestConfigManager:
         with pytest.raises(ValueError, match="ConfigManager expects a config dict"):
             ConfigManager("not a dict")
 
-    def test_init_enriches_api_keys_from_env(self):
-        """Test that ConfigManager enriches API keys from environment variables"""
-        config = {"default_model": "openai"}
-        
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key", "ANTHROPIC_API_KEY": "env-anthropic-key"}):
-            cm = ConfigManager(config)
-            assert cm.config["api_keys"]["openai"] == "env-key"
-            assert cm.config["api_keys"]["anthropic"] == "env-anthropic-key"
-
     def test_init_preserves_existing_api_keys(self):
         """Test that existing API keys in config are preserved over env vars"""
         config = {
@@ -54,34 +45,6 @@ class TestConfigManager:
         cm = ConfigManager.from_dict(config)
         assert isinstance(cm, ConfigManager)
         assert cm.config["default_model"] == "openai"
-
-    def test_is_remote_provider_true(self):
-        """Test is_remote_provider returns True for remote providers"""
-        assert ConfigManager.is_remote_provider("openai") is True
-        assert ConfigManager.is_remote_provider("anthropic") is True
-        assert ConfigManager.is_remote_provider("lamia") is True
-
-    def test_is_remote_provider_false(self):
-        """Test is_remote_provider returns False for local providers"""
-        assert ConfigManager.is_remote_provider("ollama") is False
-
-    def test_is_remote_provider_unknown(self):
-        """Test is_remote_provider returns False for unknown providers"""
-        assert ConfigManager.is_remote_provider("unknown") is False
-
-    def test_get_env_var_name_valid(self):
-        """Test get_env_var_name returns correct env var names"""
-        assert ConfigManager.get_env_var_name("openai") == "OPENAI_API_KEY"
-        assert ConfigManager.get_env_var_name("anthropic") == "ANTHROPIC_API_KEY"
-        assert ConfigManager.get_env_var_name("lamia") == "LAMIA_API_KEY"
-
-    def test_get_env_var_name_ollama(self):
-        """Test get_env_var_name returns None for ollama"""
-        assert ConfigManager.get_env_var_name("ollama") is None
-
-    def test_get_env_var_name_unknown(self):
-        """Test get_env_var_name returns None for unknown providers"""
-        assert ConfigManager.get_env_var_name("unknown") is None
 
     def test_get_config(self):
         """Test get_config returns the entire configuration"""

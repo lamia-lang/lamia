@@ -182,7 +182,7 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        with patch('lamia.engine.llm_manager.OpenAIAdapter') as MockAdapter:
+        with patch('lamia.engine.llm.llm_manager.OpenAIAdapter') as MockAdapter:
             result = create_adapter_from_config(cm)
             MockAdapter.assert_called_once_with(
                 api_key="test-key",
@@ -201,7 +201,7 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        with patch('lamia.engine.llm_manager.AnthropicAdapter') as MockAdapter:
+        with patch('lamia.engine.llm.llm_manager.AnthropicAdapter') as MockAdapter:
             result = create_adapter_from_config(cm)
             MockAdapter.assert_called_once_with(
                 api_key="test-key",
@@ -236,7 +236,7 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        with patch('lamia.engine.llm_manager.AnthropicAdapter') as MockAdapter:
+        with patch('lamia.engine.llm.llm_manager.AnthropicAdapter') as MockAdapter:
             result = create_adapter_from_config(cm, override_model="anthropic")
             MockAdapter.assert_called_once_with(
                 api_key="key2",
@@ -303,7 +303,7 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        with patch('lamia.engine.llm_manager._discover_adapters_in_path') as mock_discover:
+        with patch('lamia.engine.llm.llm_manager._discover_adapters_in_path') as mock_discover:
             mock_discover.return_value = {"openai": MagicMock}  # Conflict with built-in
             
             with pytest.raises(RuntimeError, match="User-defined adapter name.*conflict.*openai"):
@@ -322,7 +322,7 @@ class TestCreateAdapterFromConfig:
         }
         monkeypatch.setenv("LAMIA_API_KEY", "env-lamia-key")
         cm = ConfigManager(config)
-        with patch("lamia.engine.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
+        with patch("lamia.engine.llm.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
             create_adapter_from_config(cm)
             # The adapter should have been created using the proxy key from the env variable
             MockAdapter.assert_called()
