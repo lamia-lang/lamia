@@ -3,8 +3,7 @@ import asyncio
 from typing import Any, Optional, List, Dict, Union
 import yaml
 import logging
-import ast
-from lamia.engine.llm.llm_manager import MissingAPIKeysError
+from lamia.interpreter.python_runner import is_python_code, run_python_code
 
 logger = logging.getLogger(__name__)
 
@@ -80,66 +79,6 @@ class Lamia:
 
     # No more ceremony needed - engine is ready on creation!
 
-    def is_python_code(self, code: str) -> bool:
-        """
-        Check if the input string is likely Python code.
-        
-        Args:
-            code: The input string to check
-            
-        Returns:
-            bool: True if the string is likely Python code
-        """
-        try:
-            ast.parse(code, mode='eval')
-            return True
-        except:
-            pass
-        
-        try:
-            ast.parse(code, mode='exec')
-            return True
-        except:
-            return False
-
-    def run_python_code(self, code: str, mode: str = 'interactive', show_banner: bool = True) -> tuple[bool, Any]:
-        """
-        Execute Python code or expression.
-        
-        Args:
-            code: The Python code to execute
-            mode: 'interactive' or 'file' - controls output behavior
-            show_banner: Whether to show result banner
-            
-        Returns:
-            tuple: (success: bool, result: Any)
-        """
-        # Try to evaluate as expression first
-        try:
-            expr_ast = ast.parse(code, mode='eval')
-            result = eval(compile(expr_ast, '<string>', mode='eval'))
-            return True, result
-        except:
-            pass
-        
-        # Try to execute as code
-        try:
-            code_ast = ast.parse(code, mode='exec')
-            local_vars = {}
-            exec(compile(code_ast, '<string>', mode='exec'), {}, local_vars)
-            
-            # In interactive mode, return the result of the last expression if present
-            if mode == 'interactive' and code_ast.body and isinstance(code_ast.body[-1], ast.Expr):
-                last_expr = code_ast.body[-1]
-                # Don't return result if the last expression is a print() call
-                if not (isinstance(last_expr.value, ast.Call) and getattr(last_expr.value.func, 'id', None) == 'print'):
-                    result = eval(compile(ast.Expression(last_expr.value), '<string>', mode='eval'), {}, local_vars)
-                    return True, result
-            
-            return True, None
-        except Exception as e:
-            return False, e
-
     async def run_async(
         self, 
         prompt: str, 
@@ -166,7 +105,7 @@ class Lamia:
             ValueError: If validator fails
         """
         # Check if this is Python code
-        success, result = self.run_python_code(prompt, mode='interactive', show_banner=False)
+        success, result = run_python_code(prompt, mode='interactive', show_banner=False)
         if success:
             return str(result) if result is not None else ""
         
@@ -201,14 +140,6 @@ class Lamia:
         
         return response.text
 
-    def get_validation_stats(self) -> Optional[Any]:
-        """Get validation statistics."""
-        return self._engine.get_validation_stats()
-    
-    def get_recent_validation_results(self, limit: Optional[int] = None) -> Optional[List[Any]]:
-        """Get recent validation results."""
-        return self._engine.get_recent_validation_results(limit)
-
     def run(
         self,
         prompt: str,
@@ -239,6 +170,14 @@ class Lamia:
                     "Use 'await lamia.run_async(...)' instead."
                 ) from e
             raise
+
+    def get_validation_stats(self) -> Optional[Any]:
+        """Get validation statistics."""
+        return self._engine.get_validation_stats()
+    
+    def get_recent_validation_results(self, limit: Optional[int] = None) -> Optional[List[Any]]:
+        """Get recent validation results."""
+        return self._engine.get_recent_validation_results(limit)
 
     async def __aenter__(self):
         """Async context manager entry"""
