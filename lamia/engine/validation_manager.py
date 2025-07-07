@@ -3,98 +3,94 @@ from typing import Optional, Dict, Any, List
 import logging
 from datetime import datetime
 from dataclasses import dataclass, field
-from enum import Enum
-from lamia.validation.base import ValidationResult
 
 from .config_manager import ConfigManager
-from lamia.validation.validator_registry import ValidatorRegistry
+from .interfaces import DomainType, ValidationStrategy, Manager
+from .factories import ValidationStrategyFactory
+from lamia.validation.base import ValidationResult
 
 logger = logging.getLogger(__name__)
 
 @dataclass
 class ValidationStats:
-    """Statistics about validation operations."""
+    """Statistics about validation operations across all domains."""
     total_validations: int = 0
     successful_validations: int = 0
     failed_validations: int = 0
     avg_execution_time_ms: float = 0.0
+    by_domain: Dict[DomainType, int] = field(default_factory=dict)
     by_validator_type: Dict[str, int] = field(default_factory=dict)
 
 class ValidationManager:
-    """Manages validation across all domains and tracks statistics."""
+    """Manages validation across all domains and tracks centralized statistics."""
     
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: ConfigManager, validation_factory: ValidationStrategyFactory):
         self.config_manager = config_manager
+        self.validation_factory = validation_factory
         self.enabled = self._is_validation_enabled()
+        
+        # Centralized statistics tracking
         self.stats = ValidationStats()
         self.recent_results: List[ValidationResult] = []
         self.max_recent_results = 100  # Keep last 100 results
-        
-        # Initialize domain-specific components
-        self._llm_strategy = None
-        # TODO: Add other domain strategies
-        # self._fs_strategy = None
-        # self._web_strategy = None
         
     def _is_validation_enabled(self) -> bool:
         """Check if validation is enabled in config."""
         validation_config = self.config_manager.config.get('validation', {})
         return validation_config.get('enabled', False)
     
-    async def initialize(self):
-        """Initialize validation components if enabled."""
-        if not self.enabled:
-            logger.info("Validation disabled")
-            return
+    async def validate(self, domain_type: DomainType, manager: Manager, content: str, **kwargs) -> Any:
+        """Coordinate validation using the appropriate domain strategy.
+        
+        Args:
+            domain_type: The domain type for validation
+            manager: The domain manager to use
+            content: The content to validate
+            **kwargs: Domain-specific parameters
             
-        # Initialize LLM validation strategy
-        await self._initialize_llm_strategy()
+        Returns:
+            Validated response from the domain
+        """
+        if not self.enabled:
+            # If validation disabled, use manager directly
+            return await manager.execute(content, **kwargs)
         
-        logger.info("ValidationManager initialized")
+        start_time = asyncio.get_event_loop().time()
+        
+        try:
+            # Get the appropriate validation strategy
+            strategy = await self.validation_factory.get_strategy(domain_type)
+            
+            # Execute validation
+            result = await strategy.validate(manager, content, **kwargs)
+            
+            # Record successful validation
+            execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
+            validation_result = ValidationResult(
+                is_valid=True,
+                validated_text=getattr(result, 'text', str(result))
+            )
+            self._record_validation_result(validation_result, domain_type, execution_time)
+            
+            return result
+            
+        except ValueError as e:
+            # Strategy not found for this domain - use manager directly
+            logger.debug(f"No validation strategy for {domain_type}, using manager directly")
+            return await manager.execute(content, **kwargs)
+            
+        except Exception as e:
+            # Record failed validation
+            execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
+            validation_result = ValidationResult(
+                is_valid=False,
+                error_message=str(e)
+            )
+            self._record_validation_result(validation_result, domain_type, execution_time)
+            raise
     
-    async def _initialize_llm_strategy(self):
-        """Initialize LLM-specific validation strategy."""
-        from lamia.adapters.llm.strategy import ValidationStrategy, RetryConfig
-        
-        validation_config = self.config_manager.config.get('validation', {})
-        retry_config = RetryConfig(
-            max_retries=validation_config.get('max_retries'),
-            fallback_models=validation_config.get('fallback_models'),
-            validators=validation_config.get('validators')
-        )
-        
-        # Use ValidatorRegistry for registry
-        ext_folder = self.config_manager.get_extensions_folder()
-        validator_registry = ValidatorRegistry(self.config_manager.config, ext_folder)
-        registry = await validator_registry.get_registry()
-        
-        self._llm_strategy = ValidationStrategy(
-            config=retry_config,
-            validator_registry=registry
-        )
-    
-    async def validate_llm_response(self, llm_manager, prompt: str, **kwargs) -> Any:
-        """Validate LLM response using domain-specific strategy."""
-        if not self.enabled or not self._llm_strategy:
-            # If validation disabled, use llm_manager directly  
-            return await llm_manager.generate(prompt, **kwargs)
-        
-        # Get primary adapter through llm_manager (proper encapsulation)
-        primary_adapter = await llm_manager._get_primary_adapter()
-
-        validation_result = await self._llm_strategy.execute_with_retries(
-            primary_adapter=primary_adapter,
-            prompt=prompt,
-            create_adapter_fn=lambda model: llm_manager.create_adapter_from_config(override_model=model),
-            **kwargs
-        )
-        self._record_validation_result(validation_result)
-        
-        return validation_result
-
-    
-    def _record_validation_result(self, result: ValidationResult):
-        """Record validation result and update statistics."""
+    def _record_validation_result(self, result: ValidationResult, domain_type: DomainType, execution_time_ms: float):
+        """Record validation result and update centralized statistics."""
         # Add to recent results
         self.recent_results.append(result)
         if len(self.recent_results) > self.max_recent_results:
@@ -103,24 +99,25 @@ class ValidationManager:
         # Update statistics
         self.stats.total_validations += 1
         
-        if result.success:
+        if result.is_valid:
             self.stats.successful_validations += 1
         else:
             self.stats.failed_validations += 1
         
-        # Update averages
+        # Update execution time averages
         if self.stats.total_validations > 0:
             total_time = (self.stats.avg_execution_time_ms * (self.stats.total_validations - 1) + 
-                         result.execution_time_ms)
+                         execution_time_ms)
             self.stats.avg_execution_time_ms = total_time / self.stats.total_validations
         
         # Update by-domain stats
-        domain_count = self.stats.by_domain.get(result.domain, 0)
-        self.stats.by_domain[result.domain] = domain_count + 1
+        domain_count = self.stats.by_domain.get(domain_type, 0)
+        self.stats.by_domain[domain_type] = domain_count + 1
         
         # Update by-validator-type stats
-        validator_count = self.stats.by_validator_type.get(result.validator_type, 0)
-        self.stats.by_validator_type[result.validator_type] = validator_count + 1
+        validator_type = f"{domain_type.value}_validation"
+        validator_count = self.stats.by_validator_type.get(validator_type, 0)
+        self.stats.by_validator_type[validator_type] = validator_count + 1
     
     def get_validation_stats(self) -> ValidationStats:
         """Get current validation statistics."""
@@ -134,5 +131,5 @@ class ValidationManager:
     
     async def close(self):
         """Cleanup validation manager resources."""
-        # TODO: Cleanup strategies if needed
+        # ValidationFactory handles cleanup of individual strategies
         logger.info("ValidationManager closed") 

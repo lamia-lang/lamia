@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from ..config_manager import ConfigManager
+from ..interfaces import Manager, DomainType
 from .providers import ProviderRegistry
 
 class MissingAPIKeysError(Exception):
@@ -30,7 +31,7 @@ class MissingAPIKeysError(Exception):
         )
         super().__init__(message)
 
-class LLMManager:
+class LLMManager(Manager):
     """Manages LLM adapters and only loads the ones that are actually needed."""
     
     def __init__(self, config_manager: ConfigManager):
@@ -50,6 +51,25 @@ class LLMManager:
         # Adapter lifecycle management
         self._primary_adapter = None
         self._adapter_initialized = False
+        self._initialized = False
+    
+    @property
+    def domain_type(self) -> DomainType:
+        """Return the domain type this manager handles."""
+        return DomainType.LLM
+    
+    async def execute(self, content: str, **kwargs) -> LLMResponse:
+        """Execute an LLM request (alias for generate)."""
+        return await self.generate(content, **kwargs)
+    
+    async def initialize(self) -> None:
+        """Initialize the LLM manager."""
+        if self._initialized:
+            return
+        
+        # Check API keys early
+        self.check_all_required_api_keys()
+        self._initialized = True
     
     def _get_needed_providers(self) -> Set[str]:
         """Get the set of providers that are actually needed based on config."""
@@ -243,3 +263,4 @@ class LLMManager:
         if self._primary_adapter and self._adapter_initialized:
             await self._primary_adapter.close()
             self._adapter_initialized = False
+        self._initialized = False
