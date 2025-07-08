@@ -4,7 +4,6 @@ import logging
 from datetime import datetime
 from dataclasses import dataclass, field
 
-from .interfaces import DomainType, ValidationStrategy, Manager
 from .factories import ValidationStrategyFactory
 from lamia.validation.base import ValidationResult
 

@@ -4,6 +4,7 @@ from typing import Any, Optional, List, Dict, Union
 import yaml
 import logging
 from lamia.interpreter.python_runner import is_python_code, run_python_code
+from lamia.command_parser import CommandParser
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ class Lamia:
         
         # Initialize engine - ready to use immediately!
         self._engine = LamiaEngine(self._config_dict)
+        
+        # Initialize command parser instance
+        self._command_parser = None
         
         logger.info("Lamia instance created")
 
@@ -81,20 +85,13 @@ class Lamia:
 
     async def run_async(
         self, 
-        prompt: str, 
-        *, 
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None, 
-        skip_validators: bool = False
+        command: str, 
     ) -> str:
         """
         Generate a response, trying Python code first, then LLM.
         
         Args:
-            prompt: The input prompt
-            temperature: Optional temperature override
-            max_tokens: Optional max tokens override
-            skip_validators: Whether to skip manual validators
+            command: The command to execute
             
         Returns:
             str: Generated response text
@@ -105,61 +102,41 @@ class Lamia:
             ValueError: If validator fails
         """
         # Check if this is Python code
-        success, result = run_python_code(prompt, mode='interactive', show_banner=False)
-        if success:
-            return str(result) if result is not None else ""
-        
-        # Generate LLM response
-        response = await self._engine.execute(
-            'llm',
-            prompt,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        
-        # Apply manual validators if not skipped
-        if not skip_validators and self._validators:
-            text = response.text
-            for validator in self._validators:
-                try:
-                    # Try instance method first
-                    if hasattr(validator, 'validate') and callable(getattr(validator, 'validate')):
-                        valid = validator.validate(text)
-                    else:
-                        # Fall back to callable
-                        valid = validator(text)
-                    
-                    if not valid:
-                        validator_name = getattr(validator, '__name__', validator.__class__.__name__)
-                        raise ValueError(f"Validator {validator_name} failed for response: {text}")
-                except Exception as e:
-                    if isinstance(e, ValueError):
-                        raise  # Re-raise validation errors
-                    # Log other errors but continue
-                    logger.warning(f"Validator error: {e}")
-        
-        return response.text
+        if is_python_code(command):
+            success, result = run_python_code(command, mode='interactive', show_banner=False)
+            if success:
+                return str(result) if result is not None else ""
+            else:
+                # If Python code execution fails, raise an error or return a message
+                raise RuntimeError(f"Python code execution failed: {result}")
+        else:
+            # Parse command using instance parser
+            if self._command_parser is None:
+                self._command_parser = CommandParser(command)
+            response = await self._engine.execute(
+                self._command_parser.command_type,
+                self._command_parser.content,
+                **self._command_parser.kwargs
+            )
+            return response.text
 
     def run(
         self,
-        prompt: str,
-        *,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        skip_validators: bool = False,
+        command: str,
     ) -> str:
         """
         Synchronous helper around run_async.
 
         Note: cannot be called from inside an active event-loop.
+        
+        Raises:
+            MissingAPIKeysError: If API keys are missing
+            ValueError: If validator fails
         """
         try:
             return asyncio.run(
                 self.run_async(
-                    prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    skip_validators=skip_validators,
+                    command,
                 )
             )
         except RuntimeError as e:
@@ -174,10 +151,6 @@ class Lamia:
     def get_validation_stats(self) -> Optional[Any]:
         """Get validation statistics."""
         return self._engine.get_validation_stats()
-    
-    def get_recent_validation_results(self, limit: Optional[int] = None) -> Optional[List[Any]]:
-        """Get recent validation results."""
-        return self._engine.get_recent_validation_results(limit)
 
     async def __aenter__(self):
         """Async context manager entry"""

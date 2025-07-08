@@ -2,9 +2,9 @@ from typing import Optional, Dict, Any
 import asyncio
 
 from .config_manager import ConfigManager
-from .interfaces import DomainType
 from .factories import ManagerFactory, ValidationStrategyFactory
 from .validation_manager import ValidationManager
+from lamia.command_types import CommandType
 
 class LamiaEngine:
     """Main engine for Lamia that orchestrates different domain managers."""
@@ -28,7 +28,7 @@ class LamiaEngine:
     
     async def execute(
         self,
-        request_type: str,
+        command_type: CommandType,
         content: str,
         **kwargs
     ) -> Any:
@@ -42,17 +42,12 @@ class LamiaEngine:
         Returns:
             Response from the appropriate manager
         """
-        # Convert string to DomainType enum
-        try:
-            domain_type = DomainType(request_type)
-        except ValueError:
-            raise ValueError(f"Unsupported request type: {request_type}")
         
         # Get the appropriate manager
-        manager = await self.manager_factory.get_manager(domain_type)
+        manager = await self.manager_factory.get_manager(command_type)
         
         # Apply domain-specific parameter handling (for LLM)
-        if domain_type == DomainType.LLM:
+        if command_type == CommandType.LLM:
             model_name = self.config_manager.get_default_model()
             config = self.config_manager.get_model_config(model_name)
             

@@ -1,5 +1,6 @@
 from typing import Dict, Type
-from ..interfaces import Manager, DomainType
+from lamia.command_types import CommandType
+from ..interfaces import Manager
 from ..config_manager import ConfigManager
 
 class ManagerFactory:
@@ -7,8 +8,8 @@ class ManagerFactory:
     
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager
-        self._manager_registry: Dict[DomainType, Type[Manager]] = {}
-        self._manager_instances: Dict[DomainType, Manager] = {}
+        self._manager_registry: Dict[CommandType, Type[Manager]] = {}
+        self._manager_instances: Dict[CommandType, Manager] = {}
         self._register_managers()
     
     def _register_managers(self):
@@ -16,35 +17,35 @@ class ManagerFactory:
         # Import here to avoid circular imports
         from ..llm.llm_manager import LLMManager
         
-        self._manager_registry[DomainType.LLM] = LLMManager
+        self._manager_registry[CommandType.LLM] = LLMManager
         # TODO: Register other managers as they're implemented
         # self._manager_registry[DomainType.FILESYSTEM] = FSManager
         # self._manager_registry[DomainType.WEB] = WebManager
     
-    async def get_manager(self, domain_type: DomainType) -> Manager:
-        """Get or create a manager for the specified domain type.
+    async def get_manager(self, command_type: CommandType) -> Manager:
+        """Get or create a manager for the specified command type.
         
         Args:
-            domain_type: The domain type to get a manager for
+            command_type: The command type to get a manager for
             
         Returns:
-            Manager instance for the domain
+            Manager instance for the command
             
         Raises:
-            ValueError: If domain type is not supported
+            ValueError: If command type is not supported
         """
-        if domain_type not in self._manager_registry:
-            raise ValueError(f"Unsupported domain type: {domain_type}")
+        if command_type not in self._manager_registry:
+            raise ValueError(f"Unsupported command type: {command_type}")
         
         # Return existing instance if available (singleton pattern)
-        if domain_type in self._manager_instances:
-            return self._manager_instances[domain_type]
+        if command_type in self._manager_instances:
+            return self._manager_instances[command_type]
         
         # Create new instance
-        manager_class = self._manager_registry[domain_type]
+        manager_class = self._manager_registry[command_type]
         manager = manager_class(self.config_manager)
         await manager.initialize()
-        self._manager_instances[domain_type] = manager
+        self._manager_instances[command_type] = manager
         
         return manager
     

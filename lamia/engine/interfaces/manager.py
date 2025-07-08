@@ -1,15 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
-from .domain_types import DomainType
 
 class Manager(ABC):
     """Abstract base class for all domain managers."""
-    
-    @property
-    @abstractmethod
-    def domain_type(self) -> DomainType:
-        """Return the domain type this manager handles."""
-        pass
     
     @abstractmethod
     async def execute(self, content: str, **kwargs) -> Any:
