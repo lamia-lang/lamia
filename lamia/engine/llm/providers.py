@@ -28,26 +28,15 @@ class ProviderRegistry:
         
         # Maps for fast access
         self._adapter_map: Dict[str, Type[BaseLLMAdapter]] = {}
-        self._remote_providers: Set[str] = set()
-        self._lamia_proxy_providers: Set[str] = {"openai", "anthropic"}
         
         # Only load needed adapters
         self._needed_providers = needed_providers or set()
         
-        # Build maps
-        self._build_maps()
-    
-    def _build_maps(self):
-        """Build maps for needed adapters only."""
-        # Add built-in adapters that are needed
+        # Build adapter map
         for adapter_cls in self._builtin_adapters:
             name = adapter_cls.name()
             if not self._needed_providers or name in self._needed_providers:
                 self._adapter_map[name] = adapter_cls
-                
-                # Build remote providers set
-                if adapter_cls.is_remote():
-                    self._remote_providers.add(name)
     
     def add_user_adapters(self, search_paths: list[str]):
         """Add user-defined adapters from search paths."""
@@ -117,14 +106,6 @@ class ProviderRegistry:
             if value := os.getenv(env_var):
                 return value
         return None
-    
-    def is_remote(self, provider_name: str) -> bool:
-        """Check if provider is remote."""
-        return provider_name in self._remote_providers
-    
-    def supports_lamia_proxy(self, provider_name: str) -> bool:
-        """Check if provider supports lamia proxy."""
-        return provider_name in self._lamia_proxy_providers
     
     def get_all_providers(self) -> Set[str]:
         """Get all provider names."""

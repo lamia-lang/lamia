@@ -79,27 +79,29 @@ class LLMManager(Manager):
         
         return needed
     
-    def check_api_key(self, provider_name: str) -> Optional[str]:
+    def _resolve_api_key(self, provider_name: str) -> Optional[str]:
         """
         Get and validate API key from config_manager config.
         Returns the API key if found, otherwise raises MissingAPIKeysError.
         Priority: specific provider key > lamia key (for remote providers) > env var fallback (with precedence).
         """
-        # First priority: specific provider API key
+
+        if LamiaAdapter.supports(provider_name):
+            lamia_api_key = self.config_manager.get_api_key("lamia")
+            if lamia_api_key:
+                return lamia_api_key, True
+        
+        lamia_env_api_key = self.provider_registry.get_api_key_from_env("lamia")
+        if lamia_env_api_key:
+            return lamia_env_api_key, True
+
         api_key = self.config_manager.get_api_key(provider_name)
         if api_key:
             return api_key
 
-        # Second priority: environment variable fallback (with precedence)
         env_api_key = self.provider_registry.get_api_key_from_env(provider_name)
         if env_api_key:
-            return env_api_key
-        
-        # Third priority: lamia API key (for providers that support proxy)
-        if self.provider_registry.supports_lamia_proxy(provider_name):
-            lamia_api_key = self.config_manager.get_api_key('lamia')
-            if lamia_api_key:
-                return lamia_api_key
+            return env_api_key, False
 
         # No API key found - only raise error if this provider needs one
         env_var_names = self.provider_registry.get_env_var_names(provider_name)
@@ -108,7 +110,7 @@ class LLMManager(Manager):
             raise MissingAPIKeysError([(provider_name, env_vars_str)])
         
         # Provider doesn't need an API key (e.g., local models)
-        return None
+        return None, False
     
     def check_all_required_api_keys(self):
         """
@@ -123,7 +125,7 @@ class LLMManager(Manager):
         missing = []
         for engine in required_engines:
             try:
-                self.check_api_key(engine)
+                self._resolve_api_key(engine)
             except MissingAPIKeysError as e:
                 missing.extend(e.missing)
         
@@ -147,56 +149,23 @@ class LLMManager(Manager):
                 elif isinstance(m, dict):
                     model_name = m.get('name')
 
-        # Check if we should use Lamia adapter as fallback
-        use_lamia_adapter = False
-        api_key = None
-        
-        # Check API key availability and determine adapter to use
-        own_api_key = self.config_manager.get_api_key(provider_name) or self.provider_registry.get_api_key_from_env(provider_name)
-        lamia_api_key = self.config_manager.get_api_key('lamia') or self.provider_registry.get_api_key_from_env('lamia')
-        
-        if own_api_key:
-            # Use original adapter with specific API key
-            api_key = own_api_key
-            use_lamia_adapter = False
-        elif self.provider_registry.supports_lamia_proxy(provider_name) and lamia_api_key and not own_api_key:
-            # Use Lamia adapter when:
-            # 1. Provider supports lamia proxy
-            # 2. Lamia API key is available
-            # 3. No env var API key for the specific provider
-            use_lamia_adapter = True
-            api_key = lamia_api_key
-        else:
-            raise MissingAPIKeysError([(provider_name, "API key")])
+        api_key, use_lamia_adapter = self._resolve_api_key(provider_name)
 
         # Get the adapter class
         if use_lamia_adapter:
             adapter_class = LamiaAdapter
-            # For Lamia adapter, we need to prefix the model name based on provider
-            if provider_name == 'openai':
-                model_name = f"gpt-{model_name}" if not model_name.startswith('gpt-') else model_name
-            elif provider_name == 'anthropic':
-                model_name = f"anthropic-{model_name}" if not model_name.startswith('anthropic-') else model_name
+            model_name = f"{provider_name}-{model_name}"
         else:
             adapter_class = self.provider_registry.get_adapter_class(provider_name)
 
-        # Extract has_context_memory from config if present
-        has_context_memory = self.config_manager.get_has_context_memory(provider_name, model_name)
-
         # Create adapter instance based on its requirements
         init_kwargs = {}
-        
-        # Add API key if needed
-        env_var_names = self.provider_registry.get_env_var_names('lamia' if use_lamia_adapter else provider_name)
-        if env_var_names:  # Provider needs an API key
-            init_kwargs['api_key'] = api_key
         
         # Add model name
         init_kwargs['model'] = model_name
         
         # Add provider-specific parameters
         if provider_name == "ollama" and not use_lamia_adapter:
-            init_kwargs['has_context_memory'] = has_context_memory
             # Add any other ollama-specific config from provider_config
             for key in ['base_url', 'temperature', 'max_tokens', 'context_size', 'num_ctx', 'num_gpu', 'num_thread', 'repeat_penalty', 'top_k', 'top_p']:
                 if key in provider_config:
@@ -217,10 +186,9 @@ class LLMManager(Manager):
             
         return self._primary_adapter
 
-    async def generate(
+    async def execute(
         self,
         prompt: str,
-        *,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None
     ) -> LLMResponse:

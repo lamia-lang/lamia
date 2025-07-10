@@ -1,10 +1,13 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Set
 import aiohttp
 import json
 from .base import BaseLLMAdapter, LLMResponse
 
 class LamiaAdapter(BaseLLMAdapter):
     """Lamia API adapter that proxies requests to multiple providers."""
+
+    # Supported providers that Lamia can proxy requests to
+    _supported_providers: Set[str] = {"openai", "anthropic"}
     
     @classmethod
     def name(cls) -> str:
@@ -18,6 +21,10 @@ class LamiaAdapter(BaseLLMAdapter):
     @classmethod
     def is_remote(cls) -> bool:
         return True
+    
+    @classmethod
+    def supports(cls, provider: str) -> bool:
+        return provider in cls._supported_providers
     
     def __init__(self, api_key: str):
         self.api_key = api_key

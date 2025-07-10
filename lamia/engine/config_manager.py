@@ -61,22 +61,6 @@ class ConfigManager:
         """Get the default model name from config."""
         return self.config.get('default_model')
 
-    def get_has_context_memory(self, provider: str, model_name: str) -> Optional[bool]:
-        """
-        Get has_context_memory override for a specific provider and model name from config.
-        Returns None if not set.
-        """
-        models_config = self.config.get('models', {})
-        provider_config = models_config.get(provider, {})
-        models_list = provider_config.get('models', [])
-        for entry in models_list:
-            if isinstance(entry, dict) and entry.get('name') == model_name:
-                return entry.get('has_context_memory')
-            elif isinstance(entry, str) and entry == model_name:
-                # No override, just a string
-                return None
-        return None 
-
     def get_api_key(self, provider: str) -> Optional[str]:
         # Only return from the dict, never from the environment
         api_keys = self.config.get('api_keys', {})
