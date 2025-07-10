@@ -6,7 +6,8 @@ import sys
 from .base import BaseLLMAdapter, LLMResponse
 from ...validation.base import BaseValidator, ValidationResult
 from ...validation.validators import CONFLICTING_VALIDATOR_GROUPS
-from ...engine.interfaces import ValidationStrategy as IValidationStrategy, Manager, DomainType
+from ...engine.interfaces import ValidationStrategy as IValidationStrategy, Manager
+from lamia.command_types import CommandType
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +43,6 @@ class ValidationStrategy(IValidationStrategy):
         self.validators = self._setup_validators()
         self._initialized = True
     
-    @property
-    def domain_type(self) -> DomainType:
-        """Return the domain type this strategy validates."""
-        return DomainType.LLM
-    
     async def validate(self, manager: Manager, content: str, **kwargs) -> LLMResponse:
         """Validate LLM content using this strategy.
         
@@ -58,8 +54,6 @@ class ValidationStrategy(IValidationStrategy):
         Returns:
             Validated LLMResponse
         """
-        if manager.domain_type != DomainType.LLM:
-            raise ValueError(f"Expected LLM manager, got {manager.domain_type}")
         
         # Get the primary adapter through the manager
         primary_adapter = await manager._get_primary_adapter()

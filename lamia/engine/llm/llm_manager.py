@@ -53,15 +53,6 @@ class LLMManager(Manager):
         self._adapter_initialized = False
         self._initialized = False
     
-    @property
-    def domain_type(self) -> DomainType:
-        """Return the domain type this manager handles."""
-        return DomainType.LLM
-    
-    async def execute(self, content: str, **kwargs) -> LLMResponse:
-        """Execute an LLM request (alias for generate)."""
-        return await self.generate(content, **kwargs)
-    
     async def initialize(self) -> None:
         """Initialize the LLM manager."""
         if self._initialized:

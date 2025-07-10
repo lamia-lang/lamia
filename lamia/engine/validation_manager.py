@@ -3,7 +3,8 @@ from typing import Optional, Dict, Any, List
 import logging
 from datetime import datetime
 from dataclasses import dataclass, field
-
+from lamia.engine.interfaces.manager import Manager
+from lamia.engine.interfaces.command import CommandType
 from .factories import ValidationStrategyFactory
 from lamia.validation.base import ValidationResult
 
@@ -16,7 +17,7 @@ class ValidationStats:
     successful_validations: int = 0
     failed_validations: int = 0
     avg_execution_time_ms: float = 0.0
-    by_domain: Dict[DomainType, int] = field(default_factory=dict)
+    by_domain: Dict[CommandType, int] = field(default_factory=dict)
     by_validator_type: Dict[str, int] = field(default_factory=dict)
 
 class ValidationManager:
@@ -30,11 +31,10 @@ class ValidationManager:
         self.recent_results: List[ValidationResult] = []
         self.max_recent_results = 100  # Keep last 100 results
     
-    async def validate(self, domain_type: DomainType, manager: Manager, content: str, **kwargs) -> Any:
+    async def validate(self, command_type: CommandType, manager: Manager, content: str, **kwargs) -> Any:
         """Coordinate validation using the appropriate domain strategy.
         
         Args:
-            domain_type: The domain type for validation
             manager: The domain manager to use
             content: The content to validate
             **kwargs: Domain-specific parameters
@@ -46,7 +46,7 @@ class ValidationManager:
         
         try:
             # Get the appropriate validation strategy
-            strategy = await self.validation_factory.get_strategy(domain_type)
+            strategy = await self.validation_factory.get_strategy(command_type)
             
             # Execute validation
             result = await strategy.validate(manager, content, **kwargs)
@@ -57,7 +57,7 @@ class ValidationManager:
                 is_valid=True,
                 validated_text=getattr(result, 'text', str(result))
             )
-            self._record_validation_result(validation_result, domain_type, execution_time)
+            self._record_validation_result(validation_result, execution_time)
             
             return result
             

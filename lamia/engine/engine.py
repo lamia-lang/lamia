@@ -58,7 +58,7 @@ class LamiaEngine:
         # Engine makes routing decision based on validation enabled flag
         if self._validation_enabled:
             # Use validation manager for coordination and statistics
-            return await self.validation_manager.validate(domain_type, manager, content, **kwargs)
+            return await self.validation_manager.validate(manager, content, **kwargs)
         else:
             # Use manager directly (no validation)
             return await manager.execute(content, **kwargs)

@@ -16,13 +16,3 @@ class Manager(ABC):
             Domain-specific response
         """
         pass
-    
-    @abstractmethod
-    async def initialize(self) -> None:
-        """Initialize the manager."""
-        pass
-    
-    @abstractmethod
-    async def close(self) -> None:
-        """Close and cleanup manager resources."""
-        pass 

@@ -19,8 +19,8 @@ class ManagerFactory:
         
         self._manager_registry[CommandType.LLM] = LLMManager
         # TODO: Register other managers as they're implemented
-        # self._manager_registry[DomainType.FILESYSTEM] = FSManager
-        # self._manager_registry[DomainType.WEB] = WebManager
+        # self._manager_registry[CommandType.FILESYSTEM] = FSManager
+        # self._manager_registry[CommandType.WEB] = WebManager
     
     async def get_manager(self, command_type: CommandType) -> Manager:
         """Get or create a manager for the specified command type.

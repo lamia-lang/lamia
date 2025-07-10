@@ -1,6 +1,7 @@
 from typing import Dict, Type
-from ..interfaces import ValidationStrategy, DomainType
+from ..interfaces import ValidationStrategy
 from ..config_manager import ConfigManager
+from lamia.command_types import CommandType
 
 class ValidationStrategyFactory:
     """Factory for creating validation strategies based on domain type."""
@@ -16,7 +17,7 @@ class ValidationStrategyFactory:
         # Import here to avoid circular imports
         from lamia.adapters.llm.strategy import ValidationStrategy as LLMValidationStrategy
         
-        self._strategy_registry[DomainType.LLM] = LLMValidationStrategy
+        self._strategy_registry[CommandType.LLM] = LLMValidationStrategy
         # TODO: Register other strategies as they're implemented
         # self._strategy_registry[DomainType.FILESYSTEM] = FSValidationStrategy
         # self._strategy_registry[DomainType.WEB] = WebValidationStrategy
@@ -33,8 +34,7 @@ class ValidationStrategyFactory:
         Raises:
             ValueError: If domain type is not supported
         """
-        if domain_type not in self._strategy_registry:
-            raise ValueError(f"Unsupported domain type for validation: {domain_type}")
+
         
         # Return existing instance if available (singleton pattern)
         if domain_type in self._strategy_instances:
@@ -43,7 +43,7 @@ class ValidationStrategyFactory:
         # Create new instance with proper dependencies
         strategy_class = self._strategy_registry[domain_type]
         
-        if domain_type == DomainType.LLM:
+        if domain_type == CommandType.LLM:
             # Create LLM validation strategy with proper dependencies
             strategy = await self._create_llm_validation_strategy(strategy_class)
         else:
