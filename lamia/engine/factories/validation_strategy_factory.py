@@ -43,7 +43,7 @@ class ValidationStrategyFactory:
     async def _create_llm_validation_strategy(self) -> ValidationStrategy:
         """Build the LLM validation strategy with its dependencies."""
 
-        from lamia.adapters.llm.strategy import ValidationStrategy as LLMValidationStrategy, RetryConfig
+        from lamia.adapters.llm.llm_validation_strategy import ValidationStrategy as LLMValidationStrategy, RetryConfig
         from lamia.validation.validator_registry import ValidatorRegistry
 
         # Fetch validation-specific configuration

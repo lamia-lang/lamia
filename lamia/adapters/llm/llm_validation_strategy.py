@@ -6,8 +6,7 @@ import sys
 from .base import BaseLLMAdapter, LLMResponse
 from ...validation.base import BaseValidator, ValidationResult
 from ...validation.validators import CONFLICTING_VALIDATOR_GROUPS
-from ...engine.interfaces import ValidationStrategy as IValidationStrategy, Manager
-from lamia.command_types import CommandType
+from ...engine.interfaces import ValidationStrategy, Manager
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ class RetryConfig:
     fallback_models: List[str] = None  # List of model names to try if primary fails
     validators: List[Dict[str, Any]] = None  # List of validator configs
 
-class ValidationStrategy(IValidationStrategy):
+class LLMValidationStrategy(ValidationStrategy):
     """Handles response validation and retry logic."""
     
     def __init__(
@@ -56,9 +55,6 @@ class ValidationStrategy(IValidationStrategy):
         Returns:
             Validated LLMResponse
         """
-        
-        # Get the primary adapter through the manager
-        primary_adapter = await manager.get_primary_adapter()
         
         # Use the existing validation logic
         return await self.execute_with_retries(
@@ -155,8 +151,6 @@ class ValidationStrategy(IValidationStrategy):
         Raises:
             RuntimeError: If all attempts fail
         """
-        attempts = 0
-        errors = []
         current_adapter = await manager.get_primary_adapter()
         # Aggregate initial hints from all validators
         initial_hints = [v.initial_hint for v in self.validators if hasattr(v, 'initial_hint')]
@@ -166,41 +160,17 @@ class ValidationStrategy(IValidationStrategy):
         else:
             current_prompt = prompt
         
-        while attempts < self.config.max_retries:
-            attempts += 1
-            try:
-                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{getattr(current_adapter, 'model', 'unknown')}':\n{grey_text(current_prompt)}")
-                response = await current_adapter.generate(current_prompt, **kwargs)
-                logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{getattr(current_adapter, 'model', 'unknown')}':\n{response.text}")
-                
-                # Validate the response
-                validation_result = await self.validate_response(response.text)
-                if validation_result.is_valid:
-                    # If validated_text is present, return a new LLMResponse with it
-                    if validation_result.validated_text is not None:
-                        return type(response)(**{**response.__dict__, 'text': validation_result.validated_text})
-                    return response
-                
-                logger.warning(
-                    f"Attempt {attempts}/{self.config.max_retries} failed validation: "
-                    f"{validation_result.error_message}"
-                )
-                errors.append(validation_result.error_message)
-
-                # Construct retry prompt based on context memory
-                if current_adapter.has_context_memory:
-                    # Only send the validation issue and hint
-                    retry_message = f"The previous response had an issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again."
-                    current_prompt = retry_message
-                else:
-                    # Resend the original prompt plus the validation issue and hint
-                    retry_message = f"Previous response failed validation. Issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again.\n\nOriginal prompt:\n{prompt}"
-                    current_prompt = retry_message
-                
-                # Try fallback model if available
-                if (self.config.fallback_models and 
-                    attempts < len(self.config.fallback_models) + 1):
-                    fallback_model = self.config.fallback_models[attempts - 1]
+        try:
+            return await self._generate_and_validate_once(
+                adapter=current_adapter,
+                prompt=current_prompt,
+                max_attempts=self.config.max_retries,
+                **kwargs,
+            )
+        except Exception as e:
+            # Try fallback model if available
+            if self.config.fallback_models:
+                for fallback_model in self.config.fallback_models:
                     logger.info(f"Trying fallback model: {fallback_model}")
                     # Lazily create and cache adapters so we don't re-instantiate them
                     if fallback_model in self._adapter_cache:
@@ -213,11 +183,70 @@ class ValidationStrategy(IValidationStrategy):
                         current_prompt = f"{initial_hint_text}\n\n{prompt}"
                     else:
                         current_prompt = prompt
+
+                    try:
+                        return await self._generate_and_validate_once(
+                            manager=manager,
+                            adapter=current_adapter,
+                            prompt=current_prompt,
+                            max_attempts=1, # Fallback models are used only once
+                            **kwargs,
+                        )
+                    except Exception as e:
+                        # Continue to the next fallback model
+                        pass
+                
+                raise RuntimeError(
+                    f"All {attempts} attempts failed with {adapter.name}. Errors: {'; '.join(errors)}"
+                ) 
+
+                
+    
+    async def _generate_and_validate_once(
+        self,
+        adapter: BaseLLMAdapter,
+        prompt: str,
+        max_attempts: int,
+        **kwargs,
+    ) -> LLMResponse:
+        errors = []
+        attempts = 0
+        while attempts < self.config.max_retries:
+            attempts += 1
+            try:
+                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{getattr(adapter, 'model', 'unknown')}':\n{grey_text(current_prompt)}")
+                response = await adapter.generate(current_prompt, **kwargs)
+                logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{getattr(adapter, 'model', 'unknown')}':\n{response.text}")
+                
+                # Validate the response
+                validation_result = await self.validate_response(response.text)
+                if validation_result.is_valid:
+                    # If validated_text is present, return a new LLMResponse with it
+                    if validation_result.validated_text is not None:
+                        return type(response)(**{**response.__dict__, 'text': validation_result.validated_text})
+                    return response
+                
+                logger.warning(
+                    f"Attempt {attempts}/{max_attempts} failed validation: "
+                    f"{validation_result.error_message}"
+                )
+                errors.append(validation_result.error_message)
+
+                # Construct retry prompt based on context memory
+                # TODO: Maybe we need to send whole chat history, for telling about all errors that the model made?
+                if adapter.has_context_memory:
+                    # Only send the validation issue and hint
+                    retry_message = f"The previous response had an issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again."
+                    current_prompt = retry_message
+                else:
+                    # Resend the original prompt plus the validation issue and hint
+                    retry_message = f"Previous response failed validation. Issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again.\n\nOriginal prompt:\n{prompt}"
+                    current_prompt = retry_message
                 
             except Exception as e:
                 logger.error(f"Attempt {attempts} failed with error: {str(e)}")
                 errors.append(str(e))
-                
+
         raise RuntimeError(
-            f"All {attempts} attempts failed. Errors: {'; '.join(errors)}"
+            f"All {attempts} attempts failed with {adapter.name}. Errors: {'; '.join(errors)}"
         ) 
