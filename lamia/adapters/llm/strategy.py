@@ -41,6 +41,8 @@ class ValidationStrategy(IValidationStrategy):
         self.config = config
         self.validator_registry = validator_registry
         self.validators = self._setup_validators()
+        # Cache for lazily-created fallback adapters
+        self._adapter_cache: Dict[str, BaseLLMAdapter] = {}
         self._initialized = True
     
     async def validate(self, manager: Manager, content: str, **kwargs) -> LLMResponse:
@@ -56,13 +58,12 @@ class ValidationStrategy(IValidationStrategy):
         """
         
         # Get the primary adapter through the manager
-        primary_adapter = await manager._get_primary_adapter()
+        primary_adapter = await manager.get_primary_adapter()
         
         # Use the existing validation logic
         return await self.execute_with_retries(
-            primary_adapter=primary_adapter,
+            manager=manager,
             prompt=content,
-            create_adapter_fn=lambda model: manager.create_adapter_from_config(override_model=model),
             **kwargs
         )
         
@@ -136,9 +137,8 @@ class ValidationStrategy(IValidationStrategy):
 
     async def execute_with_retries(
         self,
-        primary_adapter: BaseLLMAdapter,
+        manager: Manager,
         prompt: str,
-        create_adapter_fn,
         **kwargs
     ) -> LLMResponse:
         """Execute the prompt with retry and fallback logic.
@@ -157,7 +157,7 @@ class ValidationStrategy(IValidationStrategy):
         """
         attempts = 0
         errors = []
-        current_adapter = primary_adapter
+        current_adapter = await manager.get_primary_adapter()
         # Aggregate initial hints from all validators
         initial_hints = [v.initial_hint for v in self.validators if hasattr(v, 'initial_hint')]
         initial_hint_text = "\n".join(initial_hints)
@@ -202,7 +202,12 @@ class ValidationStrategy(IValidationStrategy):
                     attempts < len(self.config.fallback_models) + 1):
                     fallback_model = self.config.fallback_models[attempts - 1]
                     logger.info(f"Trying fallback model: {fallback_model}")
-                    current_adapter = create_adapter_fn(fallback_model)
+                    # Lazily create and cache adapters so we don't re-instantiate them
+                    if fallback_model in self._adapter_cache:
+                        current_adapter = self._adapter_cache[fallback_model]
+                    else:
+                        current_adapter = await manager.create_adapter_from_config(fallback_model)
+                        self._adapter_cache[fallback_model] = current_adapter
                     # Reset prompt for new adapter, with initial hints
                     if initial_hint_text:
                         current_prompt = f"{initial_hint_text}\n\n{prompt}"

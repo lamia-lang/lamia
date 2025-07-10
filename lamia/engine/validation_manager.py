@@ -20,6 +20,9 @@ class ValidationStats:
     by_domain: Dict[CommandType, int] = field(default_factory=dict)
     by_validator_type: Dict[str, int] = field(default_factory=dict)
 
+class ValidationStrategyNotFoundError(LookupError):
+    """Raised when no validation strategy exists for the requested command type."""
+
 class ValidationManager:
     """Manages validation across all domains and tracks centralized statistics."""
     
@@ -61,7 +64,7 @@ class ValidationManager:
             
             return result
             
-        except ValueError as e:
+        except ValidationStrategyNotFoundError:
             # Strategy not found for this domain - use manager directly
             logger.debug(f"No validation strategy for {command_type}, using manager directly")
             return await manager.execute(content, **kwargs)

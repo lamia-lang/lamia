@@ -45,7 +45,6 @@ class LLMManager(Manager):
         
         # Adapter lifecycle management
         self._primary_adapter = None
-        self._adapter_initialized = False
         self._initialized = False
     
     async def initialize(self) -> None:
@@ -131,7 +130,7 @@ class LLMManager(Manager):
         if missing:
             raise MissingAPIKeysError(missing)
     
-    def create_adapter_from_config(self, override_model: str = None) -> BaseLLMAdapter:
+    async def create_adapter_from_config(self, override_model: str = None) -> BaseLLMAdapter:
         """Create an adapter instance based on the active configuration."""
         self.check_all_required_api_keys()
         provider_name = override_model or self.config_manager.get_default_model()
@@ -207,16 +206,14 @@ class LLMManager(Manager):
             lamia_config = self.config_manager.get_config().get('lamia', {})
             init_kwargs['api_url'] = lamia_config.get('api_url', 'http://localhost:8080')
         
-        return adapter_class(**init_kwargs)
+        adapter = adapter_class(**init_kwargs)
+        await adapter.initialize()
+        return adapter
 
-    async def _get_primary_adapter(self) -> BaseLLMAdapter:
+    async def get_primary_adapter(self) -> BaseLLMAdapter:
         """Get the primary adapter, creating and initializing it if needed."""
         if self._primary_adapter is None:
             self._primary_adapter = self.create_adapter_from_config()
-        
-        if not self._adapter_initialized:
-            await self._primary_adapter.initialize()
-            self._adapter_initialized = True
             
         return self._primary_adapter
 
@@ -237,7 +234,7 @@ class LLMManager(Manager):
         Returns:
             LLMResponse containing the generated text and metadata
         """
-        adapter = await self._get_primary_adapter()
+        adapter = await self.get_primary_adapter()
         return await adapter.generate(
             prompt,
             temperature=temperature,
@@ -246,7 +243,6 @@ class LLMManager(Manager):
 
     async def close(self):
         """Close and cleanup the managed adapter."""
-        if self._primary_adapter and self._adapter_initialized:
+        if self._primary_adapter:
             await self._primary_adapter.close()
-            self._adapter_initialized = False
         self._initialized = False
