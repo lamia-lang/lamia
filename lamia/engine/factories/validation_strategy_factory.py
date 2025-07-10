@@ -1,85 +1,72 @@
-from typing import Dict, Type
+from typing import Dict, Any
+
 from ..interfaces import ValidationStrategy
 from ..config_manager import ConfigManager
 from lamia.command_types import CommandType
 
+
 class ValidationStrategyFactory:
-    """Factory for creating validation strategies based on domain type."""
-    
+    """Provide (and cache) validation strategies for each supported command type.
+
+    At the moment Lamia only implements an LLM validation strategy, so we avoid the
+    premature complexity of a separate *registry* + *instances* split.  A single
+    `_strategies` cache is enough to keep the already-constructed strategy
+    instances (lazy-loaded on first use).  When new domains need validation we
+    can extend `_create_strategy()` – until then YAGNI.
+    """
+
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager
-        self._strategy_registry: Dict[DomainType, Type[ValidationStrategy]] = {}
-        self._strategy_instances: Dict[DomainType, ValidationStrategy] = {}
-        self._register_strategies()
-    
-    def _register_strategies(self):
-        """Register available validation strategy implementations."""
-        # Import here to avoid circular imports
-        from lamia.adapters.llm.strategy import ValidationStrategy as LLMValidationStrategy
-        
-        self._strategy_registry[CommandType.LLM] = LLMValidationStrategy
-        # TODO: Register other strategies as they're implemented
-        # self._strategy_registry[DomainType.FILESYSTEM] = FSValidationStrategy
-        # self._strategy_registry[DomainType.WEB] = WebValidationStrategy
-    
-    async def get_strategy(self, domain_type: DomainType) -> ValidationStrategy:
-        """Get or create a validation strategy for the specified domain type.
-        
-        Args:
-            domain_type: The domain type to get a strategy for
-            
-        Returns:
-            ValidationStrategy instance for the domain
-            
-        Raises:
-            ValueError: If domain type is not supported
-        """
+        # Cache of already constructed strategies (lazy singleton per CommandType)
+        self._strategies: Dict[CommandType, ValidationStrategy] = {}
 
-        
-        # Return existing instance if available (singleton pattern)
-        if domain_type in self._strategy_instances:
-            return self._strategy_instances[domain_type]
-        
-        # Create new instance with proper dependencies
-        strategy_class = self._strategy_registry[domain_type]
-        
-        if domain_type == CommandType.LLM:
-            # Create LLM validation strategy with proper dependencies
-            strategy = await self._create_llm_validation_strategy(strategy_class)
-        else:
-            # For other domains, use the config_manager approach
-            strategy = strategy_class(self.config_manager)
-            await strategy.initialize()
-        
-        self._strategy_instances[domain_type] = strategy
+    async def get_strategy(self, command_type: CommandType) -> ValidationStrategy:
+        """Return a validation strategy for *command_type* (cached after first build)."""
+
+        # Fast path: return cached instance if we have it
+        if command_type in self._strategies:
+            return self._strategies[command_type]
+
+        # Otherwise build, cache and return
+        strategy = await self._create_strategy(command_type)
+        self._strategies[command_type] = strategy
         return strategy
-    
-    async def _create_llm_validation_strategy(self, strategy_class):
-        """Create LLM validation strategy with proper dependencies."""
-        from lamia.adapters.llm.strategy import RetryConfig
+
+    async def _create_strategy(self, command_type: CommandType) -> ValidationStrategy:
+        """Instantiate the appropriate validation strategy for *command_type*."""
+
+        if command_type == CommandType.LLM:
+            return await self._create_llm_validation_strategy()
+
+        raise ValueError(f"No validation strategy implemented for command type: {command_type}")
+
+    async def _create_llm_validation_strategy(self) -> ValidationStrategy:
+        """Build the LLM validation strategy with its dependencies."""
+
+        from lamia.adapters.llm.strategy import ValidationStrategy as LLMValidationStrategy, RetryConfig
         from lamia.validation.validator_registry import ValidatorRegistry
-        
-        validation_config = self.config_manager.config.get('validation', {})
+
+        # Fetch validation-specific configuration
+        validation_cfg: Dict[str, Any] = self.config_manager.get_validation_config()
+
         retry_config = RetryConfig(
-            max_retries=validation_config.get('max_retries'),
-            fallback_models=validation_config.get('fallback_models'),
-            validators=validation_config.get('validators')
+            max_retries=validation_cfg.get("max_retries", 1),
+            fallback_models=validation_cfg.get("fallback_models"),
+            validators=validation_cfg.get("validators"),
         )
-        
-        # Use ValidatorRegistry for registry
+
+        # Build validator registry (allows project / user extensions)
         ext_folder = self.config_manager.get_extensions_folder()
-        validator_registry = ValidatorRegistry(self.config_manager.config, ext_folder)
-        registry = await validator_registry.get_registry()
-        
-        strategy = strategy_class(
+        registry = await ValidatorRegistry(self.config_manager.config, ext_folder).get_registry()
+
+        strategy = LLMValidationStrategy(
             config=retry_config,
-            validator_registry=registry
+            validator_registry=registry,
         )
-        await strategy.initialize()
+
+        # Some strategies might expose async initialise hooks – call if present.
+        initialise = getattr(strategy, "initialize", None)
+        if callable(initialise):
+            await initialise()
+
         return strategy
-    
-    async def close_all(self):
-        """Close all created strategy instances."""
-        for strategy in self._strategy_instances.values():
-            await strategy.close()
-        self._strategy_instances.clear() 

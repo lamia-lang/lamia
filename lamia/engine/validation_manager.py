@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from dataclasses import dataclass, field
 from lamia.engine.interfaces.manager import Manager
-from lamia.engine.interfaces.command import CommandType
+from lamia.command_types import CommandType
 from .factories import ValidationStrategyFactory
 from lamia.validation.base import ValidationResult
 
@@ -63,7 +63,7 @@ class ValidationManager:
             
         except ValueError as e:
             # Strategy not found for this domain - use manager directly
-            logger.debug(f"No validation strategy for {domain_type}, using manager directly")
+            logger.debug(f"No validation strategy for {command_type}, using manager directly")
             return await manager.execute(content, **kwargs)
             
         except Exception as e:
@@ -73,10 +73,10 @@ class ValidationManager:
                 is_valid=False,
                 error_message=str(e)
             )
-            self._record_validation_result(validation_result, domain_type, execution_time)
+            self._record_validation_result(validation_result, command_type, execution_time)
             raise
     
-    def _record_validation_result(self, result: ValidationResult, domain_type: DomainType, execution_time_ms: float):
+    def _record_validation_result(self, result: ValidationResult, command_type: CommandType, execution_time_ms: float):
         """Record validation result and update centralized statistics."""
         # Add to recent results
         self.recent_results.append(result)
@@ -98,11 +98,11 @@ class ValidationManager:
             self.stats.avg_execution_time_ms = total_time / self.stats.total_validations
         
         # Update by-domain stats
-        domain_count = self.stats.by_domain.get(domain_type, 0)
-        self.stats.by_domain[domain_type] = domain_count + 1
+        domain_count = self.stats.by_domain.get(command_type, 0)
+        self.stats.by_domain[command_type] = domain_count + 1
         
         # Update by-validator-type stats
-        validator_type = f"{domain_type.value}_validation"
+        validator_type = f"{command_type.value}_validation"
         validator_count = self.stats.by_validator_type.get(validator_type, 0)
         self.stats.by_validator_type[validator_type] = validator_count + 1
     

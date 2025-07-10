@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import pytest
 from lamia.engine.engine import LamiaEngine
-from lamia.engine.llm_manager import create_adapter_from_config
+from lamia.command_types import CommandType
 
 # --- Dummy extension adapter and validator code ---
 ADAPTER_CODE = '''
@@ -51,7 +51,8 @@ def temp_extensions():
     yield temp_dir
     shutil.rmtree(temp_dir)
 
-def test_extension_adapter_and_validator_loading(temp_extensions):
+@pytest.mark.asyncio
+async def test_extension_adapter_and_validator_loading(temp_extensions):
     config = {
         "default_model": "MyExtensionAdapter",
         "models": {
@@ -74,7 +75,7 @@ def test_extension_adapter_and_validator_loading(temp_extensions):
     try:
         engine = LamiaEngine(config)
         # Adapter: should be available and instantiable
-        adapter = create_adapter_from_config(engine.config_manager)
+        adapter = await engine.execute(CommandType.LLM, "Hello, world!")
         assert adapter.__class__.__name__ == "MyExtensionAdapter"
     finally:
         sys.path.remove(temp_extensions) 

@@ -8,34 +8,32 @@ from pathlib import Path
 import importlib.util
 
 from lamia.engine.llm.llm_manager import (
-    check_api_key,
-    check_all_required_api_keys,
-    create_adapter_from_config,
-    MissingAPIKeysError
+    MissingAPIKeysError,
+    LLMManager
 )
 from lamia.engine.config_manager import ConfigManager
-from lamia.adapters.llm.openai_adapter import OpenAIAdapter
-from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter
 from lamia.adapters.llm.local import OllamaAdapter
 
 
-class TestCheckApiKey:
-    """Test suite for check_api_key function"""
+class TestLLMManager:
+    """Test suite for LLMManager"""
 
     def test_check_api_keys_direct(self):
         """Test check_api_key with direct OpenAI API key"""
         config = {"api_keys": {"openai": "test-openai-key", "anthropic": "test-anthropic-key"}}
         cm = ConfigManager(config)
         
-        assert check_api_key("openai", cm) == "test-openai-key"
-        assert check_api_key("anthropic", cm) == "test-anthropic-key"
+        manager = LLMManager(cm)
+        assert manager.check_api_key("openai") == "test-openai-key"
+        assert manager.check_api_key("anthropic") == "test-anthropic-key"
 
     def test_check_api_key_direct_overrides_lamia_proxy(self):
         """Test lamia proxy API key takes precedence over direct provider key"""
         config = {"api_keys": {"openai": "direct-key", "lamia": "proxy-key"}}
         cm = ConfigManager(config)
         
-        result = check_api_key("openai", cm)
+        manager = LLMManager(cm)
+        result = manager.check_api_key("openai")
         assert result == "direct-key"
 
     def test_check_api_key_env_fallback(self):
@@ -43,8 +41,9 @@ class TestCheckApiKey:
         config = {"api_keys": {}}
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key"}):
-            result = check_api_key("openai", cm)
+            result = manager.check_api_key("openai")
             assert result == "env-key"
 
     def test_check_api_key_missing_raises_error(self):
@@ -52,9 +51,10 @@ class TestCheckApiKey:
         config = {"api_keys": {}}
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(MissingAPIKeysError) as exc_info:
-                check_api_key("openai", cm)
+                manager.check_api_key("openai")
             
             assert "openai" in str(exc_info.value)
             assert "OPENAI_API_KEY" in str(exc_info.value)
@@ -64,8 +64,9 @@ class TestCheckApiKey:
         config = {"api_keys": {}}
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            check_api_key("unknown", cm)
+            manager.check_api_key("unknown")
 
         assert "unknown" in str(exc_info.value)
 
@@ -100,8 +101,9 @@ class TestCheckAllRequiredApiKeys:
         }
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         # Should not raise any exception
-        check_all_required_api_keys(cm)
+        manager.check_all_required_api_keys()
 
     def test_check_all_required_api_keys_lamia_proxy(self):
         """Test check_all_required_api_keys with lamia key as proxy"""
@@ -112,8 +114,9 @@ class TestCheckAllRequiredApiKeys:
         }
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         # Should not raise any exception
-        check_all_required_api_keys(cm)
+        manager.check_all_required_api_keys()
 
     def test_check_all_required_api_keys_ollama_no_key_needed(self):
         """Test check_all_required_api_keys with ollama (no key needed)"""
@@ -124,8 +127,9 @@ class TestCheckAllRequiredApiKeys:
         }
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         # Should not raise any exception
-        check_all_required_api_keys(cm)
+        manager.check_all_required_api_keys()
 
     def test_check_all_required_api_keys_missing_default(self):
         """Test check_all_required_api_keys with missing default model key"""
@@ -136,8 +140,9 @@ class TestCheckAllRequiredApiKeys:
         }
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            check_all_required_api_keys(cm)
+            manager.check_all_required_api_keys()
         
         assert "openai" in str(exc_info.value)
 
@@ -150,8 +155,9 @@ class TestCheckAllRequiredApiKeys:
         }
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            check_all_required_api_keys(cm)
+            manager.check_all_required_api_keys()
         
         assert "anthropic" in str(exc_info.value)
 
@@ -163,8 +169,9 @@ class TestCheckAllRequiredApiKeys:
         }
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         # Should not raise any exception
-        check_all_required_api_keys(cm)
+        manager.check_all_required_api_keys()
 
 
 class TestCreateAdapterFromConfig:
@@ -182,8 +189,9 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        with patch('lamia.engine.llm.llm_manager.OpenAIAdapter') as MockAdapter:
-            result = create_adapter_from_config(cm)
+        with patch('lamia.engine.llm.providers.OpenAIAdapter') as MockAdapter:
+            manager = LLMManager(cm)
+            result = manager.create_adapter_from_config()
             MockAdapter.assert_called_once_with(
                 api_key="test-key",
                 model="gpt-3.5-turbo"
@@ -201,8 +209,9 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        with patch('lamia.engine.llm.llm_manager.AnthropicAdapter') as MockAdapter:
-            result = create_adapter_from_config(cm)
+        with patch('lamia.engine.llm.providers.AnthropicAdapter') as MockAdapter:
+            manager = LLMManager(cm)
+            result = manager.create_adapter_from_config()
             MockAdapter.assert_called_once_with(
                 api_key="test-key",
                 model="claude-3-opus-20240229"
@@ -219,7 +228,8 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        result = create_adapter_from_config(cm)
+        manager = LLMManager(cm)
+        result = manager.create_adapter_from_config()
         assert isinstance(result, OllamaAdapter)
         assert result.model == "llama2"
 
@@ -236,8 +246,9 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        with patch('lamia.engine.llm.llm_manager.AnthropicAdapter') as MockAdapter:
-            result = create_adapter_from_config(cm, override_model="anthropic")
+        with patch('lamia.engine.llm.providers.AnthropicAdapter') as MockAdapter:
+            manager = LLMManager(cm)
+            result = manager.create_adapter_from_config(override_model="anthropic")
             MockAdapter.assert_called_once_with(
                 api_key="key2",
                 model="claude-3-opus-20240229"
@@ -257,7 +268,8 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        result = create_adapter_from_config(cm)
+        manager = LLMManager(cm)
+        result = manager.create_adapter_from_config()
         assert isinstance(result, OllamaAdapter)
         assert result.has_context_memory is True
 
@@ -272,8 +284,9 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
-        with pytest.raises(ValueError, match="Unsupported model type: unsupported"):
-            create_adapter_from_config(cm)
+        manager = LLMManager(cm)
+        with pytest.raises(ValueError, match="Unknown provider: unsupported"):
+            manager.create_adapter_from_config()
 
     def test_create_adapter_from_config_missing_api_key(self):
         """Test create_adapter_from_config with missing API key"""
@@ -287,29 +300,10 @@ class TestCreateAdapterFromConfig:
         }
         cm = ConfigManager(config)
         
+        manager = LLMManager(cm)
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(MissingAPIKeysError):
-                create_adapter_from_config(cm)
-
-    def test_create_adapter_from_config_extension_adapter_conflict(self):
-        """Test create_adapter_from_config with extension adapter name conflict"""
-        config = {
-            "default_model": "openai",
-            "models": {
-                "openai": {"default_model": "gpt-3.5-turbo"}
-            },
-            "api_keys": {"openai": "key"},
-            "validation": {"fallback_models": []}
-        }
-        cm = ConfigManager(config)
-        
-        with patch('lamia.engine.llm.llm_manager._discover_adapters_in_path') as mock_discover:
-            mock_discover.return_value = {"openai": MagicMock}  # Conflict with built-in
-            
-            with pytest.raises(RuntimeError, match="User-defined adapter name.*conflict.*openai"):
-                create_adapter_from_config(cm)
-
-        """Additional tests for create_adapter_from_config covering environment variable fallbacks and extended config options."""
+                manager.create_adapter_from_config()
 
     def test_lamia_api_key_from_env(self, monkeypatch):
         config = {
@@ -322,8 +316,9 @@ class TestCreateAdapterFromConfig:
         }
         monkeypatch.setenv("LAMIA_API_KEY", "env-lamia-key")
         cm = ConfigManager(config)
-        with patch("lamia.engine.llm.llm_manager.OpenAIAdapter", autospec=True) as MockAdapter:
-            create_adapter_from_config(cm)
+        manager = LLMManager(cm)
+        with patch("lamia.engine.llm.llm_manager.LamiaAdapter", autospec=True) as MockAdapter:
+            manager.create_adapter_from_config()
             # The adapter should have been created using the proxy key from the env variable
             MockAdapter.assert_called()
         monkeypatch.delenv("LAMIA_API_KEY", raising=False)
@@ -349,7 +344,8 @@ class TestCreateAdapterFromConfig:
             "validation": {"fallback_models": []}
         }
         cm = ConfigManager(config)
-        adapter = create_adapter_from_config(cm)
+        manager = LLMManager(cm)
+        adapter = manager.create_adapter_from_config()
         assert isinstance(adapter, OllamaAdapter)
         assert adapter.base_url == "http://localhost:11434"
         assert adapter.temperature == 0.7

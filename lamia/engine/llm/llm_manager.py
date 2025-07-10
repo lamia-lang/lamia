@@ -1,18 +1,13 @@
-import asyncio
+
 from typing import List, Optional, Dict, Any, Set
 import os
-import subprocess
-import requests
-import time
-import sys
-import importlib.util
 from lamia.adapters.llm.lamia_adapter import LamiaAdapter
 
 from dotenv import load_dotenv
 
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from ..config_manager import ConfigManager
-from ..interfaces import Manager, DomainType
+from ..interfaces import Manager
 from .providers import ProviderRegistry
 
 class MissingAPIKeysError(Exception):
