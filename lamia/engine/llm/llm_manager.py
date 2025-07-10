@@ -134,7 +134,6 @@ class LLMManager(Manager):
     
     async def create_adapter_from_config(self, override_model: str = None) -> BaseLLMAdapter:
         """Create an adapter instance based on the active configuration."""
-        self.check_all_required_api_keys()
         provider_name = override_model or self.config_manager.get_default_model()
         provider_config = self.config_manager.get_model_config(provider_name)
 
@@ -162,10 +161,11 @@ class LLMManager(Manager):
         init_kwargs = {}
         
         # Add model name
+        init_kwargs['api_key'] = api_key
         init_kwargs['model'] = model_name
         
         # Add provider-specific parameters
-        if provider_name == "ollama" and not use_lamia_adapter:
+        if provider_name == "ollama":
             # Add any other ollama-specific config from provider_config
             for key in ['base_url', 'temperature', 'max_tokens', 'context_size', 'num_ctx', 'num_gpu', 'num_thread', 'repeat_penalty', 'top_k', 'top_p']:
                 if key in provider_config:
