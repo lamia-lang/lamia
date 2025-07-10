@@ -64,9 +64,4 @@ class ValidationStrategyFactory:
             validator_registry=registry,
         )
 
-        # Some strategies might expose async initialise hooks – call if present.
-        initialise = getattr(strategy, "initialize", None)
-        if callable(initialise):
-            await initialise()
-
         return strategy
