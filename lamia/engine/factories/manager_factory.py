@@ -44,7 +44,6 @@ class ManagerFactory:
         # Create new instance
         manager_class = self._manager_registry[command_type]
         manager = manager_class(self.config_manager)
-        await manager.initialize()
         self._manager_instances[command_type] = manager
         
         return manager

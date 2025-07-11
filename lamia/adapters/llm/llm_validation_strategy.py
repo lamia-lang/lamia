@@ -143,7 +143,6 @@ class LLMValidationStrategy(ValidationStrategy):
             attempts += 1
             try:
                 logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{getattr(adapter, 'model', 'unknown')}':\n{grey_text(current_prompt)}")
-                print(adapter)
                 response = await adapter.generate(current_prompt, **kwargs)
                 logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{getattr(adapter, 'model', 'unknown')}':\n{response.text}")
                 

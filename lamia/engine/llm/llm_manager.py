@@ -45,12 +45,6 @@ class LLMManager(Manager):
         
         # Adapter lifecycle management
         self._primary_adapter = None
-        self._initialized = False
-    
-    async def initialize(self) -> None:
-        """Initialize the LLM manager."""
-        if self._initialized:
-            return
         
         # Check API keys early
         self.check_all_required_api_keys()
@@ -176,7 +170,7 @@ class LLMManager(Manager):
             init_kwargs['api_url'] = lamia_config.get('api_url', 'http://localhost:8080')
         
         adapter = adapter_class(**init_kwargs)
-        await adapter.initialize()
+        await adapter.async_initialize()
         return adapter
 
     async def get_primary_adapter(self) -> BaseLLMAdapter:
