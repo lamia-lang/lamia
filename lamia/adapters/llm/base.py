@@ -34,10 +34,16 @@ class BaseLLMAdapter(ABC):
         """Return True if this adapter makes network calls, False for local."""
         pass
     
-    @abstractmethod
-    async def initialize(self) -> None:
-        """Initialize any necessary resources for the adapter."""
-        pass
+    async def async_initialize(self) -> None:
+        """Initialize any necessary asynchronous resources for the adapter.
+
+        Subclasses that require asynchronous start-up (e.g. opening network
+        sessions, loading local models) should override this method.  Adapters
+        that don’t need special preparation can rely on this default no-op
+        implementation, which lets callers treat every adapter uniformly while
+        avoiding boilerplate for the simple cases.
+        """
+        return
 
     @abstractmethod
     async def generate(

@@ -29,21 +29,21 @@ class AnthropicAdapter(BaseLLMAdapter):
         self.model = model
         self.client = None
         self.session = None
-        self._use_sdk = True
-        self._has_context_memory = None # User cannot set this for now
-        
-    async def initialize(self):
-        # Try to import Anthropic SDK
-        anthropic_module, success, error = import_optional(
-            "anthropic", 
+        self._has_context_memory = None  # User cannot set this for now
+
+        # Try to import Anthropic SDK (and auto-install if allowed).
+        anthropic_module, success, _ = import_optional(
+            "anthropic",
             min_version="0.5.0"
         )
-        
-        if success:
-            self._use_sdk = True
+
+        if success and anthropic_module is not None:
             self.client = anthropic_module.AsyncAnthropic(api_key=self.api_key)
+            self._use_sdk = True
         else:
+            # Fall back to HTTP client
             print("Using HTTP fallback for Anthropic API")
+            self._use_sdk = False
             self.session = aiohttp.ClientSession(
                 headers={
                     "x-api-key": self.api_key,
@@ -51,9 +51,7 @@ class AnthropicAdapter(BaseLLMAdapter):
                     "Content-Type": "application/json"
                 }
             )
-        
-        return self
-        
+            
     async def close(self):
         if self._use_sdk and self.client:
             await self.client.close()

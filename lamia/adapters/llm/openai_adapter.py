@@ -24,23 +24,25 @@ class OpenAIAdapter(BaseLLMAdapter):
     def __init__(self, api_key: str, model: str = "gpt-3.5-turbo"):
         self.api_key = api_key
         self.model = model
-        self._has_context_memory = None # User cannot set this for now
-        self._use_sdk = True  # Priority for SDK
-        self.client = None
-        self.session = None
 
-    async def initialize(self) -> None:
-        """Initialize client - will try SDK first, fallback to HTTP."""
-        if self._use_sdk:
+        # Detect whether the OpenAI SDK is available. If not, fall back to raw HTTP.
+        self._use_sdk = True
+        self._has_context_memory = None  # User cannot set this for now
+
+        try:
+            # Prefer the official SDK when present
             self.client = openai.AsyncOpenAI(api_key=self.api_key)
-        else:
+            self.session = None
+        except Exception:
+            # SDK not available or failed to initialise – fall back to HTTP
+            self._use_sdk = False
+            self.client = None
             self.session = aiohttp.ClientSession(
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"
                 }
             )
-        return self
     
     async def generate(self, 
                       prompt: str, 

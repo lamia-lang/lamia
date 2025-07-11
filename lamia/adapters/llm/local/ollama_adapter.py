@@ -90,7 +90,7 @@ class OllamaAdapter(BaseLLMAdapter):
             logger.error(f"Failed to check/pull Ollama model: {str(e)}")
             return False
 
-    async def initialize(self) -> None:
+    async def async_initialize(self) -> None:
         """Initialize the aiohttp session and verify model availability. Start Ollama service and pull model if needed."""
         # Start Ollama service if not running
         if not self.start_ollama_service():

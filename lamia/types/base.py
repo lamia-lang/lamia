@@ -22,7 +22,7 @@ class ValidatingType(ABC):
         """
         self.model = model
         self._validator = self._create_validator()
-        self._last_result: Optional[ValidationResult] = None
+        self._validation_result: Optional[ValidationResult] = None
     
     @abstractmethod
     def _create_validator(self) -> BaseValidator:
@@ -34,7 +34,7 @@ class ValidatingType(ABC):
         """
         pass
     
-    async def get_instance(self, response: str) -> 'TypeWrapper':
+    async def get_instance(self, response: str) -> ValidationResult:
         """
         Validate the response and return self for method chaining.
         
@@ -47,39 +47,6 @@ class ValidatingType(ABC):
         Raises:
             ValueError: If validation fails
         """
-        self._last_result = await self._validator.validate(response)
+        self._validation_result = await self._validator.validate(response)
         
-        if not self._last_result.is_valid:
-            raise ValueError(f"Validation failed: {self._last_result.error_message}")
-        
-        return self
-    
-    @property
-    def text(self) -> str:
-        """
-        Get the validated text content.
-        
-        Returns:
-            str: The validated text
-            
-        Raises:
-            RuntimeError: If get_instance() hasn't been called yet
-        """
-        if self._last_result is None:
-            raise RuntimeError("Must call get_instance() before accessing text")
-        return self._last_result.validated_text
-    
-    @property
-    def model(self) -> Optional[Any]:
-        """
-        Get the validated result type (e.g., parsed Pydantic model).
-        
-        Returns:
-            Any: The validated result type, or None if no model was specified
-            
-        Raises:
-            RuntimeError: If get_instance() hasn't been called yet
-        """
-        if self._last_result is None:
-            raise RuntimeError("Must call get_instance() before accessing result_type")
-        return self._last_result.result_type
+        return self._validation_result

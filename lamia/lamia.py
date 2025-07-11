@@ -3,7 +3,7 @@ import asyncio
 from typing import Any, Optional, List, Dict, Union
 import yaml
 import logging
-from lamia.interpreter.python_runner import is_python_code, run_python_code
+from lamia.interpreter.python_runner import run_python_code
 from lamia.command_parser import CommandParser
 
 logger = logging.getLogger(__name__)
@@ -101,24 +101,26 @@ class Lamia:
             MissingAPIKeysError: If API keys are missing
             ValueError: If validator fails
         """
-        # Check if this is Python code
-        if is_python_code(command):
-            success, result = run_python_code(command, mode='interactive', show_banner=False)
-            if success:
-                return str(result) if result is not None else ""
-            else:
-                # If Python code execution fails, raise an error or return a message
-                raise RuntimeError(f"Python code execution failed: {result}")
-        else:
-            # Parse command using instance parser
-            if self._command_parser is None:
-                self._command_parser = CommandParser(command)
-            response = await self._engine.execute(
-                self._command_parser.command_type,
-                self._command_parser.content,
-                **self._command_parser.kwargs
-            )
-            return response.text
+        # Run Python code if this is Python code
+        try:
+            result = run_python_code(command, mode='interactive')
+            return str(result) if result is not None else ""
+        except SyntaxError as e:
+            print(f"Syntax error: {e}", command)
+            pass
+        except Exception as e:
+            print(f"Python code execution failed: {e}")
+            pass
+        
+        # If not Python code, parse command using Lamia parser
+        if self._command_parser is None:
+            self._command_parser = CommandParser(command)
+        response = await self._engine.execute(
+            self._command_parser.command_type,
+            self._command_parser.content,
+            **self._command_parser.kwargs
+        )
+        return response.text
 
     def run(
         self,

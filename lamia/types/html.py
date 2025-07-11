@@ -15,7 +15,7 @@ class HTML(ValidatingType[T]):
     2. HTML(model=MyModel) - for structured HTML validation with a Pydantic model
     """
     
-    def __init__(self, model: Optional[Type[T]] = None):
+    def __init__(self, model: Optional[Type[T]] = None, strict: bool = True):
         """
         Initialize the HTML type wrapper.
         
@@ -34,7 +34,7 @@ class HTML(ValidatingType[T]):
         """
         if self.model is not None:
             # Use HTMLStructureValidator for structured validation
-            return HTMLStructureValidator(model=self.model)
+            return HTMLStructureValidator(model=self.model, strict=self.strict)
         else:
             # Use HTMLValidator for basic HTML validation
             return HTMLValidator()

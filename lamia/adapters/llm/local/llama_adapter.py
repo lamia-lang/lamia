@@ -31,8 +31,6 @@ class LlamaAdapter(BaseLLMAdapter):
         self._has_context_memory = has_context_memory
         self.configs = configs or {}
 
-    async def initialize(self) -> None:
-        """Initialize the LLaMA model."""
         llama_kwargs = dict(model_path=self.model_path)
         llama_kwargs.update(self.configs)
         self.model = Llama(**llama_kwargs)

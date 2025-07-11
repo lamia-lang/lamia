@@ -31,8 +31,6 @@ class LamiaAdapter(BaseLLMAdapter):
         self.session = None
         self._has_context_memory = None
 
-    async def initialize(self) -> None:
-        """Initialize HTTP session for Lamia API."""
         self.session = aiohttp.ClientSession(
             headers={
                 "Authorization": f"Bearer {self.api_key}",

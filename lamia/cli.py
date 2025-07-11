@@ -49,40 +49,31 @@ async def interactive_mode(lamia: Lamia):
                 print("Prompt is empty. Start typing a new prompt.")
                 continue
 
-            # First check if this is Python code
-            success, py_result = lamia.run_python_code(user_input, mode='interactive', show_banner=False)
-            if success:
-                print("\n🐍 Python Result:")
+            # Generate LLM response
+            print("\nThinking... 🤔 (type STOP to interrupt)")
+            running_task = asyncio.create_task(lamia.run_async(user_input))
+            while not running_task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(running_task), timeout=0.2)
+                except asyncio.TimeoutError:
+                    # Check for STOP command from user
+                    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                        stop_input = sys.stdin.readline().strip()
+                        if stop_input.upper() == 'STOP':
+                            running_task.cancel()
+                            print("Prompt interrupted by user (STOP). Start typing a new prompt.")
+                            break
+                        elif user_input.lower() in ['exit', 'quit', ':q']:
+                            print("\nGoodbye! 👋")
+                            break
+            if running_task.done() and not running_task.cancelled():
+                result = running_task.result()
+                print("\n🔮 Response:")
                 print("----------------------------------------")
-                if py_result is not None:
-                    print(py_result)
+                print(result)
                 print("----------------------------------------")
-            else:
-                # Generate LLM response
-                print("\nThinking... 🤔 (type STOP to interrupt)")
-                running_task = asyncio.create_task(lamia.run_async(user_input))
-                while not running_task.done():
-                    try:
-                        await asyncio.wait_for(asyncio.shield(running_task), timeout=0.2)
-                    except asyncio.TimeoutError:
-                        # Check for STOP command from user
-                        if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                            stop_input = sys.stdin.readline().strip()
-                            if stop_input.upper() == 'STOP':
-                                running_task.cancel()
-                                print("Prompt interrupted by user (STOP). Start typing a new prompt.")
-                                break
-                            elif user_input.lower() in ['exit', 'quit', ':q']:
-                                print("\nGoodbye! 👋")
-                                break
-                if running_task.done() and not running_task.cancelled():
-                    result = running_task.result()
-                    print("\n🔮 Response:")
-                    print("----------------------------------------")
-                    print(result)
-                    print("----------------------------------------")
-                    # Add model info if available
-                    print(f"Model: {lamia._config_dict.get('default_model', 'unknown')}")
+                # Add model info if available
+                print(f"Model: {lamia._config_dict.get('default_model', 'unknown')}")
         except KeyboardInterrupt:
             print("\n\nGoodbye! 👋")
             break
@@ -93,32 +84,34 @@ async def interactive_mode(lamia: Lamia):
 def add_all_py_dirs_to_syspath_and_check_conflicts(root_dir):
     module_names = {}
     function_names = {}
-    for dirpath, dirnames, filenames in os.walk(root_dir):
-        py_files = [f for f in filenames if f.endswith('.py')]
-        if py_files:
-            sys.path.insert(0, dirpath)
-            for f in py_files:
-                mod_name = os.path.splitext(f)[0]
-                mod_path = os.path.join(dirpath, f)
-                # Check for module name conflicts
-                if mod_name in module_names:
-                    print(f"❌ Module name conflict: '{mod_name}.py' found in both '{module_names[mod_name]}' and '{dirpath}'. Please rename one of them.")
-                    sys.exit(1)
-                module_names[mod_name] = dirpath
-                # Check for function name conflicts
-                try:
-                    with open(mod_path, 'r') as file:
-                        node = ast.parse(file.read(), filename=mod_path)
-                        for n in node.body:
-                            if isinstance(n, ast.FunctionDef):
-                                func_name = n.name
-                                if func_name in function_names:
-                                    prev_mod, prev_path = function_names[func_name]
-                                    print(f"❌ Function name conflict: function '{func_name}' found in both '{prev_path}' and '{mod_path}'. Please rename one of them or use explicit imports (e.g., 'from <module> import <func>').")
-                                    sys.exit(1)
-                                function_names[func_name] = (mod_name, mod_path)
-                except Exception as e:
-                    print(f"Warning: Could not parse {mod_path}: {e}")
+    if ".lamia" in os.listdir(root_dir):
+        # It's a Lamia special folder we don't allow conflicting filenames and function names
+        for dirpath, dirnames, filenames in os.walk(root_dir):
+            py_files = [f for f in filenames if f.endswith('.py')]
+            if py_files:
+                sys.path.insert(0, dirpath)
+                for f in py_files:
+                    mod_name = os.path.splitext(f)[0]
+                    mod_path = os.path.join(dirpath, f)
+                    # Check for module name conflicts
+                    if mod_name in module_names:
+                        print(f"❌ Module name conflict: '{mod_name}.py' found in both '{module_names[mod_name]}' and '{dirpath}'. Please rename one of them.")
+                        sys.exit(1)
+                    module_names[mod_name] = dirpath
+                    # Check for function name conflicts
+                    try:
+                        with open(mod_path, 'r') as file:
+                            node = ast.parse(file.read(), filename=mod_path)
+                            for n in node.body:
+                                if isinstance(n, ast.FunctionDef):
+                                    func_name = n.name
+                                    if func_name in function_names:
+                                        prev_mod, prev_path = function_names[func_name]
+                                        print(f"❌ Function name conflict: function '{func_name}' found in both '{prev_path}' and '{mod_path}'. Please rename one of them or use explicit imports (e.g., 'from <module> import <func>').")
+                                        sys.exit(1)
+                                    function_names[func_name] = (mod_name, mod_path)
+                    except Exception as e:
+                        print(f"Warning: Could not parse {mod_path}: {e}")
 
 def main():
     """Main entry point for the Lamia CLI."""
