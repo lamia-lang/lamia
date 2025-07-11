@@ -70,10 +70,10 @@ async def interactive_mode(lamia: Lamia):
                 result = running_task.result()
                 print("\n🔮 Response:")
                 print("----------------------------------------")
-                print(result)
+                print(result.result)
                 print("----------------------------------------")
                 # Add model info if available
-                print(f"Model: {lamia._config_dict.get('default_model', 'unknown')}")
+                print(f"Executed by: {result.executor}")
         except KeyboardInterrupt:
             print("\n\nGoodbye! 👋")
             break

@@ -5,8 +5,13 @@ import yaml
 import logging
 from lamia.interpreter.python_runner import run_python_code
 from lamia.command_parser import CommandParser
-
+from dataclasses import dataclass
 logger = logging.getLogger(__name__)
+
+@dataclass
+class LamiaResult:
+    result: str
+    executor: str
 
 class Lamia:
     """
@@ -86,7 +91,7 @@ class Lamia:
     async def run_async(
         self, 
         command: str, 
-    ) -> str:
+    ) -> LamiaResult:
         """
         Generate a response, trying Python code first, then LLM.
         
@@ -104,7 +109,7 @@ class Lamia:
         # Run Python code if this is Python code
         try:
             result = run_python_code(command, mode='interactive')
-            return str(result) if result is not None else ""
+            return LamiaResult(result=str(result) if result is not None else "", executor="python")
         except SyntaxError as e:
             print(f"Syntax error: {e}", command)
             pass
@@ -120,12 +125,12 @@ class Lamia:
             self._command_parser.content,
             **self._command_parser.kwargs
         )
-        return response.text
+        return LamiaResult(result=response.text, executor=response.model)
 
     def run(
         self,
         command: str,
-    ) -> str:
+    ) -> LamiaResult:
         """
         Synchronous helper around run_async.
 
