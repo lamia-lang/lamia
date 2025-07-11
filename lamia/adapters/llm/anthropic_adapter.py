@@ -58,27 +58,38 @@ class AnthropicAdapter(BaseLLMAdapter):
         elif self.session:
             await self.session.close()
             
-    async def generate(self, 
-                      prompt: str, 
-                      temperature: float = 0.7, 
-                      max_tokens: int = 1000) -> LLMResponse:
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = 1000,
+        stop_sequences: Optional[list[str]] = None,
+        **kwargs
+    ) -> LLMResponse:
         """Generate a response using Anthropic's API."""
         
         if self._use_sdk:
-            return await self._generate_with_sdk(prompt, temperature, max_tokens)
+            return await self._generate_with_sdk(prompt, temperature, max_tokens, stop_sequences, **kwargs)
         else:
-            return await self._generate_with_http(prompt, temperature, max_tokens)
+            return await self._generate_with_http(prompt, temperature, max_tokens, stop_sequences, **kwargs)
             
-    async def _generate_with_sdk(self, 
-                               prompt: str, 
-                               temperature: float, 
-                               max_tokens: int) -> LLMResponse:
+    async def _generate_with_sdk(
+        self,
+        prompt: str,
+        temperature: float,
+        max_tokens: int,
+        stop_sequences: Optional[list[str]] = None,
+        **kwargs
+    ) -> LLMResponse:
         """Generate response using the Anthropic SDK."""
         response = await self.client.messages.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            stop_sequences=stop_sequences,
+            **kwargs
         )
         
         return LLMResponse(
@@ -92,10 +103,14 @@ class AnthropicAdapter(BaseLLMAdapter):
             }
         )
             
-    async def _generate_with_http(self, 
-                                prompt: str, 
-                                temperature: float, 
-                                max_tokens: int) -> LLMResponse:
+    async def _generate_with_http(
+        self,
+        prompt: str,
+        temperature: float,
+        max_tokens: int,
+        stop_sequences: Optional[list[str]] = None,
+        **kwargs
+    ) -> LLMResponse:
         """Generate response using direct HTTP calls."""
         payload = {
             "model": self.model,
@@ -103,6 +118,9 @@ class AnthropicAdapter(BaseLLMAdapter):
             "max_tokens": max_tokens,
             "temperature": temperature
         }
+        if stop_sequences is not None:
+            payload["stop_sequences"] = stop_sequences
+        payload.update(kwargs)
         
         try:
             async with self.session.post(self.API_URL, json=payload) as response:

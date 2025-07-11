@@ -43,7 +43,7 @@ class LLMValidationStrategy(ValidationStrategy):
         self._adapter_cache: Dict[str, BaseLLMAdapter] = {}
         self._initialized = True
     
-    async def validate(self, manager: Manager, content: str, **kwargs) -> LLMResponse:
+    async def validate(self, manager: Manager, content: str, **kwargs) -> Any:
         """Validate LLM content using this strategy.
         
         Args:
@@ -73,7 +73,6 @@ class LLMValidationStrategy(ValidationStrategy):
         Args:
             primary_adapter: The primary LLM adapter to use
             prompt: The prompt to send
-            create_adapter_fn: Function to create new adapters for fallbacks
             **kwargs: Additional parameters for generate()
             
         Returns:
@@ -139,10 +138,12 @@ class LLMValidationStrategy(ValidationStrategy):
     ) -> LLMResponse:
         errors = []
         attempts = 0
+        current_prompt = prompt
         while attempts < self.config.max_retries:
             attempts += 1
             try:
                 logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{getattr(adapter, 'model', 'unknown')}':\n{grey_text(current_prompt)}")
+                print(adapter)
                 response = await adapter.generate(current_prompt, **kwargs)
                 logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{getattr(adapter, 'model', 'unknown')}':\n{response.text}")
                 

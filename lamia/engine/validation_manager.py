@@ -60,7 +60,7 @@ class ValidationManager:
                 is_valid=True,
                 validated_text=getattr(result, 'text', str(result))
             )
-            self._record_validation_result(validation_result, execution_time)
+            self._record_validation_result(validation_result, command_type, execution_time)
             
             return result
             

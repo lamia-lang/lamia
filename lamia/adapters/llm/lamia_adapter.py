@@ -46,6 +46,7 @@ class LamiaAdapter(BaseLLMAdapter):
         *,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        stop_sequences: Optional[list[str]] = None,
         **kwargs
     ) -> LLMResponse:
         """Generate a response using Lamia's API."""
@@ -62,10 +63,8 @@ class LamiaAdapter(BaseLLMAdapter):
                 **kwargs
             }
         }
-        
-        # Add max_tokens if specified
-        if max_tokens is not None:
-            payload["params"]["max_tokens"] = max_tokens
+        if stop_sequences is not None:
+            payload["params"]["stop_sequences"] = stop_sequences
             
         
         try:

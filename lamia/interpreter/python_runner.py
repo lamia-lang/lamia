@@ -6,10 +6,9 @@ def run_python_code(code: str, mode: str = 'interactive', show_banner: bool = Tr
     Returns:
         Any: The result of the Python code execution
     """
-    print(code)
     try:
         expr_ast = ast.parse(code, mode='eval')
-        print(ast.dump(expr_ast))
+        print(ast.dump(expr_ast, indent=4))
         result = eval(compile(expr_ast, '<string>', mode='eval'))
         return result
     except SyntaxError as e:
@@ -18,7 +17,7 @@ def run_python_code(code: str, mode: str = 'interactive', show_banner: bool = Tr
         pass
     try:
         code_ast = ast.parse(code, mode='exec')
-        print(ast.dump(code_ast))
+        print(ast.dump(code_ast, indent=4))
         local_vars = {}
         exec(compile(code_ast, '<string>', mode='exec'), {}, local_vars)
         if mode == 'interactive' and code_ast.body and isinstance(code_ast.body[-1], ast.Expr):

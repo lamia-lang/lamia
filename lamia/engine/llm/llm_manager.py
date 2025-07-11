@@ -182,7 +182,7 @@ class LLMManager(Manager):
     async def get_primary_adapter(self) -> BaseLLMAdapter:
         """Get the primary adapter, creating and initializing it if needed."""
         if self._primary_adapter is None:
-            self._primary_adapter = self.create_adapter_from_config()
+            self._primary_adapter = await self.create_adapter_from_config()
             
         return self._primary_adapter
 

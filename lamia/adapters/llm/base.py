@@ -81,7 +81,7 @@ class BaseLLMAdapter(ABC):
         pass
 
     async def __aenter__(self):
-        await self.initialize()
+        await self.async_initialize()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
