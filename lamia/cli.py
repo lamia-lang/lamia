@@ -195,7 +195,7 @@ def main():
         try:
             # Create Lamia instance with config
             print("Creating Lamia instance...")
-            lamia = Lamia(config=config_dict)
+            lamia = Lamia.from_config(config_dict)
             
             print("✅ Lamia instance created successfully")
             

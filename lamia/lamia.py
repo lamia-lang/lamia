@@ -50,27 +50,50 @@ class Lamia:
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "Lamia":
-        def new_method(config, default_model):
-            if ":" in default_model:
-                models = [default_model]
+        def constuct_full_model_name(config, model_name):
+            if ":" in model_name:
+                return model_name
             else:
-                model_family_name = config['models'][default_model]["default_model"]
-                full_model_name = f"{default_model}:{model_family_name}"
-                models = [full_model_name]
-            return models
+                if "providers" not in config:
+                    raise ValueError("Providers are not configured.")
+                
+                providers = config["providers"]
+                provider_name = model_name
+                if provider_name not in providers:
+                    raise ValueError(f"Provider {provider_name} is not configured.")
+                
+                if not providers[provider_name]["enabled"]:
+                    raise ValueError(f"Provider {provider_name} is not enabled. Please enable it in the config")
+                
+                if "default_model" not in providers[provider_name]:
+                    raise ValueError(f"Provider {provider_name} does not have a default model. Please provide a default model in the config")
+                
+                model_family_name = providers[provider_name]["default_model"]
+                full_model_name = f"{provider_name}:{model_family_name}"
+            return full_model_name
 
         default_model = config['default_model']
         if default_model is not None:
-            models = new_method(config, default_model)
+            try:
+                models = [constuct_full_model_name(config, default_model)]
+            except ValueError as e:
+                raise ValueError(f"{e}. Please provide full model name like 'openai:gpt-4o' for default-model or fix the config for {default_model}")
         
-        fallback_models = config["fallback_models"]
-        if fallback_models is not None:
-            for model in fallback_models:
-                models.extend(new_method(config, model))
+        if "validation" in config:
+            if "fallback_models" in config["validation"]:
+                if default_model is not None:
+                    raise ValueError("Fallback models are not supported when no default model is provided. Please provide a default model in the config")
+
+                fallback_models = config["validation"]["fallback_models"]
+                for model in fallback_models:
+                    try:
+                        models.extend(constuct_full_model_name(config, model))
+                    except ValueError as e:
+                        raise ValueError(f"{e}. Please provide full model name like 'openai:gpt-4o' in the fallback-models list or fix the config for {model}")
 
         return cls(
-            models=models,
-            validators=config['validators']
+            models,
+            validators=config["validation"]["validators"] if "validation" in config and "validators" in config["validation"] else None
         )
 
     def _get_provider_name(self, model_obj: "Model") -> str:

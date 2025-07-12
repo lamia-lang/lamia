@@ -3,8 +3,6 @@ from typing import List, Optional, Dict, Any, Set
 import os
 from lamia.adapters.llm.lamia_adapter import LamiaAdapter
 
-from dotenv import load_dotenv
-
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from ..config_provider import ConfigProvider
 from ..interfaces import Manager
