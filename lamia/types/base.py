@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Type, TypeVar
+from typing import Any, Generic, Optional, Type, TypeVar
 from pydantic import BaseModel
 from lamia.validation.base import BaseValidator, ValidationResult
 
 T = TypeVar('T', bound=BaseModel)
 
-class ValidatingType(ABC):
+class ValidatingType(ABC, Generic[T]):
     """
     Base class for type wrappers that provide easy access to validated content.
     

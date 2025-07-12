@@ -1,6 +1,6 @@
 import os
-from typing import Dict, Any, Optional, List
-
+from typing import Dict, Any, Optional, List, Tuple, Union
+from lamia import LLMModel
 
 class ConfigProvider:
     """
@@ -17,20 +17,21 @@ class ConfigProvider:
         
         # Make a defensive copy to ensure true immutability
         self._config = config.copy()
-        
-        # Enrich api_keys from env if missing (this happens once, at creation)
-        api_keys = self._config.get('api_keys', {}).copy()
-        self._config['api_keys'] = api_keys
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]):
         return cls(config_dict)
 
-    def get_default_model(self) -> str:
-        """Get the default model name from config."""
+    @property
+    def config(self) -> Dict[str, Any]:
+        """Get the raw config dictionary."""
+        return self._config
+
+    def get_default_model(self) -> Tuple[LLMModel, int]:
+        """Get the default model and retries from config."""
         return self._config.get('default_model')
 
-    def get_fallback_models(self) -> List[str]:
+    def get_fallback_models(self) -> List[Tuple[LLMModel, int]]:
         """Get the fallback models from config."""
         return self._config.get('fallback_models', [])
 
@@ -38,9 +39,11 @@ class ConfigProvider:
         """Get validation configuration settings."""
         return self._config.get('validation', {})
 
-    def get_default_model(self) -> str:
-        """Get the default model name from config."""
-        return self._config.get('default_model')
+    def get_model_config(self, model_name: str) -> Dict[str, Any]:
+        """Get configuration for a specific model."""
+        # This is a simplified implementation - you might want to enhance this
+        # based on your actual model configuration structure
+        return {}
 
     def get_api_key(self, provider: str) -> Optional[str]:
         # Only return from the dict, never from the environment

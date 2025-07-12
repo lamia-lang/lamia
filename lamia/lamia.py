@@ -6,37 +6,8 @@ from lamia.command_parser import CommandParser
 from dataclasses import dataclass
 from lamia.engine.config_provider import ConfigProvider
 import logging
-
+from lamia import LLMModel
 logger = logging.getLogger(__name__)
-
-@dataclass
-class LLMModel:
-    """Configuration for an LLM model.
-    
-    Args:
-        model: The model identifier (e.g. 'gpt-4', 'claude-2', etc.)
-        temperature: Controls randomness in responses. Higher values (e.g. 0.8) make output more random, 
-                    lower values (e.g. 0.2) make it more focused and deterministic.
-        max_tokens: The maximum number of tokens to generate in the response.
-        stream: Whether to stream the response token by token instead of waiting for the complete response.
-                Useful for real-time display of model output.
-        
-        # Advanced parameters
-        top_p: Nucleus sampling parameter. Only consider tokens whose cumulative probability exceeds this threshold.
-        top_k: Only consider the top k tokens for each next token prediction.
-        frequency_penalty: Positive values penalize tokens based on their frequency in the text so far.
-        presence_penalty: Positive values penalize tokens that have appeared in the text at all.
-    """
-    model: str
-    # Primary parameters
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    # Advanced parameters
-    top_p: Optional[float] = None  
-    top_k: Optional[int] = None
-    frequency_penalty: Optional[float] = None
-    presence_penalty: Optional[float] = None
-    seed: Optional[int] = None
 
 @dataclass
 class LamiaResult:
@@ -64,20 +35,21 @@ class Lamia:
         validators: Optional[List[Any]] = None, 
     ):
         # Initialize engine - ready to use immediately!
-        self._engine = LamiaEngine(self._build_config(models, api_keys, validators, None))
+        self._engine = LamiaEngine(self._build_config(models, api_keys, validators))
         
         # Initialize command parser instance
         self._command_parser = None
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "Lamia":
-        def constuct_model(config, model_chain_item) -> LLMModel:
+        def construct_model(config, model_chain_item) -> LLMModel:
             if "name" not in model_chain_item:
                 raise ValueError("Model chain item must have a name")
             
             if ":" in model_chain_item["name"]:
                 model_family_name = model_chain_item["name"].split(":")[1]
                 model_full_name = model_chain_item["name"]
+                provider_name = model_chain_item["name"].split(":")[0]
             else:
                 if "providers" not in config:
                     raise ValueError("Providers are not configured.")
@@ -88,7 +60,8 @@ class Lamia:
                     raise ValueError(f"Provider {provider_name} is not configured.")
                 
                 if not providers[provider_name]["enabled"]:
-                    raise ValueError(f"Provider {provider_name} is not enabled. Please enable it in the config")
+                    logger.warning(f"Provider {provider_name} is not enabled. Please enable it in the config if you want to use it.")
+                    return None
                 
                 if "default_model" not in providers[provider_name]:
                     raise ValueError(f"Provider {provider_name} does not have a default model. Please provide a default model in the config")
@@ -96,6 +69,7 @@ class Lamia:
                 model_family_name = providers[provider_name]["default_model"]
                 model_full_name = f"{provider_name}:{model_family_name}"
             
+            providers = config.get("providers", {})
             provider_settings = providers.get(provider_name, {})
             model_family_settings = provider_settings.get(model_family_name, {})
             get_model_param = lambda key: model_chain_item.get(key, None) or model_family_settings.get(key, None) or provider_settings.get(key, None)
@@ -113,17 +87,20 @@ class Lamia:
         
 
         models = []
-        if "model_chain" not in config:
+        if "model_chain" in config:
             model_chain = config['model_chain']
-            for model_chain_item, index in enumerate(model_chain):
+            for index, model_chain_item in enumerate(model_chain):
                 try:
-                    models = [constuct_model(config, model_chain_item)]
+                    model = construct_model(config, model_chain_item)
+                    if model is not None: # Gracefully handle disabled providers
+                        models.append(model)
                 except ValueError as e:
-                    raise ValueError(f"Model chain item {index} with name{model_chain_item.name} excluded. Reason: {e}")
+                    raise ValueError(f"Model chain item {index} with name '{model_chain_item.get('name', 'unknown')}' excluded. Reason: {e}")
 
         if len(models) == 0:
             logger.warning("No valid LLM model found in the model chain. LLM operations will not be possible.")
 
+        # Unpack the models list for the constructor
         return cls(
             *models,
             validators=config["validation"]["validators"] if "validation" in config and "validators" in config["validation"] else None
@@ -131,15 +108,10 @@ class Lamia:
 
     def _build_config(
         self,
-        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]],
+        models: Tuple[Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], ...],
         api_keys: Optional[dict], 
         validators: Optional[List[Any]], 
-        config: Optional[Dict[str, Union[str, int, float, bool]]]
     ) -> Dict[str, Any]:
-
-        # If the user supplied a ready-made config dict we keep it verbatim.
-        if config is not None:
-            return config
 
         DEFAULT_RETRIES = 1
         # Convert the *models* var-tuple into a proper list for iteration.
