@@ -4,6 +4,18 @@ from typing import Any, Optional, List, Dict, Union, Tuple
 from lamia.interpreter.python_runner import run_python_code
 from lamia.command_parser import CommandParser
 from dataclasses import dataclass
+from lamia.engine.config_provider import ConfigProvider
+
+@dataclass
+class Model:
+    model: str
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    top_p: Optional[float] = None
+    top_k: Optional[int] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    stream: Optional[bool] = None
 
 @dataclass
 class LamiaResult:
@@ -26,18 +38,12 @@ class Lamia:
     
     def __init__(
         self, 
-        *models: Union[str, Tuple[str, int]], 
+        *models: Union[Union[str, Model], Tuple[Union[str, Model], int]], 
         api_keys: Optional[dict] = None, 
         validators: Optional[List[Any]] = None, 
     ):
-        # Configuration
-        self._config_dict = self._build_config(models, api_keys, validators, None)
-        
-        # Store validators for manual validation
-        self._validators = validators if validators is not None else []
-        
         # Initialize engine - ready to use immediately!
-        self._engine = LamiaEngine(self._config_dict)
+        self._engine = LamiaEngine(self._build_config(models, api_keys, validators, None))
         
         # Initialize command parser instance
         self._command_parser = None
@@ -67,50 +73,75 @@ class Lamia:
             validators=config['validators']
         )
 
+    def _get_provider_name(self, model_obj: "Model") -> str:
+        """Extract provider name from a Model instance.
+        A model can be expressed either as "provider"  (e.g. "openai") or
+        "provider:model_family" (e.g. "openai:gpt-4o").  In both cases we only
+        need the provider part for routing / config keys.
+        """
+        return model_obj.model.split(":", 1)[0]
+
     def _build_config(
-        self, 
-        models: tuple, 
+        self,
+        models: Union[Union[str, Model], Tuple[Union[str, Model], int]],
         api_keys: Optional[dict], 
         validators: Optional[List[Any]], 
         config: Optional[Dict[str, Union[str, int, float, bool]]]
     ) -> Dict[str, Any]:
-        """Build configuration from parameters"""
+
+        # If the user supplied a ready-made config dict we keep it verbatim.
         if config is not None:
             return config
-        
-        # Build config from models/api_keys/validators
-        config_dict = {
-            'default_model': models[0] if models else 'ollama',
-            'models': models,
-            'validation': {
-                'enabled': True,
-                'max_retries': 1,
-                'fallback_models': list(models[1:]) if len(models) > 1 else [],
-                'validators': [] if not validators else validators
-            }
-        }
-        
-        # Add model configs
-        for model in models:
-            config_dict['models'][model] = {'enabled': True}
-        
-        if api_keys:
-            config_dict['api_keys'] = api_keys
-            
-        return config_dict
+
+        DEFAULT_RETRIES = 1
+        # Convert the *models* var-tuple into a proper list for iteration.
+        incoming_models = list(models) if models else []
+
+        # If nothing was supplied default to a local Ollama setup.
+        if not incoming_models:
+            incoming_models = ["ollama"]
+
+        models_and_retries: List[Tuple[Model, int]] = []
+        for item in incoming_models:
+            retries = DEFAULT_RETRIES
+
+            # Unpack `(something, retries)`
+            if isinstance(item, tuple):
+                item, retries = item  # type: ignore[misc]
+
+            # Turn strings into ``Model`` instances
+            if isinstance(item, str):
+                item = Model(model=item)
+            elif not isinstance(item, Model):
+                raise TypeError(
+                    "Each model spec must be a str, Model or (spec, retries) tuple"
+                )
+
+            models_and_retries.append((item, retries))
+
+        # Assemble the final config dict
+        config_dict: Dict[str, Any] = {
+            "default_model": models_and_retries[0],
+            "fallback_models": models_and_retries[1:],
+            "validators": validators or [],
+            "api_keys": api_keys,
+        }    
+
+        return ConfigProvider(config_dict)
 
     # No more ceremony needed - engine is ready on creation!
 
     async def run_async(
-        self, 
+        self,
         command: str, 
+        models: Union[Union[str, Model], Tuple[Union[str, Model], int]] = None, 
     ) -> LamiaResult:
         """
         Generate a response, trying Python code first, then LLM.
         
         Args:
             command: The command to execute
-            
+            models: The models to use, if not provided, the default models will be used
         Returns:
             str: Generated response text
             
@@ -129,20 +160,26 @@ class Lamia:
         except Exception as e:
             print(f"Python code execution failed: {e}")
             pass
-        
+
         # If not Python code, parse command using Lamia parser
         if self._command_parser is None:
             self._command_parser = CommandParser(command)
+
+        parser_kwargs = dict(self._command_parser.kwargs)  # copy
+        if models is not None:
+            parser_kwargs['models'] = models
+
         response = await self._engine.execute(
             self._command_parser.command_type,
             self._command_parser.content,
-            **self._command_parser.kwargs
+            **parser_kwargs,
         )
         return LamiaResult(result=response.text, executor=response.model)
 
     def run(
         self,
         command: str,
+        models: Union[Union[str, Model], Tuple[Union[str, Model], int]] = None,
     ) -> LamiaResult:
         """
         Synchronous helper around run_async.
@@ -157,6 +194,7 @@ class Lamia:
             return asyncio.run(
                 self.run_async(
                     command,
+                    models,
                 )
             )
         except RuntimeError as e:

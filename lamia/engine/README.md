@@ -8,7 +8,7 @@ This directory contains the core engine implementation and management for Lamia,
 
 - `engine.py`: Main engine implementation
 - `llm_manager.py`: LLM adapter management
-- `config_manager.py`: Configuration handling
+- `config_provider.py`: Configuration handling
 
 ### Custom Validators (Simple Functions and Lamia Validators)
 

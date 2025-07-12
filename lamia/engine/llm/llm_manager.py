@@ -6,7 +6,7 @@ from lamia.adapters.llm.lamia_adapter import LamiaAdapter
 from dotenv import load_dotenv
 
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
-from ..config_manager import ConfigManager
+from ..config_provider import ConfigProvider
 from ..interfaces import Manager
 from .providers import ProviderRegistry
 
@@ -29,8 +29,8 @@ class MissingAPIKeysError(Exception):
 class LLMManager(Manager):
     """Manages LLM adapters and only loads the ones that are actually needed."""
     
-    def __init__(self, config_manager: ConfigManager):
-        self.config_manager = config_manager
+    def __init__(self, config_provider: ConfigProvider):
+        self.config_provider = config_provider
         
         # Determine which providers are needed based on config
         needed_providers = self._get_needed_providers()
@@ -39,7 +39,7 @@ class LLMManager(Manager):
         self.provider_registry = ProviderRegistry(needed_providers)
         
         # Add user adapters from extensions
-        ext_folder = self.config_manager.get_extensions_folder()
+        ext_folder = self.config_provider.get_extensions_folder()
         ext_adapters_path = os.path.join(os.getcwd(), ext_folder, "adapters")
         self.provider_registry.add_user_adapters([ext_adapters_path])
         
@@ -55,33 +55,26 @@ class LLMManager(Manager):
         needed = set()
         
         # Add default model provider
-        default_model = self.config_manager.get_default_model()
+        default_model = self.config_provider.get_default_model()
         if default_model:
             needed.add(default_model)
         
         # Add fallback models providers
-        validation_config = self.config_manager.get_validation_config()
+        validation_config = self.config_provider.get_validation_config()
         fallback_models = validation_config.get('fallback_models', [])
         needed.update(fallback_models)
-        
-        # Add providers that are enabled in config
-        config = self.config_manager.get_config()
-        models_config = config.get('models', {})
-        for provider, provider_config in models_config.items():
-            if provider_config.get('enabled', True):  # enabled by default
-                needed.add(provider)
         
         return needed
     
     def _resolve_api_key(self, provider_name: str) -> Optional[str]:
         """
-        Get and validate API key from config_manager config.
+        Get and validate API key from config_provider config.
         Returns the API key if found, otherwise raises MissingAPIKeysError.
         Priority: specific provider key > lamia key (for remote providers) > env var fallback (with precedence).
         """
 
         if LamiaAdapter.supports(provider_name):
-            lamia_api_key = self.config_manager.get_api_key("lamia")
+            lamia_api_key = self.config_provider.get_api_key("lamia")
             if lamia_api_key:
                 return lamia_api_key, True
         
@@ -89,7 +82,7 @@ class LLMManager(Manager):
         if lamia_env_api_key:
             return lamia_env_api_key, True
 
-        api_key = self.config_manager.get_api_key(provider_name)
+        api_key = self.config_provider.get_api_key(provider_name)
         if api_key:
             return api_key
 
@@ -111,9 +104,8 @@ class LLMManager(Manager):
         Check that all required API keys for default and fallback engines are present.
         If any are missing, raise MissingAPIKeysError.
         """
-        config = self.config_manager.get_config()
-        default_model = config.get('default_model')
-        fallback_models = config.get('validation', {}).get('fallback_models', [])
+        default_model = self.config_provider.get_default_model()
+        fallback_models = self.config_provider.get_fallback_models()
         required_engines = set([default_model] + fallback_models)
         
         missing = []
@@ -128,8 +120,8 @@ class LLMManager(Manager):
     
     async def create_adapter_from_config(self, override_model: str = None) -> BaseLLMAdapter:
         """Create an adapter instance based on the active configuration."""
-        provider_name = override_model or self.config_manager.get_default_model()
-        provider_config = self.config_manager.get_model_config(provider_name)
+        provider_name = override_model or self.config_provider.get_default_model()
+        provider_config = self.config_provider.get_model_config(provider_name)
 
         # Determine the model name
         model_name = provider_config.get('default_model')
@@ -164,10 +156,6 @@ class LLMManager(Manager):
             for key in ['base_url', 'temperature', 'max_tokens', 'context_size', 'num_ctx', 'num_gpu', 'num_thread', 'repeat_penalty', 'top_k', 'top_p']:
                 if key in provider_config:
                     init_kwargs[key] = provider_config[key]
-        elif use_lamia_adapter:
-            # Add Lamia-specific parameters
-            lamia_config = self.config_manager.get_config().get('lamia', {})
-            init_kwargs['api_url'] = lamia_config.get('api_url', 'http://localhost:8080')
         
         adapter = adapter_class(**init_kwargs)
         await adapter.async_initialize()

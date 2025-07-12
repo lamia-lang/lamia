@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any
 import asyncio
 
-from .config_manager import ConfigManager
+from .config_provider import ConfigProvider
 from .factories import ManagerFactory, ValidationStrategyFactory
 from .validation_manager import ValidationManager
 from lamia.command_types import CommandType
@@ -9,13 +9,13 @@ from lamia.command_types import CommandType
 class LamiaEngine:
     """Main engine for Lamia that orchestrates different domain managers."""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config_provider: ConfigProvider):
         """Initialize the Lamia engine."""
-        self.config_manager = ConfigManager(config)
+        self.config_provider = config_provider
         
         # Initialize factories (DIP compliance)
-        self.manager_factory = ManagerFactory(self.config_manager)
-        self.validation_factory = ValidationStrategyFactory(self.config_manager)
+        self.manager_factory = ManagerFactory(self.config_provider)
+        self.validation_factory = ValidationStrategyFactory(self.config_provider)
         
         # Initialize validation manager for centralized coordination and statistics
         self.validation_manager = ValidationManager(self.validation_factory)
@@ -23,7 +23,7 @@ class LamiaEngine:
     
     def _is_validation_enabled(self) -> bool:
         """Check if validation is enabled in config."""
-        validation_config = self.config_manager.config.get('validation', {})
+        validation_config = self.config_provider.config.get('validation', {})
         return validation_config.get('enabled', False)
     
     async def execute(
@@ -48,12 +48,32 @@ class LamiaEngine:
         
         # Apply domain-specific parameter handling (for LLM)
         if command_type == CommandType.LLM:
-            model_name = self.config_manager.get_default_model()
-            config = self.config_manager.get_model_config(model_name)
-            
+            request_model = kwargs.get('model')
+            if request_model is not None:
+                if isinstance(request_model, str):
+                    model_name = request_model
+                else:
+                    model_name = request_model.model
+                    kwargs['temperature'] = request_model.temperature
+                    kwargs['max_tokens'] = request_model.max_tokens
+                    kwargs['top_p'] = request_model.top_p
+                    kwargs['top_k'] = request_model.top_k
+                    kwargs['frequency_penalty'] = request_model.frequency_penalty
+                    kwargs['presence_penalty'] = request_model.presence_penalty
+                    kwargs['stream'] = request_model.stream
+            else:
+                model_name = self.config_provider.get_default_model()
+
             # Use config values if not overridden
-            kwargs['temperature'] = kwargs.get('temperature') or config.get('temperature')
-            kwargs['max_tokens'] = kwargs.get('max_tokens') or config.get('max_tokens')
+            config = self.config_provider.get_model_config(model_name)
+
+            kwargs['temperature'] = kwargs['temperature'] or config.get('temperature')
+            kwargs['max_tokens'] = kwargs['max_tokens'] or config.get('max_tokens')
+            kwargs['top_p'] = kwargs['top_p'] or config.get('top_p')
+            kwargs['top_k'] = kwargs['top_k'] or config.get('top_k')
+            kwargs['frequency_penalty'] = kwargs['frequency_penalty'] or config.get('frequency_penalty')
+            kwargs['presence_penalty'] = kwargs['presence_penalty'] or config.get('presence_penalty')
+            kwargs['stream'] = kwargs['stream'] or config.get('stream')
         
         # Engine makes routing decision based on validation enabled flag
         if self._validation_enabled:

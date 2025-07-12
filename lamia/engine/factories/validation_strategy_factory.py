@@ -1,7 +1,7 @@
 from typing import Dict, Any
 
 from ..interfaces import ValidationStrategy
-from ..config_manager import ConfigManager
+from ..config_provider import ConfigProvider
 from lamia.command_types import CommandType
 from lamia.adapters.llm.llm_validation_strategy import LLMValidationStrategy, RetryConfig
 from lamia.validation.validator_registry import ValidatorRegistry
@@ -16,8 +16,8 @@ class ValidationStrategyFactory:
     can extend `_create_strategy()` – until then YAGNI.
     """
 
-    def __init__(self, config_manager: ConfigManager):
-        self.config_manager = config_manager
+    def __init__(self, config_provider: ConfigProvider):
+        self.config_provider = config_provider
         # Cache of already constructed strategies (lazy singleton per CommandType)
         self._strategies: Dict[CommandType, ValidationStrategy] = {}
 
@@ -45,7 +45,7 @@ class ValidationStrategyFactory:
         """Build the LLM validation strategy with its dependencies."""
 
         # Fetch validation-specific configuration
-        validation_cfg: Dict[str, Any] = self.config_manager.get_validation_config()
+        validation_cfg: Dict[str, Any] = self.config_provider.get_validation_config()
 
         retry_config = RetryConfig(
             max_retries=validation_cfg.get("max_retries", 1),
@@ -54,8 +54,8 @@ class ValidationStrategyFactory:
         )
 
         # Build validator registry (allows project / user extensions)
-        ext_folder = self.config_manager.get_extensions_folder()
-        registry = await ValidatorRegistry(self.config_manager.config, ext_folder).get_registry()
+        ext_folder = self.config_provider.get_extensions_folder()
+        registry = await ValidatorRegistry(self.config_provider.config, ext_folder).get_registry()
 
         strategy = LLMValidationStrategy(
             config=retry_config,

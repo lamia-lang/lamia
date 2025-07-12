@@ -1,13 +1,13 @@
 from typing import Dict, Type
 from lamia.command_types import CommandType
 from ..interfaces import Manager
-from ..config_manager import ConfigManager
+from ..config_provider import ConfigProvider
 
 class ManagerFactory:
     """Factory for creating domain managers based on request type."""
     
-    def __init__(self, config_manager: ConfigManager):
-        self.config_manager = config_manager
+    def __init__(self, config_provider: ConfigProvider):
+        self.config_provider = config_provider
         self._manager_registry: Dict[CommandType, Type[Manager]] = {}
         self._manager_instances: Dict[CommandType, Manager] = {}
         self._register_managers()
@@ -43,7 +43,7 @@ class ManagerFactory:
         
         # Create new instance
         manager_class = self._manager_registry[command_type]
-        manager = manager_class(self.config_manager)
+        manager = manager_class(self.config_provider)
         self._manager_instances[command_type] = manager
         
         return manager
