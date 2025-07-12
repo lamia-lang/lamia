@@ -5,17 +5,38 @@ from lamia.interpreter.python_runner import run_python_code
 from lamia.command_parser import CommandParser
 from dataclasses import dataclass
 from lamia.engine.config_provider import ConfigProvider
+import logging
+
+logger = logging.getLogger(__name__)
 
 @dataclass
-class Model:
+class LLMModel:
+    """Configuration for an LLM model.
+    
+    Args:
+        model: The model identifier (e.g. 'gpt-4', 'claude-2', etc.)
+        temperature: Controls randomness in responses. Higher values (e.g. 0.8) make output more random, 
+                    lower values (e.g. 0.2) make it more focused and deterministic.
+        max_tokens: The maximum number of tokens to generate in the response.
+        stream: Whether to stream the response token by token instead of waiting for the complete response.
+                Useful for real-time display of model output.
+        
+        # Advanced parameters
+        top_p: Nucleus sampling parameter. Only consider tokens whose cumulative probability exceeds this threshold.
+        top_k: Only consider the top k tokens for each next token prediction.
+        frequency_penalty: Positive values penalize tokens based on their frequency in the text so far.
+        presence_penalty: Positive values penalize tokens that have appeared in the text at all.
+    """
     model: str
+    # Primary parameters
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
-    top_p: Optional[float] = None
+    # Advanced parameters
+    top_p: Optional[float] = None  
     top_k: Optional[int] = None
     frequency_penalty: Optional[float] = None
     presence_penalty: Optional[float] = None
-    stream: Optional[bool] = None
+    seed: Optional[int] = None
 
 @dataclass
 class LamiaResult:
@@ -30,7 +51,7 @@ class Lamia:
     initialization and cleanup.
     
     Args:
-        *models: Model names (e.g., 'openai', 'ollama', ...)
+        *models: Model names or Model objects (e.g., 'openai:gpt-4o', 'ollama', ...)
         api_keys: Optional dict of API keys (e.g., {'openai': 'sk-...'}).
         validators: Optional list of functions or Lamia validator instances.
         config: Optional config dict or path. If provided, overrides *models.
@@ -38,7 +59,7 @@ class Lamia:
     
     def __init__(
         self, 
-        *models: Union[Union[str, Model], Tuple[Union[str, Model], int]], 
+        *models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], 
         api_keys: Optional[dict] = None, 
         validators: Optional[List[Any]] = None, 
     ):
@@ -50,15 +71,19 @@ class Lamia:
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "Lamia":
-        def constuct_full_model_name(config, model_name):
-            if ":" in model_name:
-                return model_name
+        def constuct_model(config, model_chain_item) -> LLMModel:
+            if "name" not in model_chain_item:
+                raise ValueError("Model chain item must have a name")
+            
+            if ":" in model_chain_item["name"]:
+                model_family_name = model_chain_item["name"].split(":")[1]
+                model_full_name = model_chain_item["name"]
             else:
                 if "providers" not in config:
                     raise ValueError("Providers are not configured.")
                 
                 providers = config["providers"]
-                provider_name = model_name
+                provider_name = model_chain_item["name"]
                 if provider_name not in providers:
                     raise ValueError(f"Provider {provider_name} is not configured.")
                 
@@ -69,44 +94,44 @@ class Lamia:
                     raise ValueError(f"Provider {provider_name} does not have a default model. Please provide a default model in the config")
                 
                 model_family_name = providers[provider_name]["default_model"]
-                full_model_name = f"{provider_name}:{model_family_name}"
-            return full_model_name
-
-        default_model = config['default_model']
-        if default_model is not None:
-            try:
-                models = [constuct_full_model_name(config, default_model)]
-            except ValueError as e:
-                raise ValueError(f"{e}. Please provide full model name like 'openai:gpt-4o' for default-model or fix the config for {default_model}")
+                model_full_name = f"{provider_name}:{model_family_name}"
+            
+            provider_settings = providers.get(provider_name, {})
+            model_family_settings = provider_settings.get(model_family_name, {})
+            get_model_param = lambda key: model_chain_item.get(key, None) or model_family_settings.get(key, None) or provider_settings.get(key, None)
+            
+            return LLMModel(
+                model=model_full_name,
+                temperature=get_model_param("temperature"),
+                max_tokens=get_model_param("max_tokens"),
+                top_p=get_model_param("top_p"),
+                top_k=get_model_param("top_k"),
+                frequency_penalty=get_model_param("frequency_penalty"),
+                presence_penalty=get_model_param("presence_penalty"),
+                seed=get_model_param("seed")
+            )
         
-        if "validation" in config:
-            if "fallback_models" in config["validation"]:
-                if default_model is not None:
-                    raise ValueError("Fallback models are not supported when no default model is provided. Please provide a default model in the config")
 
-                fallback_models = config["validation"]["fallback_models"]
-                for model in fallback_models:
-                    try:
-                        models.extend(constuct_full_model_name(config, model))
-                    except ValueError as e:
-                        raise ValueError(f"{e}. Please provide full model name like 'openai:gpt-4o' in the fallback-models list or fix the config for {model}")
+        models = []
+        if "model_chain" not in config:
+            model_chain = config['model_chain']
+            for model_chain_item, index in enumerate(model_chain):
+                try:
+                    models = [constuct_model(config, model_chain_item)]
+                except ValueError as e:
+                    raise ValueError(f"Model chain item {index} with name{model_chain_item.name} excluded. Reason: {e}")
+
+        if len(models) == 0:
+            logger.warning("No valid LLM model found in the model chain. LLM operations will not be possible.")
 
         return cls(
-            models,
+            *models,
             validators=config["validation"]["validators"] if "validation" in config and "validators" in config["validation"] else None
         )
 
-    def _get_provider_name(self, model_obj: "Model") -> str:
-        """Extract provider name from a Model instance.
-        A model can be expressed either as "provider"  (e.g. "openai") or
-        "provider:model_family" (e.g. "openai:gpt-4o").  In both cases we only
-        need the provider part for routing / config keys.
-        """
-        return model_obj.model.split(":", 1)[0]
-
     def _build_config(
         self,
-        models: Union[Union[str, Model], Tuple[Union[str, Model], int]],
+        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]],
         api_keys: Optional[dict], 
         validators: Optional[List[Any]], 
         config: Optional[Dict[str, Union[str, int, float, bool]]]
@@ -124,7 +149,7 @@ class Lamia:
         if not incoming_models:
             incoming_models = ["ollama"]
 
-        models_and_retries: List[Tuple[Model, int]] = []
+        models_and_retries: List[Tuple[LLMModel, int]] = []
         for item in incoming_models:
             retries = DEFAULT_RETRIES
 
@@ -134,8 +159,8 @@ class Lamia:
 
             # Turn strings into ``Model`` instances
             if isinstance(item, str):
-                item = Model(model=item)
-            elif not isinstance(item, Model):
+                item = LLMModel(model=item)
+            elif not isinstance(item, LLMModel):
                 raise TypeError(
                     "Each model spec must be a str, Model or (spec, retries) tuple"
                 )
@@ -157,7 +182,7 @@ class Lamia:
     async def run_async(
         self,
         command: str, 
-        models: Union[Union[str, Model], Tuple[Union[str, Model], int]] = None, 
+        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None, 
     ) -> LamiaResult:
         """
         Generate a response, trying Python code first, then LLM.
@@ -202,7 +227,7 @@ class Lamia:
     def run(
         self,
         command: str,
-        models: Union[Union[str, Model], Tuple[Union[str, Model], int]] = None,
+        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None,
     ) -> LamiaResult:
         """
         Synchronous helper around run_async.
