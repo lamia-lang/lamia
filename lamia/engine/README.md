@@ -30,7 +30,7 @@ os.environ["OPENAI_API_KEY"] = "sk-..."
 simple = Lamia("openai") # include a model without validation
 answer = simple.run("Say hello world!")
 
-with_default_validation = Lamia("ollama", "openai") # Default validation will be applied and if the request wil oollama fails openai reques will be send
+with_default_validation = Lamia("ollama", "openai") # Default validation will be applied and if the request with ollama fails openai request will be send
 with_default_validation.run("Give me an HTMl file")
 
 lamia = Lamia("openai", "ollama", api_keys={"openai": "sk-..."})

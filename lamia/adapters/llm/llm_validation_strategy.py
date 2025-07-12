@@ -91,7 +91,7 @@ class LLMValidationStrategy(ValidationStrategy):
             current_prompt = prompt
         
         try:
-            return await self._generate_and_validate_once(
+            return await self._generate_and_validate(
                 adapter=primary_adapter,
                 prompt=current_prompt,
                 max_attempts=self.config.max_retries,
@@ -115,7 +115,7 @@ class LLMValidationStrategy(ValidationStrategy):
                         current_prompt = prompt
 
                     try:
-                        return await self._generate_and_validate_once(
+                        return await self._generate_and_validate(
                             adapter=fallback_adapter,
                             prompt=current_prompt,
                             max_attempts=1, # Fallback models are used only once
@@ -129,7 +129,7 @@ class LLMValidationStrategy(ValidationStrategy):
             f"All attempts failed. Giving up."
         )
     
-    async def _generate_and_validate_once(
+    async def _generate_and_validate(
         self,
         adapter: BaseLLMAdapter,
         prompt: str,

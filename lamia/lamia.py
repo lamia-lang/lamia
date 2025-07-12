@@ -1,12 +1,9 @@
 from lamia.engine.engine import LamiaEngine
 import asyncio
-from typing import Any, Optional, List, Dict, Union
-import yaml
-import logging
+from typing import Any, Optional, List, Dict, Union, Tuple
 from lamia.interpreter.python_runner import run_python_code
 from lamia.command_parser import CommandParser
 from dataclasses import dataclass
-logger = logging.getLogger(__name__)
 
 @dataclass
 class LamiaResult:
@@ -29,13 +26,12 @@ class Lamia:
     
     def __init__(
         self, 
-        *models: str, 
+        *models: Union[str, Tuple[str, int]], 
         api_keys: Optional[dict] = None, 
         validators: Optional[List[Any]] = None, 
-        config: Optional[Union[str, Dict[str, Any]]] = None
     ):
         # Configuration
-        self._config_dict = self._build_config(models, api_keys, validators, config)
+        self._config_dict = self._build_config(models, api_keys, validators, None)
         
         # Store validators for manual validation
         self._validators = validators if validators is not None else []
@@ -45,35 +41,52 @@ class Lamia:
         
         # Initialize command parser instance
         self._command_parser = None
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "Lamia":
+        def new_method(config, default_model):
+            if ":" in default_model:
+                models = [default_model]
+            else:
+                model_family_name = config['models'][default_model]["default_model"]
+                full_model_name = f"{default_model}:{model_family_name}"
+                models = [full_model_name]
+            return models
+
+        default_model = config['default_model']
+        if default_model is not None:
+            models = new_method(config, default_model)
         
-        logger.info("Lamia instance created")
+        fallback_models = config["fallback_models"]
+        if fallback_models is not None:
+            for model in fallback_models:
+                models.extend(new_method(config, model))
+
+        return cls(
+            models=models,
+            validators=config['validators']
+        )
 
     def _build_config(
         self, 
         models: tuple, 
         api_keys: Optional[dict], 
         validators: Optional[List[Any]], 
-        config: Optional[Union[str, Dict[str, Any]]]
+        config: Optional[Dict[str, Union[str, int, float, bool]]]
     ) -> Dict[str, Any]:
         """Build configuration from parameters"""
         if config is not None:
-            if isinstance(config, str):
-                with open(config, 'r') as f:
-                    return yaml.safe_load(f)
-            elif isinstance(config, dict):
-                return config
-            else:
-                raise ValueError("config must be a dict or a file path")
+            return config
         
         # Build config from models/api_keys/validators
         config_dict = {
             'default_model': models[0] if models else 'ollama',
-            'models': {},
+            'models': models,
             'validation': {
                 'enabled': True,
                 'max_retries': 1,
                 'fallback_models': list(models[1:]) if len(models) > 1 else [],
-                'validators': [{'type': 'html'}] if not validators else validators
+                'validators': [] if not validators else validators
             }
         }
         
