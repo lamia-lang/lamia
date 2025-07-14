@@ -14,11 +14,11 @@ class LamiaEngine:
         self.config_provider = config_provider
         
         # Initialize factories (DIP compliance)
-        self.manager_factory = ManagerFactory(self.config_provider)
         self.validation_factory = ValidationStrategyFactory(self.config_provider)
+        self.manager_factory = ManagerFactory(self.config_provider)
         
         # Initialize validation manager for centralized coordination and statistics
-        self.validation_manager = ValidationManager(self.validation_factory)
+        self.validation_manager = ValidationManager()
         self._validation_enabled = self._is_validation_enabled()
     
     def _is_validation_enabled(self) -> bool:
@@ -43,40 +43,12 @@ class LamiaEngine:
             Response from the appropriate manager
         """
         
-        # Get the appropriate manager
-        manager = await self.manager_factory.get_manager(command_type)
+        # Create validation strategy for this command type
+        validation_strategy = await self.validation_factory.get_strategy(command_type)
         
-        # Apply domain-specific parameter handling (for LLM)
-        if command_type == CommandType.LLM:
-            '''request_model = kwargs.get('model')
-            if request_model is not None:
-                if isinstance(request_model, str):
-                    model_name = request_model
-                else:
-                    model_name = request_model.model
-                    kwargs['temperature'] = request_model.temperature
-                    kwargs['max_tokens'] = request_model.max_tokens
-                    kwargs['top_p'] = request_model.top_p
-                    kwargs['top_k'] = request_model.top_k
-                    kwargs['frequency_penalty'] = request_model.frequency_penalty
-                    kwargs['presence_penalty'] = request_model.presence_penalty
-                    kwargs['stream'] = request_model.stream
-            else:
-                model_name = self.config_provider.get_primary_model().model.model
-
-            # Use config values if not overridden
-            config = self.config_provider.get_primary_model().model.get_config()
-
-            kwargs['temperature'] = kwargs.get('temperature') or config.get('temperature')
-            kwargs['max_tokens'] = kwargs.get('max_tokens') or config.get('max_tokens')
-            kwargs['top_p'] = kwargs.get('top_p') or config.get('top_p')
-            kwargs['top_k'] = kwargs.get('top_k') or config.get('top_k')
-            kwargs['frequency_penalty'] = kwargs.get('frequency_penalty') or config.get('frequency_penalty')
-            kwargs['presence_penalty'] = kwargs.get('presence_penalty') or config.get('presence_penalty')
-            kwargs['stream'] = kwargs.get('stream') or config.get('stream')'''
-            pass
+        # Get the appropriate manager with its validation strategy
+        manager = await self.manager_factory.get_manager(command_type, validation_strategy)
         
-
         return await self.validation_manager.validate(command_type, manager, content, **kwargs)
     
     def get_validation_stats(self):

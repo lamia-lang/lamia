@@ -24,8 +24,8 @@ class LamiaAdapter(BaseLLMAdapter):
         return True
     
     @classmethod
-    def supports(cls, provider: str) -> bool:
-        return provider in cls._supported_providers
+    def get_supported_providers(cls) -> Set[str]:
+        return cls._supported_providers
     
     def __init__(self, api_key: str):
         self.api_key = api_key

@@ -5,8 +5,7 @@ import logging
 import subprocess
 import requests
 import time
-
-from ..base import BaseLLMAdapter, LLMResponse
+from ..base import BaseLLMAdapter, LLMResponse, LLMModel
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,11 @@ class OllamaAdapter(BaseLLMAdapter):
         """
         self.base_url = base_url.rstrip('/')
         self.model_params = model_params
-        self.session = None
+
+        # Start Ollama service if not running
+        if not self.start_ollama_service():
+            raise RuntimeError("Failed to start Ollama service")
+        self.session = aiohttp.ClientSession()
 
     def is_ollama_running(self) -> bool:
         try:
@@ -86,47 +89,18 @@ class OllamaAdapter(BaseLLMAdapter):
             logger.error(f"Failed to check/pull Ollama model: {str(e)}")
             return False
 
-    async def async_initialize(self) -> None:
-        """Initialize the aiohttp session and verify model availability. Start Ollama service and pull model if needed."""
-        # Start Ollama service if not running
-        if not self.start_ollama_service():
-            raise RuntimeError("Failed to start Ollama service")
-        # Ensure model is pulled
-        if not self.ensure_ollama_model_pulled(self.model):
-            raise RuntimeError(f"Failed to pull Ollama model: {self.model}")
-        self.session = aiohttp.ClientSession()
-        # Check if model is available (API check)
-        try:
-            async with self.session.post(
-                f"{self.base_url}/api/show",
-                json={"name": self.model}
-            ) as response:
-                if response.status != 200:
-                    raise ValueError(
-                        f"Model '{self.model}' not found. Please pull it first using: "
-                        f"'ollama pull {self.model}'"
-                    )
-                model_info = await response.json()
-                logger.info(f"Using Ollama model: {self.model}")
-                logger.debug(f"Model details: {json.dumps(model_info, indent=2)}")
-        except aiohttp.ClientError as e:
-            raise ConnectionError(
-                f"Failed to connect to Ollama server at {self.base_url}. "
-                "Is Ollama running?"
-            ) from e
-
     async def generate(
         self,
         prompt: str,
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[list[str]] = None,
-        **kwargs
+        model: LLMModel,
     ) -> LLMResponse:
         """Generate a response using the Ollama model."""
         if not self.session:
             raise RuntimeError("Adapter not initialized. Use 'async with' or call initialize()")
+        
+        # Ensure model is pulled
+        if not self.ensure_ollama_model_pulled(model.name):
+            raise RuntimeError(f"Failed to pull Ollama model: {model.name}")
 
         # Prepare request payload
         payload = {
@@ -134,17 +108,16 @@ class OllamaAdapter(BaseLLMAdapter):
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": temperature,
-                **self.model_params,
-                **kwargs
+                "temperature": model.temperature,
+                "max_tokens": model.max_tokens,
+                "stop": model.stop_sequences,
+                "top_p": model.top_p,
+                "top_k": model.top_k,
+                "frequency_penalty": model.frequency_penalty,
+                "presence_penalty": model.presence_penalty,
+                "seed": model.seed,
             }
         }
-
-        if max_tokens:
-            payload["options"]["num_predict"] = max_tokens
-
-        if stop_sequences:
-            payload["options"]["stop"] = stop_sequences
 
         try:
             async with self.session.post(

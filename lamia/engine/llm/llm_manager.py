@@ -31,7 +31,7 @@ class MissingAPIKeysError(Exception):
             "- As environment variables (e.g., export OPENAI_API_KEY=...)\n"
             "- In your config file under api_keys (e.g., api_keys: {openai: ...})\n"
             "- As a parameter to the Lamia() constructor (e.g., Lamia(..., api_keys={...}))\n"
-            "You can also use LAMIA_API_KEY to proxy remote adapters (openai, anthropic).\n"
+            f"You can also use LAMIA_API_KEY to proxy remote adapters {(", ".join(LamiaAdapter.get_supported_providers()))}.\n"
             "Alternatively, remove these engines from your default or fallback_models in config."
         )
         super().__init__(message)
@@ -66,11 +66,11 @@ class LLMManager(Manager):
         # Add default model provider
         default_model = self.config_provider.get_primary_model()
         if default_model:
-            needed.add(default_model)
+            needed.add(default_model.model.get_provider_name())
         
         # Add fallback models providers
         fallback_models = self.config_provider.get_fallback_models()
-        needed.update(fallback_models)
+        needed.update([model.model.get_provider_name() for model in fallback_models])
         
         return needed
     
@@ -81,7 +81,7 @@ class LLMManager(Manager):
         Priority: specific provider key > lamia key (for remote providers) > env var fallback (with precedence).
         """
 
-        if LamiaAdapter.supports(provider_name):
+        if provider_name in LamiaAdapter.get_supported_providers():
             lamia_api_key = self.config_provider.get_api_key("lamia")
             if lamia_api_key:
                 return lamia_api_key, True
@@ -160,14 +160,6 @@ class LLMManager(Manager):
         return await self.execute_with_retries(
             prompt=prompt,
         )
-    
-    async def close(self):
-        """Close and cleanup the managed adapter."""
-        if self._primary_adapter:
-            await self._primary_adapter.close()
-        self._initialized = False
-
-
 
     async def execute_with_retries(
         self,
@@ -284,5 +276,11 @@ class LLMManager(Manager):
         raise RuntimeError(
             f"All {attempts} attempts failed with {adapter.name}. Errors: {'; '.join(errors)}"
         ) 
+    
+    async def close(self):
+        """Close and cleanup the managed adapter."""
+        if self._primary_adapter:
+            await self._primary_adapter.close()
+        self._initialized = False
 
 

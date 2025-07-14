@@ -59,7 +59,6 @@ class OpenAIAdapter(BaseLLMAdapter):
         self,
         prompt: str,
         model: LLMModel,
-        **kwargs
     ) -> LLMResponse:
         """Generate a response using OpenAI's API."""
         if self._use_sdk:
@@ -73,7 +72,6 @@ class OpenAIAdapter(BaseLLMAdapter):
                 frequency_penalty=model.frequency_penalty,
                 presence_penalty=model.presence_penalty,
                 seed=model.seed,
-                **kwargs
             )
             
             return LLMResponse(

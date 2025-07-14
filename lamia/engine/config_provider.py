@@ -18,7 +18,7 @@ class ConfigProvider:
         # Make a defensive copy to ensure true immutability
         self._config = config.copy()
         self._primary_model = config.get('model_chain')[0]
-        self._fallback_models = [model.model for model in config.get('model_chain')[1:]]
+        self._fallback_models = [model for model in config.get('model_chain')[1:]]
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]):

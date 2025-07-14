@@ -1,6 +1,6 @@
 from typing import Dict, Type
 from lamia.command_types import CommandType
-from ..interfaces import Manager
+from ..interfaces import Manager, ValidationStrategy
 from ..config_provider import ConfigProvider
 
 class ManagerFactory:
@@ -22,11 +22,12 @@ class ManagerFactory:
         # self._manager_registry[CommandType.FILESYSTEM] = FSManager
         # self._manager_registry[CommandType.WEB] = WebManager
     
-    async def get_manager(self, command_type: CommandType) -> Manager:
+    async def get_manager(self, command_type: CommandType, validation_strategy: ValidationStrategy) -> Manager:
         """Get or create a manager for the specified command type.
         
         Args:
             command_type: The command type to get a manager for
+            validation_strategy: The validation strategy to use for this manager
             
         Returns:
             Manager instance for the command
@@ -41,7 +42,7 @@ class ManagerFactory:
         if command_type in self._manager_instances:
             return self._manager_instances[command_type]
         
-        # Create new instance
+        # Create new instance with provided validation strategy
         manager_class = self._manager_registry[command_type]
         manager = manager_class(self.config_provider, validation_strategy)
         self._manager_instances[command_type] = manager

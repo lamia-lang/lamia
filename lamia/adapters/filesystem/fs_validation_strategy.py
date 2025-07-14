@@ -47,10 +47,10 @@ class FSValidationStrategy(ValidationStrategy):
         self.config = config
         self._initialized = True
 
-    async def validate(self, manager: Manager, content: str, **kwargs) -> Any:  # type: ignore[override]
+    async def validate(self, manager: Manager, content: str) -> Any:  # type: ignore[override]
         """Execute the *filesystem* operation and validate the result."""
 
-        result = await manager.execute(content, **kwargs)
+        result = await manager.execute(content)
 
         # 2. If no validators configured – return result straight away
         if not self.validators:

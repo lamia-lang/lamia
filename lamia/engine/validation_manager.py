@@ -26,8 +26,7 @@ class ValidationStrategyNotFoundError(LookupError):
 class ValidationManager:
     """Manages validation across all domains and tracks centralized statistics."""
     
-    def __init__(self, validation_factory: ValidationStrategyFactory):
-        self.validation_factory = validation_factory
+    def __init__(self):
         
         # Centralized statistics tracking
         self.stats = ValidationStats()
@@ -48,11 +47,8 @@ class ValidationManager:
         start_time = asyncio.get_event_loop().time()
         
         try:
-            # Get the appropriate validation strategy
-            strategy = await self.validation_factory.get_strategy(command_type)
-            
             # Execute validation
-            result = await strategy.validate(manager, content, **kwargs)
+            result = await manager.execute(content)
             
             # Record successful validation
             execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
@@ -63,11 +59,6 @@ class ValidationManager:
             self._record_validation_result(validation_result, command_type, execution_time)
             
             return result
-            
-        except ValidationStrategyNotFoundError:
-            # Strategy not found for this domain - use manager directly
-            logger.debug(f"No validation strategy for {command_type}, using manager directly")
-            return await manager.execute(content, **kwargs)
             
         except Exception as e:
             # Record failed validation
