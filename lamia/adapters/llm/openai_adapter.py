@@ -24,7 +24,6 @@ class OpenAIAdapter(BaseLLMAdapter):
     
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.model = model
 
         # Detect whether the OpenAI SDK is available. If not, fall back to raw HTTP.
         self._use_sdk = True

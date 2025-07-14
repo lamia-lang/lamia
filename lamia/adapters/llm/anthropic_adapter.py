@@ -26,6 +26,7 @@ class AnthropicAdapter(BaseLLMAdapter):
     
     def __init__(self, api_key: str):
         self.api_key = api_key
+
         self.client = None
         self.session = None
         self._has_context_memory = None  # User cannot set this for now

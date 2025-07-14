@@ -24,6 +24,7 @@ class ValidatorRegistry:
         self.config = config
         self.extensions_folder = extensions_folder or "extensions"
         self.enable_contract_checking = enable_contract_checking
+        self._validator_instances = {}  # Store validator instances
         
         # Check if contract checking is disabled in config
         validation_config = config.get('validation', {})
@@ -172,7 +173,7 @@ class ValidatorRegistry:
             
         return validator_class_map
 
-    async def get_registry(self) -> Dict[str, Type[BaseValidator]]:
+    async def get_registry(self) -> Dict[str, BaseValidator]:
         """Preload all validators in the validators folder and extensions, checking for name conflicts."""
         
         validator_class_map = self._discover_validators_recursively(validators_pkg)
@@ -182,24 +183,31 @@ class ValidatorRegistry:
         if conflict_names:
             raise ValueError(f"User-defined validator name(s) conflict with built-in validators: {', '.join(conflict_names)}")
         validator_class_map.update(ext_validator_class_map)
-        registry = {}
+        
         validation_config = self.config.get('validation', {})
         if validation_config.get('validators'):
             for validator_config in validation_config['validators']:
                 vtype = validator_config.get("type")
+                strict = validator_config.get("strict", True)
                 config_copy = validator_config.copy()
                 config_copy.pop("type", None)
                 config_copy.pop("strict", None)
+                
                 if vtype in validator_class_map:
                     cls = validator_class_map[vtype]
-                    registry[cls.name()] = cls
+                    # Create singleton instance if not exists
+                    if cls.name() not in self._validator_instances:
+                        self._validator_instances[cls.name()] = cls(strict=strict, generate_hints=True, **config_copy)
                 elif vtype in ["custom_file", "custom_function"]:
                     try:
                         validator_class = await self._load_custom_validator(validator_config)
                         if validator_class:
-                            registry[validator_class.name()] = validator_class
+                            # Create singleton instance if not exists
+                            if validator_class.name() not in self._validator_instances:
+                                self._validator_instances[validator_class.name()] = validator_class(strict=strict, generate_hints=True, **config_copy)
                     except Exception as e:
                         logger.error(f"Error loading custom validator: {str(e)}")
                 else:
                     raise ValueError(f"Unknown validator type: {vtype}")
-        return registry 
+                    
+        return self._validator_instances 

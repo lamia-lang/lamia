@@ -10,31 +10,21 @@ logger = logging.getLogger(__name__)
 class ValidationStrategy(ABC):
     """Abstract base class for domain-specific validation strategies."""
 
-    def __init__(self, validator_registry: Dict[str, Type[BaseValidator]], validator_configs : List[Dict[str, Any]]):
-        self.validator_registry = validator_registry
-        self.validators = self._setup_validators(validator_configs)
+    def __init__(self, validator_registry: Dict[str, BaseValidator]):
+        """Initialize with pre-configured validator instances from registry."""
+        self.validators = self._check_validator_conflicts(list(validator_registry.values()))
 
-    def _setup_validators(self, validator_configs: List[Dict[str, Any]]) -> List[BaseValidator]:
-        """Set up validators from configuration."""
-        validators = []
+    def _check_validator_conflicts(self, validators: List[BaseValidator]) -> List[BaseValidator]:
+        """Check for conflicts between validators."""
         if not validators:
             return validators
-        for validator_config in validator_configs:
-            validator_type = validator_config.get("type")
-            strict = validator_config.get("strict", True)
-            config_copy = validator_config.copy()
-            config_copy.pop("type", None)
-            config_copy.pop("strict", None)
-            if validator_type in self.validator_registry:
-                validator_class = self.validator_registry[validator_type]
-                validators.append(validator_class(strict=strict, generate_hints=True, **config_copy))
-            else:
-                raise ValueError(f"Unknown validator type: {validator_type}")
+
         # Check for duplicate validator names
         names = [v.name for v in validators]
         duplicates = set([name for name in names if names.count(name) > 1])
         if duplicates:
             raise ValueError(f"Duplicate validator name(s) detected: {', '.join(duplicates)}")
+
         # Conflict detection: only one file type group can be present
         present_groups = []
         for group in CONFLICTING_VALIDATOR_GROUPS:

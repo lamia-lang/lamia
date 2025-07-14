@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
+from lamia import LLMModel
 
 @dataclass
 class LLMResponse:
@@ -48,20 +49,12 @@ class BaseLLMAdapter(ABC):
     async def generate(
         self,
         prompt: str,
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[list[str]] = None,
-        **kwargs
+        model: LLMModel
     ) -> LLMResponse:
         """Generate a response from the LLM.
         
         Args:
             prompt: The input prompt text
-            temperature: Controls randomness in generation (0.0 to 1.0)
-            max_tokens: Maximum number of tokens to generate
-            stop_sequences: List of sequences that will stop generation
-            **kwargs: Additional model-specific parameters
             
         Returns:
             LLMResponse containing the generated text and metadata

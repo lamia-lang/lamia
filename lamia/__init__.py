@@ -39,16 +39,17 @@ class LLMModel:
     presence_penalty: Optional[float] = None
     seed: Optional[int] = None
 
-    def get_config(self) -> Dict[str, Union[str, int, float, None]]:
-        return {
-            'temperature': self.temperature,
-            'max_tokens': self.max_tokens,
-            'top_p': self.top_p,
-            'top_k': self.top_k,
-            'frequency_penalty': self.frequency_penalty,
-            'presence_penalty': self.presence_penalty,
-            'seed': self.seed
-        }
+    def get_provider_name(self) -> str:
+        return self.name.split(":")[0]
+
+@dataclass(frozen=True)
+class OllamaModel(LLMModel):
+    base_url: Optional[str] = None
+    context_size: Optional[int] = None
+    num_ctx: Optional[int] = None
+    num_gpu: Optional[int] = None
+    num_thread: Optional[int] = None
+    repeat_penalty: Optional[float] = None
 
 from .lamia import Lamia
 

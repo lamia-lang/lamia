@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any, Set
 import aiohttp
 import json
+from lamia import LLMModel
 from .base import BaseLLMAdapter, LLMResponse
 
 class LamiaAdapter(BaseLLMAdapter):
@@ -42,12 +43,7 @@ class LamiaAdapter(BaseLLMAdapter):
     async def generate(
         self,
         prompt: str,
-        model: str,
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[list[str]] = None,
-        **kwargs
+        model: LLMModel
     ) -> LLMResponse:
         """Generate a response using Lamia's API."""
         if not self.session:
@@ -58,13 +54,17 @@ class LamiaAdapter(BaseLLMAdapter):
             "model": model,
             "prompt": prompt,
             "params": {
-                "temperature": temperature,
-                "max_tokens": max_tokens, 
-                **kwargs
+                "temperature": model.temperature,
+                "max_tokens": model.max_tokens, 
+                "top_p": model.top_p,
+                "top_k": model.top_k,
+                "frequency_penalty": model.frequency_penalty,
+                "presence_penalty": model.presence_penalty,
+                "seed": model.seed,
             }
         }
-        if stop_sequences is not None:
-            payload["params"]["stop_sequences"] = stop_sequences
+        if model.stop_sequences is not None:
+            payload["params"]["stop_sequences"] = model.stop_sequences
             
         
         try:
