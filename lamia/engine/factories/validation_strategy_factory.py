@@ -3,7 +3,7 @@ from typing import Dict, Any
 from ..interfaces import ValidationStrategy
 from ..config_provider import ConfigProvider
 from lamia.command_types import CommandType
-from lamia.adapters.llm.llm_validation_strategy import LLMValidationStrategy, RetryConfig
+from lamia.adapters.llm.llm_validation_strategy import LLMValidationStrategy
 from lamia.validation.validator_registry import ValidatorRegistry
 
 class ValidationStrategyFactory:

@@ -43,7 +43,7 @@ class ManagerFactory:
         
         # Create new instance
         manager_class = self._manager_registry[command_type]
-        manager = manager_class(self.config_provider)
+        manager = manager_class(self.config_provider, validation_strategy)
         self._manager_instances[command_type] = manager
         
         return manager

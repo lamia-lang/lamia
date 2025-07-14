@@ -6,13 +6,6 @@ import sys
 from .base import BaseLLMAdapter, LLMResponse
 from ...validation.base import BaseValidator, ValidationResult
 from ...engine.interfaces import ValidationStrategy, Manager
-from lamia._internal_types.model_retry import ModelWithRetries
-
-@dataclass
-class RetryConfig:
-    """Configuration for retry strategy."""
-    model_chain: List[ModelWithRetries] = None
-    validators: List[Dict[str, Any]] = None  # List of validator configs
 
 class LLMValidationStrategy(ValidationStrategy):
     """Handles response validation logic."""

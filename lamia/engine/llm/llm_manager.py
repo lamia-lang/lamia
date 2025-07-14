@@ -189,7 +189,7 @@ class LLMManager(Manager):
         primary_model = self.config_provider.get_primary_model().model
         primary_adapter = await self.create_adapter_from_config(primary_model)
         # Aggregate initial hints from all validators
-        initial_hints = [v.initial_hint for v in self.validators if hasattr(v, 'initial_hint')]
+        initial_hints = self.validation_strategy.get_initial_hints()
         initial_hint_text = "\n".join(initial_hints)
         if initial_hint_text:
             current_prompt = f"{initial_hint_text}\n\n{prompt}"
