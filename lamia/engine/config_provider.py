@@ -1,6 +1,6 @@
 import os
 from typing import Dict, Any, Optional, List, Tuple, Union
-from lamia import LLMModel
+from lamia._internal_types.model_retry import ModelWithRetries
 
 class ConfigProvider:
     """
@@ -17,6 +17,8 @@ class ConfigProvider:
         
         # Make a defensive copy to ensure true immutability
         self._config = config.copy()
+        self._primary_model = config.get('model_chain')[0]
+        self._fallback_models = [model.model for model in config.get('model_chain')[1:]]
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]):
@@ -27,28 +29,24 @@ class ConfigProvider:
         """Get the raw config dictionary."""
         return self._config
 
-    def get_default_model(self) -> Tuple[LLMModel, int]:
-        """Get the default model and retries from config."""
-        return self._config.get('default_model')
+    def get_primary_model(self) -> ModelWithRetries:
+        """Get the primary model and retries from config."""
+        return self._primary_model
 
-    def get_fallback_models(self) -> List[Tuple[LLMModel, int]]:
+    def get_fallback_models(self) -> List[ModelWithRetries]:
         """Get the fallback models from config."""
-        return self._config.get('fallback_models', [])
-
-    def get_validation_config(self) -> Dict[str, Any]:
-        """Get validation configuration settings."""
-        return self._config.get('validation', {})
-
-    def get_model_config(self, model_name: str) -> Dict[str, Any]:
-        """Get configuration for a specific model."""
-        # This is a simplified implementation - you might want to enhance this
-        # based on your actual model configuration structure
-        return {}
+        return self._fallback_models
 
     def get_api_key(self, provider: str) -> Optional[str]:
         # Only return from the dict, never from the environment
         api_keys = self._config.get('api_keys', {})
-        return api_keys.get(provider) 
+        if api_keys is not None and provider in api_keys:
+            return api_keys.get(provider) 
+        return None
+    
+    def get_validators(self) -> List[Any]:
+        """Get the validators from config."""
+        return self._config.get('validators', [])
 
     def get_extensions_folder(self) -> str:
         """Get the path to the extensions folder from config, defaulting to 'extensions' if not set."""

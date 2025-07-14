@@ -2,7 +2,7 @@
 from typing import List, Optional, Dict, Any, Set
 import os
 from lamia.adapters.llm.lamia_adapter import LamiaAdapter
-
+from lamia import LLMModel
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from ..config_provider import ConfigProvider
 from ..interfaces import Manager
@@ -53,13 +53,12 @@ class LLMManager(Manager):
         needed = set()
         
         # Add default model provider
-        default_model = self.config_provider.get_default_model()
+        default_model = self.config_provider.get_primary_model()
         if default_model:
             needed.add(default_model)
         
         # Add fallback models providers
-        validation_config = self.config_provider.get_validation_config()
-        fallback_models = validation_config.get('fallback_models', [])
+        fallback_models = self.config_provider.get_fallback_models()
         needed.update(fallback_models)
         
         return needed
@@ -102,7 +101,7 @@ class LLMManager(Manager):
         Check that all required API keys for default and fallback engines are present.
         If any are missing, raise MissingAPIKeysError.
         """
-        default_model = self.config_provider.get_default_model()
+        default_model = self.config_provider.get_primary_model()
         fallback_models = self.config_provider.get_fallback_models()
         required_engines = set([default_model] + fallback_models)
         
@@ -116,10 +115,10 @@ class LLMManager(Manager):
         if missing:
             raise MissingAPIKeysError(missing)
     
-    async def create_adapter_from_config(self, override_model: str = None) -> BaseLLMAdapter:
+    async def create_adapter_from_config(self, model: LLMModel) -> BaseLLMAdapter:
         """Create an adapter instance based on the active configuration."""
-        provider_name = override_model or self.config_provider.get_default_model()
-        provider_config = self.config_provider.get_model_config(provider_name)
+        provider_name = model.name
+        provider_config = model.get_config()
 
         # Determine the model name
         model_name = provider_config.get('default_model')

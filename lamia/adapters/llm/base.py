@@ -40,8 +40,7 @@ class BaseLLMAdapter(ABC):
         Subclasses that require asynchronous start-up (e.g. opening network
         sessions, loading local models) should override this method.  Adapters
         that don’t need special preparation can rely on this default no-op
-        implementation, which lets callers treat every adapter uniformly while
-        avoiding boilerplate for the simple cases.
+        implementation.
         """
         return
 

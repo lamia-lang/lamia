@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from lamia.engine.config_provider import ConfigProvider
 import logging
 from lamia import LLMModel
+from lamia._internal_types.model_retry import ModelWithRetries
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -75,7 +76,7 @@ class Lamia:
             get_model_param = lambda key: model_chain_item.get(key, None) or model_family_settings.get(key, None) or provider_settings.get(key, None)
             
             return LLMModel(
-                model=model_full_name,
+                name=model_full_name,
                 temperature=get_model_param("temperature"),
                 max_tokens=get_model_param("max_tokens"),
                 top_p=get_model_param("top_p"),
@@ -121,7 +122,7 @@ class Lamia:
         if not incoming_models:
             incoming_models = ["ollama"]
 
-        models_and_retries: List[Tuple[LLMModel, int]] = []
+        models_and_retries: List[ModelWithRetries] = []
         for item in incoming_models:
             retries = DEFAULT_RETRIES
 
@@ -131,18 +132,17 @@ class Lamia:
 
             # Turn strings into ``Model`` instances
             if isinstance(item, str):
-                item = LLMModel(model=item)
+                item = LLMModel(name=item) # When only the model name is provided, the model params are set to None automatically
             elif not isinstance(item, LLMModel):
                 raise TypeError(
                     "Each model spec must be a str, Model or (spec, retries) tuple"
                 )
 
-            models_and_retries.append((item, retries))
+            models_and_retries.append(ModelWithRetries(item, retries))
 
         # Assemble the final config dict
         config_dict: Dict[str, Any] = {
-            "default_model": models_and_retries[0],
-            "fallback_models": models_and_retries[1:],
+            "model_chain": models_and_retries,
             "validators": validators or [],
             "api_keys": api_keys,
         }    

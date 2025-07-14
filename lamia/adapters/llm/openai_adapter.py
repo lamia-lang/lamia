@@ -2,6 +2,7 @@ from typing import Optional, Dict, Any
 import aiohttp
 import openai
 from .base import BaseLLMAdapter, LLMResponse
+from lamia import LLMModel
 
 class OpenAIAdapter(BaseLLMAdapter):
     """OpenAI API adapter with SDK support and HTTP fallback."""
@@ -21,7 +22,7 @@ class OpenAIAdapter(BaseLLMAdapter):
     def is_remote(cls) -> bool:
         return True
     
-    def __init__(self, api_key: str, model: str = "gpt-3.5-turbo"):
+    def __init__(self, api_key: str):
         self.api_key = api_key
         self.model = model
 
@@ -58,20 +59,21 @@ class OpenAIAdapter(BaseLLMAdapter):
     async def generate(
         self,
         prompt: str,
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = 1000,
-        stop_sequences: Optional[list[str]] = None,
+        model: LLMModel,
         **kwargs
     ) -> LLMResponse:
         """Generate a response using OpenAI's API."""
         if self._use_sdk:
             response = await self.client.chat.completions.create(
-                model=self.model,
+                model=model.name,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stop=stop_sequences,
+                temperature=model.temperature,
+                max_tokens=model.max_tokens,
+                top_p=model.top_p,
+                top_k=model.top_k,
+                frequency_penalty=model.frequency_penalty,
+                presence_penalty=model.presence_penalty,
+                seed=model.seed,
                 **kwargs
             )
             
@@ -90,11 +92,16 @@ class OpenAIAdapter(BaseLLMAdapter):
             payload = {
                 "model": self.model,
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": temperature,
-                "max_tokens": max_tokens
+                "temperature": model.temperature,
+                "max_tokens": model.max_tokens,
+                "top_p": model.top_p,
+                "top_k": model.top_k,
+                "frequency_penalty": model.frequency_penalty,
+                "presence_penalty": model.presence_penalty,
+                "seed": model.seed,
             }
-            if stop_sequences is not None:
-                payload["stop"] = stop_sequences
+            if model.stop_sequences is not None:
+                payload["stop"] = model.stop_sequences
             payload.update(kwargs)
             
             try:
@@ -117,13 +124,7 @@ class OpenAIAdapter(BaseLLMAdapter):
 
     @property
     def has_context_memory(self) -> bool:
-        if self._has_context_memory is not None:
-            return self._has_context_memory
-        # Infer from model name: chat models (gpt-*, turbo, etc.) have context memory
-        chat_prefixes = ("gpt-", "text-davinci-003", "text-davinci-002")
-        if self.model.startswith(chat_prefixes) or "turbo" in self.model:
-            return True
-        # Legacy completion models (e.g., text-davinci-003) are stateless
+        # Context memory, if supported, should be implemented in the adapter layer
         return False
     
     async def close(self) -> None:

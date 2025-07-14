@@ -9,6 +9,7 @@ import select
 import yaml
 import logging
 import runpy
+import traceback
 
 from lamia.lamia import Lamia
 from lamia.engine.llm.llm_manager import MissingAPIKeysError
@@ -78,6 +79,7 @@ async def interactive_mode(lamia: Lamia):
             print("\n\nGoodbye! 👋")
             break
         except Exception as e:
+            traceback.print_exc()
             print(f"\n❌ Error: {str(e)}")
             continue
 

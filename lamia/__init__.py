@@ -8,17 +8,14 @@ through a consistent interface, with configuration management and a CLI.
 __version__ = "0.1.0"
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union, Dict
 
-# By default dataclasses are unhashable when they define an __eq__ method and
-# are not frozen. Setting ``frozen=True`` restores hashing behaviour based on
-# the instance's fields.
 @dataclass(frozen=True)
 class LLMModel:
     """Configuration for an LLM model.
     
     Args:
-        model: The model identifier (e.g. 'gpt-4', 'claude-2', etc.)
+        name: The full model identifier (e.g. 'openai:gpt-4', 'anthropic:claude-2', etc.)
         temperature: Controls randomness in responses. Higher values (e.g. 0.8) make output more random, 
                     lower values (e.g. 0.2) make it more focused and deterministic.
         max_tokens: The maximum number of tokens to generate in the response.
@@ -31,7 +28,7 @@ class LLMModel:
         frequency_penalty: Positive values penalize tokens based on their frequency in the text so far.
         presence_penalty: Positive values penalize tokens that have appeared in the text at all.
     """
-    model: str
+    name: str
     # Primary parameters
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
@@ -41,6 +38,17 @@ class LLMModel:
     frequency_penalty: Optional[float] = None
     presence_penalty: Optional[float] = None
     seed: Optional[int] = None
+
+    def get_config(self) -> Dict[str, Union[str, int, float, None]]:
+        return {
+            'temperature': self.temperature,
+            'max_tokens': self.max_tokens,
+            'top_p': self.top_p,
+            'top_k': self.top_k,
+            'frequency_penalty': self.frequency_penalty,
+            'presence_penalty': self.presence_penalty,
+            'seed': self.seed
+        }
 
 from .lamia import Lamia
 

@@ -24,9 +24,8 @@ class AnthropicAdapter(BaseLLMAdapter):
     def is_remote(cls) -> bool:
         return True
     
-    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
+    def __init__(self, api_key: str):
         self.api_key = api_key
-        self.model = model
         self.client = None
         self.session = None
         self._has_context_memory = None  # User cannot set this for now

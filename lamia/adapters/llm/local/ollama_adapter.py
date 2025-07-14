@@ -32,9 +32,7 @@ class OllamaAdapter(BaseLLMAdapter):
     
     def __init__(
         self,
-        model: str = "llama2",
         base_url: str = "http://localhost:11434",
-        context_size: int = 4096,
         **model_params
     ):
         """Initialize Ollama adapter.
@@ -45,9 +43,7 @@ class OllamaAdapter(BaseLLMAdapter):
             context_size: Maximum context size for the model
             **model_params: Additional model parameters supported by Ollama
         """
-        self.model = model
         self.base_url = base_url.rstrip('/')
-        self.context_size = context_size
         self.model_params = model_params
         self.session = None
 

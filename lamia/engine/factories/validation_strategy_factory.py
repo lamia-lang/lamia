@@ -44,21 +44,11 @@ class ValidationStrategyFactory:
     async def _create_llm_validation_strategy(self) -> ValidationStrategy:
         """Build the LLM validation strategy with its dependencies."""
 
-        # Fetch validation-specific configuration
-        validation_cfg: Dict[str, Any] = self.config_provider.get_validation_config()
-
-        retry_config = RetryConfig(
-            max_retries=validation_cfg.get("max_retries", 1),
-            fallback_models=validation_cfg.get("fallback_models"),
-            validators=validation_cfg.get("validators"),
-        )
-
         # Build validator registry (allows project / user extensions)
         ext_folder = self.config_provider.get_extensions_folder()
         registry = await ValidatorRegistry(self.config_provider.config, ext_folder).get_registry()
 
         strategy = LLMValidationStrategy(
-            config=retry_config,
             validator_registry=registry,
         )
 

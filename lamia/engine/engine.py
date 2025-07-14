@@ -48,7 +48,7 @@ class LamiaEngine:
         
         # Apply domain-specific parameter handling (for LLM)
         if command_type == CommandType.LLM:
-            request_model = kwargs.get('model')
+            '''request_model = kwargs.get('model')
             if request_model is not None:
                 if isinstance(request_model, str):
                     model_name = request_model
@@ -62,26 +62,22 @@ class LamiaEngine:
                     kwargs['presence_penalty'] = request_model.presence_penalty
                     kwargs['stream'] = request_model.stream
             else:
-                model_name = self.config_provider.get_default_model()
+                model_name = self.config_provider.get_primary_model().model.model
 
             # Use config values if not overridden
-            config = self.config_provider.get_model_config(model_name)
+            config = self.config_provider.get_primary_model().model.get_config()
 
-            kwargs['temperature'] = kwargs['temperature'] or config.get('temperature')
-            kwargs['max_tokens'] = kwargs['max_tokens'] or config.get('max_tokens')
-            kwargs['top_p'] = kwargs['top_p'] or config.get('top_p')
-            kwargs['top_k'] = kwargs['top_k'] or config.get('top_k')
-            kwargs['frequency_penalty'] = kwargs['frequency_penalty'] or config.get('frequency_penalty')
-            kwargs['presence_penalty'] = kwargs['presence_penalty'] or config.get('presence_penalty')
-            kwargs['stream'] = kwargs['stream'] or config.get('stream')
+            kwargs['temperature'] = kwargs.get('temperature') or config.get('temperature')
+            kwargs['max_tokens'] = kwargs.get('max_tokens') or config.get('max_tokens')
+            kwargs['top_p'] = kwargs.get('top_p') or config.get('top_p')
+            kwargs['top_k'] = kwargs.get('top_k') or config.get('top_k')
+            kwargs['frequency_penalty'] = kwargs.get('frequency_penalty') or config.get('frequency_penalty')
+            kwargs['presence_penalty'] = kwargs.get('presence_penalty') or config.get('presence_penalty')
+            kwargs['stream'] = kwargs.get('stream') or config.get('stream')'''
+            pass
         
-        # Engine makes routing decision based on validation enabled flag
-        if self._validation_enabled:
-            # Use validation manager for coordination and statistics
-            return await self.validation_manager.validate(command_type, manager, content, **kwargs)
-        else:
-            # Use manager directly (no validation)
-            return await manager.execute(content, **kwargs)
+
+        return await self.validation_manager.validate(command_type, manager, content, **kwargs)
     
     def get_validation_stats(self):
         """Get validation statistics from the validation manager."""
