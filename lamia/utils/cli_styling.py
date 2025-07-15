@@ -5,13 +5,12 @@ from typing import Optional
 # ANSI color codes
 class Colors:
     GREY = "\033[90m"
-    RED = "\033[91m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    BLUE = "\033[94m"
-    MAGENTA = "\033[95m"
-    CYAN = "\033[96m"
-    WHITE = "\033[97m"
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
     RESET = "\033[0m"
 
 class ColoredFormatter(logging.Formatter):
@@ -19,7 +18,7 @@ class ColoredFormatter(logging.Formatter):
     
     COLORS = {
         'DEBUG': Colors.BLUE,
-        'INFO': Colors.WHITE,
+        'INFO': '',  # Use terminal default color
         'WARNING': Colors.YELLOW,
         'ERROR': Colors.RED,
         'CRITICAL': Colors.RED,
@@ -31,17 +30,20 @@ class ColoredFormatter(logging.Formatter):
             # Color the levelname
             if record.levelname in self.COLORS:
                 color = self.COLORS[record.levelname]
-                record.levelname = f"{color}{record.levelname}{Colors.RESET}"
+                if color:  # Only add color if it's not empty string
+                    record.levelname = f"{color}{record.levelname}{Colors.RESET}"
             
-            # Color the message based on level
+            # Color the message based on level and content
             if record.levelname in ['WARNING', 'ERROR', 'CRITICAL']:
                 record.msg = f"{self.COLORS[record.levelname]}{record.msg}{Colors.RESET}"
-            elif record.levelname == 'INFO' and '✅' in str(record.msg):
-                # Success messages (with checkmark) in green
-                record.msg = f"{Colors.GREEN}{record.msg}{Colors.RESET}"
-            elif record.levelname == 'INFO' and '[Lamia][Ask]' in str(record.msg):
-                # Grey out prompts
-                record.msg = f"{Colors.GREY}{record.msg}{Colors.RESET}"
+            elif record.levelname == 'INFO':
+                if '✅' in str(record.msg):
+                    # Success messages (with checkmark) in green
+                    record.msg = f"{Colors.GREEN}{record.msg}{Colors.RESET}"
+                elif '[Lamia][Ask]' in str(record.msg):
+                    # Grey out prompts
+                    record.msg = f"{Colors.GREY}{record.msg}{Colors.RESET}"
+                # else: use terminal default color
         
         return super().format(record)
 

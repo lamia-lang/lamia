@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 async def interactive_mode(lamia: Lamia):
     """Run Lamia in interactive mode, processing user prompts."""
-    logger.info("\nLamia Interactive Mode")
+    logger.info("Lamia Interactive Mode")
     logger.info("Enter your prompts (type 'SEND' on a new line to finish, type CANCEL to discard current input, Ctrl+C to quit, type STOP to interrupt a running prompt, 'exit' to quit)")
     logger.info("----------------------------------------")
 
@@ -82,8 +82,7 @@ async def interactive_mode(lamia: Lamia):
             logger.info("\n\nGoodbye! 👋")
             break
         except Exception as e:
-            logger.error(traceback.format_exc())
-            logger.error(f"\nError: {str(e)}")
+            logger.error(f"❌ Error: {str(e)}")
             continue
 
 def add_all_py_dirs_to_syspath_and_check_conflicts(root_dir):

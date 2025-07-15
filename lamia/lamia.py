@@ -26,7 +26,6 @@ class Lamia:
         *models: Model names or Model objects (e.g., 'openai:gpt-4o', 'ollama', ...)
         api_keys: Optional dict of API keys (e.g., {'openai': 'sk-...'}).
         validators: Optional list of functions or Lamia validator instances.
-        config: Optional config dict or path. If provided, overrides *models.
     """
     
     def __init__(
@@ -58,7 +57,7 @@ class Lamia:
                 providers = config["providers"]
                 provider_name = model_chain_item["name"]
                 if provider_name not in providers:
-                    raise ValueError(f"Provider {provider_name} is not configured.")
+                    raise ValueError(f"Provider {provider_name} is not configured. Please provide the model full name, e.g. 'openai:gpt-4o'.")
                 
                 if not providers[provider_name]["enabled"]:
                     logger.warning(f"Provider {provider_name} is not enabled. Please enable it in the config if you want to use it.")

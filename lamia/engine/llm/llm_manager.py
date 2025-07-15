@@ -9,7 +9,6 @@ from ..interfaces import Manager
 from .providers import ProviderRegistry
 from ..interfaces.validation_strategy import ValidationStrategy
 import logging
-import sys
 
 
 logger = logging.getLogger(__name__)
@@ -18,13 +17,16 @@ class MissingAPIKeysError(Exception):
     """Raised when one or more required API keys are missing for LLM engines."""
     def __init__(self, missing):
         self.missing = missing
+        missing_providers = [model_provider for model_provider, _ in missing]
         message = (
-            "\n❌ The following engines are missing required API keys:\n" +
+            "The following engines are missing required API keys:\n" +
             "\n".join([f"- {model_provider}: missing {env_vars}" for model_provider, env_vars in missing]) +
-            "\n\nPlease provide the missing API keys in one of the following ways:\n"
-            "- As environment variables (e.g., export OPENAI_API_KEY=...)\n"
-            "- As a parameter to the Lamia() constructor (e.g., Lamia(..., api_keys={...}))\n"
-            f"You can also use LAMIA_API_KEY to proxy remote adapters {(', '.join(LamiaAdapter.get_supported_providers()))}.\n"
+            "\n\nPlease provide the missing API keys in one of the following ways:\n" +
+            "- As environment variables (e.g., export OPENAI_API_KEY=...)\n" +
+            "- As a parameter to the Lamia() constructor (e.g., Lamia(..., api_keys={" +
+            ", ".join([f'"{provider_name}": "my-api-key"' for provider_name, _ in missing]) +
+            "}))\n" +
+            (f"You can also use LAMIA_API_KEY to proxy remote adapters ({', '.join(LamiaAdapter.get_supported_providers())}).\n" if all(provider in LamiaAdapter.get_supported_providers() for provider in missing_providers) else "") +
             "Alternatively, remove these engines from your default or fallback_models in config."
         )
         super().__init__(message)
@@ -74,6 +76,7 @@ class LLMManager(Manager):
         Priority: specific provider key > lamia key (for remote providers) > env var fallback (with precedence).
         """
 
+        # Priority: lamia key > lamia env key > provider key > provider env key
         if provider_name in LamiaAdapter.get_supported_providers():
             lamia_api_key = self.config_provider.get_api_key("lamia")
             if lamia_api_key:
@@ -85,7 +88,7 @@ class LLMManager(Manager):
 
         api_key = self.config_provider.get_api_key(provider_name)
         if api_key:
-            return api_key
+            return api_key, False
 
         env_api_key = self.provider_registry.get_api_key_from_env(provider_name)
         if env_api_key:
@@ -112,7 +115,7 @@ class LLMManager(Manager):
         missing = []
         for engine in required_engines:
             try:
-                self._resolve_api_key(engine)
+                self._resolve_api_key(engine.model.get_provider_name())
             except MissingAPIKeysError as e:
                 missing.extend(e.missing)
         
