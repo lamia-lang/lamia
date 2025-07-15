@@ -89,8 +89,7 @@ class ProviderRegistry:
     def get_adapter_class(self, provider_name: str) -> Type[BaseLLMAdapter]:
         """Get adapter class by name."""
         if provider_name not in self._adapter_map:
-            available = list(self._adapter_map.keys())
-            raise ValueError(f"Unknown provider: {provider_name}. Available: {available}")
+            raise ValueError(f"Unknown provider: {provider_name}.")
         return self._adapter_map[provider_name]
     
     def get_env_var_names(self, provider_name: str) -> list[str]:

@@ -22,7 +22,6 @@ async def interactive_mode(lamia: Lamia):
     """Run Lamia in interactive mode, processing user prompts."""
     logger.info("Lamia Interactive Mode")
     logger.info("Enter your prompts (type 'SEND' on a new line to finish, type CANCEL to discard current input, Ctrl+C to quit, type STOP to interrupt a running prompt, 'exit' to quit)")
-    logger.info("----------------------------------------")
 
     prompt_str = "\n🤖 > (SEND=submit, CANCEL=discard, STOP=interrupt, Command/Ctrl C or EXIT=quit)\n> "
 

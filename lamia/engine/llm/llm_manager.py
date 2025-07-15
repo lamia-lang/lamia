@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 class MissingAPIKeysError(Exception):
     """Raised when one or more required API keys are missing for LLM engines."""
     def __init__(self, missing):
+        def get_api_keys_constructor_string(provider_names: List[str]) -> str:
+            return "Lamia(..., api_keys={" + \
+                ", ".join([f'"{provider_name}": "my-api-key"' for provider_name in provider_names]) + \
+                "}"
+
         self.missing = missing
         missing_providers = [model_provider for model_provider, _ in missing]
         message = (
@@ -23,10 +28,8 @@ class MissingAPIKeysError(Exception):
             "\n".join([f"- {model_provider}: missing {env_vars}" for model_provider, env_vars in missing]) +
             "\n\nPlease provide the missing API keys in one of the following ways:\n" +
             "- As environment variables (e.g., export OPENAI_API_KEY=...)\n" +
-            "- As a parameter to the Lamia() constructor (e.g., Lamia(..., api_keys={" +
-            ", ".join([f'"{provider_name}": "my-api-key"' for provider_name, _ in missing]) +
-            "}))\n" +
-            (f"You can also use LAMIA_API_KEY to proxy remote adapters ({', '.join(LamiaAdapter.get_supported_providers())}).\n" if all(provider in LamiaAdapter.get_supported_providers() for provider in missing_providers) else "") +
+            "- As a parameter to the Lamia() constructor like this: " + get_api_keys_constructor_string([provider for provider,_ in missing]) + "\n" +
+            (f"You can also use LAMIA_API_KEY or {get_api_keys_constructor_string(['lamia'])} to proxy remote adapters ({', '.join(LamiaAdapter.get_supported_providers())}).\n" if all(provider in LamiaAdapter.get_supported_providers() for provider in missing_providers) else "") +
             "Alternatively, remove these engines from your default or fallback_models in config."
         )
         super().__init__(message)
@@ -50,8 +53,11 @@ class LLMManager(Manager):
         ext_adapters_path = os.path.join(os.getcwd(), ext_folder, "adapters")
         self.provider_registry.add_user_adapters([ext_adapters_path])
         
+        # Check if all needed providers are supported
+        self._check_all_required_providers(needed_providers)
+
         # Check API keys early
-        self._check_all_required_api_keys()
+        self._check_all_required_api_keys(needed_providers)
         self._initialized = True
     
     def _get_needed_providers(self) -> Set[str]:
@@ -103,19 +109,36 @@ class LLMManager(Manager):
         # Provider doesn't need an API key (e.g., local models)
         return None, False
     
-    def _check_all_required_api_keys(self):
+    def _check_all_required_providers(self, needed_providers: Set[str]):
+        """
+        Check that all required providers are supported.
+        If any are missing, raise ValueError.
+        """
+        unsupported = []
+        for provider_name in needed_providers:
+            try:
+                self.provider_registry.get_adapter_class(provider_name)
+            except ValueError as e:
+                unsupported.append(provider_name)
+
+        if unsupported:
+            raise ValueError(
+                f"The following providers are not supported: {', '.join(unsupported)}.\n"
+                "Please either:\n"
+                "- Remove them from the model chain\n"
+                "- Add corresponding adapters to your extensions folder."
+            )
+        
+    def _check_all_required_api_keys(self, needed_providers: Set[str]):
         """
         Check that all required API keys for default and fallback engines are present.
         If any are missing, raise MissingAPIKeysError.
         """
-        default_model = self.config_provider.get_primary_model()
-        fallback_models = self.config_provider.get_fallback_models()
-        required_engines = set([default_model] + fallback_models)
         
         missing = []
-        for engine in required_engines:
+        for provider_name in needed_providers:
             try:
-                self._resolve_api_key(engine.model.get_provider_name())
+                self._resolve_api_key(provider_name)
             except MissingAPIKeysError as e:
                 missing.extend(e.missing)
         
