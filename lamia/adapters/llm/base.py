@@ -66,12 +66,6 @@ class BaseLLMAdapter(ABC):
         """Cleanup any resources used by the adapter."""
         pass
 
-    @property
-    @abstractmethod
-    def has_context_memory(self) -> bool:
-        """Whether the LLM adapter supports context memory (chat history)."""
-        pass
-
     async def __aenter__(self):
         await self.async_initialize()
         return self

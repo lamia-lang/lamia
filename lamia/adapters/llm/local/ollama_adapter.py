@@ -6,14 +6,12 @@ import subprocess
 import requests
 import time
 from ..base import BaseLLMAdapter, LLMResponse, LLMModel
+import traceback
 
 logger = logging.getLogger(__name__)
 
 class OllamaAdapter(BaseLLMAdapter):
     """Adapter for local Ollama models.
-    
-    The has_context_memory property infers context memory from the model name (if it contains 'chat' or 'instruct', returns True),
-    but can be overridden by passing has_context_memory in model_params.
     """
     
     @classmethod
@@ -32,18 +30,13 @@ class OllamaAdapter(BaseLLMAdapter):
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        **model_params
     ):
         """Initialize Ollama adapter.
         
         Args:
             model: Name of the Ollama model to use (must be pulled first)
-            base_url: URL of the Ollama API server
-            context_size: Maximum context size for the model
-            **model_params: Additional model parameters supported by Ollama
         """
         self.base_url = base_url.rstrip('/')
-        self.model_params = model_params
 
         # Start Ollama service if not running
         if not self.start_ollama_service():
@@ -99,18 +92,18 @@ class OllamaAdapter(BaseLLMAdapter):
             raise RuntimeError("Adapter not initialized. Use 'async with' or call initialize()")
         
         # Ensure model is pulled
-        if not self.ensure_ollama_model_pulled(model.name):
-            raise RuntimeError(f"Failed to pull Ollama model: {model.name}")
+        if not self.ensure_ollama_model_pulled(model.get_model_name_without_provider()):
+            raise RuntimeError(f"Failed to pull Ollama model: {model.get_model_name_without_provider()}")
 
         # Prepare request payload
         payload = {
-            "model": self.model,
+            "model": model.get_model_name_without_provider(),
             "prompt": prompt,
             "stream": False,
             "options": {
                 "temperature": model.temperature,
                 "max_tokens": model.max_tokens,
-                "stop": model.stop_sequences,
+                #"stop": model.stop_sequences,
                 "top_p": model.top_p,
                 "top_k": model.top_k,
                 "frequency_penalty": model.frequency_penalty,
@@ -143,7 +136,7 @@ class OllamaAdapter(BaseLLMAdapter):
                     text=result["response"],
                     raw_response=result,
                     usage=usage,
-                    model=f"ollama/{self.model}"
+                    model=model.name
                 )
 
         except aiohttp.ClientError as e:
@@ -154,14 +147,3 @@ class OllamaAdapter(BaseLLMAdapter):
         if self.session:
             await self.session.close()
             self.session = None
-
-    @property
-    def has_context_memory(self) -> bool:
-        # Allow explicit override
-        if 'has_context_memory' in self.model_params:
-            return bool(self.model_params['has_context_memory'])
-        # Infer from model name
-        model_name = self.model.lower()
-        if any(x in model_name for x in ["chat", "instruct"]):
-            return True
-        return False 

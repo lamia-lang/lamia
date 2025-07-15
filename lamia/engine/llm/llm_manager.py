@@ -157,7 +157,10 @@ class LLMManager(Manager):
         else:
             adapter_class = self.provider_registry.get_adapter_class(provider_name)
         
-        adapter = adapter_class(api_key=api_key)
+        if adapter_class.is_remote():
+            adapter = adapter_class(api_key=api_key)
+        else:
+            adapter = adapter_class()
         await adapter.async_initialize()
         return adapter
 
@@ -259,9 +262,9 @@ class LLMManager(Manager):
         while attempts < max_attempts:
             attempts += 1
             try:
-                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{adapter.model}':\n{current_prompt}")
+                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}':\n{current_prompt}")
                 response = await adapter.generate(current_prompt, model=model)
-                logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{adapter.model}':\n{response.text}")
+                logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}':\n{response.text}")
                 
                 # Validate the response
                 validation_result = await self.validation_strategy.validate(response.text)

@@ -27,7 +27,6 @@ class OpenAIAdapter(BaseLLMAdapter):
 
         # Detect whether the OpenAI SDK is available. If not, fall back to raw HTTP.
         self._use_sdk = True
-        self._has_context_memory = None  # User cannot set this for now
 
         try:
             # Prefer the official SDK when present
@@ -118,11 +117,6 @@ class OpenAIAdapter(BaseLLMAdapter):
                     
             except aiohttp.ClientError as e:
                 raise RuntimeError(f"Failed to communicate with OpenAI API: {str(e)}")
-
-    @property
-    def has_context_memory(self) -> bool:
-        # Context memory, if supported, should be implemented in the adapter layer
-        return False
     
     async def close(self) -> None:
         """Cleanup any resources used by the adapter."""

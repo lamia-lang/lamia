@@ -12,7 +12,6 @@ class LlamaAdapter(BaseLLMAdapter):
     def __init__(
         self,
         model_path: Optional[str] = None,
-        has_context_memory: bool = None,
         configs: Optional[dict] = None
     ):
         """Initialize local LLaMA adapter.

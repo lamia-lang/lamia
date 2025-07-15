@@ -174,10 +174,10 @@ class Lamia:
             result = run_python_code(command, mode='interactive')
             return LamiaResult(result=str(result) if result is not None else "", executor="python")
         except SyntaxError as e:
-            print(f"Syntax error: {e}", command)
+            logger.error(f"Syntax error: {e}", command)
             pass
         except Exception as e:
-            print(f"Python code execution failed: {e}")
+            logger.error(f"Python code execution failed: {e}")
             pass
 
         # If not Python code, parse command using Lamia parser

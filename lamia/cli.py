@@ -82,6 +82,7 @@ async def interactive_mode(lamia: Lamia):
             break
         except Exception as e:
             logger.error(f"❌ Error: {str(e)}")
+            logger.error(traceback.format_exc())
             continue
 
 def add_all_py_dirs_to_syspath_and_check_conflicts(root_dir):

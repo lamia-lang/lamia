@@ -41,6 +41,9 @@ class LLMModel:
 
     def get_provider_name(self) -> str:
         return self.name.split(":")[0]
+    
+    def get_model_name_without_provider(self) -> str:
+        return ":".join(self.name.split(":")[1:])
 
 @dataclass(frozen=True)
 class OllamaModel(LLMModel):

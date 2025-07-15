@@ -30,7 +30,6 @@ class LamiaAdapter(BaseLLMAdapter):
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.session = None
-        self._has_context_memory = None
 
         self.session = aiohttp.ClientSession(
             headers={
@@ -92,11 +91,6 @@ class LamiaAdapter(BaseLLMAdapter):
                 
         except aiohttp.ClientError as e:
             raise RuntimeError(f"Failed to communicate with Lamia API: {str(e)}")
-
-    @property
-    def has_context_memory(self) -> bool:
-        """Context memory depends on the underlying provider being proxied."""
-        return False
     
     async def close(self) -> None:
         """Cleanup HTTP session."""

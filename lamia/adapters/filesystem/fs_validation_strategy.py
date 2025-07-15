@@ -46,39 +46,3 @@ class FSValidationStrategy(ValidationStrategy):
 
         self.config = config
         self._initialized = True
-
-    async def validate(self, manager: Manager, content: str) -> Any:  # type: ignore[override]
-        """Execute the *filesystem* operation and validate the result."""
-
-        result = await manager.execute(content)
-
-        # 2. If no validators configured – return result straight away
-        if not self.validators:
-            return result
-
-        # 3. Decide on *text* that will be passed to validators
-        if isinstance(result, str):
-            text = result
-        elif isinstance(result, (bytes, bytearray)):
-            text = result.decode("utf-8", errors="ignore")
-        else:
-            text = str(result)
-
-        # 4. Chain-validate
-        validation_outcome: ValidationResult = await self.chain_validate(text)
-
-        if validation_outcome.is_valid:
-            # Propagate `validated_text` when a validator provides a cleaner
-            # version of the response – fall back to original *text*
-            return validation_outcome.validated_text or result
-
-        # 5. Validation failed – decide according to strategy configuration
-        logger.info(
-            "Validation failed for filesystem result: %s", validation_outcome.error_message
-        )
-        if self.config.raise_on_failure:
-            raise RuntimeError(validation_outcome.error_message)
-
-        # If we do *not* raise, return the original result so the caller can
-        # decide what to do with invalid data.
-        return result 

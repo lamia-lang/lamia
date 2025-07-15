@@ -1,6 +1,9 @@
 import subprocess
 import requests
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 class OllamaManager:
     def is_running(self) -> bool:
@@ -17,7 +20,7 @@ class OllamaManager:
         Returns empty list if service is not running or no models found.
         """
         if not self.is_running():
-            print("⚠️  Ollama service is not running. Start it with 'ollama serve'")
+            logger.warning("⚠️ Ollama service is not running. Start it with 'ollama serve'")
             return []
         try:
             response = requests.get("http://localhost:11434/api/tags", timeout=5)
@@ -35,9 +38,9 @@ class OllamaManager:
             bool: True if service started successfully or was already running
         """
         if self.is_running():
-            print("✓ Ollama service is running")
+            logger.info("✓ Ollama service is running")
             return True
-        print("Starting Ollama service...")
+        logger.info("Starting Ollama service...")
         try:
             # Start Ollama in the background
             subprocess.Popen(["ollama", "serve"],
@@ -51,13 +54,13 @@ class OllamaManager:
                 if i % 5 == 0:  # Show progress every 5 seconds
                     print(".", end="", flush=True)
                 time.sleep(1)
-            print("\n❌ Timeout waiting for Ollama service to start")
+            logger.error("Timeout waiting for Ollama service to start")
             return False
         except FileNotFoundError:
-            print("\n❌ Ollama is not installed. Please install it first: https://ollama.ai/download")
+            logger.error("Ollama is not installed. Please install it first: https://ollama.ai/download")
             raise RuntimeError("Ollama is not installed")
         except Exception as e:
-            print(f"\n❌ Failed to start Ollama service: {str(e)}")
+            logger.error(f"Failed to start Ollama service: {str(e)}")
             return False
 
     def ensure_model_pulled(self, model_name: str) -> bool:

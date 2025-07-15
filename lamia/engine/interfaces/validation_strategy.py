@@ -40,7 +40,7 @@ class ValidationStrategy(ABC):
 
         return validators
 
-    async def chain_validate(self, response: str) -> ValidationResult:
+    async def _chain_validate(self, response: str) -> ValidationResult:
         """Validate a response against all configured validators.
         
         Args:
@@ -59,7 +59,7 @@ class ValidationStrategy(ABC):
                 response = result.validated_text
         return ValidationResult(is_valid=True, validated_text=response)
     
-    async def validate(self, manager: Manager, content: str, **kwargs) -> Any:
+    async def validate(self, content: str, **kwargs) -> Any:
         """Validate content using the provided manager.
         
         Args:
@@ -70,4 +70,4 @@ class ValidationStrategy(ABC):
         Returns:
             Validated response from the domain
         """
-        return await self.chain_validate(content)
+        return await self._chain_validate(content)

@@ -29,7 +29,6 @@ class AnthropicAdapter(BaseLLMAdapter):
 
         self.client = None
         self.session = None
-        self._has_context_memory = None  # User cannot set this for now
 
         # Try to import Anthropic SDK (and auto-install if allowed).
         anthropic_module, success, _ = import_optional(
@@ -42,7 +41,6 @@ class AnthropicAdapter(BaseLLMAdapter):
             self._use_sdk = True
         else:
             # Fall back to HTTP client
-            print("Using HTTP fallback for Anthropic API")
             self._use_sdk = False
             self.session = aiohttp.ClientSession(
                 headers={
@@ -126,10 +124,3 @@ class AnthropicAdapter(BaseLLMAdapter):
                 
         except aiohttp.ClientError as e:
             raise RuntimeError(f"Failed to communicate with Anthropic API: {str(e)}")
-
-    @property
-    def has_context_memory(self) -> bool:
-        if self._has_context_memory is not None:
-            return self._has_context_memory
-        # All Anthropic chat models (Claude, etc.) have context memory
-        return True 
