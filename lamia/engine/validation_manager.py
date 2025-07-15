@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List
 import logging
 from datetime import datetime
 from dataclasses import dataclass, field
-from lamia.engine.interfaces.manager import Manager
+from lamia.engine.managers.manager import Manager
 from lamia.command_types import CommandType
 from .factories import ValidationStrategyFactory
 from lamia.validation.base import ValidationResult

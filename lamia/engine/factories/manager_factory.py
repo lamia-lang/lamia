@@ -1,7 +1,8 @@
 from typing import Dict, Type
 from lamia.command_types import CommandType
-from ..interfaces import Manager, ValidationStrategy
+from ..managers import Manager, ValidationStrategy
 from ..config_provider import ConfigProvider
+from ..managers.llm.llm_manager import LLMManager
 
 class ManagerFactory:
     """Factory for creating domain managers based on request type."""
@@ -15,7 +16,6 @@ class ManagerFactory:
     def _register_managers(self):
         """Register available manager implementations."""
         # Import here to avoid circular imports
-        from ..llm.llm_manager import LLMManager
         
         self._manager_registry[CommandType.LLM] = LLMManager
         # TODO: Register other managers as they're implemented

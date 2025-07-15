@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, Dict, Type
-from .manager import Manager
+from ..managers.manager import Manager
 from lamia.validation.base import BaseValidator, ValidationResult
 from lamia.validation.validators import CONFLICTING_VALIDATOR_GROUPS
 import logging

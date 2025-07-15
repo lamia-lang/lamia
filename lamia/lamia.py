@@ -188,7 +188,7 @@ class Lamia:
             current_parser.command_type,
             current_parser.content,
         )
-        return LamiaResult(result=response.text, executor=response.model)
+        return LamiaResult(result=response.raw_text, executor="LLM model not known")
 
     def run(
         self,

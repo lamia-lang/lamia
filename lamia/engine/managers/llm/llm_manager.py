@@ -3,12 +3,12 @@ from typing import List, Optional, Dict, Any, Set
 import os
 from lamia.adapters.llm.lamia_adapter import LamiaAdapter
 from lamia import LLMModel
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
-from ..config_provider import ConfigProvider
-from ..interfaces import Manager
+from lamia.adapters.llm.base import BaseLLMAdapter
+from ...config_provider import ConfigProvider
+from ...managers import Manager
 from .providers import ProviderRegistry
-from ..interfaces.validation_strategy import ValidationStrategy
-from ...validation.base import ValidationResult
+from ...validation_strategies.validation_strategy import ValidationStrategy
+from lamia.validation.base import ValidationResult
 import logging
 
 

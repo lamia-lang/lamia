@@ -12,7 +12,7 @@ import runpy
 import traceback
 
 from lamia.lamia import Lamia
-from lamia.engine.llm.llm_manager import MissingAPIKeysError
+from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
 from lamia.utils import scaffold
 from lamia.utils.cli_styling import setup_cli_logging
 
@@ -83,6 +83,7 @@ async def interactive_mode(lamia: Lamia):
             logger.info("\n\nGoodbye! 👋")
             break
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"❌ Error: {str(e)}")
             logger.error(traceback.format_exc())
             continue
@@ -220,6 +221,7 @@ def main():
             logger.error("Please check your .env file or config.yaml for required API keys.")
             sys.exit(1)
         except Exception as e:
+            traceback.print_exc()
             logger.error(f"❌ Error: {e}")
             logger.error("Check your config.yaml and logs for details.")
             sys.exit(1)

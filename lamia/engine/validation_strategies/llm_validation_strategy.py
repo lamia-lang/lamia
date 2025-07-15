@@ -1,4 +1,4 @@
-from ...engine.interfaces import ValidationStrategy
+from ..managers import ValidationStrategy
 
 class LLMValidationStrategy(ValidationStrategy):
     """Handles LLM validation logic."""

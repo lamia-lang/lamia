@@ -1,9 +1,10 @@
-from typing import Dict, Any
+from typing import Dict
 
-from ..interfaces import ValidationStrategy
+from ..managers import ValidationStrategy
 from ..config_provider import ConfigProvider
 from lamia.command_types import CommandType
-from lamia.adapters.llm.llm_validation_strategy import LLMValidationStrategy
+from lamia.engine.validation_strategies.llm_validation_strategy import LLMValidationStrategy
+from lamia.engine.validation_strategies.fs_validation_strategy import FSValidationStrategy
 from lamia.validation.validator_registry import ValidatorRegistry
 
 class ValidationStrategyFactory:
@@ -36,20 +37,13 @@ class ValidationStrategyFactory:
     async def _create_strategy(self, command_type: CommandType) -> ValidationStrategy:
         """Instantiate the appropriate validation strategy for *command_type*."""
 
-        if command_type == CommandType.LLM:
-            return await self._create_llm_validation_strategy()
-
-        raise ValueError(f"No validation strategy implemented for command type: {command_type}")
-
-    async def _create_llm_validation_strategy(self) -> ValidationStrategy:
-        """Build the LLM validation strategy with its dependencies."""
-
         # Build validator registry (allows project / user extensions)
         ext_folder = self.config_provider.get_extensions_folder()
         registry = await ValidatorRegistry(self.config_provider.config, ext_folder).get_registry()
 
-        strategy = LLMValidationStrategy(
-            validator_registry=registry,
-        )
+        if command_type == CommandType.LLM:
+            return LLMValidationStrategy(registry)
+        elif command_type == CommandType.FILESYSTEM:
+            return FSValidationStrategy(registry)
 
-        return strategy
+        raise ValueError(f"No validation strategy implemented for command type: {command_type}")
