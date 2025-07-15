@@ -8,6 +8,7 @@ from ..config_provider import ConfigProvider
 from ..interfaces import Manager
 from .providers import ProviderRegistry
 from ..interfaces.validation_strategy import ValidationStrategy
+from ...validation.base import ValidationResult
 import logging
 
 
@@ -177,7 +178,7 @@ class LLMManager(Manager):
     async def execute(
         self,
         prompt: str,
-    ) -> LLMResponse:
+    ) -> ValidationResult:
         """Generate a response using the managed adapter.
         
         Args:
@@ -196,7 +197,7 @@ class LLMManager(Manager):
     async def execute_with_retries(
         self,
         prompt: str
-    ) -> LLMResponse:
+    ) -> ValidationResult:
         """Execute the prompt with retry and fallback logic.
         
         Args:
@@ -205,7 +206,7 @@ class LLMManager(Manager):
             **kwargs: Additional parameters for generate()
             
         Returns:
-            LLMResponse from a successful attempt
+            ValidationResult from a successful attempt
             
         Raises:
             RuntimeError: If all attempts fail
@@ -265,7 +266,7 @@ class LLMManager(Manager):
         model: LLMModel,
         prompt: str,
         max_attempts: int,
-    ) -> LLMResponse:
+    ) -> ValidationResult:
         errors = []
         attempts = 0
         current_prompt = prompt
@@ -279,10 +280,7 @@ class LLMManager(Manager):
                 # Validate the response
                 validation_result = await self.validation_strategy.validate(response.text)
                 if validation_result.is_valid:
-                    # If validated_text is present, return a new LLMResponse with it
-                    if validation_result.validated_text is not None:
-                        return type(response)(**{**response.__dict__, 'text': validation_result.validated_text})
-                    return response
+                    return validation_result
                 
                 logger.warning(
                     f"Attempt {attempts}/{max_attempts} failed validation: "

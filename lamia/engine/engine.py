@@ -5,6 +5,7 @@ from .config_provider import ConfigProvider
 from .factories import ManagerFactory, ValidationStrategyFactory
 from .validation_manager import ValidationManager
 from lamia.command_types import CommandType
+from lamia.validation.base import ValidationResult
 
 class LamiaEngine:
     """Main engine for Lamia that orchestrates different domain managers."""
@@ -13,7 +14,7 @@ class LamiaEngine:
         """Initialize the Lamia engine."""
         self.config_provider = config_provider
         
-        # Initialize factories (DIP compliance)
+        # Initialize factories
         self.validation_factory = ValidationStrategyFactory(self.config_provider)
         self.manager_factory = ManagerFactory(self.config_provider)
         
@@ -30,7 +31,7 @@ class LamiaEngine:
         self,
         command_type: CommandType,
         content: str,
-    ) -> Any:
+    ) -> ValidationResult:
         """Execute a request using the appropriate domain manager.
         
         Args:

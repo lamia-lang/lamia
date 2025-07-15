@@ -33,7 +33,7 @@ class ValidationManager:
         self.recent_results: List[ValidationResult] = []
         self.max_recent_results = 100  # Keep last 100 results
     
-    async def validate(self, command_type: CommandType, manager: Manager, content: str) -> Any:
+    async def validate(self, command_type: CommandType, manager: Manager, content: str) -> ValidationResult:
         """Coordinate validation using the appropriate domain strategy.
         
         Args:
@@ -48,17 +48,13 @@ class ValidationManager:
         
         try:
             # Execute validation
-            result = await manager.execute(content)
+            validation_result = await manager.execute(content)
             
             # Record successful validation
             execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
-            validation_result = ValidationResult(
-                is_valid=True,
-                validated_text=getattr(result, 'text', str(result))
-            )
             self._record_validation_result(validation_result, command_type, execution_time)
             
-            return result
+            return validation_result
             
         except Exception as e:
             # Record failed validation

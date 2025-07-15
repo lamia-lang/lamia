@@ -59,7 +59,7 @@ class ValidationStrategy(ABC):
                 response = result.validated_text
         return ValidationResult(is_valid=True, validated_text=response)
     
-    async def validate(self, content: str, **kwargs) -> Any:
+    async def validate(self, content: str, **kwargs) -> ValidationResult:
         """Validate content using the provided manager.
         
         Args:

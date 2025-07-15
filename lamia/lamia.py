@@ -166,7 +166,7 @@ class Lamia:
             
         Raises:
             RuntimeError: If engine fails to start
-            MissingAPIKeysError: If API keys are missing
+            MissingAPIKeysError: If API keys are missing for LLM requests
             ValueError: If validator fails
         """
         # Run Python code if this is Python code
