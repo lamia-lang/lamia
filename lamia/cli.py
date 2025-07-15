@@ -27,8 +27,7 @@ async def interactive_mode(lamia: Lamia):
 
     running_task = None
 
-    lamia.run_async("a")
-    lamia.run_async("b")
+    await asyncio.gather(lamia.run_async("a"), lamia.run_async("b"))
 
     while True:
         try:

@@ -180,18 +180,13 @@ class Lamia:
             logger.error(f"Python code execution failed: {e}")
             pass
 
-        # If not Python code, parse command using Lamia parser
-        if self._command_parser is None:
-            self._command_parser = CommandParser(command)
-
-        parser_kwargs = dict(self._command_parser.kwargs)  # copy
-        if models is not None:
-            parser_kwargs['models'] = models
+        # Always create a fresh parser for each command to avoid reusing the
+        # previous command's state (which caused the first‐command‐only bug).
+        current_parser = CommandParser(command)
 
         response = await self._engine.execute(
-            self._command_parser.command_type,
-            self._command_parser.content,
-            **parser_kwargs,
+            current_parser.command_type,
+            current_parser.content,
         )
         return LamiaResult(result=response.text, executor=response.model)
 
