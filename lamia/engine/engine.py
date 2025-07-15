@@ -30,7 +30,6 @@ class LamiaEngine:
         self,
         command_type: CommandType,
         content: str,
-        **kwargs
     ) -> Any:
         """Execute a request using the appropriate domain manager.
         
@@ -49,7 +48,7 @@ class LamiaEngine:
         # Get the appropriate manager with its validation strategy
         manager = await self.manager_factory.get_manager(command_type, validation_strategy)
         
-        return await self.validation_manager.validate(command_type, manager, content, **kwargs)
+        return await self.validation_manager.validate(command_type, manager, content)
     
     def get_validation_stats(self):
         """Get validation statistics from the validation manager."""

@@ -1,29 +1,7 @@
-from typing import List, Optional, Dict, Any, Type
-from dataclasses import dataclass
-import logging
-import sys
-
-from .base import BaseLLMAdapter, LLMResponse
-from ...validation.base import BaseValidator, ValidationResult
-from ...engine.interfaces import ValidationStrategy, Manager
+from ...engine.interfaces import ValidationStrategy
 
 class LLMValidationStrategy(ValidationStrategy):
-    """Handles response validation logic."""
-    
-    def __init__(self, validator_registry: Dict[str, Type[BaseValidator]]):
-        super().__init__(validator_registry)
-        self._initialized = True
-    
-    async def validate(self, content: str) -> ValidationResult:
-        """Validate LLM content using registered validators.
-        
-        Args:
-            content: The content to validate
-            
-        Returns:
-            ValidationResult with validation status and any error messages
-        """
-        return await self.chain_validate(content)
+    """Handles LLM validation logic."""
 
     def get_initial_hints(self) -> str:
         """Get combined initial hints from all validators."""

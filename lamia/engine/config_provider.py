@@ -17,6 +17,7 @@ class ConfigProvider:
         
         # Make a defensive copy to ensure true immutability
         self._config = config.copy()
+        print("aaaa", config.get('model_chain'))
         self._primary_model = config.get('model_chain')[0]
         self._fallback_models = [model for model in config.get('model_chain')[1:]]
 

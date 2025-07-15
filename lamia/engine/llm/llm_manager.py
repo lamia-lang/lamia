@@ -14,24 +14,17 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-def grey_text(text: str) -> str:
-    # Only colorize if output is a TTY (terminal)
-    if sys.stdout.isatty():
-        return f"\033[90m{text}\033[0m"
-    return text
-
 class MissingAPIKeysError(Exception):
     """Raised when one or more required API keys are missing for LLM engines."""
     def __init__(self, missing):
         self.missing = missing
         message = (
             "\n❌ The following engines are missing required API keys:\n" +
-            "\n".join([f"- {engine}: missing {env_vars}" for engine, env_vars in missing]) +
+            "\n".join([f"- {model_provider}: missing {env_vars}" for model_provider, env_vars in missing]) +
             "\n\nPlease provide the missing API keys in one of the following ways:\n"
             "- As environment variables (e.g., export OPENAI_API_KEY=...)\n"
-            "- In your config file under api_keys (e.g., api_keys: {openai: ...})\n"
             "- As a parameter to the Lamia() constructor (e.g., Lamia(..., api_keys={...}))\n"
-            f"You can also use LAMIA_API_KEY to proxy remote adapters {(", ".join(LamiaAdapter.get_supported_providers()))}.\n"
+            f"You can also use LAMIA_API_KEY to proxy remote adapters {(', '.join(LamiaAdapter.get_supported_providers()))}.\n"
             "Alternatively, remove these engines from your default or fallback_models in config."
         )
         super().__init__(message)
@@ -56,7 +49,7 @@ class LLMManager(Manager):
         self.provider_registry.add_user_adapters([ext_adapters_path])
         
         # Check API keys early
-        self.check_all_required_api_keys()
+        self._check_all_required_api_keys()
         self._initialized = True
     
     def _get_needed_providers(self) -> Set[str]:
@@ -107,7 +100,7 @@ class LLMManager(Manager):
         # Provider doesn't need an API key (e.g., local models)
         return None, False
     
-    def check_all_required_api_keys(self):
+    def _check_all_required_api_keys(self):
         """
         Check that all required API keys for default and fallback engines are present.
         If any are missing, raise MissingAPIKeysError.
@@ -237,10 +230,10 @@ class LLMManager(Manager):
         errors = []
         attempts = 0
         current_prompt = prompt
-        while attempts < self.config.max_retries:
+        while attempts < max_attempts:
             attempts += 1
             try:
-                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{adapter.model}':\n{grey_text(current_prompt)}")
+                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{adapter.model}':\n{current_prompt}")
                 response = await adapter.generate(current_prompt, model=model)
                 logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{adapter.model}':\n{response.text}")
                 

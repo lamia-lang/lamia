@@ -14,12 +14,15 @@ import traceback
 from lamia.lamia import Lamia
 from lamia.engine.llm.llm_manager import MissingAPIKeysError
 from lamia.utils import scaffold
+from lamia.utils.cli_styling import setup_cli_logging
+
+logger = logging.getLogger(__name__)
 
 async def interactive_mode(lamia: Lamia):
     """Run Lamia in interactive mode, processing user prompts."""
-    print("\nLamia Interactive Mode")
-    print("Enter your prompts (type 'SEND' on a new line to finish, type CANCEL to discard current input, Ctrl+C to quit, type STOP to interrupt a running prompt, 'exit' to quit)")
-    print("----------------------------------------")
+    logger.info("\nLamia Interactive Mode")
+    logger.info("Enter your prompts (type 'SEND' on a new line to finish, type CANCEL to discard current input, Ctrl+C to quit, type STOP to interrupt a running prompt, 'exit' to quit)")
+    logger.info("----------------------------------------")
 
     prompt_str = "\n🤖 > (SEND=submit, CANCEL=discard, STOP=interrupt, Command/Ctrl C or EXIT=quit)\n> "
 
@@ -35,23 +38,23 @@ async def interactive_mode(lamia: Lamia):
                 if line.strip() == "SEND":
                     break
                 if line.strip().upper() == "CANCEL":
-                    print("Prompt cancelled. Start typing a new prompt.")
+                    logger.info("Prompt cancelled. Start typing a new prompt.")
                     lines = []
                     # Show the prompt again for a new input
                     continue
                 # Check for exit commands
                 if line.lower() in ['exit', 'quit', ':q']:
-                    print("\nGoodbye! 👋")
+                    logger.info("\nGoodbye! 👋")
                     exit(0)
                 lines.append(line)
             user_input = "\n".join(lines).strip()
 
             if not user_input:
-                print("Prompt is empty. Start typing a new prompt.")
+                logger.info("Prompt is empty. Start typing a new prompt.")
                 continue
 
             # Generate LLM response
-            print("\nThinking... 🤔 (type STOP to interrupt)")
+            logger.info("\nThinking... 🤔 (type STOP to interrupt)")
             running_task = asyncio.create_task(lamia.run_async(user_input))
             while not running_task.done():
                 try:
@@ -62,25 +65,25 @@ async def interactive_mode(lamia: Lamia):
                         stop_input = sys.stdin.readline().strip()
                         if stop_input.upper() == 'STOP':
                             running_task.cancel()
-                            print("Prompt interrupted by user (STOP). Start typing a new prompt.")
+                            logger.warning("Prompt interrupted by user (STOP). Start typing a new prompt.")
                             break
                         elif user_input.lower() in ['exit', 'quit', ':q']:
-                            print("\nGoodbye! 👋")
+                            logger.info("\nGoodbye! 👋")
                             break
             if running_task.done() and not running_task.cancelled():
                 result = running_task.result()
-                print("\n🔮 Response:")
-                print("----------------------------------------")
-                print(result.result)
-                print("----------------------------------------")
+                logger.info("\n🔮 Response:")
+                logger.info("----------------------------------------")
+                logger.info(result.result)
+                logger.info("----------------------------------------")
                 # Add model info if available
-                print(f"Executed by: {result.executor}")
+                logger.info(f"Executed by: {result.executor}")
         except KeyboardInterrupt:
-            print("\n\nGoodbye! 👋")
+            logger.info("\n\nGoodbye! 👋")
             break
         except Exception as e:
-            traceback.print_exc()
-            print(f"\n❌ Error: {str(e)}")
+            logger.error(traceback.format_exc())
+            logger.error(f"\nError: {str(e)}")
             continue
 
 def add_all_py_dirs_to_syspath_and_check_conflicts(root_dir):
@@ -97,7 +100,7 @@ def add_all_py_dirs_to_syspath_and_check_conflicts(root_dir):
                     mod_path = os.path.join(dirpath, f)
                     # Check for module name conflicts
                     if mod_name in module_names:
-                        print(f"❌ Module name conflict: '{mod_name}.py' found in both '{module_names[mod_name]}' and '{dirpath}'. Please rename one of them.")
+                        logger.error(f"Module name conflict: '{mod_name}.py' found in both '{module_names[mod_name]}' and '{dirpath}'. Please rename one of them.")
                         sys.exit(1)
                     module_names[mod_name] = dirpath
                     # Check for function name conflicts
@@ -109,11 +112,11 @@ def add_all_py_dirs_to_syspath_and_check_conflicts(root_dir):
                                     func_name = n.name
                                     if func_name in function_names:
                                         prev_mod, prev_path = function_names[func_name]
-                                        print(f"❌ Function name conflict: function '{func_name}' found in both '{prev_path}' and '{mod_path}'. Please rename one of them or use explicit imports (e.g., 'from <module> import <func>').")
+                                        logger.error(f"Function name conflict: function '{func_name}' found in both '{prev_path}' and '{mod_path}'. Please rename one of them or use explicit imports (e.g., 'from <module> import <func>').")
                                         sys.exit(1)
                                     function_names[func_name] = (mod_name, mod_path)
                     except Exception as e:
-                        print(f"Warning: Could not parse {mod_path}: {e}")
+                        logger.warning(f"Could not parse {mod_path}: {e}")
 
 def main():
     """Main entry point for the Lamia CLI."""
@@ -137,21 +140,21 @@ def main():
             config_path = os.path.join(os.getcwd(), "config.yaml")
             created = scaffold.create_minimal_config(config_path, with_extensions=args.with_extensions)
             if created:
-                print("Created config.yaml")
+                logger.info("✅ Created config.yaml")
             else:
-                print("config.yaml already exists")
+                logger.warning("config.yaml already exists")
             if args.with_extensions:
                 ext_path = scaffold.ensure_extensions_folder(os.getcwd())
                 updated = scaffold.update_config_with_extensions(config_path)
-                print(f"Extensions folder scaffolded at: {ext_path}")
+                logger.info(f"✅ Extensions folder scaffolded at: {ext_path}")
                 if updated:
-                    print("config.yaml updated with extensions_folder key.")
+                    logger.info("✅ config.yaml updated with extensions_folder key.")
             env_path = os.path.join(os.getcwd(), ".env")
             env_created = scaffold.create_env_file(env_path)
             if env_created:
-                print("Created .env file with dummy API keys.")
+                logger.info("✅ Created .env file with dummy API keys.")
             else:
-                print(".env file already exists.")
+                logger.warning(".env file already exists.")
             return
         return
     else:
@@ -168,26 +171,23 @@ def main():
         parser.add_argument('--log-level', default='INFO', help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
         args = parser.parse_args()
 
-    # Setup logging globally for CLI
-    logging.basicConfig(
-        level=getattr(logging, args.log_level.upper(), logging.INFO),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    # Setup colored logging for CLI
+    setup_cli_logging(args.log_level.upper())
 
     prompt_file = args.filename or args.file
     config_path = args.config
 
     config_dict = None
     if config_path:
-        print(f"Using configuration from: {config_path}")
+        logger.info(f"Using configuration from: {config_path}")
         with open(config_path, 'r') as f:
             config_dict = yaml.safe_load(f)
     elif os.path.exists("config.yaml"):
-        print("Using configuration from: config.yaml")
+        logger.info("Using configuration from: config.yaml")
         with open("config.yaml", 'r') as f:
             config_dict = yaml.safe_load(f)
     else:
-        print("❌ Error: --config is required for CLI operation.", file=sys.stderr)
+        logger.error("❌ Error: --config is required for CLI operation.")
         sys.exit(1)
 
     # Add this before running the user script
@@ -196,34 +196,34 @@ def main():
     async def run():
         try:
             # Create Lamia instance with config
-            print("Creating Lamia instance...")
+            logger.info("Creating Lamia instance...")
             lamia = Lamia.from_config(config_dict)
             
-            print("✅ Lamia instance created successfully")
+            logger.info("✅ Lamia instance created successfully")
             
             if prompt_file:
                 # Read prompt from file and execute as a Python script using runpy
                 try:
-                    print(f"Executing script: {prompt_file}")
+                    logger.info(f"Executing script: {prompt_file}")
                     runpy.run_path(prompt_file, run_name="__main__")
                     sys.exit(0)
                 except Exception as e:
-                    print(f"❌ Error executing script: {e}", file=sys.stderr)
+                    logger.error(f"❌ Error executing script: {e}")
                     sys.exit(1)
             else:
                 # Run interactive mode
                 await interactive_mode(lamia)
                 
         except MissingAPIKeysError as e:
-            print(f"❌ Missing API Keys: {str(e)}", file=sys.stderr)
-            print("Please check your .env file or config.yaml for required API keys.", file=sys.stderr)
+            logger.error(f"❌ Missing API Keys: {str(e)}")
+            logger.error("Please check your .env file or config.yaml for required API keys.")
             sys.exit(1)
         except Exception as e:
-            print(f"❌ Error: {e}", file=sys.stderr)
-            print("Check your config.yaml and logs for details.", file=sys.stderr)
+            logger.error(f"❌ Error: {e}")
+            logger.error("Check your config.yaml and logs for details.")
             sys.exit(1)
         except KeyboardInterrupt:
-            print("\n\nGoodbye! 👋")
+            logger.info("\n\nGoodbye! 👋")
             sys.exit(0)
 
     asyncio.run(run())

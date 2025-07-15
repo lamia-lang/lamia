@@ -33,7 +33,7 @@ class ValidationManager:
         self.recent_results: List[ValidationResult] = []
         self.max_recent_results = 100  # Keep last 100 results
     
-    async def validate(self, command_type: CommandType, manager: Manager, content: str, **kwargs) -> Any:
+    async def validate(self, command_type: CommandType, manager: Manager, content: str) -> Any:
         """Coordinate validation using the appropriate domain strategy.
         
         Args:

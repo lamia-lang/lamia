@@ -59,7 +59,6 @@ class ValidationStrategy(ABC):
                 response = result.validated_text
         return ValidationResult(is_valid=True, validated_text=response)
     
-    @abstractmethod
     async def validate(self, manager: Manager, content: str, **kwargs) -> Any:
         """Validate content using the provided manager.
         
@@ -71,4 +70,4 @@ class ValidationStrategy(ABC):
         Returns:
             Validated response from the domain
         """
-        pass 
+        return await self.chain_validate(content)
