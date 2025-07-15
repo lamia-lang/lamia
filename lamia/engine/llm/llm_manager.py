@@ -147,6 +147,11 @@ class LLMManager(Manager):
     
     async def create_adapter_from_config(self, model: LLMModel) -> BaseLLMAdapter:
         """Create an adapter instance based on the active configuration."""
+        # Use the full model name as cache key – guarantees one adapter per model
+        cache_key = model.get_provider_name()
+
+        if cache_key in self._adapter_cache:
+            return self._adapter_cache[cache_key]
 
         provider_name = model.get_provider_name()
         api_key, use_lamia_adapter = self._resolve_api_key(provider_name)
@@ -156,12 +161,17 @@ class LLMManager(Manager):
             adapter_class = LamiaAdapter
         else:
             adapter_class = self.provider_registry.get_adapter_class(provider_name)
-        
+
         if adapter_class.is_remote():
             adapter = adapter_class(api_key=api_key)
         else:
             adapter = adapter_class()
+
         await adapter.async_initialize()
+
+        # Cache for reuse
+        self._adapter_cache[cache_key] = adapter
+
         return adapter
 
     async def execute(

@@ -53,4 +53,4 @@ class ManagerFactory:
         """Close all created manager instances."""
         for manager in self._manager_instances.values():
             await manager.close()
-        self._manager_instances.clear() 
+        self._manager_instances.clear()

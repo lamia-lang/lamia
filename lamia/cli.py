@@ -26,7 +26,9 @@ async def interactive_mode(lamia: Lamia):
     prompt_str = "\n🤖 > (SEND=submit, CANCEL=discard, STOP=interrupt, Command/Ctrl C or EXIT=quit)\n> "
 
     running_task = None
-    loop = asyncio.get_event_loop()
+
+    lamia.run_async("a")
+    lamia.run_async("b")
 
     while True:
         try:
@@ -44,7 +46,7 @@ async def interactive_mode(lamia: Lamia):
                 # Check for exit commands
                 if line.lower() in ['exit', 'quit', ':q']:
                     logger.info("\nGoodbye! 👋")
-                    exit(0)
+                    return
                 lines.append(line)
             user_input = "\n".join(lines).strip()
 
@@ -71,12 +73,13 @@ async def interactive_mode(lamia: Lamia):
                             break
             if running_task.done() and not running_task.cancelled():
                 result = running_task.result()
-                logger.info("\n🔮 Response:")
-                logger.info("----------------------------------------")
-                logger.info(result.result)
-                logger.info("----------------------------------------")
+                # TODO: use a logger without timestamps, etc
+                print("🔮 Response:")
+                print("----------------------------------------")
+                print(result.result)
+                print("----------------------------------------")
                 # Add model info if available
-                logger.info(f"Executed by: {result.executor}")
+                print(f"Executed by: {result.executor}")
         except KeyboardInterrupt:
             logger.info("\n\nGoodbye! 👋")
             break
@@ -224,11 +227,7 @@ def main():
         except KeyboardInterrupt:
             logger.info("\n\nGoodbye! 👋")
             sys.exit(0)
-        finally:
-            # Allow event loop to complete pending tasks
-            await asyncio.sleep(0)
 
-    # Use asyncio.run() which properly closes the event loop
     asyncio.run(run())
 
 if __name__ == "__main__":
