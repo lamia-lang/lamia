@@ -224,7 +224,11 @@ def main():
         except KeyboardInterrupt:
             logger.info("\n\nGoodbye! 👋")
             sys.exit(0)
+        finally:
+            # Allow event loop to complete pending tasks
+            await asyncio.sleep(0)
 
+    # Use asyncio.run() which properly closes the event loop
     asyncio.run(run())
 
 if __name__ == "__main__":

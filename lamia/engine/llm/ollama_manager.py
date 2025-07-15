@@ -49,10 +49,10 @@ class OllamaManager:
             # Wait for service to start (max 30 seconds)
             for i in range(30):
                 if self.is_running():
-                    print("✓ Ollama service started successfully")
+                    logger.info("✓ Ollama service started successfully")
                     return True
                 if i % 5 == 0:  # Show progress every 5 seconds
-                    print(".", end="", flush=True)
+                    logger.info(".", end="", flush=True)
                 time.sleep(1)
             logger.error("Timeout waiting for Ollama service to start")
             return False

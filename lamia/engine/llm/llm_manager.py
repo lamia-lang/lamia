@@ -300,9 +300,10 @@ class LLMManager(Manager):
         ) 
     
     async def close(self):
-        """Close and cleanup the managed adapter."""
-        if self._primary_adapter:
-            await self._primary_adapter.close()
+        """Close and cleanup all managed adapters."""
+        for adapter in self._adapter_cache.values():
+            await adapter.close()
+        self._adapter_cache.clear()
         self._initialized = False
 
 

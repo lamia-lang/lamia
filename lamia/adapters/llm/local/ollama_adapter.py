@@ -6,7 +6,6 @@ import subprocess
 import requests
 import time
 from ..base import BaseLLMAdapter, LLMResponse, LLMModel
-import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,8 @@ class OllamaAdapter(BaseLLMAdapter):
         # Start Ollama service if not running
         if not self.start_ollama_service():
             raise RuntimeError("Failed to start Ollama service")
-        self.session = aiohttp.ClientSession()
+        # Initialize session as None - will be created on first use
+        self.session = None
 
     def is_ollama_running(self) -> bool:
         try:
@@ -82,14 +82,19 @@ class OllamaAdapter(BaseLLMAdapter):
             logger.error(f"Failed to check/pull Ollama model: {str(e)}")
             return False
 
+    async def _ensure_session(self):
+        """Ensure we have an active session."""
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+        return self.session
+
     async def generate(
         self,
         prompt: str,
         model: LLMModel,
     ) -> LLMResponse:
         """Generate a response using the Ollama model."""
-        if not self.session:
-            raise RuntimeError("Adapter not initialized. Use 'async with' or call initialize()")
+        await self._ensure_session()
         
         # Ensure model is pulled
         if not self.ensure_ollama_model_pulled(model.get_model_name_without_provider()):
