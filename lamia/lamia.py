@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LamiaResult:
     result_text: str
-    typed_result: str
+    typed_result: Any
     executor: str
 
 class Lamia:
@@ -173,7 +173,7 @@ class Lamia:
         # Run Python code if this is Python code
         try:
             result = run_python_code(command, mode='interactive')
-            return LamiaResult(result=str(result) if result is not None else "", executor="python")
+            return LamiaResult(result_text=str(result) if result is not None else "", typed_result=result, executor="python")
         except SyntaxError as e:
             logger.error(f"Syntax error: {e}", command)
             pass
@@ -224,6 +224,10 @@ class Lamia:
     def get_validation_stats(self) -> Optional[Any]:
         """Get validation statistics."""
         return self._engine.get_validation_stats()
+
+    def get_recent_validation_results(self, limit: Optional[int] = None):
+        """Get recent validation results from the engine's validation manager."""
+        return self._engine.get_recent_validation_results(limit)
 
     async def __aenter__(self):
         """Async context manager entry"""

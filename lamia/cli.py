@@ -23,9 +23,12 @@ async def interactive_mode(lamia: Lamia):
     logger.info("Lamia Interactive Mode")
     logger.info("Enter your prompts")
 
-    prompt_str = "\n🤖 > (SEND=submit, CANCEL=discard, STOP=interrupt, Command/Ctrl C or EXIT=quit)\n> "
+    prompt_str = "\n🤖 > (SEND=submit, CANCEL=discard, STOP=interrupt, STATS=stats, Command/Ctrl C or EXIT=quit)\n> "
 
     running_task = None
+
+    # Flag to indicate an immediate command like STATS was executed
+    do_stats_command = False
 
     while True:
         try:
@@ -33,6 +36,15 @@ async def interactive_mode(lamia: Lamia):
             lines = []
             while True:
                 line = input(prompt_str if not lines else "> ")
+                # Immediate command: STATS (case-insensitive) without SEND
+                if not lines and line.strip().upper() == "STATS":
+                    stats = lamia.get_validation_stats()
+                    print("\n📊 Validation statistics:")
+                    print("----------------------------------------")
+                    print(stats)
+                    print("----------------------------------------")
+                    do_stats_command = True
+                    break  # break out of inner input loop
                 if line.strip() == "SEND":
                     break
                 if line.strip().upper() == "CANCEL":
@@ -45,6 +57,11 @@ async def interactive_mode(lamia: Lamia):
                     logger.info("\nGoodbye! 👋")
                     return
                 lines.append(line)
+            # If an immediate command like STATS was executed, restart outer loop
+            if do_stats_command:
+                do_stats_command = False
+                continue
+
             user_input = "\n".join(lines).strip()
 
             if not user_input:
@@ -73,7 +90,7 @@ async def interactive_mode(lamia: Lamia):
                 # TODO: use a logger without timestamps, etc
                 print("🔮 Response:")
                 print("----------------------------------------")
-                print(result.result)
+                print(result.result_text)
                 print("----------------------------------------")
                 # Add model info if available
                 print(f"Executed by: {result.executor}")
