@@ -31,6 +31,15 @@ class ConfigProvider:
         """Get the primary model and retries from config."""
         return self.config.get('model_chain')
 
+    def override_model_chain_with(self, model_chain: List[ModelWithRetries]):
+        """Set the model chain in config."""
+        self._main_model_chain = self._config['model_chain']
+        self._config['model_chain'] = model_chain
+
+    def reset_model_chain(self):
+        """Reset the model chain to the original model chain."""
+        self._config['model_chain'] = self._main_model_chain
+
     def get_api_key(self, provider: str) -> Optional[str]:
         # Only return from the dict, never from the environment
         api_keys = self._config.get('api_keys', {})

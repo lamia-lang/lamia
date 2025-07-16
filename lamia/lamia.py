@@ -185,10 +185,17 @@ class Lamia:
         # previous command's state (which caused the first‐command‐only bug).
         current_parser = CommandParser(command)
 
+        if models is not None:
+            self._engine.config_provider.override_model_chain_with(models)
+
         response = await self._engine.execute(
             current_parser.command_type,
             current_parser.content,
         )
+
+        if models is not None:
+            self._engine.config_provider.reset_model_chain()
+
         return LamiaResult(result_text=response.raw_text, typed_result=response.result_type, executor=current_parser.command_type)
 
     def run(

@@ -3,6 +3,8 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from lamia.lamia import Lamia
 from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
+from lamia import LLMModel  # Added for model override test
+from lamia._internal_types.model_retry import ModelWithRetries  # Added for model override test
 
 
 class TestLamiaLifecycle:
@@ -153,6 +155,39 @@ models:
         lamia = Lamia()
         result = await lamia.run_async("2 * 3")
         assert result == "6"
+
+    @pytest.mark.asyncio
+    async def test_run_async_model_override(self):
+        """run_async should temporarily override the engine model chain when *models* is supplied."""
+
+        # Prepare a dummy config provider that tracks overrides
+        dummy_config_provider = MagicMock()
+        dummy_config_provider.override_model_chain_with = MagicMock()
+        dummy_config_provider.reset_model_chain = MagicMock()
+
+        # Stub LamiaEngine.execute to return a simple ValidationResult
+        async def _execute_stub(command_type, content):
+            from lamia.validation.base import ValidationResult
+            return ValidationResult(is_valid=True, raw_text="dummy response")
+
+        dummy_engine = MagicMock()
+        dummy_engine.execute = AsyncMock(side_effect=_execute_stub)
+        dummy_engine.config_provider = dummy_config_provider
+
+        # Patch LamiaEngine so that Lamia uses our dummy engine
+        with patch("lamia.lamia.LamiaEngine", return_value=dummy_engine):
+            lamia = Lamia("openai")
+
+            override_models = [ModelWithRetries(LLMModel("ollama"), retries=1)]
+
+            result = await lamia.run_async("hello", models=override_models)
+
+            # Verify that override and reset were called
+            dummy_config_provider.override_model_chain_with.assert_called_once_with(override_models)
+            dummy_config_provider.reset_model_chain.assert_called_once()
+
+            # Ensure the response is propagated correctly
+            assert result.result_text == "dummy response"
 
     @pytest.mark.asyncio
     async def test_context_manager_async(self):
