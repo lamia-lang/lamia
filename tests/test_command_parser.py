@@ -3,11 +3,8 @@ Tests for the command parser module.
 """
 
 import pytest
-from lamia.command_parser import (
-    CommandParser,
-    get_lamia_command_type, 
-    get_command_args
-)
+# Updated: CommandParser now exposes parsed data directly — helper functions removed.
+from lamia.command_parser import CommandParser
 from lamia.command_types import CommandType
 
 
@@ -17,15 +14,15 @@ class TestCommandTypeDetection:
     def test_fs_commands(self):
         """Test filesystem command detection."""
         fs_commands = [
-            "read /tmp/file.txt",
-            "list /home/user",
-            "copy /src/file.txt /dest/",
-            "ls /var/log",
-            "mkdir /tmp/newdir",
+            "file:///tmp/file.txt",
+            "file:///home/user/",
+            "file:///src/file.txt",
+            "file:///var/log/syslog",
+            "file:///tmp/newdir/",
         ]
         
         for command in fs_commands:
-            assert get_lamia_command_type(command) == CommandType.FILESYSTEM
+            assert CommandParser(command).command_type == CommandType.FILESYSTEM
     
     def test_web_commands(self):
         """Test web command detection."""
@@ -38,7 +35,7 @@ class TestCommandTypeDetection:
         ]
         
         for command in web_commands:
-            assert get_lamia_command_type(command) == CommandType.WEB
+            assert CommandParser(command).command_type == CommandType.WEB
     
     def test_llm_commands(self):
         """Test LLM command detection (default)."""
@@ -52,7 +49,7 @@ class TestCommandTypeDetection:
         ]
         
         for command in llm_commands:
-            assert get_lamia_command_type(command) == CommandType.LLM
+            assert CommandParser(command).command_type == CommandType.LLM
 
 
 class TestCommandParsing:
@@ -60,72 +57,22 @@ class TestCommandParsing:
     
     def test_fs_command_parsing(self):
         """Test filesystem command parsing."""
-        # Test basic fs command
-        content, kwargs = get_command_args("read /tmp/file.txt")
-        assert content == "/tmp/file.txt"
-        assert kwargs['operation'] == 'read'
-        
-        # Test fs command with flags
-        content, kwargs = get_command_args("copy /src/file.txt /dest/ --recursive --force")
-        assert content == "/src/file.txt"
-        assert kwargs['operation'] == 'copy'
-        assert kwargs['recursive'] is True
-        assert kwargs['force'] is True
+        # Updated: filesystem commands must use the "file://" scheme and kwargs are empty.
+        parser = CommandParser("file:///tmp/file.txt")
+        assert parser.command_type == CommandType.FILESYSTEM
+        assert parser.content == "file:///tmp/file.txt"
+        assert parser.kwargs == {}
     
     def test_web_command_parsing(self):
         """Test web command parsing."""
-        # Test URL as command
-        content, kwargs = get_command_args("https://example.com")
-        assert content == "https://example.com"
-        assert kwargs['operation'] == 'get'
-        
-        # Test web command with operation
-        content, kwargs = get_command_args("screenshot https://example.com --full-page")
-        assert content == "https://example.com"
-        assert kwargs['operation'] == 'screenshot'
-        assert kwargs['full-page'] is True
-    
-    def test_llm_command_parsing(self):
-        """Test LLM command parsing."""
-        content, kwargs = get_command_args("What is the weather today?")
-        assert content == "What is the weather today?"
-        assert kwargs == {}
-
-
-class TestCommandParserClass:
-    """Test the CommandParser class."""
-    
-    def test_fs_command_parsing(self):
-        """Test filesystem command parsing with CommandParser."""
-        parser = CommandParser("read /tmp/file.txt")
-        assert parser.command_type == CommandType.FILESYSTEM
-        assert parser.content == "/tmp/file.txt"
-        assert parser.kwargs['operation'] == 'read'
-        
-        # Test with flags
-        parser = CommandParser("copy /src/file.txt /dest/ --recursive --force")
-        assert parser.command_type == CommandType.FILESYSTEM
-        assert parser.content == "/src/file.txt"
-        assert parser.kwargs['operation'] == 'copy'
-        assert parser.kwargs['recursive'] is True
-        assert parser.kwargs['force'] is True
-    
-    def test_web_command_parsing(self):
-        """Test web command parsing with CommandParser."""
+        # URL as command
         parser = CommandParser("https://example.com")
         assert parser.command_type == CommandType.WEB
         assert parser.content == "https://example.com"
-        assert parser.kwargs['operation'] == 'get'
-        
-        # Test with operation
-        parser = CommandParser("screenshot https://example.com --full-page")
-        assert parser.command_type == CommandType.WEB
-        assert parser.content == "https://example.com"
-        assert parser.kwargs['operation'] == 'screenshot'
-        assert parser.kwargs['full-page'] is True
+        assert parser.kwargs == {}
     
     def test_llm_command_parsing(self):
-        """Test LLM command parsing with CommandParser."""
+        """Test LLM command parsing."""
         parser = CommandParser("What is the weather today?")
         assert parser.command_type == CommandType.LLM
         assert parser.content == "What is the weather today?"
@@ -133,10 +80,10 @@ class TestCommandParserClass:
     
     def test_get_args_method(self):
         """Test the get_args method."""
-        parser = CommandParser("read /tmp/file.txt")
+        parser = CommandParser("file:///tmp/file.txt")
         content, kwargs = parser.get_args()
-        assert content == "/tmp/file.txt"
-        assert kwargs['operation'] == 'read'
+        assert content == "file:///tmp/file.txt"
+        assert kwargs == {}
 
 
 class TestErrorHandling:
@@ -144,14 +91,14 @@ class TestErrorHandling:
     
     def test_invalid_fs_command(self):
         """Test invalid filesystem command handling."""
-        # Invalid commands should fallback to LLM
-        content, kwargs = get_command_args("read")  # Missing path
-        assert content == "read"
-        assert kwargs == {}
+        # Invalid filesystem-like commands should fallback to LLM
+        parser = CommandParser("read")
+        assert parser.command_type == CommandType.LLM
+        assert parser.kwargs == {}
     
     def test_invalid_web_command(self):
         """Test invalid web command handling."""
         # Invalid commands should fallback to LLM
-        content, kwargs = get_command_args("get")  # Missing URL
-        assert content == "get"
-        assert kwargs == {} 
+        parser = CommandParser("get")
+        assert parser.command_type == CommandType.LLM
+        assert parser.kwargs == {} 
