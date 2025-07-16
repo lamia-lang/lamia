@@ -27,8 +27,6 @@ async def interactive_mode(lamia: Lamia):
 
     running_task = None
 
-    await asyncio.gather(lamia.run_async("a"), lamia.run_async("b"))
-
     while True:
         try:
             # Multiline input: keep reading until 'SEND' is entered on a new line

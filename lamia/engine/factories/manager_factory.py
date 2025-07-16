@@ -3,6 +3,8 @@ from lamia.command_types import CommandType
 from ..managers import Manager, ValidationStrategy
 from ..config_provider import ConfigProvider
 from ..managers.llm.llm_manager import LLMManager
+from ..managers.fs_manager import FSManager
+from ..managers.web_manager import WebManager
 
 class ManagerFactory:
     """Factory for creating domain managers based on request type."""
@@ -18,9 +20,8 @@ class ManagerFactory:
         # Import here to avoid circular imports
         
         self._manager_registry[CommandType.LLM] = LLMManager
-        # TODO: Register other managers as they're implemented
-        # self._manager_registry[CommandType.FILESYSTEM] = FSManager
-        # self._manager_registry[CommandType.WEB] = WebManager
+        self._manager_registry[CommandType.FILESYSTEM] = FSManager
+        self._manager_registry[CommandType.WEB] = WebManager
     
     async def get_manager(self, command_type: CommandType, validation_strategy: ValidationStrategy) -> Manager:
         """Get or create a manager for the specified command type.

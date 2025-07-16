@@ -74,13 +74,7 @@ class CommandParser:
     
     def _is_fs_command(self) -> bool:
         """Check if command is a filesystem operation."""
-        fs_patterns = [
-            r'^(read|write|list|copy|move|delete|mkdir|rmdir)\s+[/\\]',  # Must be followed by a path starting with / or \
-            r'^(file|dir|directory)\s+[/\\]',  # Must be followed by a path starting with / or \
-            r'^(ls|cat|cp|mv|rm|mkdir|rmdir)\s+[/\\]',  # Must be followed by a path starting with / or \
-        ]
-        
-        return any(re.match(pattern, self.command, re.IGNORECASE) for pattern in fs_patterns)
+        return self.command.startswith("file://")
     
     def _is_web_command(self) -> bool:
         """Check if command is a web operation."""
@@ -173,38 +167,3 @@ class CommandParser:
     def get_args(self) -> Tuple[str, Dict[str, Any]]:
         """Get both content and kwargs as a tuple."""
         return self._content, self._kwargs
-
-
-# Backward compatibility functions
-def get_lamia_command_type(command: str) -> CommandType:
-    """
-    Determine the domain type for a given command.
-    
-    Args:
-        command: The command string to analyze
-        
-    Returns:
-        CommandType: Domain type (CommandType.LLM, CommandType.FILESYSTEM, CommandType.WEB, etc.)
-        
-    Raises:
-        ValueError: If command type cannot be determined
-    """
-    parser = CommandParser(command)
-    return parser.command_type
-
-
-def get_command_args(command: str) -> Tuple[str, Dict[str, Any]]:
-    """
-    Extract the content and arguments from a command.
-    
-    Args:
-        command: The command string to parse
-        
-    Returns:
-        Tuple[str, Dict[str, Any]]: (content, kwargs)
-        
-    Raises:
-        ValueError: If command cannot be parsed
-    """
-    parser = CommandParser(command)
-    return parser.get_args() 

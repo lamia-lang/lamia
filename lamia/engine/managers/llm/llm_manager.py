@@ -59,7 +59,6 @@ class LLMManager(Manager):
 
         # Check API keys early
         self._check_all_required_api_keys(needed_providers)
-        self._initialized = True
     
     def _get_needed_providers(self) -> Set[str]:
         """Get the set of providers that are actually needed based on config."""
@@ -312,6 +311,5 @@ class LLMManager(Manager):
         for adapter in self._adapter_cache.values():
             await adapter.close()
         self._adapter_cache.clear()
-        self._initialized = False
 
 
