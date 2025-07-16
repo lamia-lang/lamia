@@ -18,7 +18,6 @@ class ValidationStats:
     failed_validations: int = 0
     avg_execution_time_ms: float = 0.0
     by_domain: Dict[CommandType, int] = field(default_factory=dict)
-    by_validator_type: Dict[str, int] = field(default_factory=dict)
 
 class ValidationStrategyNotFoundError(LookupError):
     """Raised when no validation strategy exists for the requested command type."""
@@ -87,14 +86,9 @@ class ValidationManager:
                          execution_time_ms)
             self.stats.avg_execution_time_ms = total_time / self.stats.total_validations
         
-        # Update by-domain stats
-        domain_count = self.stats.by_domain.get(command_type, 0)
-        self.stats.by_domain[command_type] = domain_count + 1
-        
-        # Update by-validator-type stats
-        validator_type = f"{command_type.value}_validation"
-        validator_count = self.stats.by_validator_type.get(validator_type, 0)
-        self.stats.by_validator_type[validator_type] = validator_count + 1
+        # Update by-domain stats (store as simple string key)
+        domain_key = command_type.value if isinstance(command_type, CommandType) else str(command_type)
+        self.stats.by_domain[domain_key] = self.stats.by_domain.get(domain_key, 0) + 1
     
     def get_validation_stats(self) -> ValidationStats:
         """Get current validation statistics."""
