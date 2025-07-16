@@ -101,53 +101,11 @@ class CommandParser:
     
     def _parse_fs_command(self) -> Tuple[str, Dict[str, Any]]:
         """Parse filesystem command into operation and arguments."""
-        parts = self.command.split()
-        
-        if len(parts) < 2:
-            raise ValueError(f"Invalid filesystem command: {self.command}")
-        
-        operation = parts[0].lower()
-        path = parts[1]
-        
-        kwargs = {}
-        
-        # Extract additional arguments
-        for i in range(2, len(parts)):
-            if parts[i].startswith('--'):
-                # Handle flags like --recursive, --force, etc.
-                flag = parts[i][2:]
-                if i + 1 < len(parts) and not parts[i + 1].startswith('--'):
-                    kwargs[flag] = parts[i + 1]
-                else:
-                    kwargs[flag] = True
-        
-        return path, {'operation': operation, **kwargs}
+        return self.command, {}
     
     def _parse_web_command(self) -> Tuple[str, Dict[str, Any]]:
         """Parse web command into URL and arguments."""
-        parts = self.command.split()
-        
-        if self._looks_like_url(parts[0]):
-            url = parts[0]
-            operation = 'get'  # Default operation
-        else:
-            operation = parts[0].lower()
-            if len(parts) < 2:
-                raise ValueError(f"Invalid web command: {self.command}")
-            url = parts[1]
-        
-        kwargs = {'operation': operation}
-        
-        # Extract additional arguments
-        for i in range(2, len(parts)):
-            if parts[i].startswith('--'):
-                flag = parts[i][2:]
-                if i + 1 < len(parts) and not parts[i + 1].startswith('--'):
-                    kwargs[flag] = parts[i + 1]
-                else:
-                    kwargs[flag] = True
-        
-        return url, kwargs
+        return self.command, {}
     
     @property
     def command_type(self) -> CommandType:

@@ -183,12 +183,13 @@ class Lamia:
         # Always create a fresh parser for each command to avoid reusing the
         # previous command's state (which caused the first‐command‐only bug).
         current_parser = CommandParser(command)
+        print("current_parser.command_type", current_parser.command_type)
 
         response = await self._engine.execute(
             current_parser.command_type,
             current_parser.content,
         )
-        return LamiaResult(result=response.raw_text, executor="LLM model not known")
+        return LamiaResult(result_text=response.raw_text, result_type=response.result_type, executor=current_parser.command_type)
 
     def run(
         self,

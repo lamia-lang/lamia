@@ -45,5 +45,7 @@ class ValidationStrategyFactory:
             return LLMValidationStrategy(registry)
         elif command_type == CommandType.FILESYSTEM:
             return FSValidationStrategy(registry)
+        elif command_type == CommandType.WEB:
+            return ValidationStrategy(registry)
 
         raise ValueError(f"No validation strategy implemented for command type: {command_type}")
