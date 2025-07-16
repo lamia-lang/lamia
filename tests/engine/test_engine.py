@@ -4,9 +4,9 @@ import asyncio
 from pathlib import Path
 
 from lamia.engine.engine import LamiaEngine
-from lamia.engine.config_manager import ConfigManager
+from lamia.engine.config_provider import ConfigProvider
 from lamia.adapters.llm.base import LLMResponse, BaseLLMAdapter
-from lamia.adapters.llm.strategy import ValidationStrategy, RetryConfig
+from lamia.engine.validation_strategies.llm_validation_strategy import ValidationStrategy, RetryConfig
 from lamia.validation.validator_registry import ValidatorRegistry
 
 
@@ -16,7 +16,7 @@ async def test_init_must_start_with_empty_config():
     config = {}
     engine = LamiaEngine(config)
     
-    assert isinstance(engine.config_manager, ConfigManager)
+    assert isinstance(engine.config_provider, ConfigProvider)
     assert engine.adapter is None
     assert engine.validation_strategy is None
 
@@ -474,7 +474,7 @@ async def test_generate_fails_if_fallback_adapter_fails_to_initialize():
     # Side-effect for create_adapter_from_config:
     #   1) First call (no override) -> primary_adapter
     #   2) Second call (override == "anthropic") -> raise
-    def create_adapter_side_effect(config_manager, override_model=None):
+    def create_adapter_side_effect(config_provider, override_model=None):
         if override_model is None or override_model == "openai":
             return primary_adapter
         elif override_model == "anthropic":

@@ -1,11 +1,11 @@
 import pytest
-from lamia.adapters.llm.strategy import ValidationStrategy, RetryConfig
+from lamia.engine.validation_strategies.llm_validation_strategy import ValidationStrategy, RetryConfig
 from lamia.validators import HTMLValidator, LengthValidator
 from examples.custom_validators.code_validator import CodeValidator
 
 async def test_config_loading_builtin_validators():
     config = RetryConfig(
-        max_retries=1,
+        max_retries_primary=1,
         fallback_models=[],
         validators=[
             {"type": "html"},
@@ -27,7 +27,7 @@ async def test_config_loading_custom_class_validator():
     validator_class = CodeValidator
     registry = {"code_python": validator_class}
     config = RetryConfig(
-        max_retries=1,
+        max_retries_primary=1,
         fallback_models=[],
         validators=[{"type": "code_python", "language": "python", "strict": True}]
     )

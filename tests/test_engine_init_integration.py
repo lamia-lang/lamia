@@ -97,8 +97,8 @@ async def test_fallback_adapter_is_used_on_failure():
 
     ollama_adapter = make_stub_adapter("ollama", "<html><body>fallback</body></html>")
 
-    def adapter_factory(config_manager, override_model=None):
-        model = override_model or config_manager.get_default_model()
+    def adapter_factory(config_provider, override_model=None):
+        model = override_model or config_provider.get_primary_model()
         return openai_adapter if model == "openai" else ollama_adapter
 
     with patch(

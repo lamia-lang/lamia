@@ -1,33 +1,33 @@
 import pytest
 from unittest.mock import patch, MagicMock
 import os
-from lamia.engine.config_manager import ConfigManager
+from lamia.engine.config_provider import ConfigProvider
 
 
-class TestConfigManager:
-    """Test suite for ConfigManager class"""
+class TestConfigProvider:
+    """Test suite for ConfigProvider class"""
 
     def test_init_with_valid_config(self):
-        """Test ConfigManager initialization with valid config"""
+        """Test ConfigProvider initialization with valid config"""
         config = {
             "default_model": "openai",
             "models": {"openai": {"default_model": "gpt-3.5-turbo"}},
             "api_keys": {"openai": "test-key"}
         }
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         assert cm.config == config
         assert cm.config["api_keys"]["openai"] == "test-key"
 
     def test_init_with_empty_config(self):
-        """Test ConfigManager initialization with empty config"""
+        """Test ConfigProvider initialization with empty config"""
         config = {}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         assert cm.config == {"api_keys": {}}
 
     def test_init_with_invalid_config_type(self):
-        """Test ConfigManager initialization with invalid config type"""
-        with pytest.raises(ValueError, match="ConfigManager expects a config dict"):
-            ConfigManager("not a dict")
+        """Test ConfigProvider initialization with invalid config type"""
+        with pytest.raises(ValueError, match="ConfigProvider expects a config dict"):
+            ConfigProvider("not a dict")
 
     def test_init_preserves_existing_api_keys(self):
         """Test that existing API keys in config are preserved over env vars"""
@@ -36,20 +36,20 @@ class TestConfigManager:
         }
         
         with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key"}):
-            cm = ConfigManager(config)
+            cm = ConfigProvider(config)
             assert cm.config["api_keys"]["openai"] == "config-key"
 
     def test_from_dict_class_method(self):
-        """Test ConfigManager.from_dict class method"""
+        """Test ConfigProvider.from_dict class method"""
         config = {"default_model": "openai"}
-        cm = ConfigManager.from_dict(config)
-        assert isinstance(cm, ConfigManager)
+        cm = ConfigProvider.from_dict(config)
+        assert isinstance(cm, ConfigProvider)
         assert cm.config["default_model"] == "openai"
 
     def test_get_config(self):
         """Test get_config returns the entire configuration"""
         config = {"default_model": "openai", "models": {}}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         returned_config = cm.get_config()
         assert returned_config["default_model"] == "openai"
         assert "api_keys" in returned_config
@@ -62,7 +62,7 @@ class TestConfigManager:
                 "anthropic": {"default_model": "claude-3-opus-20240229"}
             }
         }
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         openai_config = cm.get_model_config("openai")
         assert openai_config["default_model"] == "gpt-3.5-turbo"
@@ -71,7 +71,7 @@ class TestConfigManager:
     def test_get_model_config_missing(self):
         """Test get_model_config raises error for missing model"""
         config = {"models": {}}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         with pytest.raises(ValueError, match="Configuration for model 'nonexistent' not found"):
             cm.get_model_config("nonexistent")
@@ -79,7 +79,7 @@ class TestConfigManager:
     def test_get_model_config_no_models_section(self):
         """Test get_model_config when no models section exists"""
         config = {}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         with pytest.raises(ValueError, match="Configuration for model 'openai' not found"):
             cm.get_model_config("openai")
@@ -93,7 +93,7 @@ class TestConfigManager:
                 "validators": ["html"]
             }
         }
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         validation_config = cm.get_validation_config()
         assert validation_config["enabled"] is True
@@ -103,24 +103,24 @@ class TestConfigManager:
     def test_get_validation_config_empty(self):
         """Test get_validation_config returns empty dict when no validation config"""
         config = {}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         validation_config = cm.get_validation_config()
         assert validation_config == {}
 
-    def test_get_default_model(self):
-        """Test get_default_model returns default model"""
+    def test_get_primary_model(self):
+        """Test get_primary_model returns default model"""
         config = {"default_model": "anthropic"}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
-        assert cm.get_default_model() == "anthropic"
+        assert cm.get_primary_model() == "anthropic"
 
-    def test_get_default_model_none(self):
-        """Test get_default_model returns None when not set"""
+    def test_get_primary_model_none(self):
+        """Test get_primary_model returns None when not set"""
         config = {}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
-        assert cm.get_default_model() is None
+        assert cm.get_primary_model() is None
 
     def test_get_has_context_memory_with_dict_entry(self):
         """Test get_has_context_memory with dictionary model entry"""
@@ -134,7 +134,7 @@ class TestConfigManager:
                 }
             }
         }
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         assert cm.get_has_context_memory("openai", "gpt-4") is True
         assert cm.get_has_context_memory("openai", "gpt-3.5-turbo") is False
@@ -148,7 +148,7 @@ class TestConfigManager:
                 }
             }
         }
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         assert cm.get_has_context_memory("openai", "gpt-4") is None
         assert cm.get_has_context_memory("openai", "gpt-3.5-turbo") is None
@@ -162,48 +162,48 @@ class TestConfigManager:
                 }
             }
         }
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         assert cm.get_has_context_memory("openai", "nonexistent") is None
 
     def test_get_has_context_memory_provider_not_found(self):
         """Test get_has_context_memory returns None for non-existent provider"""
         config = {"models": {}}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         assert cm.get_has_context_memory("nonexistent", "gpt-4") is None
 
     def test_get_api_key_exists(self):
         """Test get_api_key returns existing API key"""
         config = {"api_keys": {"openai": "test-key"}}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         assert cm.get_api_key("openai") == "test-key"
 
     def test_get_api_key_missing(self):
         """Test get_api_key returns None for missing API key"""
         config = {"api_keys": {}}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         assert cm.get_api_key("openai") is None
 
     def test_get_api_key_no_api_keys_section(self):
         """Test get_api_key returns None when no api_keys section"""
         config = {}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         assert cm.get_api_key("openai") is None
 
     def test_get_extensions_folder_default(self):
         """Test get_extensions_folder returns default value"""
         config = {}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         assert cm.get_extensions_folder() == "extensions"
 
     def test_get_extensions_folder_custom(self):
         """Test get_extensions_folder returns custom value"""
         config = {"extensions_folder": "custom_extensions"}
-        cm = ConfigManager(config)
+        cm = ConfigProvider(config)
         
         assert cm.get_extensions_folder() == "custom_extensions"

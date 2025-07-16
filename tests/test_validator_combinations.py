@@ -1,10 +1,10 @@
 import pytest
-from lamia.adapters.llm.strategy import ValidationStrategy, RetryConfig
+from lamia.engine.validation_strategies.llm_validation_strategy import ValidationStrategy, RetryConfig
 from lamia.validation.validators import HTMLValidator, LengthValidator
 
 async def test_combined_html_and_length_validators():
     config = RetryConfig(
-        max_retries=1,
+        max_retries_primary=1,
         fallback_models=[],
         validators=[
             {"type": "html"},

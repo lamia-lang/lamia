@@ -6,7 +6,7 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch, call
 from io import StringIO
 from lamia.cli import main
-from lamia.engine.llm.llm_manager import MissingAPIKeysError
+from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
 
 
 class TestCLILifecycle:

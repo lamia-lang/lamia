@@ -2,7 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from lamia.lamia import Lamia
-from lamia.engine.llm.llm_manager import MissingAPIKeysError
+from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
 
 
 class TestLamiaLifecycle:
