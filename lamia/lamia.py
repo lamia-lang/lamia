@@ -225,9 +225,56 @@ class Lamia:
         """Get validation statistics."""
         return self._engine.get_validation_stats()
 
-    def get_recent_validation_results(self, limit: Optional[int] = None):
-        """Get recent validation results from the engine's validation manager."""
-        return self._engine.get_recent_validation_results(limit)
+    def load_python_folder(self, folder_path: str, recursive: bool = False) -> None:
+        """Import every ``.py`` file in *folder_path* so in‐folder imports work.
+
+        This is a utility for quickly making a directory of helper scripts
+        available to code snippets executed via :pyfunc:`run_async`.
+
+        Parameters
+        ----------
+        folder_path : str
+            Path to the directory containing ``.py`` files.
+        recursive : bool, default False
+            If *True*, walk sub-directories recursively.  Otherwise only the
+            top-level files are imported.
+        """
+
+        import sys
+        import importlib.util
+        from pathlib import Path
+
+        base_path = Path(folder_path).expanduser().resolve()
+        if not base_path.is_dir():
+            raise NotADirectoryError(f"{folder_path} is not a directory")
+
+        # Ensure the folder is on sys.path so regular import statements work.
+        if str(base_path) not in sys.path:
+            sys.path.insert(0, str(base_path))
+
+        # Choose glob strategy based on recursion flag.
+        file_iter = base_path.rglob('*.py') if recursive else base_path.glob('*.py')
+
+        for py_file in file_iter:
+            # Skip package init files – they’re imported automatically when
+            # other modules in that package are loaded.
+            if py_file.name == '__init__.py':
+                continue
+
+            # Derive a module name relative to the base folder so that nested
+            # packages import with dotted paths (e.g. ``pkg.sub.module``).
+            relative_parts = py_file.relative_to(base_path).with_suffix('').parts
+            module_name = '.'.join(relative_parts)
+
+            # Don’t reload if it’s already imported.
+            if module_name in sys.modules:
+                continue
+
+            spec = importlib.util.spec_from_file_location(module_name, py_file)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module  # must be in sys.modules before exec
+                spec.loader.exec_module(module)
 
     async def __aenter__(self):
         """Async context manager entry"""

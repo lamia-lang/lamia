@@ -1,4 +1,6 @@
 import ast
+import sys
+from pathlib import Path
 from typing import Any
 
 def run_python_code(code: str, mode: str = 'interactive', show_banner: bool = True) -> Any:
@@ -30,3 +32,41 @@ def run_python_code(code: str, mode: str = 'interactive', show_banner: bool = Tr
         raise e
     except Exception as e:
         raise e
+
+# New helper -------------------------------------------------------------
+
+def run_python_file(file_path: str, mode: str = 'interactive') -> Any:
+    """Execute a Python script located at *file_path* in an isolated namespace.
+
+    The script's directory is temporarily added to ``sys.path`` so that any
+    sibling modules (``import foo`` where ``foo.py`` is next to the script)
+    can be resolved by the standard import machinery.
+
+    Args:
+        file_path: Path to the ``.py`` file to execute.
+        mode:   Execution mode passed to :pyfunc:`run_python_code`.
+
+    Returns
+    -------
+    Any
+        Result of the last expression in interactive mode, or ``None``.
+    """
+
+    path = Path(file_path).expanduser().resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"Python file not found: {file_path}")
+
+    # Ensure the script's directory is on sys.path for local imports.
+    script_dir = str(path.parent)
+    added_to_syspath = False
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+        added_to_syspath = True
+
+    try:
+        source = path.read_text(encoding='utf-8')
+        return run_python_code(source, mode=mode)
+    finally:
+        # Clean up sys.path to avoid side-effects across multiple calls.
+        if added_to_syspath and script_dir in sys.path:
+            sys.path.remove(script_dir)
