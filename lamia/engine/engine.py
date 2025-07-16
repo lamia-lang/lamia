@@ -20,12 +20,6 @@ class LamiaEngine:
         
         # Initialize validation manager for centralized coordination and statistics
         self.validation_manager = ValidationManager()
-        self._validation_enabled = self._is_validation_enabled()
-    
-    def _is_validation_enabled(self) -> bool:
-        """Check if validation is enabled in config."""
-        validation_config = self.config_provider.config.get('validation', {})
-        return validation_config.get('enabled', False)
     
     async def execute(
         self,

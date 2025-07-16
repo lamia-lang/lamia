@@ -17,8 +17,6 @@ class ConfigProvider:
         
         # Make a defensive copy to ensure true immutability
         self._config = config.copy()
-        self._primary_model = config.get('model_chain')[0]
-        self._fallback_models = [model for model in config.get('model_chain')[1:]]
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]):
@@ -29,13 +27,9 @@ class ConfigProvider:
         """Get the raw config dictionary."""
         return self._config
 
-    def get_primary_model(self) -> ModelWithRetries:
+    def get_model_chain(self) -> List[ModelWithRetries]:
         """Get the primary model and retries from config."""
-        return self._primary_model
-
-    def get_fallback_models(self) -> List[ModelWithRetries]:
-        """Get the fallback models from config."""
-        return self._fallback_models
+        return self.config.get('model_chain')
 
     def get_api_key(self, provider: str) -> Optional[str]:
         # Only return from the dict, never from the environment

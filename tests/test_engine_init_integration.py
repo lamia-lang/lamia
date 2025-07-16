@@ -4,6 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from lamia.engine.engine import LamiaEngine
 from lamia.adapters.llm.base import LLMResponse
+from lamia.command_types import CommandType
+from lamia._internal_types.model_retry import ModelWithRetries
+from lamia import LLMModel
+from lamia.engine.config_provider import ConfigProvider
 
 class DummyLLMResponse(LLMResponse):
     """Lightweight LLMResponse that keeps the original constructor contract so **dict unpacking works."""
@@ -38,6 +42,7 @@ def make_stub_adapter(model_name: str, reply_text: str, *, is_valid: bool = True
     adapter.initialize = AsyncMock()
     adapter.close = AsyncMock()
     adapter.model = model_name
+    adapter.name = model_name            # used by LLMManager logging
     adapter.generate = AsyncMock(return_value=DummyLLMResponse(reply_text, model_name, is_valid, error_message))
     return adapter
 
@@ -49,77 +54,60 @@ def _dummy_api_key(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_single_model():
-    config = {
-        "default_model": "openai",
-        "models": {"openai": {"enabled": True}},
-        "validation": {
-            "enabled": True,
-            "max_retries": 1,
-            "fallback_models": [],
-            "validators": [{"type": "html"}],
-        },
+    config = {                                             # new model-chain config
+        "model_chain": [
+            ModelWithRetries(LLMModel("openai"), retries=1)
+        ],
+        "validators": [{"type": "html"}],
+        "api_keys": {"openai": "dummy"},
     }
+    cfg_provider = ConfigProvider(config)
 
     openai_adapter = make_stub_adapter("openai", "<html><body>ok</body></html>")
 
     with patch(
-        "lamia.engine.llm_manager.create_adapter_from_config", return_value=openai_adapter
-    ), patch(
-        "lamia.engine.engine.create_adapter_from_config", return_value=openai_adapter
+        "lamia.engine.managers.llm.llm_manager.LLMManager.create_adapter_from_config",
+        new_callable=AsyncMock,
+        return_value=openai_adapter,
     ):
-        engine = LamiaEngine(config)
-        await engine.start()
-        response = await engine.generate("Hello, world!")
+        engine = LamiaEngine(cfg_provider)
+        result = await engine.execute(CommandType.LLM, "Hello, world!")
 
-        assert isinstance(response.text, str)
-        assert response.model == "openai"
-        assert response.validation_result["is_valid"] is True
-
-        await engine.stop()
+        assert result.is_valid is True
 
 @pytest.mark.asyncio
 async def test_fallback_adapter_is_used_on_failure():
     """If the primary adapter errors, engine should switch to the fallback model."""
 
     config = {
-        "default_model": "openai",
-        "models": {"openai": {"enabled": True}, "ollama": {"enabled": True}},
-        "validation": {
-            "enabled": True,
-            "max_retries": 2,
-            "fallback_models": ["ollama"],
-            "validators": [{"type": "html"}],
-        },
+        "model_chain": [
+            ModelWithRetries(LLMModel("openai"), retries=1),
+            ModelWithRetries(LLMModel("ollama"), retries=1),
+        ],
+        "validators": [{"type": "html"}],
+        "api_keys": {"openai": "dummy", "ollama": "dummy"},
     }
+    cfg_provider = ConfigProvider(config)
 
     # Primary adapter returns invalid HTML (fails validation), fallback returns valid HTML
     openai_adapter = make_stub_adapter("openai", "not html", is_valid=False, error_message="Invalid HTML")
 
     ollama_adapter = make_stub_adapter("ollama", "<html><body>fallback</body></html>")
 
-    def adapter_factory(config_provider, override_model=None):
-        model = override_model or config_provider.get_primary_model()
-        return openai_adapter if model == "openai" else ollama_adapter
+    async def adapter_factory(self, model):
+        return openai_adapter if model.get_provider_name() == "openai" else ollama_adapter
 
     with patch(
-        "lamia.engine.llm_manager.create_adapter_from_config", side_effect=adapter_factory
-    ), patch(
-        "lamia.engine.engine.create_adapter_from_config", side_effect=lambda cm, override_model=None: adapter_factory(cm, override_model)
+        "lamia.engine.managers.llm.llm_manager.LLMManager.create_adapter_from_config",
+        new_callable=AsyncMock,
+        side_effect=adapter_factory,
     ):
-        engine = LamiaEngine(config)
-        await engine.start()
+        engine = LamiaEngine(cfg_provider)
+        result = await engine.execute(CommandType.LLM, "Trigger fallback")
 
-        result = await engine.generate("Trigger fallback")
-
-        # Fallback adapter should be used
-        assert result.model == "ollama"
-        assert result.validation_result["is_valid"] is True
-
-        # Primary adapter tried once, fallback once
+        assert result.is_valid is True
         openai_adapter.generate.assert_awaited_once()
         ollama_adapter.generate.assert_awaited_once()
-
-        await engine.stop()
 
 @pytest.mark.asyncio
 async def test_custom_validator_success():

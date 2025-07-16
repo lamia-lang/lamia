@@ -1,7 +1,9 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import os
 from lamia.engine.config_provider import ConfigProvider
+from lamia._internal_types.model_retry import ModelWithRetries
+from lamia import LLMModel
 
 
 class TestConfigProvider:
@@ -10,9 +12,8 @@ class TestConfigProvider:
     def test_init_with_valid_config(self):
         """Test ConfigProvider initialization with valid config"""
         config = {
-            "default_model": "openai",
-            "models": {"openai": {"default_model": "gpt-3.5-turbo"}},
-            "api_keys": {"openai": "test-key"}
+            "model_chain": [ModelWithRetries(LLMModel("openai"), retries=1)],
+            "api_keys": {"openai": "test-key"},
         }
         cm = ConfigProvider(config)
         assert cm.config == config
@@ -22,7 +23,7 @@ class TestConfigProvider:
         """Test ConfigProvider initialization with empty config"""
         config = {}
         cm = ConfigProvider(config)
-        assert cm.config == {"api_keys": {}}
+        assert cm.config == {}
 
     def test_init_with_invalid_config_type(self):
         """Test ConfigProvider initialization with invalid config type"""
@@ -41,10 +42,10 @@ class TestConfigProvider:
 
     def test_from_dict_class_method(self):
         """Test ConfigProvider.from_dict class method"""
-        config = {"default_model": "openai"}
+        config = {"model_chain": [ModelWithRetries(LLMModel("openai"), retries=1)]}
         cm = ConfigProvider.from_dict(config)
         assert isinstance(cm, ConfigProvider)
-        assert cm.config["default_model"] == "openai"
+        assert cm.config["model_chain"][0].model.name == "openai"
 
     def test_get_config(self):
         """Test get_config returns the entire configuration"""
@@ -54,124 +55,13 @@ class TestConfigProvider:
         assert returned_config["default_model"] == "openai"
         assert "api_keys" in returned_config
 
-    def test_get_model_config_valid(self):
-        """Test get_model_config returns correct model configuration"""
-        config = {
-            "models": {
-                "openai": {"default_model": "gpt-3.5-turbo", "temperature": 0.7},
-                "anthropic": {"default_model": "claude-3-opus-20240229"}
-            }
-        }
-        cm = ConfigProvider(config)
-        
-        openai_config = cm.get_model_config("openai")
-        assert openai_config["default_model"] == "gpt-3.5-turbo"
-        assert openai_config["temperature"] == 0.7
-
-    def test_get_model_config_missing(self):
-        """Test get_model_config raises error for missing model"""
-        config = {"models": {}}
-        cm = ConfigProvider(config)
-        
-        with pytest.raises(ValueError, match="Configuration for model 'nonexistent' not found"):
-            cm.get_model_config("nonexistent")
-
-    def test_get_model_config_no_models_section(self):
-        """Test get_model_config when no models section exists"""
-        config = {}
-        cm = ConfigProvider(config)
-        
-        with pytest.raises(ValueError, match="Configuration for model 'openai' not found"):
-            cm.get_model_config("openai")
-
-    def test_get_validation_config(self):
-        """Test get_validation_config returns validation settings"""
-        config = {
-            "validation": {
-                "enabled": True,
-                "max_retries": 3,
-                "validators": ["html"]
-            }
-        }
-        cm = ConfigProvider(config)
-        
-        validation_config = cm.get_validation_config()
-        assert validation_config["enabled"] is True
-        assert validation_config["max_retries"] == 3
-        assert validation_config["validators"] == ["html"]
-
-    def test_get_validation_config_empty(self):
-        """Test get_validation_config returns empty dict when no validation config"""
-        config = {}
-        cm = ConfigProvider(config)
-        
-        validation_config = cm.get_validation_config()
-        assert validation_config == {}
-
-    def test_get_primary_model(self):
-        """Test get_primary_model returns default model"""
-        config = {"default_model": "anthropic"}
-        cm = ConfigProvider(config)
-        
-        assert cm.get_primary_model() == "anthropic"
-
-    def test_get_primary_model_none(self):
-        """Test get_primary_model returns None when not set"""
-        config = {}
-        cm = ConfigProvider(config)
-        
-        assert cm.get_primary_model() is None
-
-    def test_get_has_context_memory_with_dict_entry(self):
-        """Test get_has_context_memory with dictionary model entry"""
-        config = {
-            "models": {
-                "openai": {
-                    "models": [
-                        {"name": "gpt-4", "has_context_memory": True},
-                        {"name": "gpt-3.5-turbo", "has_context_memory": False}
-                    ]
-                }
-            }
-        }
-        cm = ConfigProvider(config)
-        
-        assert cm.get_has_context_memory("openai", "gpt-4") is True
-        assert cm.get_has_context_memory("openai", "gpt-3.5-turbo") is False
-
-    def test_get_has_context_memory_with_string_entry(self):
-        """Test get_has_context_memory with string model entry"""
-        config = {
-            "models": {
-                "openai": {
-                    "models": ["gpt-4", "gpt-3.5-turbo"]
-                }
-            }
-        }
-        cm = ConfigProvider(config)
-        
-        assert cm.get_has_context_memory("openai", "gpt-4") is None
-        assert cm.get_has_context_memory("openai", "gpt-3.5-turbo") is None
-
-    def test_get_has_context_memory_model_not_found(self):
-        """Test get_has_context_memory returns None for non-existent model"""
-        config = {
-            "models": {
-                "openai": {
-                    "models": [{"name": "gpt-4", "has_context_memory": True}]
-                }
-            }
-        }
-        cm = ConfigProvider(config)
-        
-        assert cm.get_has_context_memory("openai", "nonexistent") is None
-
-    def test_get_has_context_memory_provider_not_found(self):
-        """Test get_has_context_memory returns None for non-existent provider"""
-        config = {"models": {}}
-        cm = ConfigProvider(config)
-        
-        assert cm.get_has_context_memory("nonexistent", "gpt-4") is None
+    def test_get_model_chain(self):
+        chain = [
+            ModelWithRetries(LLMModel("openai"), retries=2),
+            ModelWithRetries(LLMModel("anthropic"), retries=1),
+        ]
+        cm = ConfigProvider({"model_chain": chain})
+        assert cm.get_model_chain() == chain
 
     def test_get_api_key_exists(self):
         """Test get_api_key returns existing API key"""

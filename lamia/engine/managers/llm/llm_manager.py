@@ -65,13 +65,9 @@ class LLMManager(Manager):
         needed = set()
         
         # Add default model provider
-        default_model = self.config_provider.get_primary_model()
-        if default_model:
-            needed.add(default_model.model.get_provider_name())
-        
-        # Add fallback models providers
-        fallback_models = self.config_provider.get_fallback_models()
-        needed.update([model.model.get_provider_name() for model in fallback_models])
+        model_chain = self.config_provider.get_model_chain()
+        if model_chain:
+            needed.update([model.model.get_provider_name() for model in model_chain])
         
         return needed
     
@@ -210,8 +206,6 @@ class LLMManager(Manager):
         Raises:
             RuntimeError: If all attempts fail
         """
-        primary_model = self.config_provider.get_primary_model().model
-        primary_adapter = await self.create_adapter_from_config(primary_model)
         # Aggregate initial hints from all validators
         initial_hints = self.validation_strategy.get_initial_hints()
         initial_hint_text = "\n".join(initial_hints)
@@ -219,41 +213,27 @@ class LLMManager(Manager):
             current_prompt = f"{initial_hint_text}\n\n{prompt}"
         else:
             current_prompt = prompt
-        
-        try:
-            return await self._generate_and_validate(
-                adapter=primary_adapter,
-                model=primary_model,
-                prompt=current_prompt,
-                max_attempts=self.config_provider.get_primary_model().retries,
-            )
-        except Exception as e:
-            # Try fallback model if available
-            fallback_models = self.config_provider.get_fallback_models()
-            for fallback_model in fallback_models:
-                logger.info(f"Trying fallback model: {fallback_model.model.name}")
-                # Lazily create and cache adapters so we don't re-instantiate them
-                if fallback_model in self._adapter_cache:
-                    fallback_adapter = self._adapter_cache[fallback_model]
-                else:
-                    fallback_adapter = await self.create_adapter_from_config(fallback_model.model)
-                    self._adapter_cache[fallback_model] = fallback_adapter
-                # Reset prompt for new adapter, with initial hints
-                if initial_hint_text:
-                    current_prompt = f"{initial_hint_text}\n\n{prompt}"
-                else:
-                    current_prompt = prompt
 
-                try:
-                    return await self._generate_and_validate(
-                        adapter=fallback_adapter,
-                        model=fallback_model.model,
-                        prompt=current_prompt,
-                        max_attempts=fallback_model.retries,
-                    )
-                except Exception as e:
-                    # Continue to the next fallback model
-                    pass
+        for model_and_retries in self.config_provider.get_model_chain():
+            model = model_and_retries.model
+
+            # Lazily create and cache adapters so we don't re-instantiate them
+            if model in self._adapter_cache:
+                adapter = self._adapter_cache[model]
+            else:
+                adapter = await self.create_adapter_from_config(model)
+                self._adapter_cache[model] = adapter
+
+            try:
+                return await self._generate_and_validate(
+                    adapter=adapter,
+                    model = model_and_retries.model,
+                    prompt=current_prompt,
+                    max_attempts=model_and_retries.retries,
+                )
+            except Exception as e:
+                # Continue to the next fallback model
+                pass
                 
         raise RuntimeError(
             f"All attempts failed. Giving up."
