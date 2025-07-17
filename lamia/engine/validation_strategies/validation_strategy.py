@@ -3,6 +3,7 @@ from typing import Any, List, Dict, Type
 from ..managers.manager import Manager
 from lamia.validation.base import BaseValidator, ValidationResult
 from lamia.validation.validators import CONFLICTING_VALIDATOR_GROUPS
+from lamia.validation.validator_registry import ValidatorRegistry
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,9 +11,9 @@ logger = logging.getLogger(__name__)
 class ValidationStrategy(ABC):
     """Abstract base class for domain-specific validation strategies."""
 
-    def __init__(self, validator_registry: Dict[str, BaseValidator]):
+    def __init__(self, validators: List[BaseValidator]):
         """Initialize with pre-configured validator instances from registry."""
-        self.validators = self._check_validator_conflicts(list(validator_registry.values()))
+        self.validators = self._check_validator_conflicts(validators)
 
     def _check_validator_conflicts(self, validators: List[BaseValidator]) -> List[BaseValidator]:
         """Check for conflicts between validators."""

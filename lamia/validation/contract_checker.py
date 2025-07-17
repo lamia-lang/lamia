@@ -106,7 +106,7 @@ class ValidatorContractChecker:
         self.validator_class = validator_class
         self.violations: List[ContractViolation] = []
         
-    async def check_contracts(self) -> Tuple[bool, List[ContractViolation]]:
+    def check_contracts(self) -> Tuple[bool, List[ContractViolation]]:
         """
         Run all contract checks for the validator class.
         
@@ -122,15 +122,15 @@ class ValidatorContractChecker:
         self.violations = []
         
         # Test basic BaseValidator contracts that apply to all validators
-        await self._check_base_validator_contracts()
+        self._check_base_validator_contracts()
         
         # Test DocumentStructureValidator contracts if applicable
         if issubclass(self.validator_class, DocumentStructureValidator):
-            await self._check_document_structure_contracts()
+            self._check_document_structure_contracts()
             
         return len(self.violations) == 0, self.violations
     
-    async def _check_base_validator_contracts(self):
+    def _check_base_validator_contracts(self):
         """Check contracts for BaseValidator abstract methods and properties.
         
         This method tests the fundamental requirements that all validators must meet:
@@ -142,13 +142,13 @@ class ValidatorContractChecker:
         reliably with any custom validator implementation.
         """
         # Test property contracts
-        await self._test_name_property()
-        await self._test_initial_hint_property()
+        self._test_name_property()
+        self._test_initial_hint_property()
         
         # Test validation method contracts
-        await self._test_validation_methods()
+        self._test_validation_methods()
         
-    async def _test_name_property(self):
+    def _test_name_property(self):
         """Test that name property returns a non-empty string.
         
         The name property is critical for validator registration and identification.
@@ -198,7 +198,7 @@ class ValidatorContractChecker:
                 error_message=f"name property raised exception: {str(e)}"
             ))
     
-    async def _test_initial_hint_property(self):
+    def _test_initial_hint_property(self):
         """Test that initial_hint property returns a string.
         
         The initial_hint property provides guidance to LLMs about expected output format.
@@ -228,7 +228,7 @@ class ValidatorContractChecker:
                 error_message=f"initial_hint property raised exception: {str(e)}"
             ))
     
-    async def _test_validation_methods(self):
+    def _test_validation_methods(self):
         """Test validation method contracts with various input types.
         
         This method tests that validation methods properly handle different types
@@ -263,12 +263,12 @@ class ValidatorContractChecker:
         
         if has_validate and not (has_strict or has_perm):
             # Uses validate() pattern - test only validate method
-            await self._test_validation_method(validator, 'validate', test_inputs)
+            self._test_validation_method(validator, 'validate', test_inputs)
             
         elif (has_strict and has_perm) and not has_validate:
             # Uses validate_strict/validate_permissive pattern
-            await self._test_validation_method(validator, 'validate_strict', test_inputs)
-            await self._test_validation_method(validator, 'validate_permissive', test_inputs)
+            self._test_validation_method(validator, 'validate_strict', test_inputs)
+            self._test_validation_method(validator, 'validate_permissive', test_inputs)
             
         else:
             # Invalid pattern - this should be caught by BaseValidator.__init__
@@ -279,7 +279,7 @@ class ValidatorContractChecker:
                 error_message="Must implement either validate() OR both validate_strict and validate_permissive"
             ))
     
-    async def _test_validation_method(self, validator, method_name: str, test_inputs: List[str]):
+    def _test_validation_method(self, validator, method_name: str, test_inputs: List[str]):
         """Test a specific validation method with multiple inputs.
         
         This method exercises a validation method with various test inputs to ensure
@@ -299,7 +299,7 @@ class ValidatorContractChecker:
         
         for test_input in test_inputs:
             try:
-                result = await method(test_input)
+                result = method(test_input)
                 
                 # Check return type is ValidationResult
                 if not isinstance(result, ValidationResult):
@@ -331,7 +331,7 @@ class ValidatorContractChecker:
                     error_message=f"Method raised exception: {str(e)}"
                 ))
     
-    async def _check_document_structure_contracts(self):
+    def _check_document_structure_contracts(self):
         """Check contracts specific to DocumentStructureValidator subclasses.
         
         Document structure validators have additional requirements beyond basic
@@ -346,15 +346,15 @@ class ValidatorContractChecker:
         5. Structure description: _describe_structure
         """
         # Test extract_payload contract - critical for handling LLM responses
-        await self._test_extract_payload()
+        self._test_extract_payload()
         
         # Test load_payload contract - must parse extracted content correctly
-        await self._test_load_payload()
+        self._test_load_payload()
         
         # Test other abstract methods exist and are callable
-        await self._test_document_structure_methods()
+        self._test_document_structure_methods()
     
-    async def _test_extract_payload(self):
+    def _test_extract_payload(self):
         """Test extract_payload method contract with various response types.
         
         The extract_payload method is crucial for handling real LLM responses that
@@ -412,7 +412,7 @@ class ValidatorContractChecker:
                 error_message=f"Could not test extract_payload: {str(e)}"
             ))
     
-    async def _test_load_payload(self):
+    def _test_load_payload(self):
         """Test load_payload method with format-appropriate test data.
         
         The load_payload method must parse clean payload strings into appropriate
@@ -456,7 +456,7 @@ class ValidatorContractChecker:
             # This can happen if the validator has unusual constructor requirements
             pass
     
-    async def _test_document_structure_methods(self):
+    def _test_document_structure_methods(self):
         """Test that all required DocumentStructureValidator methods exist and are callable.
         
         Document structure validators must implement several abstract methods for
@@ -552,7 +552,7 @@ class ValidatorContractChecker:
             raise ValueError(f"Could not create test instance of {self.validator_class.__name__}: {str(e)}")
 
 
-async def check_validator_contracts(validator_class: Type[BaseValidator]) -> Tuple[bool, List[ContractViolation]]:
+def check_validator_contracts(validator_class: Type[BaseValidator]) -> Tuple[bool, List[ContractViolation]]:
     """
     Convenience function to check all contracts for a validator class.
     
@@ -575,4 +575,4 @@ async def check_validator_contracts(validator_class: Type[BaseValidator]) -> Tup
                 print(f"  {v.method_name}: {v.error_message}")
     """
     checker = ValidatorContractChecker(validator_class)
-    return await checker.check_contracts() 
+    return checker.check_contracts() 

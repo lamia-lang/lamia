@@ -8,6 +8,8 @@ from lamia.engine.config_provider import ConfigProvider
 import logging
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
+from lamia.validation.base import BaseValidator
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -33,7 +35,7 @@ class Lamia:
         self, 
         *models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], 
         api_keys: Optional[dict] = None, 
-        validators: Optional[List[Any]] = None, 
+        validators: Optional[List[BaseValidator]] = None, 
     ):
         # Initialize engine - ready to use immediately!
         self._engine = LamiaEngine(self._build_config(models, api_keys, validators))
@@ -111,7 +113,7 @@ class Lamia:
         self,
         models: Tuple[Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], ...],
         api_keys: Optional[dict], 
-        validators: Optional[List[Any]], 
+        validators: Optional[List[BaseValidator]], 
     ) -> Dict[str, Any]:
 
         DEFAULT_RETRIES = 1
@@ -155,6 +157,7 @@ class Lamia:
         self,
         command: str, 
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None, 
+        validators: Optional[List[BaseValidator]] = None,
     ) -> LamiaResult:
         """
         Generate a response, trying Python code first, then LLM.
@@ -202,11 +205,10 @@ class Lamia:
         self,
         command: str,
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None,
+        validators: Optional[List[BaseValidator]] = None,
     ) -> LamiaResult:
         """
-        Synchronous helper around run_async.
-
-        Note: cannot be called from inside an active event-loop.
+        Run a command synchronously.
         
         Raises:
             MissingAPIKeysError: If API keys are missing
@@ -217,6 +219,7 @@ class Lamia:
                 self.run_async(
                     command,
                     models,
+                    validators,
                 )
             )
         except RuntimeError as e:
@@ -235,16 +238,13 @@ class Lamia:
     def load_python_folder(self, folder_path: str, recursive: bool = False) -> None:
         """Import every ``.py`` file in *folder_path* so in‐folder imports work.
 
-        This is a utility for quickly making a directory of helper scripts
-        available to code snippets executed via :pyfunc:`run_async`.
-
-        Parameters
-        ----------
-        folder_path : str
-            Path to the directory containing ``.py`` files.
-        recursive : bool, default False
-            If *True*, walk sub-directories recursively.  Otherwise only the
+        Args:
+            folder_path: Path to the directory containing ``.py`` files.
+            recursive: If *True*, walk sub-directories recursively.  Otherwise only the
             top-level files are imported.
+            
+        Raises:
+            NotADirectoryError: If the folder path is not a directory
         """
 
         import sys

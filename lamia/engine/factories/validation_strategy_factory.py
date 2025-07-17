@@ -1,11 +1,11 @@
-from typing import Dict
+from typing import Dict, Optional, List
 
-from ..managers import ValidationStrategy
 from ..config_provider import ConfigProvider
 from lamia.command_types import CommandType
 from lamia.engine.validation_strategies.llm_validation_strategy import LLMValidationStrategy
 from lamia.engine.validation_strategies.fs_validation_strategy import FSValidationStrategy
-from lamia.validation.validator_registry import ValidatorRegistry
+from lamia.engine.validation_strategies.validation_strategy import ValidationStrategy
+from lamia.validation.base import BaseValidator
 
 class ValidationStrategyFactory:
     """Provide (and cache) validation strategies for each supported command type.
@@ -17,12 +17,11 @@ class ValidationStrategyFactory:
     can extend `_create_strategy()` – until then YAGNI.
     """
 
-    def __init__(self, config_provider: ConfigProvider):
-        self.config_provider = config_provider
+    def __init__(self):
         # Cache of already constructed strategies (lazy singleton per CommandType)
         self._strategies: Dict[CommandType, ValidationStrategy] = {}
 
-    async def get_strategy(self, command_type: CommandType) -> ValidationStrategy:
+    async def get_strategy(self, command_type: CommandType, validators: List[BaseValidator]) -> ValidationStrategy:
         """Return a validation strategy for *command_type* (cached after first build)."""
 
         # Fast path: return cached instance if we have it
@@ -30,22 +29,18 @@ class ValidationStrategyFactory:
             return self._strategies[command_type]
 
         # Otherwise build, cache and return
-        strategy = await self._create_strategy(command_type)
+        strategy = await self._create_strategy(command_type, validators)
         self._strategies[command_type] = strategy
         return strategy
 
-    async def _create_strategy(self, command_type: CommandType) -> ValidationStrategy:
+    async def _create_strategy(self, command_type: CommandType, validators: Optional[List[BaseValidator]] = None) -> ValidationStrategy:
         """Instantiate the appropriate validation strategy for *command_type*."""
 
-        # Build validator registry (allows project / user extensions)
-        ext_folder = self.config_provider.get_extensions_folder()
-        registry = await ValidatorRegistry(self.config_provider.config, ext_folder).get_registry()
-
         if command_type == CommandType.LLM:
-            return LLMValidationStrategy(registry)
+            return LLMValidationStrategy(validators)
         elif command_type == CommandType.FILESYSTEM:
-            return FSValidationStrategy(registry)
+            return FSValidationStrategy(validators)
         elif command_type == CommandType.WEB:
-            return ValidationStrategy(registry)
+            return ValidationStrategy(validators) 
 
         raise ValueError(f"No validation strategy implemented for command type: {command_type}")

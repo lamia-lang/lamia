@@ -20,18 +20,25 @@ logger = logging.getLogger(__name__)
 
 class ValidatorRegistry:
     """Handles discovery and loading of validator classes, both built-in and user-defined."""
-    def __init__(self, config: dict, extensions_folder: Optional[str] = None, enable_contract_checking: bool = True):
-        self.config = config
+    def __init__(self, extensions_folder: Optional[str] = None, enable_contract_checking: bool = True):
         self.extensions_folder = extensions_folder or "extensions"
         self.enable_contract_checking = enable_contract_checking
-        self._validator_instances = {}  # Store validator instances
-        
-        # Check if contract checking is disabled in config
-        validation_config = config.get('validation', {})
-        if 'enable_contract_checking' in validation_config:
-            self.enable_contract_checking = validation_config['enable_contract_checking']
 
-    async def _check_validator_contract(self, validator_class: Type[BaseValidator], source: str = "unknown") -> bool:
+    
+    def get_registry(self) -> Dict[str, Type[BaseValidator]]:
+        """Preload all validators in the validators folder and extensions, checking for name conflicts."""
+        
+        validator_class_map = self._discover_validators_recursively(validators_pkg)
+        ext_validators_path = os.path.join(os.getcwd(), self.extensions_folder, "validators")
+        ext_validator_class_map = self._discover_validators_in_path(ext_validators_path)
+        conflict_names = set(validator_class_map.keys()) & set(ext_validator_class_map.keys())
+        if conflict_names:
+            raise ValueError(f"User-defined validator name(s) conflict with built-in validators: {', '.join(conflict_names)}")
+        validator_class_map.update(ext_validator_class_map)
+                    
+        return validator_class_map
+
+    def _check_validator_contract(self, validator_class: Type[BaseValidator], source: str = "unknown") -> bool:
         """
         Check that a custom validator follows the documented contracts.
         
@@ -47,7 +54,7 @@ class ValidatorRegistry:
             
         try:
             logger.info(f"Running contract checks for {validator_class.__name__} from {source}")
-            passed, violations = await check_validator_contracts(validator_class)
+            passed, violations = check_validator_contracts(validator_class)
             
             if not passed:
                 logger.error(f"Contract violations found in {validator_class.__name__}:")
@@ -105,12 +112,6 @@ class ValidatorRegistry:
             contract_passed = await self._check_validator_contract(validator_class, source)
             if not contract_passed:
                 logger.error(f"Custom validator {validator_class.__name__} failed contract checks")
-                if self.config.get('validation', {}).get('strict_contract_checking', False):
-                    # If strict mode is enabled, reject validators that fail contract checks
-                    logger.error(f"Rejecting validator {validator_class.__name__} due to contract violations")
-                    return None
-                else:
-                    logger.warning(f"Loading validator {validator_class.__name__} despite contract violations")
             
         return validator_class
 
@@ -133,7 +134,7 @@ class ValidatorRegistry:
                     logger.warning(f"Could not import submodule {name}: {e}")
         return validator_class_map
 
-    async def _discover_validators_in_path(self, path: str) -> dict:
+    def _discover_validators_in_path(self, path: str) -> dict:
         import importlib.util
         validator_class_map = {}
         if not os.path.isdir(path):
@@ -158,10 +159,10 @@ class ValidatorRegistry:
                                 and callable(getattr(cls, 'name'))
                             ):
                                 # Run contract checks on discovered validators
-                                contract_passed = await self._check_validator_contract(
+                                contract_passed = self._check_validator_contract(
                                     cls, f"extensions file: {file}"
                                 )
-                                if contract_passed or not self.config.get('validation', {}).get('strict_contract_checking', False):
+                                if contract_passed:
                                     validator_class_map[cls.name()] = cls
                                 else:
                                     logger.error(f"Skipping validator {cls.__name__} due to contract violations")
@@ -172,42 +173,3 @@ class ValidatorRegistry:
             sys.path.pop(0)
             
         return validator_class_map
-
-    async def get_registry(self) -> Dict[str, BaseValidator]:
-        """Preload all validators in the validators folder and extensions, checking for name conflicts."""
-        
-        validator_class_map = self._discover_validators_recursively(validators_pkg)
-        ext_validators_path = os.path.join(os.getcwd(), self.extensions_folder, "validators")
-        ext_validator_class_map = await self._discover_validators_in_path(ext_validators_path)
-        conflict_names = set(validator_class_map.keys()) & set(ext_validator_class_map.keys())
-        if conflict_names:
-            raise ValueError(f"User-defined validator name(s) conflict with built-in validators: {', '.join(conflict_names)}")
-        validator_class_map.update(ext_validator_class_map)
-        
-        validation_config = self.config.get('validation', {})
-        if validation_config.get('validators'):
-            for validator_config in validation_config['validators']:
-                vtype = validator_config.get("type")
-                strict = validator_config.get("strict", True)
-                config_copy = validator_config.copy()
-                config_copy.pop("type", None)
-                config_copy.pop("strict", None)
-                
-                if vtype in validator_class_map:
-                    cls = validator_class_map[vtype]
-                    # Create singleton instance if not exists
-                    if cls.name() not in self._validator_instances:
-                        self._validator_instances[cls.name()] = cls(strict=strict, generate_hints=True, **config_copy)
-                elif vtype in ["custom_file", "custom_function"]:
-                    try:
-                        validator_class = await self._load_custom_validator(validator_config)
-                        if validator_class:
-                            # Create singleton instance if not exists
-                            if validator_class.name() not in self._validator_instances:
-                                self._validator_instances[validator_class.name()] = validator_class(strict=strict, generate_hints=True, **config_copy)
-                    except Exception as e:
-                        logger.error(f"Error loading custom validator: {str(e)}")
-                else:
-                    raise ValueError(f"Unknown validator type: {vtype}")
-                    
-        return self._validator_instances 
