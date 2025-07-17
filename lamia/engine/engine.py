@@ -22,8 +22,8 @@ class LamiaEngine:
         self.validation_factory = ValidationStrategyFactory()
         self.manager_factory = ManagerFactory(config_provider)
         
-        # Initialize registry for built-in validators
-        self.validator_registry = ValidatorRegistry()
+        # Initialize registry for built-in and user-defined validators
+        self.validator_registry = ValidatorRegistry(extensions_folder=config_provider.get_extensions_folder())
         
         # Initialize validation manager for centralized coordination and statistics
         self.validation_manager = ValidationManager()

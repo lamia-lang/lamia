@@ -15,22 +15,15 @@ import lamia.validation.validators as validators_pkg
 logger = logging.getLogger(__name__)
 
 class ValidatorRegistry:
-    """Handles discovery and loading of built-in validator classes."""
+    """Handles discovery and loading of built-in and user-defined validator classes."""
     
-    def __init__(self):
+    def __init__(self, extensions_folder: str):
         # Load built-in validators once at initialization
-        self._built_in_validators = self._discover_validators_recursively(validators_pkg)
-    
-    def get_registry(self) -> Dict[str, Type[BaseValidator]]:
-        """Get the registry of built-in validators."""
-        return self._built_in_validators.copy()
+        self._built_in_validators = self._discover_builtin_validators_recursively(validators_pkg)
+        # Initialize empty dict for user-defined validators
+        self._user_validators: Dict[str, Type[BaseValidator]] = {}
+        self.extensions_folder = extensions_folder
         
-    def is_built_in(self, validator_class: Type[BaseValidator]) -> bool:
-        """Check if a validator class is built-in."""
-        return any(
-            validator_class is cls 
-            for cls in self._built_in_validators.values()
-        )
         
     def check_validator(self, validator_class: Type[BaseValidator]) -> Tuple[bool, List[ContractViolation]]:
         """
@@ -58,8 +51,33 @@ class ValidatorRegistry:
                     logger.error(f"    {violation.error_message}")
                     
         return passed, violations
+    
+    def get_class_from_name(self, name: str) -> Type[BaseValidator]:
+        """Get a validator class from its name."""
+        # First check built-in validators
+        if name in self._built_in_validators:
+            return self._built_in_validators[name]
+            
+        # Then check already loaded user validators
+        if name in self._user_validators:
+            return self._user_validators[name]
+            
+        # If not found, try to load from user extensions
+        self._load_user_validators()
+        if name in self._user_validators:
+            return self._user_validators[name]
+            
+        raise ValueError(f"Validator '{name}' not found")
+    
+    def _is_built_in(self, validator_class: Type[BaseValidator]) -> bool:
+        """Check if a validator class is built-in."""
+        return any(
+            validator_class is cls 
+            for cls in self._built_in_validators.values()
+        )
 
-    def _discover_validators_recursively(self, package) -> dict:
+    def _discover_builtin_validators_recursively(self, package) -> dict:
+        """Recursively discover all built-in validators in the validators package."""
         validator_class_map = {}
         for finder, name, ispkg in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
             module = importlib.import_module(name)
@@ -73,7 +91,60 @@ class ValidatorRegistry:
                     validator_class_map[cls.name()] = cls
             if ispkg:
                 try:
-                    validator_class_map.update(self._discover_validators_recursively(module))
+                    validator_class_map.update(self._discover_builtin_validators_recursively(module))
                 except Exception as e:
                     logger.warning(f"Could not import submodule {name}: {e}")
         return validator_class_map
+
+    def _load_user_validators(self):
+        """Lazily load user-defined validators from extensions folder."""
+        validators_path = os.path.join(os.getcwd(), self.extensions_folder, "validators")
+        if not os.path.isdir(validators_path):
+            return
+            
+        sys.path.insert(0, validators_path)
+        try:
+            for file in os.listdir(validators_path):
+                if file.endswith(".py") and not file.startswith("__"):
+                    module_name = file[:-3]
+                    try:
+                        spec = importlib.util.spec_from_file_location(
+                            module_name, 
+                            os.path.join(validators_path, file)
+                        )
+                        if not spec or not spec.loader:
+                            continue
+                            
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        
+                        for _, cls in inspect.getmembers(module, inspect.isclass):
+                            if (
+                                issubclass(cls, BaseValidator) and
+                                cls is not BaseValidator and
+                                hasattr(cls, 'name') and
+                                callable(getattr(cls, 'name'))
+                            ):
+                                name = cls.name()
+                                if name in self._built_in_validators:
+                                    logger.warning(
+                                        f"User validator '{name}' in {file} conflicts with "
+                                        "built-in validator - skipping"
+                                    )
+                                    continue
+                                    
+                                # Run contract checks
+                                passed, violations = self.check_validator(cls)
+                                if passed:
+                                    self._user_validators[name] = cls
+                                else:
+                                    logger.error(
+                                        f"Skipping user validator '{name}' in {file} "
+                                        "due to contract violations"
+                                    )
+                                    
+                    except Exception as e:
+                        logger.warning(f"Could not load validator from {file}: {e}")
+                        
+        finally:
+            sys.path.pop(0)
