@@ -4,10 +4,12 @@ from .config_provider import ConfigProvider
 from .factories import ManagerFactory, ValidationStrategyFactory
 from .validation_manager import ValidationManager
 from lamia.command_types import CommandType
-from lamia.validation.base import ValidationResult
+from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.validation.validator_registry import ValidatorRegistry
-from lamia.validation.base import BaseValidator
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 class LamiaEngine:
     """Main engine for Lamia that orchestrates different domain managers."""
@@ -19,15 +21,13 @@ class LamiaEngine:
         # Initialize factories
         self.validation_factory = ValidationStrategyFactory()
         self.manager_factory = ManagerFactory(config_provider)
-
-        # Build validator registry (allows project / user extensions)
-        ext_folder = config_provider.get_extensions_folder()
-        registry = ValidatorRegistry(ext_folder, enable_contract_checking=False)
-        self.registry = registry.get_registry()
+        
+        # Initialize registry for built-in validators
+        self.validator_registry = ValidatorRegistry()
         
         # Initialize validation manager for centralized coordination and statistics
         self.validation_manager = ValidationManager()
-    
+
     async def execute(
         self,
         command_type: CommandType,
@@ -37,19 +37,32 @@ class LamiaEngine:
         """Execute a request using the appropriate domain manager.
         
         Args:
-            request_type: Type of request ('llm', 'fs', 'web', etc.)
+            command_type: Type of request ('llm', 'fs', 'web', etc.)
             content: The content to process
-            **kwargs: Additional parameters for the specific manager
+            validators: Optional list of validator classes to use.
+                      If not provided, uses validators from config.
             
         Returns:
             Response from the appropriate manager
         """
-        
-        # Create validation strategy for this command type
-        if validators is not None:
+        # If no specific validators are passed, get them from config
+        if validators is None:
             validators = self.config_provider.get_validators()
-
-        validation_strategy = await self.validation_factory.get_strategy(command_type, validators)
+            
+        # Check contracts for non-built-in validators
+        validator_instances = []
+        for validator_class in validators:
+            passed, violations = self.validator_registry.check_validator(validator_class)
+            if passed:
+                validator_instances.append(validator_class())
+            else:
+                logger.error(f"Skipping validator {validator_class.__name__} due to contract violations: {violations}")
+                
+        # Create validation strategy
+        validation_strategy = await self.validation_factory.get_strategy(
+            command_type, 
+            validator_instances
+        )
         
         # Get the appropriate manager with its validation strategy
         manager = await self.manager_factory.get_manager(command_type, validation_strategy)
