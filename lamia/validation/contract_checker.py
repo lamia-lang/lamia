@@ -550,29 +550,3 @@ class ValidatorContractChecker:
                     
         except Exception as e:
             raise ValueError(f"Could not create test instance of {self.validator_class.__name__}: {str(e)}")
-
-
-def check_validator_contracts(validator_class: Type[BaseValidator]) -> Tuple[bool, List[ContractViolation]]:
-    """
-    Convenience function to check all contracts for a validator class.
-    
-    This is the main entry point for contract checking. It creates a ValidatorContractChecker
-    instance and runs all applicable contract tests for the given validator class.
-    
-    Args:
-        validator_class: The BaseValidator subclass to check contracts for
-        
-    Returns:
-        Tuple containing:
-        - bool: True if all contracts pass, False if any violations found  
-        - List[ContractViolation]: Detailed list of any violations discovered
-        
-    Example:
-        passed, violations = await check_validator_contracts(MyCustomValidator)
-        if not passed:
-            print(f"Found {len(violations)} contract violations:")
-            for v in violations:
-                print(f"  {v.method_name}: {v.error_message}")
-    """
-    checker = ValidatorContractChecker(validator_class)
-    return checker.check_contracts() 

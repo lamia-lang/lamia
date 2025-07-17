@@ -9,7 +9,7 @@ from pathlib import Path
 import logging
 
 from lamia.validation.base import BaseValidator
-from lamia.validation.contract_checker import check_validator_contracts, ContractViolation
+from lamia.validation.contract_checker import ValidatorContractChecker, ContractViolation
 import lamia.validation.validators as validators_pkg
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,8 @@ class ValidatorRegistry:
             return True, []
             
         # Run contract checks for user-defined validators
-        passed, violations = check_validator_contracts(validator_class)
+        validator_contract_checker = ValidatorContractChecker(validator_class)
+        passed, violations = validator_contract_checker.check_contracts()
         if not passed:
             logger.error(f"Contract violations found in {validator_class.__name__}:")
             for violation in violations:
