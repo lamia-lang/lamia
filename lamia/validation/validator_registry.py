@@ -4,7 +4,7 @@ import importlib
 import pkgutil
 import inspect
 import asyncio
-from typing import Dict, Type, Any, Optional, Tuple, List
+from typing import Dict, Type, Any, Optional, Tuple, List, Set
 from pathlib import Path
 import logging
 
@@ -22,13 +22,15 @@ class ValidatorRegistry:
         self._built_in_validators = self._discover_builtin_validators_recursively(validators_pkg)
         # Initialize empty dict for user-defined validators
         self._user_validators: Dict[str, Type[BaseValidator]] = {}
+        # Cache for validators that passed contract checks
+        self._checked_classes: Set[Type[BaseValidator]] = set()
         self.extensions_folder = extensions_folder
-        
         
     def check_validator(self, validator_class: Type[BaseValidator]) -> Tuple[bool, List[ContractViolation]]:
         """
         Check if a validator class meets all contracts.
         Only runs checks for non-built-in validators since built-ins are pre-tested.
+        Caches results to avoid re-checking the same class.
         
         Args:
             validator_class: The validator class to check
@@ -37,13 +39,19 @@ class ValidatorRegistry:
             Tuple of (passed, violations)
         """
         # Skip contract checks for built-in validators
-        if self.is_built_in(validator_class):
+        if self._is_built_in(validator_class):
             return True, []
-            
-        # Run contract checks for user-defined validators
-        validator_contract_checker = ValidatorContractChecker(validator_class)
-        passed, violations = validator_contract_checker.check_contracts()
-        if not passed:
+
+        # Check caches first
+        if validator_class in self._checked_classes:
+            return True, []
+
+        passed, violations = ValidatorContractChecker(validator_class).check_contracts()
+        
+        if passed:
+            self._validated_classes.add(validator_class)
+        else:
+            self._failed_classes.add(validator_class)
             logger.error(f"Contract violations found in {validator_class.__name__}:")
             for violation in violations:
                 logger.error(f"  - {violation.method_name}: Expected {violation.expected}, got {violation.actual}")
