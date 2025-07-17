@@ -6,8 +6,7 @@ model_chain:
     max_retries: 2
     temperature: 0.3          # cooler than provider default
     max_tokens: 500
-
-  - name: "openai:gpt-4o"
+  - name: "openai"
     max_retries: 1
     temperature: 0.2
 
@@ -88,17 +87,3 @@ providers:
     repeat_penalty: 1.1  # Penalty for repeated tokens
     top_k: 40           # Top-k sampling
     top_p: 0.9          # Top-p sampling
-
-# Validation settings
-validation:
-  enabled: true
-
-  validators:
-    - type: "html"
-      strict: false      # HTML validation
-    # - type: "json"    # JSON validation
-    # - type: "regex"   # Regex validation
-    - type: "length"  # Length validation
-      min_length: 100
-    - type: "html_structure"  # HTML structure validation
-      model: HtmlStructure

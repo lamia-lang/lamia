@@ -106,7 +106,7 @@ class Lamia:
         # Unpack the models list for the constructor
         return cls(
             *models,
-            validators=config["validation"]["validators"] if "validation" in config and "validators" in config["validation"] else None
+            validators=[]
         )
 
     def _build_config(
@@ -194,6 +194,7 @@ class Lamia:
         response = await self._engine.execute(
             current_parser.command_type,
             current_parser.content,
+            validators=validators
         )
 
         if models is not None:

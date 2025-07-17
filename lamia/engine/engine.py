@@ -14,7 +14,8 @@ class LamiaEngine:
     
     def __init__(self, config_provider: ConfigProvider):
         """Initialize the Lamia engine."""
-        
+        self.config_provider = config_provider
+
         # Initialize factories
         self.validation_factory = ValidationStrategyFactory()
         self.manager_factory = ManagerFactory(config_provider)
@@ -45,6 +46,9 @@ class LamiaEngine:
         """
         
         # Create validation strategy for this command type
+        if validators is not None:
+            validators = self.config_provider.get_validators()
+
         validation_strategy = await self.validation_factory.get_strategy(command_type, validators)
         
         # Get the appropriate manager with its validation strategy
