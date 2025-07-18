@@ -9,6 +9,7 @@ import logging
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.validation.base import BaseValidator
+from typing import Type
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ class Lamia:
         self,
         models: Tuple[Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], ...],
         api_keys: Optional[dict], 
-        validators: Optional[List[BaseValidator]], 
+        validator_types: Optional[List[Type[BaseValidator]]], 
     ) -> Dict[str, Any]:
 
         DEFAULT_RETRIES = 1
@@ -145,7 +146,7 @@ class Lamia:
         # Assemble the final config dict
         config_dict: Dict[str, Any] = {
             "model_chain": models_and_retries,
-            "validators": validators or [],
+            "validator_types": validator_types or [],
             "api_keys": api_keys,
         }    
 
@@ -157,7 +158,7 @@ class Lamia:
         self,
         command: str, 
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None, 
-        validators: Optional[List[BaseValidator]] = None,
+        validator_types: Optional[List[Type[BaseValidator]]] = None,
     ) -> LamiaResult:
         """
         Generate a response, trying Python code first, then LLM.
@@ -165,6 +166,7 @@ class Lamia:
         Args:
             command: The command to execute
             models: The models to use, if not provided, the default models will be used
+            validator_types: The types of validators to use, if not provided, the default validators will be used
         Returns:
             str: Generated response text
             
@@ -187,14 +189,18 @@ class Lamia:
         # Always create a fresh parser for each command to avoid reusing the
         # previous command's state (which caused the first‐command‐only bug).
         current_parser = CommandParser(command)
+        if current_parser.return_type is not None and type(current_parser.return_type) == str:
+            validator = get_validator_from_return_type(current_parser.return_type)
 
         if models is not None:
             self._engine.config_provider.override_model_chain_with(models)
 
+        
+
         response = await self._engine.execute(
             current_parser.command_type,
             current_parser.content,
-            validators=validators
+            validator_types=[current_parser.validator] if current_parser.validator is not None else validator_types
         )
 
         if models is not None:
@@ -206,7 +212,7 @@ class Lamia:
         self,
         command: str,
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None,
-        validators: Optional[List[BaseValidator]] = None,
+        validator_types: Optional[List[Type[BaseValidator]]] = None,
     ) -> LamiaResult:
         """
         Run a command synchronously.
@@ -220,7 +226,7 @@ class Lamia:
                 self.run_async(
                     command,
                     models,
-                    validators,
+                    validator_types,
                 )
             )
         except RuntimeError as e:

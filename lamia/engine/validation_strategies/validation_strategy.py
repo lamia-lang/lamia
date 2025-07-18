@@ -11,17 +11,18 @@ logger = logging.getLogger(__name__)
 class ValidationStrategy(ABC):
     """Abstract base class for domain-specific validation strategies."""
 
-    def __init__(self, validators: List[BaseValidator]):
+    def __init__(self, validator_types: List[Type[BaseValidator]]):
         """Initialize with pre-configured validator instances from registry."""
-        self.validators = self._check_validator_conflicts(validators)
+        self._check_validator_conflicts(validator_types)
+        self.validators = [validator_type() for validator_type in validator_types]
 
-    def _check_validator_conflicts(self, validators: List[BaseValidator]) -> List[BaseValidator]:
+    def _check_validator_conflicts(self, validator_types: List[Type[BaseValidator]]) -> List[Type[BaseValidator]]:
         """Check for conflicts between validators."""
-        if not validators:
-            return validators
+        if not validator_types:
+            return
 
         # Check for duplicate validator names
-        names = [v.name for v in validators]
+        names = [v.name for v in validator_types]
         duplicates = set([name for name in names if names.count(name) > 1])
         if duplicates:
             raise ValueError(f"Duplicate validator name(s) detected: {', '.join(duplicates)}")
@@ -29,7 +30,7 @@ class ValidationStrategy(ABC):
         # Conflict detection: only one file type group can be present
         present_groups = []
         for group in CONFLICTING_VALIDATOR_GROUPS:
-            if any(type(v) in group for v in validators):
+            if any(validator_type in group for validator_type in validator_types):
                 present_groups.append(group)
         if len(present_groups) > 1:
             # List the file types (by class names) that are conflicting
@@ -38,8 +39,6 @@ class ValidationStrategy(ABC):
                 f"Conflicting file type validators detected: {group_names}. "
                 "Only validators from one file type group can be used together."
             )
-
-        return validators
 
     async def _chain_validate(self, response: str) -> ValidationResult:
         """Validate a response against all configured validators.

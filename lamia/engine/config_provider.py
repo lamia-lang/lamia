@@ -1,6 +1,7 @@
 import os
 from typing import Dict, Any, Optional, List, Tuple, Union
 from lamia._internal_types.model_retry import ModelWithRetries
+from lamia.validation.base import BaseValidator
 
 class ConfigProvider:
     """
@@ -47,7 +48,7 @@ class ConfigProvider:
             return api_keys.get(provider) 
         return None
     
-    def get_validators(self) -> List[Any]:
+    def get_validators(self) -> List[BaseValidator]:
         """Get the validators from config."""
         return self._config.get('validators', [])
 

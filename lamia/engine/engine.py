@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Type
 
 from .config_provider import ConfigProvider
 from .factories import ManagerFactory, ValidationStrategyFactory
@@ -32,7 +32,7 @@ class LamiaEngine:
         self,
         command_type: CommandType,
         content: str,
-        validators: Optional[List[BaseValidator]] = None,
+        validator_types: Optional[List[Type[BaseValidator]]] = None,
     ) -> ValidationResult:
         """Execute a request using the appropriate domain manager.
         
@@ -45,23 +45,17 @@ class LamiaEngine:
         Returns:
             Response from the appropriate manager
         """
-        # If no specific validators are passed, get them from config
-        if validators is None:
-            validators = self.config_provider.get_validators()
-            
+
         # Check contracts for non-built-in validators
-        validator_instances = []
-        for validator_class in validators:
-            passed, violations = self.validator_registry.check_validator(validator_class)
-            if passed:
-                validator_instances.append(validator_class())
-            else:
-                logger.error(f"Skipping validator {validator_class.__name__} due to contract violations: {violations}")
+        for validator_type in validator_types:
+            passed, violations = self.validator_registry.check_validator(validator_type)
+            if not passed:
+                raise ValueError(f"Validator {validator_type.__name__} does not pass contract checks: {violations}")
                 
         # Create validation strategy
         validation_strategy = await self.validation_factory.get_strategy(
             command_type, 
-            validator_instances
+            validator_types
         )
         
         # Get the appropriate manager with its validation strategy

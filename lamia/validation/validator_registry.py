@@ -26,10 +26,10 @@ class ValidatorRegistry:
         self._checked_classes: Set[Type[BaseValidator]] = set()
         self.extensions_folder = extensions_folder
         
-    def check_validator(self, validator_class: Type[BaseValidator]) -> Tuple[bool, List[ContractViolation]]:
+    def validate_user_contracts(self, validator_class: Type[BaseValidator]) -> Tuple[bool, List[ContractViolation]]:
         """
-        Check if a validator class meets all contracts.
-        Only runs checks for non-built-in validators since built-ins are pre-tested.
+        Check if a user-defined validator class meets all contracts.
+        Skips built-in validators since they are pre-tested.
         Caches results to avoid re-checking the same class.
         
         Args:
@@ -41,17 +41,17 @@ class ValidatorRegistry:
         # Skip contract checks for built-in validators
         if self._is_built_in(validator_class):
             return True, []
-
-        # Check caches first
+            
+        # Check cache first
         if validator_class in self._checked_classes:
             return True, []
-
+            
         passed, violations = ValidatorContractChecker(validator_class).check_contracts()
         
         if passed:
-            self._validated_classes.add(validator_class)
+            self._checked_classes.add(validator_class)
+            logger.info(f"Validator {validator_class.__name__} passed contract checks")
         else:
-            self._failed_classes.add(validator_class)
             logger.error(f"Contract violations found in {validator_class.__name__}:")
             for violation in violations:
                 logger.error(f"  - {violation.method_name}: Expected {violation.expected}, got {violation.actual}")
@@ -142,7 +142,7 @@ class ValidatorRegistry:
                                     continue
                                     
                                 # Run contract checks
-                                passed, violations = self.check_validator(cls)
+                                passed, violations = self.validate_user_contracts(cls)
                                 if passed:
                                     self._user_validators[name] = cls
                                 else:
