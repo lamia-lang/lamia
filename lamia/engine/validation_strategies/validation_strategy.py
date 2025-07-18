@@ -14,7 +14,18 @@ class ValidationStrategy(ABC):
     def __init__(self, validator_types: List[Type[BaseValidator]]):
         """Initialize with pre-configured validator instances from registry."""
         self._check_validator_conflicts(validator_types)
-        self.validators = [validator_type() for validator_type in validator_types]
+        self.validators = [self._create_validator(validator_type) for validator_type in validator_types]
+
+    def _create_validator(self, validator_type: Type[BaseValidator]) -> BaseValidator:
+        """Create a validator instance. Override this method to customize validator creation.
+        
+        Args:
+            validator_type: The validator class to instantiate
+            
+        Returns:
+            An instance of the validator
+        """
+        return validator_type()
 
     def _check_validator_conflicts(self, validator_types: List[Type[BaseValidator]]) -> List[Type[BaseValidator]]:
         """Check for conflicts between validators."""
