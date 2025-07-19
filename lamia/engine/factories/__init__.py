@@ -1,4 +1,4 @@
 from .manager_factory import ManagerFactory
-from .validation_strategy_factory import ValidationStrategyFactory
+from .validator_factory import ValidatorFactory
 
-__all__ = ['ManagerFactory', 'ValidationStrategyFactory'] 
+__all__ = ['ManagerFactory', 'ValidatorFactory'] 

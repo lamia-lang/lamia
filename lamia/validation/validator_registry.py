@@ -26,7 +26,7 @@ class ValidatorRegistry:
         self._checked_classes: Set[Type[BaseValidator]] = set()
         self.extensions_folder = extensions_folder
         
-    def validate_user_contracts(self, validator_class: Type[BaseValidator]) -> Tuple[bool, List[ContractViolation]]:
+    def check_validator(self, validator_class: Type[BaseValidator]) -> Tuple[bool, List[ContractViolation]]:
         """
         Check if a user-defined validator class meets all contracts.
         Skips built-in validators since they are pre-tested.

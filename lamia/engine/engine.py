@@ -1,11 +1,12 @@
 from typing import Optional, Dict, Any, List, Type
 
 from .config_provider import ConfigProvider
-from .factories import ManagerFactory, ValidationStrategyFactory
+from .factories import ManagerFactory, ValidatorFactory
 from .validation_manager import ValidationManager
 from lamia.command_types import CommandType
 from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.validation.validator_registry import ValidatorRegistry
+from lamia.types import BaseType
 
 import logging
 
@@ -19,7 +20,7 @@ class LamiaEngine:
         self.config_provider = config_provider
 
         # Initialize factories
-        self.validation_factory = ValidationStrategyFactory()
+        self.validator_factory = ValidatorFactory()
         self.manager_factory = ManagerFactory(config_provider)
         
         # Initialize registry for built-in and user-defined validators
@@ -45,22 +46,25 @@ class LamiaEngine:
         Returns:
             Response from the appropriate manager
         """
-
-        # Check contracts for non-built-in validators
-        passed, violations = self.validator_registry.check_validator(validator_type)
-        if not passed:
-            raise ValueError(f"Validator {validator_type.__name__} does not pass contract checks: {violations}")
                 
-        # Create validation strategy
-        validation_strategy = await self.validation_factory.get_strategy(
-            command_type, 
-            return_type
-        )
+        # Create validator
+        if return_type is not None:
+            validator = self.validator_factory.get_validator(
+                    command_type, 
+                    return_type
+                )
+            # Check contracts for non-built-in validators
+            validator_type = type(validator)
+            passed, violations = self.validator_registry.check_validator(validator_type)
+            if not passed:
+                raise ValueError(f"Validator {validator_type.__name__} does not pass contract checks: {violations}")
+        else:
+            validator = None
         
         # Get the appropriate manager with its validation strategy
-        manager = await self.manager_factory.get_manager(command_type, validation_strategy)
+        manager = self.manager_factory.get_manager(command_type)
         
-        return await self.validation_manager.validate(command_type, manager, content)
+        return await self.validation_manager.validate(command_type, manager, content, validator)
     
     def get_validation_stats(self):
         """Get validation statistics from the validation manager."""

@@ -7,8 +7,7 @@ from lamia.adapters.llm.base import BaseLLMAdapter
 from ...config_provider import ConfigProvider
 from ...managers import Manager
 from .providers import ProviderRegistry
-from ...validation_strategies.validation_strategy import ValidationStrategy
-from lamia.validation.base import ValidationResult
+from lamia.validation.base import ValidationResult, BaseValidator
 import logging
 
 
@@ -38,9 +37,8 @@ class MissingAPIKeysError(Exception):
 class LLMManager(Manager):
     """Manages LLM adapters and only loads the ones that are actually needed."""
     
-    def __init__(self, config_provider: ConfigProvider, validation_strategy: ValidationStrategy):
+    def __init__(self, config_provider: ConfigProvider):
         self.config_provider = config_provider
-        self.validation_strategy = validation_strategy
         # Determine which providers are needed based on config
         needed_providers = self._get_needed_providers()
         
@@ -59,7 +57,28 @@ class LLMManager(Manager):
 
         # Check API keys early
         self._check_all_required_api_keys(needed_providers)
-    
+
+    async def execute(
+        self,
+        prompt: str,
+        validator: BaseValidator
+    ) -> ValidationResult:
+        """Generate a response using the managed adapter.
+        
+        Args:
+            prompt: The input prompt
+            temperature: Optional temperature override
+            max_tokens: Optional max tokens override
+            
+        Returns:
+            LLMResponse containing the generated text and metadata
+        """
+        # Use the existing validation logic
+        return await self._execute_with_retries(
+            prompt=prompt,
+            validator=validator
+        )
+
     def _get_needed_providers(self) -> Set[str]:
         """Get the set of providers that are actually needed based on config."""
         needed = set()
@@ -70,7 +89,7 @@ class LLMManager(Manager):
             needed.update([model.model.get_provider_name() for model in model_chain])
         
         return needed
-    
+
     def _resolve_api_key(self, provider_name: str) -> Optional[str]:
         """
         Get and validate API key from config_provider config.
@@ -104,7 +123,7 @@ class LLMManager(Manager):
         
         # Provider doesn't need an API key (e.g., local models)
         return None, False
-    
+
     def _check_all_required_providers(self, needed_providers: Set[str]):
         """
         Check that all required providers are supported.
@@ -124,7 +143,7 @@ class LLMManager(Manager):
                 "- Remove them from the model chain\n"
                 "- Add corresponding adapters to your extensions folder."
             )
-        
+
     def _check_all_required_api_keys(self, needed_providers: Set[str]):
         """
         Check that all required API keys for default and fallback engines are present.
@@ -140,8 +159,8 @@ class LLMManager(Manager):
         
         if missing:
             raise MissingAPIKeysError(missing)
-    
-    async def create_adapter_from_config(self, model: LLMModel) -> BaseLLMAdapter:
+
+    async def _create_adapter_from_config(self, model: LLMModel) -> BaseLLMAdapter:
         """Create an adapter instance based on the active configuration."""
         # Use the full model name as cache key – guarantees one adapter per model
         cache_key = model.get_provider_name()
@@ -170,80 +189,12 @@ class LLMManager(Manager):
 
         return adapter
 
-    async def execute(
-        self,
-        prompt: str,
-    ) -> ValidationResult:
-        """Generate a response using the managed adapter.
-        
-        Args:
-            prompt: The input prompt
-            temperature: Optional temperature override
-            max_tokens: Optional max tokens override
-            
-        Returns:
-            LLMResponse containing the generated text and metadata
-        """
-        # Use the existing validation logic
-        return await self.execute_with_retries(
-            prompt=prompt,
-        )
-
-    async def execute_with_retries(
-        self,
-        prompt: str
-    ) -> ValidationResult:
-        """Execute the prompt with retry and fallback logic.
-        
-        Args:
-            primary_adapter: The primary LLM adapter to use
-            prompt: The prompt to send
-            **kwargs: Additional parameters for generate()
-            
-        Returns:
-            ValidationResult from a successful attempt
-            
-        Raises:
-            RuntimeError: If all attempts fail
-        """
-        # Aggregate initial hints from all validators
-        initial_hints = self.validation_strategy.get_initial_hints()
-        initial_hint_text = "\n".join(initial_hints)
-        if initial_hint_text:
-            current_prompt = f"{initial_hint_text}\n\n{prompt}"
-        else:
-            current_prompt = prompt
-
-        for model_and_retries in self.config_provider.get_model_chain():
-            model = model_and_retries.model
-
-            # Lazily create and cache adapters so we don't re-instantiate them
-            if model in self._adapter_cache:
-                adapter = self._adapter_cache[model]
-            else:
-                adapter = await self.create_adapter_from_config(model)
-                self._adapter_cache[model] = adapter
-
-            try:
-                return await self._generate_and_validate(
-                    adapter=adapter,
-                    model = model_and_retries.model,
-                    prompt=current_prompt,
-                    max_attempts=model_and_retries.retries,
-                )
-            except Exception as e:
-                # Continue to the next fallback model
-                pass
-                
-        raise RuntimeError(
-            f"All attempts failed. Giving up."
-        )
-    
     async def _generate_and_validate(
         self,
         adapter: BaseLLMAdapter,
         model: LLMModel,
         prompt: str,
+        validator: BaseValidator,
         max_attempts: int,
     ) -> ValidationResult:
         errors = []
@@ -257,7 +208,7 @@ class LLMManager(Manager):
                 logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}':\n{response.text}")
                 
                 # Validate the response
-                validation_result = await self.validation_strategy.validate(response.text)
+                validation_result = await validator.validate(response.text)
                 if validation_result.is_valid:
                     return validation_result
                 
@@ -284,8 +235,59 @@ class LLMManager(Manager):
 
         raise RuntimeError(
             f"All {attempts} attempts failed with {adapter.name}. Errors: {'; '.join(errors)}"
-        ) 
-    
+        )
+
+    async def _execute_with_retries(
+        self,
+        prompt: str,
+        validator: BaseValidator
+    ) -> ValidationResult:
+        """Execute the prompt with retry and fallback logic.
+        
+        Args:
+            primary_adapter: The primary LLM adapter to use
+            prompt: The prompt to send
+            **kwargs: Additional parameters for generate()
+            
+        Returns:
+            ValidationResult from a successful attempt
+            
+        Raises:
+            RuntimeError: If all attempts fail
+        """
+        # Aggregate initial hints from all validators
+        initial_hints = validator.get_initial_hints()
+        initial_hint_text = "\n".join(initial_hints)
+        if initial_hint_text:
+            current_prompt = f"{initial_hint_text}\n\n{prompt}"
+        else:
+            current_prompt = prompt
+
+        for model_and_retries in self.config_provider.get_model_chain():
+            model = model_and_retries.model
+
+            # Lazily create and cache adapters so we don't re-instantiate them
+            if model in self._adapter_cache:
+                adapter = self._adapter_cache[model]
+            else:
+                adapter = await self._create_adapter_from_config(model)
+                self._adapter_cache[model] = adapter
+
+            try:
+                return await self._generate_and_validate(
+                    adapter=adapter,
+                    model = model_and_retries.model,
+                    prompt=current_prompt,
+                    max_attempts=model_and_retries.retries,
+                )
+            except Exception as e:
+                # Continue to the next fallback model
+                pass
+                
+        raise RuntimeError(
+            f"All attempts failed. Giving up."
+        )
+
     async def close(self):
         """Close and cleanup all managed adapters."""
         for adapter in self._adapter_cache.values():

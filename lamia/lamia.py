@@ -9,8 +9,9 @@ import logging
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.validation.base import BaseValidator
-from typing import Type
 from lamia.types import BaseType
+from typing import Type
+
 
 logger = logging.getLogger(__name__)
 
@@ -190,8 +191,8 @@ class Lamia:
         # Always create a fresh parser for each command to avoid reusing the
         # previous command's state (which caused the first‐command‐only bug).
         current_parser = CommandParser(command)
-        if current_parser.return_type is not None and type(current_parser.return_type) == str:
-            validator = get_validator_from_return_type(current_parser.return_type)
+        #if current_parser.return_type is not None and type(current_parser.return_type) == str:
+        #    validator = get_return_type_from_str(current_parser.return_type)
 
         if models is not None:
             self._engine.config_provider.override_model_chain_with(models)
