@@ -1,12 +1,20 @@
-from typing import Type, get_args, get_origin
+from typing import Type, get_args, get_origin, TypeVar
+from pydantic import BaseModel
 from lamia.validation.base import BaseValidator
-from lamia.types import BaseType, HTML, YAML, JSON
+from lamia.types import BaseType, HTML, YAML, JSON, XML, CSV, Markdown
+from lamia.validation.validators.file_validators.xml_validator import XMLValidator
+from lamia.validation.validators.file_validators.csv_validator import CSVValidator
+from lamia.validation.validators.file_validators.markdown_validator import MarkdownValidator
 from lamia.validation.validators.file_validators.html_validator import HTMLValidator
 from lamia.validation.validators.file_validators.yaml_validator import YAMLValidator
 from lamia.validation.validators.file_validators.json_validator import JSONValidator
+from lamia.validation.validators.object_validator import ObjectValidator
 from lamia.validation.validators.file_validators.file_structure.html_structure_validator import HTMLStructureValidator
 from lamia.validation.validators.file_validators.file_structure.yaml_structure_validator import YAMLStructureValidator
 from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
+from lamia.validation.validators.file_validators.file_structure.xml_structure_validator import XMLStructureValidator
+from lamia.validation.validators.file_validators.file_structure.csv_structure_validator import CSVStructureValidator
+from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import MarkdownStructureValidator
 
 def create_validator(validation_type: Type[BaseType]) -> BaseValidator:
     """
@@ -43,6 +51,14 @@ def create_validator(validation_type: Type[BaseType]) -> BaseValidator:
         return _create_yaml_validator(model, strict)
     elif base_type is JSON:
         return _create_json_validator(model, strict)
+    elif base_type is XML:
+        return _create_xml_validator(model, strict)
+    elif base_type is CSV:
+        return _create_csv_validator(model, strict)
+    elif base_type is Markdown:
+        return _create_markdown_validator(model, strict)
+    elif base_type is BaseModel:
+        return _create_object_validator(model, strict)
     else:
         raise ValueError(f"Unsupported validation type: {base_type}")
     
@@ -63,3 +79,24 @@ def _create_json_validator(model, strict: bool) -> BaseValidator:
         return JSONStructureValidator(model=model, strict=strict)
     else:
         return JSONValidator()
+    
+def _create_xml_validator(model, strict: bool) -> BaseValidator:
+    if model is not None:
+        return XMLStructureValidator(model=model, strict=strict)
+    else:
+        return XMLValidator()
+    
+def _create_csv_validator(model, strict: bool) -> BaseValidator:
+    if model is not None:
+        return CSVStructureValidator(model=model, strict=strict)
+    else:
+        return CSVValidator()
+    
+def _create_markdown_validator(model, strict: bool) -> BaseValidator:
+    if model is not None:
+        return MarkdownStructureValidator(model=model, strict=strict)
+    else:
+        return MarkdownValidator()
+    
+def _create_object_validator(model, strict: bool) -> BaseValidator:
+    return ObjectValidator(strict=strict)

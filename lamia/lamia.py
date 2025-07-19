@@ -10,6 +10,7 @@ from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.validation.base import BaseValidator
 from typing import Type
+from lamia.types import BaseType
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ class Lamia:
         self,
         command: str, 
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None, 
-        validator_types: Optional[List[Type[BaseValidator]]] = None,
+        return_type: Optional[Type[BaseType]] = None,
     ) -> LamiaResult:
         """
         Generate a response, trying Python code first, then LLM.
@@ -200,7 +201,7 @@ class Lamia:
         response = await self._engine.execute(
             current_parser.command_type,
             current_parser.content,
-            validator_types=[current_parser.validator] if current_parser.validator is not None else validator_types
+            return_type=return_type
         )
 
         if models is not None:
@@ -212,7 +213,7 @@ class Lamia:
         self,
         command: str,
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None,
-        validator_types: Optional[List[Type[BaseValidator]]] = None,
+        return_type: Optional[Type[BaseType]] = None,
     ) -> LamiaResult:
         """
         Run a command synchronously.
@@ -226,7 +227,7 @@ class Lamia:
                 self.run_async(
                     command,
                     models,
-                    validator_types,
+                    return_type,
                 )
             )
         except RuntimeError as e:

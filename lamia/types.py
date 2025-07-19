@@ -27,4 +27,15 @@ class YAML(BaseType[T, S]):
 class JSON(BaseType[T, S]):
     """Marker class for JSON validation types."""
     pass
-  
+
+class XML(BaseType[T, S]):
+    """Marker class for XML validation types."""
+    pass
+
+class CSV(BaseType[T, S]):
+    """Marker class for CSV validation types."""
+    pass
+
+class Markdown(BaseType[T, S]):
+    """Marker class for Markdown validation types."""
+    pass

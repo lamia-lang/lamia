@@ -32,7 +32,7 @@ class LamiaEngine:
         self,
         command_type: CommandType,
         content: str,
-        validator_types: Optional[List[Type[BaseValidator]]] = None,
+        return_type: Optional[Type[BaseType]] = None,
     ) -> ValidationResult:
         """Execute a request using the appropriate domain manager.
         
@@ -47,15 +47,14 @@ class LamiaEngine:
         """
 
         # Check contracts for non-built-in validators
-        for validator_type in validator_types:
-            passed, violations = self.validator_registry.check_validator(validator_type)
-            if not passed:
-                raise ValueError(f"Validator {validator_type.__name__} does not pass contract checks: {violations}")
+        passed, violations = self.validator_registry.check_validator(validator_type)
+        if not passed:
+            raise ValueError(f"Validator {validator_type.__name__} does not pass contract checks: {violations}")
                 
         # Create validation strategy
         validation_strategy = await self.validation_factory.get_strategy(
             command_type, 
-            validator_types
+            return_type
         )
         
         # Get the appropriate manager with its validation strategy
