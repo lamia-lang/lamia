@@ -39,22 +39,4 @@ __all__ = [
     "XMLValidator",
     "MarkdownValidator",
     "CSVValidator",
-] 
-
-# Group all validators by file type for conflict detection
-HTML_VALIDATORS = {HTMLValidator, HTMLStructureValidator}
-JSON_VALIDATORS = {JSONValidator, JSONStructureValidator}
-YAML_VALIDATORS = {YAMLValidator, YAMLStructureValidator}
-XML_VALIDATORS = {XMLValidator, XMLStructureValidator}
-MARKDOWN_VALIDATORS = {MarkdownValidator, MarkdownStructureValidator}
-CSV_VALIDATORS = {CSVValidator, CSVStructureValidator}
-
-# Each set represents a file type; only one file type group can be present in a config
-CONFLICTING_VALIDATOR_GROUPS = [
-    HTML_VALIDATORS,
-    JSON_VALIDATORS,
-    YAML_VALIDATORS,
-    XML_VALIDATORS,
-    MARKDOWN_VALIDATORS,
-    CSV_VALIDATORS,
-] 
+]

@@ -61,7 +61,7 @@ class LLMManager(Manager):
     async def execute(
         self,
         prompt: str,
-        validator: BaseValidator
+        validator: Optional[BaseValidator] = None
     ) -> ValidationResult:
         """Generate a response using the managed adapter.
         
@@ -194,9 +194,21 @@ class LLMManager(Manager):
         adapter: BaseLLMAdapter,
         model: LLMModel,
         prompt: str,
-        validator: BaseValidator,
-        max_attempts: int,
+        validator: Optional[BaseValidator] = None,
+        max_attempts: int = 1,  
     ) -> ValidationResult:
+        # Fast path for no validation case
+        if validator is None:
+            logger.info(f"[Lamia][Ask] Prompt sent to model '{model.name}':\n{prompt}")
+            response = await adapter.generate(prompt, model=model)
+            logger.info(f"[Lamia][Answer] Response from model '{model.name}':\n{response.text}")
+            return ValidationResult(
+                is_valid=True,
+                raw_response=response.text,
+                validation_result=response.text
+            )
+
+        # Regular validation path
         errors = []
         attempts = 0
         current_prompt = prompt
@@ -240,7 +252,7 @@ class LLMManager(Manager):
     async def _execute_with_retries(
         self,
         prompt: str,
-        validator: BaseValidator
+        validator: Optional[BaseValidator] = None,
     ) -> ValidationResult:
         """Execute the prompt with retry and fallback logic.
         
@@ -255,11 +267,9 @@ class LLMManager(Manager):
         Raises:
             RuntimeError: If all attempts fail
         """
-        # Aggregate initial hints from all validators
-        initial_hints = validator.get_initial_hints()
-        initial_hint_text = "\n".join(initial_hints)
-        if initial_hint_text:
-            current_prompt = f"{initial_hint_text}\n\n{prompt}"
+        if validator is not None:
+            initial_hints = validator.get_initial_hints()
+            current_prompt = f"{initial_hints}\n\n{prompt}"
         else:
             current_prompt = prompt
 
@@ -278,6 +288,7 @@ class LLMManager(Manager):
                     adapter=adapter,
                     model = model_and_retries.model,
                     prompt=current_prompt,
+                    validator=validator,
                     max_attempts=model_and_retries.retries,
                 )
             except Exception as e:

@@ -5,7 +5,7 @@ from datetime import datetime
 from dataclasses import dataclass, field
 from lamia.engine.managers.manager import Manager
 from lamia.command_types import CommandType
-from lamia.validation.base import ValidationResult
+from lamia.validation.base import ValidationResult, BaseValidator
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class ValidationManager:
         self.recent_results: List[ValidationResult] = []
         self.max_recent_results = 100  # Keep last 100 results
     
-    async def validate(self, command_type: CommandType, manager: Manager, content: str) -> ValidationResult:
+    async def validate(self, command_type: CommandType, manager: Manager, content: str, validator: Optional[BaseValidator] = None) -> ValidationResult:
         """Coordinate validation using the appropriate domain strategy.
         
         Args:
@@ -46,7 +46,7 @@ class ValidationManager:
         
         try:
             # Execute validation
-            validation_result = await manager.execute(content)
+            validation_result = await manager.execute(content, validator)
             
             # Record successful validation
             execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
