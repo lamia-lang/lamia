@@ -1,9 +1,9 @@
 """Retry strategies for external system operations."""
 
 from abc import ABC, abstractmethod
-from typing import Enum
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 
 class ErrorCategory(Enum):
     """Categories of errors for retry decisions."""

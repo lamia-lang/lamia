@@ -2,6 +2,8 @@
 
 from typing import List
 
+from .strategies import RetryAttempt
+
 class ExternalSystemError(Exception):
     """Base exception for all external system operation errors."""
     pass

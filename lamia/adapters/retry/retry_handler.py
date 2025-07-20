@@ -6,7 +6,8 @@ from typing import Optional, TypeVar, Dict, List, Callable, Awaitable
 import time
 import asyncio
 
-from .config import ExternalSystemRetryConfig, ErrorCategory, get_default_config
+from .config import ExternalSystemRetryConfig, ErrorCategory
+from .defaults import get_default_config
 
 
 T = TypeVar('T')
