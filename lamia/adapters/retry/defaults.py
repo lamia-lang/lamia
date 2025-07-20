@@ -3,7 +3,6 @@
 from datetime import timedelta
 from typing import Dict, Any
 
-from .strategies import ExponentialBackoffStrategy, NoRetryStrategy
 from .config import ExternalSystemRetryConfig
 
 # Default retry configurations for different adapter types
@@ -39,23 +38,15 @@ def get_adapter_category(adapter_type: str) -> str:
         return "llm"
     return "network"  # Default to network settings (most adapters are remote)
 
-def get_default_config(adapter_type: str) -> ExternalSystemRetryConfig:
+def get_default_config(adapter_type: str = "network") -> ExternalSystemRetryConfig:
     """Get default retry configuration based on adapter type."""
     category = get_adapter_category(adapter_type)
     params = RETRY_DEFAULTS[category]
     
-    if category == "local":
-        return ExternalSystemRetryConfig(
-            max_attempts=params["max_attempts"],
-            strategy=NoRetryStrategy()
-        )
-    
     return ExternalSystemRetryConfig(
         max_attempts=params["max_attempts"],
-        strategy=ExponentialBackoffStrategy(
-            base_delay=params["base_delay"],
-            max_delay=params["max_delay"],
-            exponential_base=params["exponential_base"]
-        ),
+        base_delay=params["base_delay"],
+        max_delay=params["max_delay"],
+        exponential_base=params["exponential_base"],
         max_total_duration=timedelta(seconds=params["max_duration_seconds"])
     ) 
