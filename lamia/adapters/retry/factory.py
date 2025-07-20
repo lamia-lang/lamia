@@ -5,7 +5,8 @@ from typing import Optional, TypeVar, cast
 from ..llm.base import BaseLLMAdapter
 from ..filesystem.base import BaseFSAdapter
 from .config import ExternalSystemRetryConfig
-from .wrappers import RetryWrappedLLMAdapter, RetryWrappedFSAdapter
+from .wrappers.llm import RetryWrappedLLMAdapter
+from .wrappers.fs import RetryWrappedFSAdapter
 
 T = TypeVar('T', bound=BaseLLMAdapter | BaseFSAdapter)
 

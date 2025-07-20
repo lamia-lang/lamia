@@ -8,7 +8,11 @@ from ..retry_handler import RetryHandler
 from ..config import ExternalSystemRetryConfig
 
 class RetryWrappedLLMAdapter(BaseLLMAdapter):
-    """Adds retry capabilities to LLM adapters."""
+    """Adds retry capabilities to LLM adapters.
+    
+    Automatically configures industry-standard retry settings optimized
+    for LLM operations with rate limiting and error handling.
+    """
     
     def __init__(
         self,
@@ -20,11 +24,15 @@ class RetryWrappedLLMAdapter(BaseLLMAdapter):
         
         Args:
             adapter: The LLM adapter to wrap
-            retry_config: Optional retry configuration
+            retry_config: Optional retry configuration (uses LLM defaults if None)
             collect_stats: Whether to collect retry statistics
         """
         self._adapter = adapter
-        self._retry_handler = RetryHandler(retry_config, collect_stats)
+        self._retry_handler = RetryHandler(
+            config=retry_config,
+            external_system_type="llm",  # Use LLM-optimized settings
+            collect_stats=collect_stats
+        )
 
     @classmethod
     def name(cls) -> str:
@@ -47,6 +55,11 @@ class RetryWrappedLLMAdapter(BaseLLMAdapter):
         model: Optional[LLMModel] = None
     ) -> LLMResponse:
         """Execute prompt with retry handling.
+        
+        Uses industry-standard retry logic optimized for LLM APIs:
+        - 5 max attempts
+        - 2-60 second exponential backoff
+        - Rate limit detection and extended delays
         
         Args:
             prompt: The input prompt

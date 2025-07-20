@@ -9,7 +9,8 @@ import asyncio
 from .config import ExternalSystemRetryConfig, ErrorCategory
 from .errors import ExternalSystemRetryError, ExternalSystemRateLimitError, ExternalSystemTransientError, ExternalSystemPermanentError
 from .defaults import get_default_config
-from .classifiers import get_error_classifier, ErrorClassifier
+from .classifiers import get_error_classifier
+from .classifiers.base import ErrorClassifier
 
 
 T = TypeVar('T')

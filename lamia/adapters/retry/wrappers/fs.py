@@ -7,7 +7,11 @@ from ..retry_handler import RetryHandler
 from ..config import ExternalSystemRetryConfig
 
 class RetryWrappedFSAdapter(BaseFSAdapter):
-    """Adds retry capabilities to filesystem adapters."""
+    """Adds retry capabilities to filesystem adapters.
+    
+    Automatically configures retry settings optimized for filesystem
+    operations with appropriate error classification (no rate limiting).
+    """
     
     def __init__(
         self,
@@ -19,14 +23,23 @@ class RetryWrappedFSAdapter(BaseFSAdapter):
         
         Args:
             adapter: The filesystem adapter to wrap
-            retry_config: Optional retry configuration
+            retry_config: Optional retry configuration (uses FS defaults if None)
             collect_stats: Whether to collect retry statistics
         """
         self._adapter = adapter
-        self._retry_handler = RetryHandler(retry_config, collect_stats)
+        self._retry_handler = RetryHandler(
+            config=retry_config,
+            external_system_type="filesystem",  # Use FS-optimized settings
+            collect_stats=collect_stats
+        )
     
     async def read(self, path: str) -> bytes:
         """Read file with retry handling.
+        
+        Uses filesystem-optimized retry logic:
+        - 2 max attempts (most FS errors are permanent)
+        - 0.5-5 second delays
+        - No rate limit handling
         
         Args:
             path: Path to the file to read

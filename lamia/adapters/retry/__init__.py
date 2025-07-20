@@ -1,46 +1,16 @@
-"""External system retry handling components."""
+"""External system retry handling."""
 
-from .retry_handler import RetryHandler, RetryStats
+from .retry_handler import RetryHandler
 from .config import ExternalSystemRetryConfig, ErrorCategory
-from .classifiers import (
-    ErrorClassifier,
-    HttpErrorClassifier, 
-    FilesystemErrorClassifier,
-    LocalErrorClassifier,
-    get_error_classifier,
-    register_error_classifier
-)
-from .errors import (
-    ExternalSystemError,
-    ExternalSystemRetryError,
-    ExternalSystemRateLimitError,
-    ExternalSystemTransientError,
-    ExternalSystemPermanentError
-)
-from .defaults import get_default_config
+from .classifiers import get_error_classifier, register_error_classifier
 
-__all__ = [
-    # Main components
-    "RetryHandler",
-    "RetryStats",
-    "ExternalSystemRetryConfig",
-    "ErrorCategory",
-    
-    # Error classifiers
-    "ErrorClassifier",
-    "HttpErrorClassifier",
-    "FilesystemErrorClassifier", 
-    "LocalErrorClassifier",
-    "get_error_classifier",
-    "register_error_classifier",
-    
-    # Exceptions
-    "ExternalSystemError",
-    "ExternalSystemRetryError",
-    "ExternalSystemRateLimitError",
-    "ExternalSystemTransientError", 
-    "ExternalSystemPermanentError",
-    
-    # Configuration
-    "get_default_config",
-]
+# Optional wrappers
+try:
+    from .wrappers.llm import RetryWrappedLLMAdapter
+except ImportError:
+    pass
+
+try:
+    from .wrappers.fs import RetryWrappedFSAdapter
+except ImportError:
+    pass
