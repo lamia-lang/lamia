@@ -32,10 +32,13 @@ RETRY_DEFAULTS: Dict[str, Dict[str, Any]] = {
 
 def get_adapter_category(adapter_type: str) -> str:
     """Get the retry category for an adapter type."""
-    if "Local" in adapter_type:
+    adapter_lower = adapter_type.lower()
+    if "local" in adapter_lower:
         return "local"
-    elif "LLM" in adapter_type:
+    elif "llm" in adapter_lower or "http" in adapter_lower:
         return "llm"
+    elif "file" in adapter_lower or "fs" in adapter_lower:
+        return "network"  # Filesystem operations use network-like settings
     return "network"  # Default to network settings (most adapters are remote)
 
 def get_default_config(adapter_type: str = "network") -> ExternalSystemRetryConfig:

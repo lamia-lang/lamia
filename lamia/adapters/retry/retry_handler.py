@@ -5,11 +5,11 @@ from datetime import datetime
 from typing import Optional, TypeVar, Dict, List, Callable, Awaitable
 import time
 import asyncio
-import aiohttp
 
 from .config import ExternalSystemRetryConfig, ErrorCategory
-from .errors import ExternalSystemError, ExternalSystemRetryError, ExternalSystemRateLimitError, ExternalSystemTransientError, ExternalSystemPermanentError
+from .errors import ExternalSystemRetryError, ExternalSystemRateLimitError, ExternalSystemTransientError, ExternalSystemPermanentError
 from .defaults import get_default_config
+from .classifiers import get_error_classifier, ErrorClassifier
 
 
 T = TypeVar('T')
@@ -33,9 +33,11 @@ class RetryHandler:
         self,
         config: Optional[ExternalSystemRetryConfig] = None,
         external_system_type: str = "network",
+        error_classifier: Optional[ErrorClassifier] = None,
         collect_stats: bool = True
     ):
         self.config = config or get_default_config(external_system_type)
+        self.error_classifier = error_classifier or get_error_classifier(external_system_type)
         self.stats = RetryStats() if collect_stats else None
 
     async def execute(
@@ -75,7 +77,7 @@ class RetryHandler:
                         'attempt': attempts
                     })
 
-                error_category = self._classify_error(e)
+                error_category = self.error_classifier.classify_error(e)
                 if error_category == ErrorCategory.PERMANENT or attempts >= self.config.max_attempts:
                     if self.stats:
                         self.stats.total_operations += 1
@@ -98,56 +100,6 @@ class RetryHandler:
     def get_stats(self) -> Optional[RetryStats]:
         """Get current retry statistics if enabled."""
         return self.stats
-    
-    def _classify_error(self, error: Exception) -> ErrorCategory:
-        """Classify an error to determine retry behavior."""
-        error_msg = str(error).lower()
-        
-        # Check for rate limiting
-        if (
-            isinstance(error, aiohttp.ClientResponseError) and error.status == 429
-            or "rate limit" in error_msg
-            or "too many requests" in error_msg
-            or "quota" in error_msg
-        ):
-            return ErrorCategory.RATE_LIMIT
-        
-        # Check for permanent errors (authentication, authorization, bad requests)
-        if isinstance(error, aiohttp.ClientResponseError):
-            if 400 <= error.status < 500 and error.status != 429:
-                return ErrorCategory.PERMANENT
-        
-        if (
-            "unauthorized" in error_msg
-            or "forbidden" in error_msg
-            or "invalid api key" in error_msg
-            or "authentication" in error_msg
-            or "invalid request" in error_msg
-            or "bad request" in error_msg
-        ):
-            return ErrorCategory.PERMANENT
-        
-        # Check for transient errors (network, timeouts, server errors)
-        if (
-            isinstance(error, (
-                aiohttp.ClientConnectorError,
-                aiohttp.ClientConnectionError,
-                aiohttp.ClientTimeout,
-                aiohttp.ServerTimeoutError,
-                ConnectionError,
-                TimeoutError
-            ))
-            or (isinstance(error, aiohttp.ClientResponseError) and error.status >= 500)
-            or "timeout" in error_msg
-            or "connection" in error_msg
-            or "network" in error_msg
-            or "server error" in error_msg
-            or "service unavailable" in error_msg
-        ):
-            return ErrorCategory.TRANSIENT
-        
-        # Default to transient for unknown errors (safer to retry)
-        return ErrorCategory.TRANSIENT
     
     def _calculate_delay(self, attempts: int, error_category: ErrorCategory) -> float:
         """Calculate delay before next retry attempt."""
