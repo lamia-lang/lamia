@@ -25,6 +25,21 @@ class RetryWrappedLLMAdapter(BaseLLMAdapter):
         """
         self._adapter = adapter
         self._retry_handler = RetryHandler(retry_config, collect_stats)
+
+    @classmethod
+    def name(cls) -> str:
+        """This method should not be called on the wrapper class."""
+        raise NotImplementedError("This method should not be called on the wrapper class.")
+    
+    @classmethod
+    def env_var_names(cls) -> list[str]:
+        """This method should not be called on the wrapper class."""
+        raise NotImplementedError("This method should not be called on the wrapper class.")
+    
+    @classmethod
+    def is_remote(cls) -> bool:
+        """This method should not be called on the wrapper class."""
+        raise NotImplementedError("This method should not be called on the wrapper class.")
     
     async def generate(
         self,
@@ -47,3 +62,7 @@ class RetryWrappedLLMAdapter(BaseLLMAdapter):
     def get_stats(self):
         """Get retry statistics if enabled."""
         return self._retry_handler.get_stats()
+    
+    async def close(self) -> None:
+        """Close the retry wrapper."""
+        await self._adapter.close()

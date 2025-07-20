@@ -12,7 +12,6 @@ from lamia.adapters.retry.factory import AdapterFactory
 from lamia.adapters.retry.config import ExternalSystemRetryConfig
 import logging
 
-
 logger = logging.getLogger(__name__)
 
 class MissingAPIKeysError(Exception):
@@ -223,8 +222,8 @@ class LLMManager(Manager):
                 else:
                     return ValidationResult(
                         is_valid=True,
-                        raw_response=response.text,
-                        validation_result=response.text
+                        raw_text=response.text,
+                        validated_text=response.text
                     )
                 
                 logger.warning(
