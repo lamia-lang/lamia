@@ -2,13 +2,12 @@
 
 from typing import Optional, TypeVar, cast
 
-from ..base import BaseAdapter
 from ..llm.base import BaseLLMAdapter
 from ..filesystem.base import BaseFSAdapter
 from .config import ExternalSystemRetryConfig
 from .wrappers import RetryWrappedLLMAdapter, RetryWrappedFSAdapter
 
-T = TypeVar('T', bound=BaseAdapter)
+T = TypeVar('T', bound=BaseLLMAdapter | BaseFSAdapter)
 
 class AdapterFactory:
     """Factory for creating retry-enabled adapters."""

@@ -1,23 +1,6 @@
 """Common types and exceptions for retry handling."""
 
-from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
-from typing import List, Optional
-
-class ErrorCategory(Enum):
-    """Categories of errors for retry decisions."""
-    PERMANENT = "permanent"   # Never retry (invalid credentials, etc)
-    TRANSIENT = "transient"  # Temporary issues (network, timeout)
-    RATE_LIMIT = "rate_limit"  # Special case for rate limiting
-
-@dataclass
-class RetryAttempt:
-    """Metadata about a retry attempt."""
-    attempt_number: int
-    start_time: datetime
-    error: Exception
-    error_category: ErrorCategory
+from typing import List
 
 class ExternalSystemError(Exception):
     """Base exception for all external system operation errors."""

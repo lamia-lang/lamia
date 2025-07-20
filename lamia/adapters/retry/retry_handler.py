@@ -1,14 +1,13 @@
 """Retry wrapper and factory for adapters with external system retry capabilities."""
 
-from abc import ABC
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Type, TypeVar, Generic, Dict, List, Callable, Awaitable, Any
+from typing import Optional, TypeVar, Dict, List, Callable, Awaitable
 import time
 import asyncio
 
-from .config import ExternalSystemRetryConfig, ExternalSystemError, ErrorCategory, get_default_config
-from .wrappers.llm import BaseLLMAdapter, LLMModel, LLMResponse
+from .config import ExternalSystemRetryConfig, ErrorCategory, get_default_config
+
 
 T = TypeVar('T')
 
@@ -87,69 +86,3 @@ class RetryHandler:
     def get_stats(self) -> Optional[RetryStats]:
         """Get current retry statistics if enabled."""
         return self.stats
-
-class RetryWrappedAdapter(Generic[T]):
-    """Wrapper that adds retry capabilities and statistics to any adapter."""
-
-    def __init__(
-        self,
-        adapter: BaseLLMAdapter,
-        retry_config: Optional[ExternalSystemRetryConfig] = None,
-        collect_stats: bool = True
-    ):
-        """Initialize the retry wrapper.
-        
-        Args:
-            adapter: The base adapter to wrap
-            retry_config: Optional retry configuration. If not provided, defaults will be used
-                based on the adapter type.
-            collect_stats: Whether to collect retry and performance statistics
-        """
-        self.adapter = adapter
-        self.retry_handler = RetryHandler(retry_config, collect_stats)
-        self.stats = RetryStats() if collect_stats else None
-
-    async def execute(
-        self,
-        operation: Callable[[], Awaitable[T]]
-    ) -> T:
-        """Execute an operation with retry handling and statistics collection."""
-        start_time = time.time()
-        retries = 0
-        
-        try:
-            result = await self.retry_handler.execute(operation)
-            operation_time = time.time() - start_time
-            
-            if self.stats:
-                self.stats.record_success(operation_time, retries)
-            
-            return result
-            
-        except ExternalSystemError as e:
-            operation_time = time.time() - start_time
-            if self.stats:
-                self.stats.record_failure(e, operation_time, retries)
-            raise
-
-    def get_stats(self) -> Optional[RetryStats]:
-        """Get the current retry statistics if enabled."""
-        return self.stats
-
-class RetryWrappedLLMAdapter(BaseLLMAdapter):
-    def __init__(
-        self,
-        adapter: BaseLLMAdapter,
-        retry_config: Optional[ExternalSystemRetryConfig] = None,
-        collect_stats: bool = True
-    ):
-        self._adapter = adapter
-        self._retry_handler = RetryHandler(retry_config, collect_stats)
-    
-    async def execute_prompt(self, prompt: str, model: Optional[LLMModel] = None) -> LLMResponse:
-        return await self._retry_handler.execute(
-            lambda: self._adapter.execute_prompt(prompt, model)
-        )
-    
-    def get_stats(self) -> Optional[RetryStats]:
-        return self._retry_handler.get_stats()

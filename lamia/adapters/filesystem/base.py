@@ -3,9 +3,7 @@
 from abc import abstractmethod
 from typing import Union
 
-from ..base import BaseAdapter
-
-class BaseFSAdapter(BaseAdapter[bytes]):
+class BaseFSAdapter():
     """Base interface for filesystem adapters.
     
     This defines the core filesystem operations without retry handling.

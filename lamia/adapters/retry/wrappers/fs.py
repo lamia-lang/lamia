@@ -3,7 +3,7 @@
 from typing import Optional
 
 from ...filesystem.base import BaseFSAdapter
-from ..handler import RetryHandler
+from ..retry_handler import RetryHandler
 from ..config import ExternalSystemRetryConfig
 
 class RetryWrappedFSAdapter(BaseFSAdapter):

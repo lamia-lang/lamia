@@ -4,7 +4,7 @@ from typing import Optional
 
 from ...llm.base import BaseLLMAdapter
 from ...llm.base import LLMModel, LLMResponse
-from ..handler import RetryHandler
+from ..retry_handler import RetryHandler
 from ..config import ExternalSystemRetryConfig
 
 class RetryWrappedLLMAdapter(BaseLLMAdapter):
@@ -46,4 +46,4 @@ class RetryWrappedLLMAdapter(BaseLLMAdapter):
     
     def get_stats(self):
         """Get retry statistics if enabled."""
-        return self._retry_handler.get_stats() 
+        return self._retry_handler.get_stats()
