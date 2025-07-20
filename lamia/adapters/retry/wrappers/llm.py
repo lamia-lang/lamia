@@ -3,7 +3,7 @@
 from typing import Optional
 
 from ...llm.base import BaseLLMAdapter
-from ...types import LLMModel, LLMResponse
+from ...llm.base import LLMModel, LLMResponse
 from ..handler import RetryHandler
 from ..config import ExternalSystemRetryConfig
 
@@ -26,7 +26,7 @@ class RetryWrappedLLMAdapter(BaseLLMAdapter):
         self._adapter = adapter
         self._retry_handler = RetryHandler(retry_config, collect_stats)
     
-    async def execute_prompt(
+    async def generate(
         self,
         prompt: str,
         model: Optional[LLMModel] = None
@@ -41,7 +41,7 @@ class RetryWrappedLLMAdapter(BaseLLMAdapter):
             LLMResponse containing the generated text and metadata
         """
         return await self._retry_handler.execute(
-            lambda: self._adapter.execute_prompt(prompt, model)
+            lambda: self._adapter.generate(prompt, model)
         )
     
     def get_stats(self):
