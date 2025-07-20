@@ -8,6 +8,8 @@ from ...config_provider import ConfigProvider
 from ...managers import Manager
 from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator
+from lamia.adapters.adapter_factory import AdapterFactory
+from lamia.adapters.infrastructure import ExternalSystemRetryConfig
 import logging
 
 
@@ -177,10 +179,20 @@ class LLMManager(Manager):
         else:
             adapter_class = self.provider_registry.get_adapter_class(provider_name)
 
+        # Configure factory behavior
+        AdapterFactory.configure(enable_retries=True, collect_stats=True)
+
         if adapter_class.is_remote():
             adapter = adapter_class(api_key=api_key)
         else:
             adapter = adapter_class()
+
+        # Create adapter
+        llm = AdapterFactory.create_llm_adapter(
+            adapter_class,
+            retry_config=ExternalSystemRetryConfig(max_attempts=3),
+            api_key="..."
+        )
 
         await adapter.async_initialize()
 
