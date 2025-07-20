@@ -7,7 +7,7 @@ import time
 import asyncio
 
 from .config import ExternalSystemRetryConfig, ErrorCategory
-from .errors import ExternalSystemRetryError, ExternalSystemRateLimitError, ExternalSystemTransientError, ExternalSystemPermanentError
+from .errors import ExternalOperationError, ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationRetryError
 from .defaults import get_default_config_for_adapter
 
 T = TypeVar('T')
@@ -51,6 +51,7 @@ class RetryHandler:
         """Execute operation with retries and stat collection."""
         start_time = time.time()
         attempts = 0
+        retry_history = []
 
         while True:
             try:
@@ -67,6 +68,7 @@ class RetryHandler:
 
             except Exception as e:
                 attempts += 1
+                retry_history.append(f"Attempt {attempts}: {type(e).__name__}: {str(e)}")
                 
                 if self.stats:
                     error_type = type(e).__name__
@@ -89,14 +91,15 @@ class RetryHandler:
                         self.stats.total_retries += attempts - 1
                         self.stats.total_operation_time += time.time() - start_time
                     
+                    # Raise specific operation errors that should bubble up to the user
                     if error_category == ErrorCategory.PERMANENT:
-                        raise ExternalSystemPermanentError(str(e), e)
+                        raise ExternalOperationPermanentError(str(e), retry_history, e)
                     elif error_category == ErrorCategory.RATE_LIMIT:
-                        raise ExternalSystemRateLimitError(str(e), [], e)
+                        raise ExternalOperationRateLimitError(str(e), retry_history, e)
                     elif error_category == ErrorCategory.TRANSIENT:
-                        raise ExternalSystemTransientError(str(e), [], e)
+                        raise ExternalOperationTransientError(str(e), retry_history, e)
                     else:
-                        raise ExternalSystemRetryError(str(e), [], e)
+                        raise ExternalOperationRetryError(str(e), retry_history, e)
 
                 delay = self._calculate_delay(attempts, error_category)
                 await asyncio.sleep(delay)

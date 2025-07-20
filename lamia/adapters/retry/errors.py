@@ -1,32 +1,27 @@
-"""Common types and exceptions for retry handling."""
+"""Retry-related error types for external operations."""
 
-from typing import List
+from typing import List, Optional
 
-from .strategies import RetryAttempt
-
-class ExternalSystemError(Exception):
-    """Base exception for all external system operation errors."""
-    pass
-
-class ExternalSystemRetryError(ExternalSystemError):
-    """Exception raised when all retries have been exhausted."""
-    def __init__(self, message: str, attempts: List[RetryAttempt], final_error: Exception):
+class ExternalOperationError(Exception):
+    """Base exception for external operation failures."""
+    
+    def __init__(self, message: str, retry_history: List[str], original_error: Optional[Exception] = None):
         super().__init__(message)
-        self.attempts = attempts
-        self.final_error = final_error
-        self.total_attempts = len(attempts)
-        self.error_categories = [attempt.error_category for attempt in attempts]
+        self.retry_history = retry_history
+        self.original_error = original_error
 
-class ExternalSystemRateLimitError(ExternalSystemRetryError):
-    """Exception raised when rate limits were hit and retries exhausted."""
+class ExternalOperationRetryError(ExternalOperationError):
+    """Raised when an external operation fails after all retry attempts."""
     pass
 
-class ExternalSystemTransientError(ExternalSystemRetryError):
-    """Exception raised when transient errors were hit and retries exhausted."""
+class ExternalOperationTransientError(ExternalOperationError):
+    """Raised when an external operation fails due to a transient error."""
     pass
 
-class ExternalSystemPermanentError(ExternalSystemError):
-    """Exception raised for permanent errors that should not be retried."""
-    def __init__(self, message: str, original_error: Exception):
-        super().__init__(message)
-        self.original_error = original_error 
+class ExternalOperationRateLimitError(ExternalOperationError):
+    """Raised when an external operation fails due to rate limiting."""
+    pass
+
+class ExternalOperationPermanentError(ExternalOperationError):
+    """Raised when an external operation fails due to a permanent error."""
+    pass 
