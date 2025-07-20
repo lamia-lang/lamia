@@ -197,18 +197,6 @@ class LLMManager(Manager):
         validator: Optional[BaseValidator] = None,
         max_attempts: int = 1,  
     ) -> ValidationResult:
-        # Fast path for no validation case
-        if validator is None:
-            logger.info(f"[Lamia][Ask] Prompt sent to model '{model.name}':\n{prompt}")
-            response = await adapter.generate(prompt, model=model)
-            logger.info(f"[Lamia][Answer] Response from model '{model.name}':\n{response.text}")
-            return ValidationResult(
-                is_valid=True,
-                raw_response=response.text,
-                validation_result=response.text
-            )
-
-        # Regular validation path
         errors = []
         attempts = 0
         current_prompt = prompt
@@ -220,9 +208,16 @@ class LLMManager(Manager):
                 logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}':\n{response.text}")
                 
                 # Validate the response
-                validation_result = await validator.validate(response.text)
-                if validation_result.is_valid:
-                    return validation_result
+                if validator is not None:
+                    validation_result = await validator.validate(response.text)
+                    if validation_result.is_valid:
+                        return validation_result
+                else:
+                    return ValidationResult(
+                        is_valid=True,
+                        raw_response=response.text,
+                        validation_result=response.text
+                    )
                 
                 logger.warning(
                     f"Attempt {attempts}/{max_attempts} failed validation: "
