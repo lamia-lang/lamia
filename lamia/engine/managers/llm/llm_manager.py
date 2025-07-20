@@ -10,6 +10,7 @@ from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.adapters.retry.factory import AdapterFactory
 from lamia.adapters.retry.config import ExternalSystemRetryConfig
+from lamia.adapters.retry.errors import ExternalOperationError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -48,15 +49,7 @@ class LLMManager(Manager):
 
         self._adapter_cache = {}
         
-        # Add user adapters from extensions
-        ext_folder = self.config_provider.get_extensions_folder()
-        ext_adapters_path = os.path.join(os.getcwd(), ext_folder, "adapters")
-        self.provider_registry.add_user_adapters([ext_adapters_path])
-        
-        # Check if all needed providers are supported
-        self._check_all_required_providers(needed_providers)
-
-        # Check API keys early
+        # Check that all required API keys are present
         self._check_all_required_api_keys(needed_providers)
 
     async def execute(
@@ -242,7 +235,10 @@ class LLMManager(Manager):
                     # Resend the original prompt plus the validation issue and hint
                     retry_message = f"Previous response failed validation. Issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again.\n\nOriginal prompt:\n{prompt}"
                     current_prompt = retry_message
-                
+            except ExternalOperationError:
+                # Let external operation errors bubble up to the user
+                # These contain specific information about what went wrong
+                raise
             except Exception as e:
                 logger.error(f"Attempt {attempts} failed with error: {str(e)}")
                 errors.append(str(e))
@@ -293,8 +289,13 @@ class LLMManager(Manager):
                     validator=validator,
                     max_attempts=model_and_retries.retries,
                 )
+            except ExternalOperationError:
+                # Let external operation errors bubble up to the user
+                # These contain specific actionable information about what went wrong
+                raise
             except Exception as e:
-                # Continue to the next fallback model
+                # Continue to the next fallback model for other errors
+                logger.warning(f"Model {model.name} failed, trying next fallback: {str(e)}")
                 pass
                 
         raise RuntimeError(
