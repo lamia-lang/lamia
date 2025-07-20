@@ -1,62 +1,55 @@
 # Retry System
 
-Production-ready retry handling for external adapters with industry-standard configurations.
+Production-ready retry handling for external adapters with automatic configuration based on adapter type.
 
 ## Quick Start
 
 ```python
-from lamia.adapters.retry import RetryHandler
+from lamia.adapters.retry import RetryHandler, RetryWrappedLLMAdapter
 
-# Basic usage
-handler = RetryHandler(external_system_type="llm")
+# Direct usage
+handler = RetryHandler(adapter=my_adapter)
 result = await handler.execute(my_operation)
 
-# Wrapper usage
-from lamia.adapters.retry import RetryWrappedLLMAdapter
+# Wrapper usage  
 retry_adapter = RetryWrappedLLMAdapter(original_adapter)
 response = await retry_adapter.generate("Hello world")
 ```
 
-## Configuration Profiles
+## Automatic Configuration
 
-| Type | Max Attempts | Base Delay | Max Delay | Purpose |
-|------|-------------|------------|-----------|---------|
-| **llm** | 5 | 2.0s | 60.0s | LLM APIs (OpenAI, Anthropic) |
-| **network** | 3 | 1.0s | 32.0s | Web/HTTP adapters |
-| **filesystem** | 2 | 0.5s | 5.0s | File operations |
+The system automatically detects adapter types and configures appropriate retry settings:
+
+| Adapter Type | Detection | Attempts | Delays | Purpose |
+|-------------|-----------|----------|---------|---------|
+| **Remote LLM** | `isinstance(adapter, BaseLLMAdapter) and adapter.is_remote()` | 5 | 2-60s | OpenAI, Anthropic |
+| **Self-hosted LLM** | `isinstance(adapter, BaseLLMAdapter) and not adapter.is_remote()` | 3 | 5-180s | Ollama, local models |
+| **Filesystem** | `isinstance(adapter, BaseFSAdapter)` | 2 | 0.5-5s | File operations |
 
 ## Error Classification
 
-- **PERMANENT**: Never retry (401, 403, bad requests)
-- **RATE_LIMIT**: Retry with longer delays (429, quota exceeded) 
-- **TRANSIENT**: Retry normally (timeouts, 5xx errors)
+Automatically selects appropriate error classifiers:
+- **Remote LLMs**: HTTP errors, rate limiting, auth failures
+- **Self-hosted LLMs**: Hardware errors, model loading, memory issues  
+- **Filesystem**: Permission errors, disk space, file locks
 
-## Custom Classifiers
-
-```python
-from lamia.adapters.retry import ErrorClassifier, ErrorCategory, register_error_classifier
-
-class CacheErrorClassifier(ErrorClassifier):
-    def classify_error(self, error: Exception) -> ErrorCategory:
-        if 'temporary' in str(error).lower():
-            return ErrorCategory.TRANSIENT
-        return ErrorCategory.PERMANENT
-
-register_error_classifier('cache', CacheErrorClassifier)
-handler = RetryHandler(external_system_type='cache')
-```
-
-## Adding Retry to Your Adapter
+## Usage Examples
 
 ```python
-class MyAdapter:
-    def __init__(self):
-        self.retry_handler = RetryHandler(external_system_type="network")
-    
-    async def operation(self, data):
-        return await self.retry_handler.execute(
-            lambda: self._do_operation(data)
-        )
+# LLM adapter with automatic config
+openai_adapter = OpenAIAdapter(api_key="...")
+handler = RetryHandler(adapter=openai_adapter)
+# Automatically gets: 5 attempts, 2-60s delays, HTTP error classification
+
+# Ollama adapter with automatic config
+ollama_adapter = OllamaAdapter(base_url="...")
+handler = RetryHandler(adapter=ollama_adapter) 
+# Automatically gets: 3 attempts, 5-180s delays, self-hosted error classification
+
+# Filesystem adapter with automatic config
+s3_adapter = S3Adapter(bucket="...")
+handler = RetryHandler(adapter=s3_adapter)
+# Automatically gets: 2 attempts, 0.5-5s delays, filesystem error classification
 ```
 
-Based on OpenAI cookbook and AWS best practices. 
+Based on `isinstance()` type checking and `adapter.is_remote()` method - no magic strings! 

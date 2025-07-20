@@ -2,16 +2,13 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, TypeVar, Dict, List, Callable, Awaitable
+from typing import Optional, TypeVar, Dict, List, Callable, Awaitable, Union
 import time
 import asyncio
 
 from .config import ExternalSystemRetryConfig, ErrorCategory
 from .errors import ExternalSystemRetryError, ExternalSystemRateLimitError, ExternalSystemTransientError, ExternalSystemPermanentError
-from .defaults import get_default_config
-from .classifiers import get_error_classifier
-from .classifiers.base import ErrorClassifier
-
+from .defaults import get_default_config_for_adapter
 
 T = TypeVar('T')
 
@@ -32,13 +29,19 @@ class RetryHandler:
     
     def __init__(
         self,
+        adapter: Union["BaseLLMAdapter", "BaseFSAdapter"],
         config: Optional[ExternalSystemRetryConfig] = None,
-        external_system_type: str = "network",
-        error_classifier: Optional[ErrorClassifier] = None,
         collect_stats: bool = True
     ):
-        self.config = config or get_default_config(external_system_type)
-        self.error_classifier = error_classifier or get_error_classifier(external_system_type)
+        """Initialize retry handler.
+        
+        Args:
+            adapter: The adapter instance to determine proper config/classifier
+            config: Optional retry configuration
+            collect_stats: Whether to collect retry statistics
+        """
+        self.config = config or get_default_config_for_adapter(adapter)
+        self.error_classifier = _get_error_classifier_for_adapter(adapter)
         self.stats = RetryStats() if collect_stats else None
 
     async def execute(
@@ -117,3 +120,23 @@ class RetryHandler:
         
         # Cap at maximum delay
         return min(delay, self.config.max_delay)
+
+
+def _get_error_classifier_for_adapter(adapter):
+    """Get appropriate error classifier based on adapter type and characteristics."""
+    from ..llm.base import BaseLLMAdapter
+    from ..filesystem.base import BaseFSAdapter
+    from .classifiers.http import HttpErrorClassifier
+    from .classifiers.filesystem import FilesystemErrorClassifier
+    from .classifiers.self_hosted import SelfHostedLLMErrorClassifier
+    
+    if isinstance(adapter, BaseLLMAdapter):
+        if adapter.is_remote():
+            return HttpErrorClassifier()  # Remote LLM APIs
+        else:
+            return SelfHostedLLMErrorClassifier()  # Self-hosted LLMs
+    elif isinstance(adapter, BaseFSAdapter):
+        return FilesystemErrorClassifier()
+    else:
+        # Default fallback
+        return HttpErrorClassifier()

@@ -2,7 +2,6 @@
 
 from .retry_handler import RetryHandler
 from .config import ExternalSystemRetryConfig, ErrorCategory
-from .classifiers import get_error_classifier, register_error_classifier
 
 # Optional wrappers
 try:
