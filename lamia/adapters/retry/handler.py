@@ -7,10 +7,8 @@ from typing import Optional, Type, TypeVar, Generic, Dict, List, Callable, Await
 import time
 import asyncio
 
-from .base import BaseAdapter
-from .infrastructure import ExternalSystemRetryConfig, ExternalSystemError, RetryHandler, ErrorCategory, get_default_config
-from .llm import BaseLLMAdapter, LLMModel, LLMResponse
-from .llm.openai import OpenAIAdapter
+from .config import ExternalSystemRetryConfig, ExternalSystemError, ErrorCategory, get_default_config
+from .wrappers.llm import BaseLLMAdapter, LLMModel, LLMResponse
 
 T = TypeVar('T')
 
@@ -95,7 +93,7 @@ class RetryWrappedAdapter(Generic[T]):
 
     def __init__(
         self,
-        adapter: BaseAdapter,
+        adapter: BaseLLMAdapter,
         retry_config: Optional[ExternalSystemRetryConfig] = None,
         collect_stats: bool = True
     ):
