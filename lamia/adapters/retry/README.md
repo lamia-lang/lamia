@@ -19,12 +19,11 @@ response = await retry_adapter.generate("Hello world")
 
 ## Configuration Profiles
 
-| Type | Max Attempts | Base Delay | Max Delay |
-|------|-------------|------------|-----------|
-| **llm** | 5 | 2.0s | 60.0s |
-| **network** | 3 | 1.0s | 32.0s |
-| **filesystem** | 2 | 0.5s | 5.0s |
-| **local** | 1 | 0.1s | 1.0s |
+| Type | Max Attempts | Base Delay | Max Delay | Purpose |
+|------|-------------|------------|-----------|---------|
+| **llm** | 5 | 2.0s | 60.0s | LLM APIs (OpenAI, Anthropic) |
+| **network** | 3 | 1.0s | 32.0s | Web/HTTP adapters |
+| **filesystem** | 2 | 0.5s | 5.0s | File operations |
 
 ## Error Classification
 
@@ -37,14 +36,14 @@ response = await retry_adapter.generate("Hello world")
 ```python
 from lamia.adapters.retry import ErrorClassifier, ErrorCategory, register_error_classifier
 
-class DatabaseErrorClassifier(ErrorClassifier):
+class CacheErrorClassifier(ErrorClassifier):
     def classify_error(self, error: Exception) -> ErrorCategory:
-        if 'deadlock' in str(error).lower():
+        if 'temporary' in str(error).lower():
             return ErrorCategory.TRANSIENT
         return ErrorCategory.PERMANENT
 
-register_error_classifier('database', DatabaseErrorClassifier)
-handler = RetryHandler(external_system_type='database')
+register_error_classifier('cache', CacheErrorClassifier)
+handler = RetryHandler(external_system_type='cache')
 ```
 
 ## Adding Retry to Your Adapter

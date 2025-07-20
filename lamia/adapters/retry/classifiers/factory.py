@@ -1,4 +1,4 @@
-"""Simple error classifier registry."""
+"""Error classifier factory for different adapter types."""
 
 from enum import Enum
 from typing import Type, Dict
@@ -6,20 +6,17 @@ from typing import Type, Dict
 from .base import ErrorClassifier
 from .http import HttpErrorClassifier
 from .filesystem import FilesystemErrorClassifier
-from .local import LocalErrorClassifier
 
 
 class ClassifierType(Enum):
-    HTTP = "http"
-    FILESYSTEM = "filesystem"
-    LOCAL = "local"
+    HTTP = "http"              # External HTTP/API calls (LLMs, web, REST APIs)
+    FILESYSTEM = "filesystem"  # File operations (local/remote storage) 
 
 
-# Simple registry mapping
+# Classifier mapping - only for adapter types we actually have
 _REGISTRY: Dict[str, Type[ErrorClassifier]] = {
     "http": HttpErrorClassifier,
     "filesystem": FilesystemErrorClassifier,
-    "local": LocalErrorClassifier,
 }
 
 
@@ -29,16 +26,12 @@ def get_error_classifier(system_type: str) -> ErrorClassifier:
     if system_type in _REGISTRY:
         return _REGISTRY[system_type]()
     
-    # Simple pattern matching
+    # Simple pattern matching for actual adapter types
     system_lower = system_type.lower()
-    if any(x in system_lower for x in ["llm", "api", "http"]):
-        return HttpErrorClassifier()
-    elif any(x in system_lower for x in ["file", "fs", "disk"]):
+    if any(x in system_lower for x in ["file", "fs", "disk", "storage"]):
         return FilesystemErrorClassifier()
-    elif "local" in system_lower:
-        return LocalErrorClassifier()
     
-    # Default to HTTP
+    # Default to HTTP for everything else (LLM, web, network, etc.)
     return HttpErrorClassifier()
 
 

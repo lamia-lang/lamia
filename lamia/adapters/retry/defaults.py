@@ -8,14 +8,7 @@ from .config import ExternalSystemRetryConfig
 # Industry-tested retry configurations for different adapter types
 # Based on OpenAI cookbook, AWS best practices, and production experience
 RETRY_DEFAULTS: Dict[str, Dict[str, Any]] = {
-    "local": {
-        "max_attempts": 1,         # No retries for local operations - failures are usually permanent
-        "base_delay": 0.1,         # Minimal delay for local operations
-        "max_delay": 1.0,          # Local ops should fail fast
-        "exponential_base": 2.0,   # Standard exponential backoff
-        "max_duration_seconds": 30 # Local ops should complete quickly
-    },
-    "network": {  # Standard HTTP/REST APIs
+    "network": {  # Standard HTTP/REST APIs, web adapters
         "max_attempts": 3,         # Industry standard: 3 attempts (1 initial + 2 retries)
         "base_delay": 1.0,         # OpenAI recommendation: start with 1 second
         "max_delay": 32.0,         # Common ceiling for network timeouts
@@ -41,13 +34,11 @@ RETRY_DEFAULTS: Dict[str, Dict[str, Any]] = {
 def get_adapter_category(adapter_type: str) -> str:
     """Get the retry category for an adapter type."""
     adapter_lower = adapter_type.lower()
-    if "local" in adapter_lower:
-        return "local"
-    elif "llm" in adapter_lower or "ai" in adapter_lower:
+    if "llm" in adapter_lower or "ai" in adapter_lower:
         return "llm"  # LLM-specific optimized settings
     elif "file" in adapter_lower or "fs" in adapter_lower:
         return "filesystem"  # Filesystem-specific settings
-    return "network"  # Default to network settings (most adapters are remote)
+    return "network"  # Default to network settings (covers web, HTTP, etc.)
 
 def get_default_config(adapter_type: str = "network") -> ExternalSystemRetryConfig:
     """Get default retry configuration based on adapter type."""
