@@ -55,5 +55,21 @@ class OllamaModel(LLMModel):
     repeat_penalty: Optional[float] = None
 
 from .lamia import Lamia
+from .errors import (
+    MissingAPIKeysError,
+    ExternalOperationError,
+    ExternalOperationFailedError,
+    ExternalOperationTransientError,
+    ExternalOperationRateLimitError,
+    ExternalOperationPermanentError,
+)
 
-__all__ = ["Lamia"] 
+__all__ = [
+    "Lamia",
+    "MissingAPIKeysError", 
+    "ExternalOperationError",
+    "ExternalOperationFailedError",
+    "ExternalOperationTransientError", 
+    "ExternalOperationRateLimitError",
+    "ExternalOperationPermanentError",
+] 

@@ -12,7 +12,7 @@ import runpy
 import traceback
 
 from lamia.lamia import Lamia
-from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
+from lamia.errors import MissingAPIKeysError
 from lamia.utils import scaffold
 from lamia.utils.cli_styling import setup_cli_logging
 

@@ -6,10 +6,13 @@ from typing import Optional, TypeVar, Dict, List, Callable, Awaitable, Union
 import time
 import asyncio
 
-from .errors import ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationFailedError
+from lamia.errors import ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationFailedError
 from .defaults import get_default_config_for_adapter
 from lamia.types import ExternalOperationRetryConfig
 from lamia.adapters.error_classifiers.categories import ErrorCategory
+import logging
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
 
@@ -56,6 +59,7 @@ class RetryHandler:
 
         while True:
             try:
+                logger.info(f"External operation attempt {attempts} of {self.config.max_attempts}")
                 result = await operation()
                 
                 if self.stats:

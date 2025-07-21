@@ -121,7 +121,7 @@ class Lamia:
         retry_config: Optional[ExternalOperationRetryConfig],
     ) -> Dict[str, Any]:
 
-        DEFAULT_RETRIES = 1
+        DEFAULT_LLM_RETRIES = 1
         # Convert the *models* var-tuple into a proper list for iteration.
         incoming_models = list(models) if models else []
 
@@ -131,7 +131,7 @@ class Lamia:
 
         models_and_retries: List[ModelWithRetries] = []
         for item in incoming_models:
-            retries = DEFAULT_RETRIES
+            retries = DEFAULT_LLM_RETRIES
 
             # Unpack `(something, retries)`
             if isinstance(item, tuple):
@@ -177,7 +177,6 @@ class Lamia:
             LamiaResult: Generated response with result text and typed result
             
         Raises:
-            RuntimeError: If engine fails to start
             MissingAPIKeysError: If API keys are missing for LLM requests
             ValueError: If validator fails
             ExternalOperationPermanentError: If external service has permanent failure (API key issues, invalid requests)

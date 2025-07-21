@@ -1,7 +1,7 @@
 """External system retry handling."""
 
 from .retry_handler import RetryHandler
-from .errors import (
+from lamia.errors import (
     ExternalOperationError,
     ExternalOperationFailedError, 
     ExternalOperationTransientError,

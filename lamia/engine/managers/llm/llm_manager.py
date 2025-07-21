@@ -10,30 +10,10 @@ from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.adapters.retry.factory import AdapterFactory
 from lamia.adapters.retry.errors import ExternalOperationError
+from lamia.errors import MissingAPIKeysError
 import logging
 
 logger = logging.getLogger(__name__)
-
-class MissingAPIKeysError(Exception):
-    """Raised when one or more required API keys are missing for LLM engines."""
-    def __init__(self, missing):
-        def get_api_keys_constructor_string(provider_names: List[str]) -> str:
-            return "Lamia(..., api_keys={" + \
-                ", ".join([f'"{provider_name}": "my-api-key"' for provider_name in provider_names]) + \
-                "}"
-
-        self.missing = missing
-        missing_providers = [model_provider for model_provider, _ in missing]
-        message = (
-            "The following engines are missing required API keys:\n" +
-            "\n".join([f"- {model_provider}: missing {env_vars}" for model_provider, env_vars in missing]) +
-            "\n\nPlease provide the missing API keys in one of the following ways:\n" +
-            "- As environment variables (e.g., export OPENAI_API_KEY=...)\n" +
-            "- As a parameter to the Lamia() constructor like this: " + get_api_keys_constructor_string([provider for provider,_ in missing]) + "\n" +
-            (f"You can also use LAMIA_API_KEY or {get_api_keys_constructor_string(['lamia'])} to proxy remote adapters ({', '.join(LamiaAdapter.get_supported_providers())}).\n" if all(provider in LamiaAdapter.get_supported_providers() for provider in missing_providers) else "") +
-            "Alternatively, remove these engines from your default or fallback_models in config."
-        )
-        super().__init__(message)
 
 class LLMManager(Manager):
     """Manages LLM adapters and only loads the ones that are actually needed."""
