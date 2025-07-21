@@ -165,6 +165,64 @@ class LLMManager(Manager):
         self._adapter_cache[cache_key] = adapter_with_retries
 
         return adapter_with_retries
+    
+    async def _execute_with_retries(
+        self,
+        prompt: str,
+        validator: Optional[BaseValidator] = None,
+    ) -> ValidationResult:
+        """Execute the prompt with retry and fallback logic.
+        
+        Args:
+            prompt: The prompt to send
+            validator: Optional validator to check the response
+            
+        Returns:
+            ValidationResult from a successful attempt
+            
+        Raises:
+            ExternalOperationError: If external system failures occur
+            RuntimeError: If all models in the chain fail
+        """
+        if validator is not None:
+            initial_hints = validator.get_initial_hints()
+            current_prompt = f"{initial_hints}\n\n{prompt}"
+        else:
+            current_prompt = prompt
+
+        failed_models = []
+        
+        for model_and_retries in self.config_provider.get_model_chain():
+            model = model_and_retries.model
+
+            # Lazily create and cache adapters so we don't re-instantiate them
+            if model in self._adapter_cache:
+                adapter = self._adapter_cache[model]
+            else:
+                adapter = await self._create_adapter_from_config(model)
+                self._adapter_cache[model] = adapter
+
+            logger.info(f"Trying model '{model.name}' with {model_and_retries.retries} max attempts")
+            
+            # This will either succeed (return ValidationResult), 
+            # exhaust retries (return None), or bubble up exceptions naturally
+            result = await self._generate_and_validate(
+                adapter=adapter,
+                model=model_and_retries.model,
+                prompt=current_prompt,
+                validator=validator,
+                max_attempts=model_and_retries.retries,
+            )
+            
+            if result is not None:
+                return result
+            
+            # This model exhausted retries, try next one
+            logger.warning(f"Model {model.name} exhausted all retries, trying next fallback")
+            failed_models.append(model.name)
+                
+        # All models failed
+        raise RuntimeError(f"All models failed: {', '.join(failed_models)}")
 
     async def _generate_and_validate(
         self,
@@ -223,64 +281,6 @@ class LLMManager(Manager):
 
         # All retries exhausted for this model
         return None
-
-    async def _execute_with_retries(
-        self,
-        prompt: str,
-        validator: Optional[BaseValidator] = None,
-    ) -> ValidationResult:
-        """Execute the prompt with retry and fallback logic.
-        
-        Args:
-            prompt: The prompt to send
-            validator: Optional validator to check the response
-            
-        Returns:
-            ValidationResult from a successful attempt
-            
-        Raises:
-            ExternalOperationError: If external system failures occur
-            RuntimeError: If all models in the chain fail
-        """
-        if validator is not None:
-            initial_hints = validator.get_initial_hints()
-            current_prompt = f"{initial_hints}\n\n{prompt}"
-        else:
-            current_prompt = prompt
-
-        failed_models = []
-        
-        for model_and_retries in self.config_provider.get_model_chain():
-            model = model_and_retries.model
-
-            # Lazily create and cache adapters so we don't re-instantiate them
-            if model in self._adapter_cache:
-                adapter = self._adapter_cache[model]
-            else:
-                adapter = await self._create_adapter_from_config(model)
-                self._adapter_cache[model] = adapter
-
-            logger.info(f"Trying model '{model.name}' with {model_and_retries.retries} max attempts")
-            
-            # This will either succeed (return ValidationResult), 
-            # exhaust retries (return None), or bubble up exceptions naturally
-            result = await self._generate_and_validate(
-                adapter=adapter,
-                model=model_and_retries.model,
-                prompt=current_prompt,
-                validator=validator,
-                max_attempts=model_and_retries.retries,
-            )
-            
-            if result is not None:
-                return result
-            
-            # This model exhausted retries, try next one
-            logger.warning(f"Model {model.name} exhausted all retries, trying next fallback")
-            failed_models.append(model.name)
-                
-        # All models failed
-        raise RuntimeError(f"All models failed: {', '.join(failed_models)}")
 
     async def close(self):
         """Close and cleanup all managed adapters."""
