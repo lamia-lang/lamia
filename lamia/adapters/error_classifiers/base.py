@@ -7,10 +7,6 @@ class ErrorClassifier(ABC):
     """Base class for error classification strategies.
     
     Error classifiers determine how exceptions should be categorized
-    for retry behavior:
-    - PERMANENT: Never retry (auth failures, bad requests)
-    - TRANSIENT: Retry with standard delays (network issues, 5xx errors)
-    - RATE_LIMIT: Retry with longer delays (429 errors, quota exceeded)
     """
     
     @abstractmethod

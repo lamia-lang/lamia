@@ -6,7 +6,7 @@ from ...filesystem.base import BaseFSAdapter
 from ..retry_handler import RetryHandler
 from lamia.types import ExternalOperationRetryConfig
 
-class RetryWrappedFSAdapter(BaseFSAdapter):
+class RetryingFSAdapter(BaseFSAdapter):
     """Adds retry capabilities to filesystem adapters.
     
     Automatically configures retry settings optimized for filesystem

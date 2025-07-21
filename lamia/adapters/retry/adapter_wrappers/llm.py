@@ -7,7 +7,7 @@ from ...llm.base import LLMModel, LLMResponse
 from ..retry_handler import RetryHandler
 from lamia.types import ExternalOperationRetryConfig
 
-class RetryWrappedLLMAdapter(BaseLLMAdapter):
+class RetryingLLMAdapter(BaseLLMAdapter):
     """Adds retry capabilities to LLM adapters.
     
     Automatically configures industry-standard retry settings optimized

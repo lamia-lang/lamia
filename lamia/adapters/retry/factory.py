@@ -5,8 +5,8 @@ from typing import Optional, TypeVar, cast
 from ..llm.base import BaseLLMAdapter
 from ..filesystem.base import BaseFSAdapter
 from lamia.types import ExternalOperationRetryConfig
-from .adapter_wrappers.llm import RetryWrappedLLMAdapter
-from .adapter_wrappers.fs import RetryWrappedFSAdapter
+from .adapter_wrappers.llm import RetryingLLMAdapter
+from .adapter_wrappers.fs import RetryingFSAdapter
 from .defaults import get_default_config_for_adapter
 
 T = TypeVar('T', bound=BaseLLMAdapter | BaseFSAdapter)
@@ -78,7 +78,7 @@ class RetriableAdapterFactory:
             The adapter wrapped with retry handling using intelligent defaults
         """
         effective_config = cls._get_effective_config(adapter, retry_config)
-        return RetryWrappedLLMAdapter(
+        return RetryingLLMAdapter(
             adapter,
             effective_config,
             collect_stats=cls._collect_stats
@@ -100,7 +100,7 @@ class RetriableAdapterFactory:
             The adapter wrapped with retry handling using intelligent defaults
         """
         effective_config = cls._get_effective_config(adapter, retry_config)
-        return RetryWrappedFSAdapter(
+        return RetryingFSAdapter(
             adapter,
             effective_config,
             collect_stats=cls._collect_stats
