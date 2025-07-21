@@ -1,7 +1,7 @@
 """Base error classifier abstract class."""
 
 from abc import ABC, abstractmethod
-from lamia.adapters.retry.strategies import ErrorCategory
+from .categories import ErrorCategory
 
 class ErrorClassifier(ABC):
     """Base class for error classification strategies.

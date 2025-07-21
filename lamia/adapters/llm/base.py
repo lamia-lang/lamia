@@ -54,7 +54,6 @@ class BaseLLMAdapter(ABC):
         """Generate a response from the LLM.
         
         Pure adapter method - just implement the API call.
-        Business logic like error classification is handled by retry wrappers.
         
         Args:
             prompt: The input prompt text

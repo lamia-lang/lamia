@@ -2,6 +2,7 @@ import os
 from typing import Dict, Any, Optional, List, Tuple, Union
 from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.validation.base import BaseValidator
+from lamia.types import ExternalOperationRetryConfig
 
 class ConfigProvider:
     """
@@ -54,5 +55,9 @@ class ConfigProvider:
 
     def get_extensions_folder(self) -> str:
         """Get the path to the extensions folder from config, defaulting to 'extensions' if not set."""
-        return self._config.get('extensions_folder', 'extensions') 
+        return self._config.get('extensions_folder', 'extensions')
+
+    def get_retry_config(self) -> Optional[ExternalOperationRetryConfig]:
+        """Get the retry configuration from config.""" 
+        return self._config.get('retry_config') 
 

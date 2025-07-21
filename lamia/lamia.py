@@ -9,7 +9,7 @@ import logging
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.validation.base import BaseValidator
-from lamia.types import BaseType
+from lamia.types import BaseType, ExternalOperationRetryConfig
 from typing import Type
 
 
@@ -38,10 +38,11 @@ class Lamia:
         self, 
         *models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], 
         api_keys: Optional[dict] = None, 
-        validators: Optional[List[BaseValidator]] = None, 
+        validators: Optional[List[BaseValidator]] = None,
+        retry_config: Optional['ExternalOperationRetryConfig'] = None,
     ):
         # Initialize engine - ready to use immediately!
-        self._engine = LamiaEngine(self._build_config(models, api_keys, validators))
+        self._engine = LamiaEngine(self._build_config(models, api_keys, validators, retry_config))
         
         # Initialize command parser instance
         self._command_parser = None
@@ -116,7 +117,8 @@ class Lamia:
         self,
         models: Tuple[Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], ...],
         api_keys: Optional[dict], 
-        validator_types: Optional[List[Type[BaseValidator]]], 
+        validator_types: Optional[List[Type[BaseValidator]]],
+        retry_config: Optional[ExternalOperationRetryConfig],
     ) -> Dict[str, Any]:
 
         DEFAULT_RETRIES = 1
@@ -150,6 +152,7 @@ class Lamia:
             "model_chain": models_and_retries,
             "validator_types": validator_types or [],
             "api_keys": api_keys,
+            "retry_config": retry_config,
         }    
 
         return ConfigProvider(config_dict)

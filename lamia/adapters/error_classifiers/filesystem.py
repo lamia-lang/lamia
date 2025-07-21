@@ -1,7 +1,7 @@
 """Filesystem error classifier optimized for file operations."""
 
 from .base import ErrorClassifier
-from lamia.adapters.retry.strategies import ErrorCategory
+from .categories import ErrorCategory
 
 # Filesystem permanent error patterns
 FS_PERMANENT_PATTERNS = [

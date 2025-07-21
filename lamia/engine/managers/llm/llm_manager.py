@@ -178,7 +178,9 @@ class LLMManager(Manager):
         await adapter.async_initialize()
 
 
-        adapter_with_retries = AdapterFactory.create_llm_adapter(adapter)
+        # Get user-provided retry config or use defaults
+        retry_config = self.config_provider.get_retry_config()
+        adapter_with_retries = AdapterFactory.create_llm_adapter(adapter, retry_config)
 
         # Cache for reuse
         self._adapter_cache[cache_key] = adapter_with_retries

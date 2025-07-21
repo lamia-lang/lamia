@@ -1,7 +1,7 @@
 """Self-hosted LLM error classifier for Ollama, local models, and custom servers."""
 
 from .base import ErrorClassifier
-from lamia.adapters.retry.strategies import ErrorCategory
+from .categories import ErrorCategory
 
 # Self-hosted LLM permanent error patterns
 SELF_HOSTED_PERMANENT_PATTERNS = [

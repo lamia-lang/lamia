@@ -9,7 +9,7 @@ import asyncio
 from .errors import ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationFailedError
 from .defaults import get_default_config_for_adapter
 from lamia.types import ExternalOperationRetryConfig
-from lamia.adapters.retry.strategies import ErrorCategory
+from lamia.adapters.error_classifiers.categories import ErrorCategory
 
 T = TypeVar('T')
 
