@@ -8,7 +8,7 @@ from ...config_provider import ConfigProvider
 from ...managers import Manager
 from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator
-from lamia.adapters.retry.factory import AdapterFactory
+from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.adapters.retry.errors import ExternalOperationError
 from lamia.errors import MissingAPIKeysError
 import logging
@@ -157,10 +157,9 @@ class LLMManager(Manager):
 
         await adapter.async_initialize()
 
-
         # Get user-provided retry config or use defaults
         retry_config = self.config_provider.get_retry_config()
-        adapter_with_retries = AdapterFactory.create_llm_adapter(adapter, retry_config)
+        adapter_with_retries = RetriableAdapterFactory.create_llm_adapter(adapter, retry_config)
 
         # Cache for reuse
         self._adapter_cache[cache_key] = adapter_with_retries

@@ -11,8 +11,12 @@ from .defaults import get_default_config_for_adapter
 
 T = TypeVar('T', bound=BaseLLMAdapter | BaseFSAdapter)
 
-class AdapterFactory:
-    """Factory for creating retry-enabled adapters with intelligent configuration."""
+class RetriableAdapterFactory:
+    """Factory for creating retriable adapters with intelligent retry configuration.
+    
+    This factory wraps adapters with retry capabilities, allowing for intelligent
+    retry behavior that can be enabled/disabled and configured per adapter type.
+    """
     
     _collect_stats: bool = True
     _retries_enabled: bool = True

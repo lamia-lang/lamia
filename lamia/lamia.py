@@ -11,7 +11,7 @@ from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.validation.base import BaseValidator
 from lamia.types import BaseType, ExternalOperationRetryConfig
 from typing import Type
-
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -106,11 +106,29 @@ class Lamia:
 
         if len(models) == 0:
             logger.warning("No valid LLM model found in the model chain. LLM operations will not be possible.")
+            
+        # Convert the config dictionary to ExternalOperationRetryConfig
+        retry_config_settings = config.get("retry_config", {})
+        if not retry_config_settings.get('enabled', True):
+            retry_config = None
+        else:
+            max_total_duration = retry_config_settings.get('max_total_duration')
+            if max_total_duration is not None:
+                max_total_duration = timedelta(seconds=max_total_duration)
+                
+            retry_config = ExternalOperationRetryConfig(
+                max_attempts=retry_config_settings.get('max_attempts', 3),
+                base_delay=retry_config_settings.get('base_delay', 1.0),
+                max_delay=retry_config_settings.get('max_delay', 60.0),
+                exponential_base=retry_config_settings.get('exponential_base', 2.0),
+                max_total_duration=max_total_duration
+            ) 
 
         # Unpack the models list for the constructor
         return cls(
             *models,
-            validators=[]
+            validators=[],
+            retry_config=retry_config
         )
 
     def _build_config(
