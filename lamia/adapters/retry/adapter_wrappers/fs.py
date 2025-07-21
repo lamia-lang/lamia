@@ -4,7 +4,7 @@ from typing import Optional
 
 from ...filesystem.base import BaseFSAdapter
 from ..retry_handler import RetryHandler
-from ..config import ExternalSystemRetryConfig
+from lamia.types import ExternalOperationRetryConfig
 
 class RetryWrappedFSAdapter(BaseFSAdapter):
     """Adds retry capabilities to filesystem adapters.
@@ -16,7 +16,7 @@ class RetryWrappedFSAdapter(BaseFSAdapter):
     def __init__(
         self,
         adapter: BaseFSAdapter,
-        retry_config: Optional[ExternalSystemRetryConfig] = None,
+        retry_config: Optional[ExternalOperationRetryConfig] = None,
         collect_stats: bool = True
     ):
         """Initialize the retry wrapper.
@@ -28,8 +28,8 @@ class RetryWrappedFSAdapter(BaseFSAdapter):
         """
         self._adapter = adapter
         self._retry_handler = RetryHandler(
+            adapter=adapter,  # Pass adapter for intelligent defaults
             config=retry_config,
-            external_system_type="filesystem",  # Use FS-optimized settings
             collect_stats=collect_stats
         )
     

@@ -3,7 +3,7 @@
 from datetime import timedelta
 from typing import Dict, Any, Union, TYPE_CHECKING
 
-from .config import ExternalSystemRetryConfig
+from lamia.types import ExternalOperationRetryConfig
 
 if TYPE_CHECKING:
     from ..llm.base import BaseLLMAdapter
@@ -42,7 +42,7 @@ RETRY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     }
 }
 
-def get_default_config_for_adapter(adapter: Union["BaseLLMAdapter", "BaseFSAdapter"]) -> ExternalSystemRetryConfig:
+def get_default_config_for_adapter(adapter: Union["BaseLLMAdapter", "BaseFSAdapter"]) -> ExternalOperationRetryConfig:
     """Get default retry configuration based on adapter type and characteristics."""
     from ..llm.base import BaseLLMAdapter
     from ..filesystem.base import BaseFSAdapter
@@ -58,7 +58,7 @@ def get_default_config_for_adapter(adapter: Union["BaseLLMAdapter", "BaseFSAdapt
         category = "network"  # Default fallback
     
     params = RETRY_DEFAULTS[category]
-    return ExternalSystemRetryConfig(
+    return ExternalOperationRetryConfig(
         max_attempts=params["max_attempts"],
         base_delay=params["base_delay"],
         max_delay=params["max_delay"],

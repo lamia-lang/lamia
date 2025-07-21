@@ -1,8 +1,19 @@
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Optional
+from datetime import timedelta
 from pydantic import BaseModel
+from dataclasses import dataclass
 
 T = TypeVar('T', bound=BaseModel)
 S = TypeVar('S', bound=bool)
+
+@dataclass
+class ExternalOperationRetryConfig:
+    """Configuration for external system retry behavior."""
+    max_attempts: int
+    base_delay: float
+    max_delay: float
+    exponential_base: float
+    max_total_duration: Optional[timedelta]
 
 class BaseType(Generic[T, S]):
     """Base marker class for all validation types."""

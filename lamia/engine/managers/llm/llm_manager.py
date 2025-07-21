@@ -9,7 +9,6 @@ from ...managers import Manager
 from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.adapters.retry.factory import AdapterFactory
-from lamia.adapters.retry.config import ExternalSystemRetryConfig
 from lamia.adapters.retry.errors import ExternalOperationError
 import logging
 
@@ -178,11 +177,8 @@ class LLMManager(Manager):
 
         await adapter.async_initialize()
 
-        # Create adapter with retries
-        adapter_with_retries = AdapterFactory.create_llm_adapter(
-            adapter,
-            retry_config=ExternalSystemRetryConfig(max_attempts=3),
-        )
+
+        adapter_with_retries = AdapterFactory.create_llm_adapter(adapter)
 
         # Cache for reuse
         self._adapter_cache[cache_key] = adapter_with_retries

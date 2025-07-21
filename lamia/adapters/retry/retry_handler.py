@@ -6,9 +6,10 @@ from typing import Optional, TypeVar, Dict, List, Callable, Awaitable, Union
 import time
 import asyncio
 
-from .config import ExternalSystemRetryConfig, ErrorCategory
-from .errors import ExternalOperationError, ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationFailedError
+from .errors import ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationFailedError
 from .defaults import get_default_config_for_adapter
+from lamia.types import ExternalOperationRetryConfig
+from lamia.adapters.retry.strategies import ErrorCategory
 
 T = TypeVar('T')
 
@@ -30,7 +31,7 @@ class RetryHandler:
     def __init__(
         self,
         adapter: Union["BaseLLMAdapter", "BaseFSAdapter"],
-        config: Optional[ExternalSystemRetryConfig] = None,
+        config: Optional[ExternalOperationRetryConfig] = None,
         collect_stats: bool = True
     ):
         """Initialize retry handler.

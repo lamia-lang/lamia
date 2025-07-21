@@ -34,13 +34,13 @@ class BaseLLMAdapter(ABC):
     def is_remote(cls) -> bool:
         """Return True if this adapter makes network calls, False for local."""
         pass
-    
+
     async def async_initialize(self) -> None:
         """Initialize any necessary asynchronous resources for the adapter.
 
         Subclasses that require asynchronous start-up (e.g. opening network
         sessions, loading local models) should override this method.  Adapters
-        that don’t need special preparation can rely on this default no-op
+        that don't need special preparation can rely on this default no-op
         implementation.
         """
         return
@@ -53,8 +53,12 @@ class BaseLLMAdapter(ABC):
     ) -> LLMResponse:
         """Generate a response from the LLM.
         
+        Pure adapter method - just implement the API call.
+        Business logic like error classification is handled by retry wrappers.
+        
         Args:
             prompt: The input prompt text
+            model: The LLM model configuration
             
         Returns:
             LLMResponse containing the generated text and metadata

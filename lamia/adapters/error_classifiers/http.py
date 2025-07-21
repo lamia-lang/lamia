@@ -2,7 +2,7 @@
 
 import re
 from .base import ErrorClassifier
-from ..retry.config import ErrorCategory
+from lamia.adapters.retry.strategies import ErrorCategory
 
 # HTTP Status Codes
 HTTP_TOO_MANY_REQUESTS = 429

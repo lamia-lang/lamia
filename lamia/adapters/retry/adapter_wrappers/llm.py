@@ -5,7 +5,7 @@ from typing import Optional
 from ...llm.base import BaseLLMAdapter
 from ...llm.base import LLMModel, LLMResponse
 from ..retry_handler import RetryHandler
-from ..config import ExternalSystemRetryConfig
+from lamia.types import ExternalOperationRetryConfig
 
 class RetryWrappedLLMAdapter(BaseLLMAdapter):
     """Adds retry capabilities to LLM adapters.
@@ -17,7 +17,7 @@ class RetryWrappedLLMAdapter(BaseLLMAdapter):
     def __init__(
         self,
         adapter: BaseLLMAdapter,
-        retry_config: Optional[ExternalSystemRetryConfig] = None,
+        retry_config: Optional[ExternalOperationRetryConfig] = None,
         collect_stats: bool = True
     ):
         """Initialize the retry wrapper.
@@ -29,8 +29,8 @@ class RetryWrappedLLMAdapter(BaseLLMAdapter):
         """
         self._adapter = adapter
         self._retry_handler = RetryHandler(
+            adapter=adapter,  # Pass adapter for intelligent defaults
             config=retry_config,
-            external_system_type="llm",  # Use LLM-optimized settings
             collect_stats=collect_stats
         )
 
