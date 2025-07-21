@@ -181,10 +181,8 @@ class LLMManager(Manager):
             attempts += 1
             try:
                 logger.debug(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
-                logger.debug(f"Prompt content: {current_prompt}")
                 response = await adapter.generate(current_prompt, model=model)
                 logger.debug(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}'")
-                logger.debug(f"Response content: {response.text}")
                 
                 # Validate the response
                 if validator is not None:
@@ -271,7 +269,6 @@ class LLMManager(Manager):
                 )
             except ExternalOperationError:
                 # Let external operation errors bubble up to the user
-                # These contain specific actionable information about what went wrong
                 raise
             except Exception as e:
                 # Continue to the next fallback model for other errors
