@@ -11,7 +11,7 @@ User Error Handling Guide:
 - ExternalOperationPermanentError: Don't retry, fix configuration/input
 - ExternalOperationRateLimitError: Retry later or reduce request frequency  
 - ExternalOperationTransientError: Safe to retry after a short delay
-- ExternalOperationRetryError: All retries exhausted, check service status
+- ExternalOperationRetriesExhaustedError: All retry attempts failed, check service status
 """
 
 from typing import List, Optional
@@ -41,24 +41,26 @@ class ExternalOperationError(Exception):
         self.retry_history = retry_history
         self.original_error = original_error
 
-class ExternalOperationRetryError(ExternalOperationError):
-    """Raised when an external operation fails after all retry attempts.
+class ExternalOperationRetriesExhaustedError(ExternalOperationError):
+    """Raised when all retry attempts have been exhausted without success.
     
-    This indicates that the operation was retried multiple times but never succeeded.
-    The service may be temporarily unavailable or experiencing issues.
+    This indicates that the operation was retried the maximum number of times
+    but never succeeded. The service may be experiencing extended downtime or issues.
     
     What to do:
     - Check the service status page (OpenAI, Anthropic, etc.)
-    - Wait a few minutes and try again
+    - Wait longer before trying again (service may be down)
     - Consider switching to a different model/service temporarily
     - Review retry_history to see the pattern of failures
+    - Check if this is a systemic issue or specific to your request
     
     Example:
         try:
             result = await lamia.run_async("Analyze this data")
-        except ExternalOperationRetryError as e:
-            print("Service appears to be down, trying again in 5 minutes...")
-            await asyncio.sleep(300)
+        except ExternalOperationRetriesExhaustedError as e:
+            print(f"All {len(e.retry_history)} retry attempts failed")
+            print("Service may be experiencing extended downtime")
+            # Consider alerting or switching to backup service
     """
     pass
 

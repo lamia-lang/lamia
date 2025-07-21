@@ -168,14 +168,19 @@ class Lamia:
         Args:
             command: The command to execute
             models: The models to use, if not provided, the default models will be used
-            validator_types: The types of validators to use, if not provided, the default validators will be used
+            return_type: The expected return type for validation
+            
         Returns:
-            str: Generated response text
+            LamiaResult: Generated response with result text and typed result
             
         Raises:
             RuntimeError: If engine fails to start
             MissingAPIKeysError: If API keys are missing for LLM requests
             ValueError: If validator fails
+            ExternalOperationPermanentError: If external service has permanent failure (API key issues, invalid requests)
+            ExternalOperationRateLimitError: If external service rate limits are exceeded
+            ExternalOperationTransientError: If external service has temporary failures (network issues, timeouts)
+            ExternalOperationRetriesExhaustedError: If external service fails after all retry attempts
         """
         # Run Python code if this is Python code
         try:
@@ -219,9 +224,22 @@ class Lamia:
         """
         Run a command synchronously.
         
+        Args:
+            command: The command to execute
+            models: The models to use, if not provided, the default models will be used
+            return_type: The expected return type for validation
+        
+        Returns:
+            LamiaResult: Generated response with result text and typed result
+        
         Raises:
             MissingAPIKeysError: If API keys are missing
             ValueError: If validator fails
+            ExternalOperationPermanentError: If external service has permanent failure (API key issues, invalid requests)
+            ExternalOperationRateLimitError: If external service rate limits are exceeded
+            ExternalOperationTransientError: If external service has temporary failures (network issues, timeouts)
+            ExternalOperationRetriesExhaustedError: If external service fails after all retry attempts
+            RuntimeError: If run() is called inside an async context
         """
         try:
             return asyncio.run(

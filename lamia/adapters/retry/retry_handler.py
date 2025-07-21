@@ -7,7 +7,7 @@ import time
 import asyncio
 
 from .config import ExternalSystemRetryConfig, ErrorCategory
-from .errors import ExternalOperationError, ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationRetryError
+from .errors import ExternalOperationError, ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationRetriesExhaustedError
 from .defaults import get_default_config_for_adapter
 
 T = TypeVar('T')
@@ -99,7 +99,7 @@ class RetryHandler:
                     elif error_category == ErrorCategory.TRANSIENT:
                         raise ExternalOperationTransientError(str(e), retry_history, e)
                     else:
-                        raise ExternalOperationRetryError(str(e), retry_history, e)
+                        raise ExternalOperationRetriesExhaustedError(str(e), retry_history, e)
 
                 delay = self._calculate_delay(attempts, error_category)
                 await asyncio.sleep(delay)

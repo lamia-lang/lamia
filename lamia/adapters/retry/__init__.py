@@ -4,7 +4,7 @@ from .retry_handler import RetryHandler
 from .config import ExternalSystemRetryConfig, ErrorCategory
 from .errors import (
     ExternalOperationError,
-    ExternalOperationRetryError, 
+    ExternalOperationRetriesExhaustedError, 
     ExternalOperationTransientError,
     ExternalOperationRateLimitError,
     ExternalOperationPermanentError
