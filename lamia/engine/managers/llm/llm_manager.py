@@ -9,11 +9,11 @@ from ...managers import Manager
 from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.adapters.retry.factory import RetriableAdapterFactory
-from lamia.errors import ExternalOperationError
-from lamia.errors import MissingAPIKeysError
+from lamia.errors import ExternalOperationError, MissingAPIKeysError
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class LLMManager(Manager):
     """Manages LLM adapters and only loads the ones that are actually needed."""
@@ -173,56 +173,56 @@ class LLMManager(Manager):
         prompt: str,
         validator: Optional[BaseValidator] = None,
         max_attempts: int = 1,  
-    ) -> ValidationResult:
-        errors = []
+    ) -> Optional[ValidationResult]:
+        """
+        Try to generate and validate a response with retries for this model.
+        
+        Returns:
+            ValidationResult if successful, None if all retries exhausted
+            
+        Raises:
+            ExternalOperationError: Bubbles up immediately (don't try other models)
+            Other exceptions: Programming errors bubble up immediately
+        """
         attempts = 0
         current_prompt = prompt
         while attempts < max_attempts:
             attempts += 1
-            try:
-                logger.debug(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
-                response = await adapter.generate(current_prompt, model=model)
-                logger.debug(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}'")
-                
-                # Validate the response
-                if validator is not None:
-                    validation_result = await validator.validate(response.text)
-                    if validation_result.is_valid:
-                        return validation_result
-                else:
-                    return ValidationResult(
-                        is_valid=True,
-                        raw_text=response.text,
-                        validated_text=response.text
-                    )
-                
-                logger.warning(
-                    f"Attempt {attempts}/{max_attempts} with model '{model.name}' failed validation: "
-                    f"{validation_result.error_message}"
+            
+            logger.debug(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
+            response = await adapter.generate(current_prompt, model=model)
+            logger.debug(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}'")
+            
+            # Validate the response
+            if validator is not None:
+                validation_result = await validator.validate(response.text)
+                if validation_result.is_valid:
+                    return validation_result
+            else:
+                return ValidationResult(
+                    is_valid=True,
+                    raw_text=response.text,
+                    validated_text=response.text
                 )
-                errors.append(validation_result.error_message)
+            
+            logger.warning(
+                f"Attempt {attempts}/{max_attempts} with model '{model.name}' failed validation: "
+                f"{validation_result.error_message}"
+            )
 
-                # Construct retry prompt based on context memory
-                # TODO: Maybe we need to send whole chat history, for telling about all errors that the model made?
-                if adapter.has_context_memory:
-                    # Only send the validation issue and hint
-                    retry_message = f"The previous response had an issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again."
-                    current_prompt = retry_message
-                else:
-                    # Resend the original prompt plus the validation issue and hint
-                    retry_message = f"Previous response failed validation. Issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again.\n\nOriginal prompt:\n{prompt}"
-                    current_prompt = retry_message
-            except ExternalOperationError:
-                # Let external operation errors bubble up to the user
-                # We don't want to continue with model chain retries on external operation errors
-                raise
-            except Exception as e:
-                logger.error(f"Attempt {attempts} failed with error: {str(e)}")
-                errors.append(str(e))
+            # Construct retry prompt based on context memory
+            # TODO: Maybe we need to send whole chat history, for telling about all errors that the model made?
+            if adapter.has_context_memory:
+                # Only send the validation issue and hint
+                retry_message = f"The previous response had an issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again."
+                current_prompt = retry_message
+            else:
+                # Resend the original prompt plus the validation issue and hint
+                retry_message = f"Previous response failed validation. Issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again.\n\nOriginal prompt:\n{prompt}"
+                current_prompt = retry_message
 
-        raise RuntimeError(
-            f"All attempts failed with {adapter.name}. Errors: {'; '.join(errors)}"
-        )
+        # All retries exhausted for this model
+        return None
 
     async def _execute_with_retries(
         self,
@@ -232,15 +232,15 @@ class LLMManager(Manager):
         """Execute the prompt with retry and fallback logic.
         
         Args:
-            primary_adapter: The primary LLM adapter to use
             prompt: The prompt to send
-            **kwargs: Additional parameters for generate()
+            validator: Optional validator to check the response
             
         Returns:
             ValidationResult from a successful attempt
             
         Raises:
-            RuntimeError: If all attempts fail
+            ExternalOperationError: If external system failures occur
+            RuntimeError: If all models in the chain fail
         """
         if validator is not None:
             initial_hints = validator.get_initial_hints()
@@ -248,6 +248,8 @@ class LLMManager(Manager):
         else:
             current_prompt = prompt
 
+        failed_models = []
+        
         for model_and_retries in self.config_provider.get_model_chain():
             model = model_and_retries.model
 
@@ -258,26 +260,27 @@ class LLMManager(Manager):
                 adapter = await self._create_adapter_from_config(model)
                 self._adapter_cache[model] = adapter
 
-            try:
-                logger.info(f"Trying model '{model.name}' with {model_and_retries.retries} max attempts")
-                return await self._generate_and_validate(
-                    adapter=adapter,
-                    model = model_and_retries.model,
-                    prompt=current_prompt,
-                    validator=validator,
-                    max_attempts=model_and_retries.retries,
-                )
-            except ExternalOperationError:
-                # Let external operation errors bubble up to the user
-                raise
-            except Exception as e:
-                # Continue to the next fallback model for other errors
-                logger.warning(f"Model {model.name} failed, trying next fallback: {str(e)}")
-                pass
+            logger.info(f"Trying model '{model.name}' with {model_and_retries.retries} max attempts")
+            
+            # This will either succeed (return ValidationResult), 
+            # exhaust retries (return None), or bubble up exceptions naturally
+            result = await self._generate_and_validate(
+                adapter=adapter,
+                model=model_and_retries.model,
+                prompt=current_prompt,
+                validator=validator,
+                max_attempts=model_and_retries.retries,
+            )
+            
+            if result is not None:
+                return result
+            
+            # This model exhausted retries, try next one
+            logger.warning(f"Model {model.name} exhausted all retries, trying next fallback")
+            failed_models.append(model.name)
                 
-        raise RuntimeError(
-            f"All attempts failed. Giving up."
-        )
+        # All models failed
+        raise RuntimeError(f"All models failed: {', '.join(failed_models)}")
 
     async def close(self):
         """Close and cleanup all managed adapters."""
