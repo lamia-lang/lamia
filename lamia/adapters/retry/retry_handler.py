@@ -7,7 +7,7 @@ import time
 import asyncio
 
 from .config import ExternalSystemRetryConfig, ErrorCategory
-from .errors import ExternalOperationError, ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationRetriesExhaustedError
+from .errors import ExternalOperationError, ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationFailedError
 from .defaults import get_default_config_for_adapter
 
 T = TypeVar('T')
@@ -99,7 +99,7 @@ class RetryHandler:
                     elif error_category == ErrorCategory.TRANSIENT:
                         raise ExternalOperationTransientError(str(e), retry_history, e)
                     else:
-                        raise ExternalOperationRetriesExhaustedError(str(e), retry_history, e)
+                        raise ExternalOperationFailedError(str(e), retry_history, e)
 
                 delay = self._calculate_delay(attempts, error_category)
                 await asyncio.sleep(delay)
@@ -129,9 +129,7 @@ def _get_error_classifier_for_adapter(adapter):
     """Get appropriate error classifier based on adapter type and characteristics."""
     from ..llm.base import BaseLLMAdapter
     from ..filesystem.base import BaseFSAdapter
-    from .classifiers.http import HttpErrorClassifier
-    from .classifiers.filesystem import FilesystemErrorClassifier
-    from .classifiers.self_hosted import SelfHostedLLMErrorClassifier
+    from ..error_classifiers import HttpErrorClassifier, FilesystemErrorClassifier, SelfHostedLLMErrorClassifier
     
     if isinstance(adapter, BaseLLMAdapter):
         if adapter.is_remote():

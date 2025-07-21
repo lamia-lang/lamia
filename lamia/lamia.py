@@ -180,7 +180,7 @@ class Lamia:
             ExternalOperationPermanentError: If external service has permanent failure (API key issues, invalid requests)
             ExternalOperationRateLimitError: If external service rate limits are exceeded
             ExternalOperationTransientError: If external service has temporary failures (network issues, timeouts)
-            ExternalOperationRetriesExhaustedError: If external service fails after all retry attempts
+            ExternalOperationFailedError: If external service fails with unclassified error
         """
         # Run Python code if this is Python code
         try:
@@ -238,7 +238,7 @@ class Lamia:
             ExternalOperationPermanentError: If external service has permanent failure (API key issues, invalid requests)
             ExternalOperationRateLimitError: If external service rate limits are exceeded
             ExternalOperationTransientError: If external service has temporary failures (network issues, timeouts)
-            ExternalOperationRetriesExhaustedError: If external service fails after all retry attempts
+            ExternalOperationFailedError: If external service fails with unclassified error
             RuntimeError: If run() is called inside an async context
         """
         try:

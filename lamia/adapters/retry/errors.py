@@ -11,7 +11,7 @@ User Error Handling Guide:
 - ExternalOperationPermanentError: Don't retry, fix configuration/input
 - ExternalOperationRateLimitError: Retry later or reduce request frequency  
 - ExternalOperationTransientError: Safe to retry after a short delay
-- ExternalOperationRetriesExhaustedError: All retry attempts failed, check service status
+- ExternalOperationFailedError: Unclassified failure, investigate specific error details
 """
 
 from typing import List, Optional
@@ -41,26 +41,26 @@ class ExternalOperationError(Exception):
         self.retry_history = retry_history
         self.original_error = original_error
 
-class ExternalOperationRetriesExhaustedError(ExternalOperationError):
-    """Raised when all retry attempts have been exhausted without success.
+class ExternalOperationFailedError(ExternalOperationError):
+    """Raised when external operation fails with unclassified error.
     
-    This indicates that the operation was retried the maximum number of times
-    but never succeeded. The service may be experiencing extended downtime or issues.
+    This is the fallback error for failures that don't fit into specific
+    categories (permanent, rate limit, transient). It indicates the operation
+    failed but the exact cause couldn't be determined from error classification.
     
     What to do:
-    - Check the service status page (OpenAI, Anthropic, etc.)
-    - Wait longer before trying again (service may be down)
-    - Consider switching to a different model/service temporarily
-    - Review retry_history to see the pattern of failures
-    - Check if this is a systemic issue or specific to your request
+    - Check the original_error for specific details
+    - Review retry_history to understand failure pattern  
+    - Consider if this is a service issue or request problem
+    - May require manual investigation of the underlying error
     
     Example:
         try:
-            result = await lamia.run_async("Analyze this data")
-        except ExternalOperationRetriesExhaustedError as e:
-            print(f"All {len(e.retry_history)} retry attempts failed")
-            print("Service may be experiencing extended downtime")
-            # Consider alerting or switching to backup service
+            result = await lamia.run_async("Generate text")
+        except ExternalOperationFailedError as e:
+            print(f"Operation failed: {e.original_error}")
+            print(f"Attempts made: {len(e.retry_history)}")
+            # Investigate the specific error details
     """
     pass
 
