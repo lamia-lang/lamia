@@ -10,6 +10,15 @@ model_chain:
     max_retries: 1
     temperature: 0.2
 
+# External operation retry configuration
+retry_config:
+  max_attempts: 3               # Maximum number of retry attempts
+  base_delay: 1.0              # Base delay in seconds between retries
+  max_delay: 60.0              # Maximum delay in seconds between retries
+  exponential_base: 2.0        # Exponential backoff multiplier
+  max_total_duration: 300      # Maximum total duration in seconds for all retries
+  enabled: true                # Whether retries are enabled globally
+
 # Model configurations
 providers:
   # OpenAI Configuration

@@ -95,6 +95,8 @@ class OllamaAdapter(BaseLLMAdapter):
     ) -> LLMResponse:
         """Generate a response using the Ollama model."""
         await self._ensure_session()
+
+        raise RuntimeError("Not implemented")
         
         # Ensure model is pulled
         if not self.ensure_ollama_model_pulled(model.get_model_name_without_provider()):

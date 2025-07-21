@@ -59,7 +59,7 @@ class RetryHandler:
 
         while True:
             try:
-                logger.info(f"External operation attempt {attempts} of {self.config.max_attempts}")
+                logger.debug(f"External operation attempt {attempts + 1} of {self.config.max_attempts}")
                 result = await operation()
                 
                 if self.stats:
@@ -89,6 +89,8 @@ class RetryHandler:
                     })
 
                 error_category = self.error_classifier.classify_error(e)
+                logger.debug(f"Error classified as {error_category} on attempt {attempts}: {type(e).__name__}")
+                
                 if error_category == ErrorCategory.PERMANENT or attempts >= self.config.max_attempts:
                     if self.stats:
                         self.stats.total_operations += 1
@@ -107,6 +109,7 @@ class RetryHandler:
                         raise ExternalOperationFailedError(str(e), retry_history, e)
 
                 delay = self._calculate_delay(attempts, error_category)
+                logger.info(f"Retrying in {delay:.2f}s due to {error_category} error (attempt {attempts}/{self.config.max_attempts})")
                 await asyncio.sleep(delay)
 
     def get_stats(self) -> Optional[RetryStats]:
@@ -127,7 +130,9 @@ class RetryHandler:
             delay *= 1.0  # Standard delay for transient errors
         
         # Cap at maximum delay
-        return min(delay, self.config.max_delay)
+        final_delay = min(delay, self.config.max_delay)
+        logger.debug(f"Calculated backoff delay: base={base_delay}s, multiplied={delay:.2f}s, final={final_delay:.2f}s")
+        return final_delay
 
 
 def _get_error_classifier_for_adapter(adapter):

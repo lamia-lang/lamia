@@ -9,7 +9,7 @@ from ...managers import Manager
 from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.adapters.retry.factory import RetriableAdapterFactory
-from lamia.adapters.retry.errors import ExternalOperationError
+from lamia.errors import ExternalOperationError
 from lamia.errors import MissingAPIKeysError
 import logging
 
@@ -180,9 +180,11 @@ class LLMManager(Manager):
         while attempts < max_attempts:
             attempts += 1
             try:
-                logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}':\n{current_prompt}")
+                logger.debug(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
+                logger.debug(f"Prompt content: {current_prompt}")
                 response = await adapter.generate(current_prompt, model=model)
-                logger.info(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}':\n{response.text}")
+                logger.debug(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}'")
+                logger.debug(f"Response content: {response.text}")
                 
                 # Validate the response
                 if validator is not None:
@@ -197,7 +199,7 @@ class LLMManager(Manager):
                     )
                 
                 logger.warning(
-                    f"Attempt {attempts}/{max_attempts} failed validation: "
+                    f"Attempt {attempts}/{max_attempts} with model '{model.name}' failed validation: "
                     f"{validation_result.error_message}"
                 )
                 errors.append(validation_result.error_message)
@@ -214,14 +216,14 @@ class LLMManager(Manager):
                     current_prompt = retry_message
             except ExternalOperationError:
                 # Let external operation errors bubble up to the user
-                # These contain specific information about what went wrong
+                # We don't want to continue with model chain retries on external operation errors
                 raise
             except Exception as e:
                 logger.error(f"Attempt {attempts} failed with error: {str(e)}")
                 errors.append(str(e))
 
         raise RuntimeError(
-            f"All {attempts} attempts failed with {adapter.name}. Errors: {'; '.join(errors)}"
+            f"All attempts failed with {adapter.name}. Errors: {'; '.join(errors)}"
         )
 
     async def _execute_with_retries(
@@ -259,6 +261,7 @@ class LLMManager(Manager):
                 self._adapter_cache[model] = adapter
 
             try:
+                logger.info(f"Trying model '{model.name}' with {model_and_retries.retries} max attempts")
                 return await self._generate_and_validate(
                     adapter=adapter,
                     model = model_and_retries.model,
