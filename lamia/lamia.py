@@ -38,11 +38,10 @@ class Lamia:
         self, 
         *models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], 
         api_keys: Optional[dict] = None, 
-        validators: Optional[List[BaseValidator]] = None,
         retry_config: Optional['ExternalOperationRetryConfig'] = None,
     ):
         # Initialize engine - ready to use immediately!
-        self._engine = LamiaEngine(self._build_config(models, api_keys, validators, retry_config))
+        self._engine = LamiaEngine(self._build_config(models, api_keys, retry_config))
         
         # Initialize command parser instance
         self._command_parser = None
@@ -135,7 +134,6 @@ class Lamia:
         self,
         models: Tuple[Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], ...],
         api_keys: Optional[dict], 
-        validator_types: Optional[List[Type[BaseValidator]]],
         retry_config: Optional[ExternalOperationRetryConfig],
     ) -> Dict[str, Any]:
 
@@ -168,7 +166,6 @@ class Lamia:
         # Assemble the final config dict
         config_dict: Dict[str, Any] = {
             "model_chain": models_and_retries,
-            "validator_types": validator_types or [],
             "api_keys": api_keys,
             "retry_config": retry_config,
         }    
@@ -180,8 +177,9 @@ class Lamia:
     async def run_async(
         self,
         command: str, 
-        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None, 
         return_type: Optional[Type[BaseType]] = None,
+        *,
+        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None, 
     ) -> LamiaResult:
         """
         Generate a response, trying Python code first, then LLM.
@@ -220,9 +218,8 @@ class Lamia:
         #    validator = get_return_type_from_str(current_parser.return_type)
 
         if models is not None:
+            print(f"models: {models}")
             self._engine.config_provider.override_model_chain_with(models)
-
-        
 
         response = await self._engine.execute(
             current_parser.command_type,
@@ -238,8 +235,9 @@ class Lamia:
     def run(
         self,
         command: str,
-        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None,
         return_type: Optional[Type[BaseType]] = None,
+        *,
+        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None,
     ) -> LamiaResult:
         """
         Run a command synchronously.
@@ -265,8 +263,8 @@ class Lamia:
             return asyncio.run(
                 self.run_async(
                     command,
-                    models,
                     return_type,
+                    models=models,
                 )
             )
         except RuntimeError as e:

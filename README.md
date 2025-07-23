@@ -14,10 +14,10 @@ A Python project for interpreting and interacting with various Large Language Mo
 
 - 🤖 Multi-model support (OpenAI, Anthropic, Ollama)
 - 🔄 Automatic fallback to alternative models
-- ✅ Built-in and custom validation system
-- 🛠 Configurable through YAML
+- ✅ Built-in and extensible validation system
+- 🛠 Highly configurable
 - 🔌 Extensible adapter architecture
-- 💻 Interactive CLI interface
+- 💻 Can be used though CLI interface and by Python scripts 
 
 ## Installation
 
@@ -48,6 +48,59 @@ The development installation includes:
 - `flake8`: For code linting
 
 ## Quick Start
+
+### Running from any python script
+
+```python
+from lamia import Lamia
+
+lamia = Lamia() # no LLM model is specified for teh session individual requests need to specify LLM model/s if they want to work with LLMs.
+
+# Model chain with retries and fallbacks
+ai_response = lamia.run(
+    "Generate an HTML file about neural networks",
+    "openai:gpt4o",      # Try GPT-4 first
+    "anthropic:claude",  # Fall back to Claude if GPT-4 fails
+    ("ollama:llama:7b", 2)  # Finally try Llama up to 2 times
+)
+
+lamia_with_model_chain = Lamia("ollama:llama:2b", "ollama:llama:7b")
+
+# Now we are Lamia's type system to validate response
+# Note, if we specify model chain here, the session's model chain ("ollama:llama:2b", "ollama:llama:7b") will be ignored for this particular request only
+ai_response = lamia.run(
+    "Generate a file about neural networks", HTML
+)
+
+#Full constructor with overriding retry_config that disables. retries ti fetch data from external systmes like LLMs when the first request fails. See "External System Retry Configuration" at the bottom if
+openai_key = ...
+anthropic_key = ...
+lamia_full_constructor = Lamia(("openai:gpt4o", 2), "anthropic:claude-3-sonnet-20240229", api_keys={"openai":openai_key, "anthropic":anthropic_key}, retry_config=ExternalOperationRetryConfig(max_attempts=1))
+
+responses = asyncio.gather(
+    lamia.run_async(
+        "Generate a file about neural networks", HTML, 
+    ),
+    lamia.run_async(
+        "Generate a file about LLMs", Markdown, models = "deepseek-r1:14b"
+    ),
+)
+
+class MyHTMLStructure(BaseModel):
+    h1: str
+    div: IconAndSubtitle
+    p: str
+
+class IconAndSubtitle(BaseModel):
+    icon: str
+    h2: str
+
+ai_response = lamia.run(
+    "Generate a file about neural networks", HTML[MyHTMLStructure]
+)
+```
+
+### Running a standalone service
 
 1. Create a configuration file (`config.yaml`) in your project root:
 
@@ -130,15 +183,13 @@ Lamia includes a robust validation system to ensure LLM outputs meet specific qu
 
 ### Quick Example
 
-```yaml
-# config.yaml
-validation:
-  enabled: true
-  validators:
-    - type: "json"
-      strict: false
-    - type: "length"
-      max_length: 1000
+```python
+
+Lamia(... Validators)
+
+run_async(... Validators)
+
+
 ```
 
 ### Available Validators
@@ -159,6 +210,39 @@ The validation documentation covers:
 - Advanced features like type conversion and error handling
 - Complete API reference and usage examples
 
+## Advanced Configuration
+
+### External System Retry Configuration
+
+Lamia automatically handles retries for external system operations (API calls, file operations, etc). The default behavior is well-tuned for different operation types:
+- Local operations: 1 attempt (no retries)
+- Network operations: 3 attempts with exponential backoff
+- LLM API calls: 5 attempts with longer delays
+
+You should only override this configuration if the default behavior doesn't meet your specific needs:
+
+```python
+from lamia import Lamia
+from datetime import timedelta
+
+# Custom external system retry configuration - only if defaults don't suit your needs
+# This is used to allow 10 mintes for the response and set ma attempts to 5
+retry_config = ExternalOperationRetryConfig(
+    max_attempts=5,                           # Maximum number of retry attempts
+    max_total_duration=timedelta(minutes=10)  # Maximum total time for all retries
+)
+
+# Initialize Lamia with custom retry configuration
+lamia = Lamia(retry_config=retry_config)
+```
+
+You might want to customize this for cases like:
+- Unreliable network conditions requiring more retries
+- Strict timeout requirements needing shorter retry durations
+- Special rate limit handling for your API quotas
+
+For most users, the default retry behavior will be appropriate, and you should focus on configuring your model chain retries in `run_async()`.
+
 ## Development
 
 1. Clone the repository
@@ -169,38 +253,6 @@ The validation documentation covers:
 4. Install development dependencies: `pip install -e ".[dev]"`
 5. Run tests: `pytest tests/`
 
-## Model Configuration
-
-You can configure each model in your `config.yaml`. For advanced control, you can specify whether a model supports context memory (chat history) using the `has_context_memory` property. This affects how Lamia handles retries and prompt construction for validation.
-
-Example:
-
-```yaml
-models:
-  ollama:
-    enabled: true
-    default_model: neural-chat
-    models:
-      - name: neural-chat
-        has_context_memory: true
-      - name: llama2
-        has_context_memory: false
-  openai:
-    enabled: true
-    default_model: gpt-3.5-turbo
-    models:
-      - gpt-3.5-turbo  # has_context_memory will be inferred as true
-      - text-davinci-003
-        has_context_memory: false  # override if needed
-```
-
-**Note:**
-- If `has_context_memory` is not set for a model, Lamia will use adapter-specific logic to infer whether the model supports context memory:
-  - **OpenAI:** Most `gpt-*` and `*turbo*` models are chat-based and support context memory. Legacy completion models (e.g., `text-davinci-003`) are stateless.
-  - **Anthropic:** All Claude models are chat-based and support context memory.
-  - **Ollama:** If the model name contains `chat` or `instruct`, context memory is assumed; otherwise, it is not.
-- You can always override the default by specifying `has_context_memory` in your config.
-
 ## License
 
-[MIT License](LICENSE)
+# TODO: ...

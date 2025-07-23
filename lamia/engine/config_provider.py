@@ -20,10 +20,6 @@ class ConfigProvider:
         # Make a defensive copy to ensure true immutability
         self._config = config.copy()
 
-    @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]):
-        return cls(config_dict)
-
     @property
     def config(self) -> Dict[str, Any]:
         """Get the raw config dictionary."""

@@ -38,55 +38,15 @@ class OllamaAdapter(BaseLLMAdapter):
         self.base_url = base_url.rstrip('/')
 
         # Start Ollama service if not running
-        if not self.start_ollama_service():
+        if not self._start_ollama_service():
             raise RuntimeError("Failed to start Ollama service")
         # Initialize session as None - will be created on first use
         self.session = None
 
-    def is_ollama_running(self) -> bool:
-        try:
-            response = requests.get(f"{self.base_url}/api/version", timeout=2)
-            return response.status_code == 200
-        except requests.exceptions.RequestException:
-            return False
-
-    def start_ollama_service(self) -> bool:
-        if self.is_ollama_running():
-            logger.info("✓ Ollama service is running")
-            return True
-        logger.info("Starting Ollama service...")
-        try:
-            subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            for i in range(30):
-                if self.is_ollama_running():
-                    logger.info("✓ Ollama service started successfully")
-                    return True
-                time.sleep(1)
-            logger.error("Timeout waiting for Ollama service to start")
-            return False
-        except FileNotFoundError:
-            logger.error("Ollama is not installed. Please install it first: https://ollama.ai/download")
-            return False
-        except Exception as e:
-            logger.error(f"Failed to start Ollama service: {str(e)}")
-            return False
-
-    def ensure_ollama_model_pulled(self, model_name: str) -> bool:
-        try:
-            response = requests.get(f"{self.base_url}/api/show", json={"name": model_name})
-            if response.status_code == 200:
-                return True
-            pull_response = requests.post(f"{self.base_url}/api/pull", json={"name": model_name})
-            return pull_response.status_code == 200
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to check/pull Ollama model: {str(e)}")
-            return False
-
-    async def _ensure_session(self):
-        """Ensure we have an active session."""
-        if self.session is None:
-            self.session = aiohttp.ClientSession()
-        return self.session
+    @property
+    def has_context_memory(self) -> bool:
+        """Check if the adapter has context memory."""
+        return False
 
     async def generate(
         self,
@@ -97,7 +57,7 @@ class OllamaAdapter(BaseLLMAdapter):
         await self._ensure_session()
         
         # Ensure model is pulled
-        if not self.ensure_ollama_model_pulled(model.get_model_name_without_provider()):
+        if not self._ensure_ollama_model_pulled(model.get_model_name_without_provider()):
             raise RuntimeError(f"Failed to pull Ollama model: {model.get_model_name_without_provider()}")
 
         # Prepare request payload
@@ -146,6 +106,51 @@ class OllamaAdapter(BaseLLMAdapter):
 
         except aiohttp.ClientError as e:
             raise ConnectionError(f"Failed to communicate with Ollama server: {str(e)}") from e
+
+    def _is_ollama_running(self) -> bool:
+        try:
+            response = requests.get(f"{self.base_url}/api/version", timeout=2)
+            return response.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
+
+    def _start_ollama_service(self) -> bool:
+        if self._is_ollama_running():
+            logger.info("✓ Ollama service is running")
+            return True
+        logger.info("Starting Ollama service...")
+        try:
+            subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            for i in range(30):
+                if self.is_ollama_running():
+                    logger.info("✓ Ollama service started successfully")
+                    return True
+                time.sleep(1)
+            logger.error("Timeout waiting for Ollama service to start")
+            return False
+        except FileNotFoundError:
+            logger.error("Ollama is not installed. Please install it first: https://ollama.ai/download")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to start Ollama service: {str(e)}")
+            return False
+
+    def _ensure_ollama_model_pulled(self, model_name: str) -> bool:
+        try:
+            response = requests.get(f"{self.base_url}/api/show", json={"name": model_name})
+            if response.status_code == 200:
+                return True
+            pull_response = requests.post(f"{self.base_url}/api/pull", json={"name": model_name})
+            return pull_response.status_code == 200
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to check/pull Ollama model: {str(e)}")
+            return False
+
+    async def _ensure_session(self):
+        """Ensure we have an active session."""
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+        return self.session
 
     async def close(self) -> None:
         """Close the aiohttp session."""

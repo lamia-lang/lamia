@@ -28,6 +28,11 @@ class HTMLStructureValidator(DocumentStructureValidator):
     @classmethod
     def name(cls) -> str:
         return "html_structure"
+    
+    @classmethod  
+    def file_type(cls) -> str:
+        """Return the file type name (e.g., 'MyFormat')"""
+        return "HTML"
 
     @property
     def initial_hint(self) -> str:

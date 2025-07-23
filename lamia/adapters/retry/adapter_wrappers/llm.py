@@ -49,6 +49,11 @@ class RetryingLLMAdapter(BaseLLMAdapter):
         """This method should not be called on the wrapper class."""
         raise NotImplementedError("This method should not be called on the wrapper class.")
     
+    @property
+    def has_context_memory(self) -> bool:
+        """Check if the adapter has context memory."""
+        return self._adapter.has_context_memory
+    
     async def generate(
         self,
         prompt: str,

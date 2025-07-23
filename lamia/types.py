@@ -17,7 +17,12 @@ class ExternalOperationRetryConfig:
 
 class BaseType(Generic[T, S]):
     """Base marker class for all validation types."""
-    pass
+    
+    def __class_getitem__(cls, params):
+        # Allow single parameter usage like HTML[MyModel]
+        if not isinstance(params, tuple):
+            params = (params, bool)  # Default S to bool
+        return super().__class_getitem__(params)
 
 class HTML(BaseType[T, S]):
     """Marker class for HTML validation types."""

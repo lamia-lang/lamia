@@ -185,7 +185,7 @@ class LLMManager(Manager):
             RuntimeError: If all models in the chain fail
         """
         if validator is not None:
-            initial_hints = validator.get_initial_hints()
+            initial_hints = validator.initial_hint
             current_prompt = f"{initial_hints}\n\n{prompt}"
         else:
             current_prompt = prompt
@@ -248,8 +248,10 @@ class LLMManager(Manager):
             attempts += 1
             
             logger.debug(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
+            logger.debug(f"Current prompt: {current_prompt}")
             response = await adapter.generate(current_prompt, model=model)
             logger.debug(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}'")
+            logger.debug(f"Response: {response.text}")
             
             # Validate the response
             if validator is not None:
