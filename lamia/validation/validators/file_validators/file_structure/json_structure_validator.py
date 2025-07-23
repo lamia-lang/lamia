@@ -32,47 +32,45 @@ class JSONStructureValidator(DocumentStructureValidator):
 
     @property
     def initial_hint(self) -> str:
-        if self.generate_hints:
-            # Handle case where no model is provided (regular JSON validation)
-            if self.model is None:
-                return "Please return only valid json, with no explanation or extra text."
-            
-            # Generate clean JSON structure with proper object formatting
-            structure_lines = self._describe_structure(self.model, strict_mode=self.strict)
-            json_structure = "{\n" + '\n'.join(f"  {line}" for line in structure_lines) + "\n}"
-            
-            schema_hint = self._get_model_schema_hint()
-            # Fix case sensitivity for json vs JSON
-            if self.strict:
-                schema_hint = schema_hint.replace("JSON format to be extracted from the JSON:", "json format to be extracted from the JSON:")
-            
-            # Add clean ordering information only for models with ordered fields
-            from ....utils.pydantic_utils import get_ordered_dict_fields
-            ordering_hint = ""
-            if get_ordered_dict_fields(self.model):
-                ordering_hint = self._generate_field_ordering_hint(self.model)
-            
-            if self.strict:
-                base_hint = (
-                    "Please ensure the json matches the required structure exactly.\n"
-                    "Expected structure:\n"
-                    f"{json_structure}\n"
-                    f"{schema_hint}"
-                )
-            else:
-                base_hint = (
-                    "Please ensure the JSON contains the required fields with the correct types.\n"
-                    "The fields can be nested within other JSON objects.\n"
-                    "Required fields that must be present:\n"
-                    f"{json_structure}\n"
-                    f"{schema_hint}"
-                )
-            
-            # Add ordering hint if present
-            if ordering_hint:
-                return base_hint + "\n\n" + ordering_hint
-            return base_hint
-        return ""
+        # Handle case where no model is provided (regular JSON validation)
+        if self.model is None:
+            return "Please return only valid json, with no explanation or extra text."
+        
+        # Generate clean JSON structure with proper object formatting
+        structure_lines = self._describe_structure(self.model, strict_mode=self.strict)
+        json_structure = "{\n" + '\n'.join(f"  {line}" for line in structure_lines) + "\n}"
+        
+        schema_hint = self._get_model_schema_hint()
+        # Fix case sensitivity for json vs JSON
+        if self.strict:
+            schema_hint = schema_hint.replace("JSON format to be extracted from the JSON:", "json format to be extracted from the JSON:")
+        
+        # Add clean ordering information only for models with ordered fields
+        from ....utils.pydantic_utils import get_ordered_dict_fields
+        ordering_hint = ""
+        if get_ordered_dict_fields(self.model):
+            ordering_hint = self._generate_field_ordering_hint(self.model)
+        
+        if self.strict:
+            base_hint = (
+                "Please ensure the json matches the required structure exactly.\n"
+                "Expected structure:\n"
+                f"{json_structure}\n"
+                f"{schema_hint}"
+            )
+        else:
+            base_hint = (
+                "Please ensure the JSON contains the required fields with the correct types.\n"
+                "The fields can be nested within other JSON objects.\n"
+                "Required fields that must be present:\n"
+                f"{json_structure}\n"
+                f"{schema_hint}"
+            )
+        
+        # Add ordering hint if present
+        if ordering_hint:
+            return base_hint + "\n\n" + ordering_hint
+        return base_hint
 
     def extract_payload(self, response: str) -> str:
         match = re.search(r'({[\s\S]*})|\[[\s\S]*\]', response)

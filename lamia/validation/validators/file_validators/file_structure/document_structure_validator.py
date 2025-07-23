@@ -111,6 +111,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
         
         self.model = model
         self.type_matcher = TypeMatcher(strict=strict, get_text_func=self.get_text)
+        self.strict = strict
+        self.generate_hints = generate_hints
 
     def _validate_no_raw_ordered_dict_patterns(self, obj: Any, context: str = "model") -> None:
         """Recursively validate that OrderedDict is not used as entire model or in type annotations.
