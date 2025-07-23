@@ -1,4 +1,4 @@
-from typing import Type, get_args, get_origin
+from typing import Type, get_args, get_origin, Literal
 from lamia.types import BaseType, HTML, YAML, JSON, XML, CSV, Markdown, BaseModel
 from lamia.validation.base import BaseValidator
 from lamia.validation.validators.file_validators.xml_validator import XMLValidator
@@ -39,7 +39,23 @@ def create_validator(validation_type: Type[BaseType], generate_hints: bool = Fal
             model = args[0]
             strict = True
         elif len(args) == 2:
-            model, strict = args
+            model = args[0]
+            strict_arg = args[1]
+            # Handle the case where bool class is passed instead of boolean value
+            if strict_arg is bool:
+                strict = True  # Default to True when bool class is passed
+            elif isinstance(strict_arg, bool):
+                strict = strict_arg
+            elif hasattr(strict_arg, '__origin__') and strict_arg.__origin__ is Literal:
+                # Handle Literal[True] or Literal[False]
+                literal_args = get_args(strict_arg)
+                if len(literal_args) == 1 and isinstance(literal_args[0], bool):
+                    strict = literal_args[0]
+                else:
+                    raise ValueError(f"Invalid literal type for strict parameter: {strict_arg}")
+            else:
+                # Try to convert to boolean if it's a literal value
+                strict = bool(strict_arg)
         else:
             raise ValueError(f"Invalid type: {validation_type}")
     
@@ -63,37 +79,37 @@ def create_validator(validation_type: Type[BaseType], generate_hints: bool = Fal
     
 def _create_html_validator(model, strict: bool, generate_hints: bool) -> BaseValidator:
     if model is not None:
-        return HTMLStructureValidator(model=model, strict=strict)
+        return HTMLStructureValidator(model=model, strict=strict, generate_hints=generate_hints)
     else:
         return HTMLValidator(generate_hints=generate_hints)
 
 def _create_yaml_validator(model, strict: bool, generate_hints: bool) -> BaseValidator:
     if model is not None:
-        return YAMLStructureValidator(model=model, strict=strict)
+        return YAMLStructureValidator(model=model, strict=strict, generate_hints=generate_hints)
     else:
         return YAMLValidator(generate_hints=generate_hints)
 
 def _create_json_validator(model, strict: bool, generate_hints: bool) -> BaseValidator:
     if model is not None:
-        return JSONStructureValidator(model=model, strict=strict)
+        return JSONStructureValidator(model=model, strict=strict, generate_hints=generate_hints)
     else:
         return JSONValidator(generate_hints=generate_hints)
     
 def _create_xml_validator(model, strict: bool, generate_hints: bool) -> BaseValidator:
     if model is not None:
-        return XMLStructureValidator(model=model, strict=strict)
+        return XMLStructureValidator(model=model, strict=strict, generate_hints=generate_hints)
     else:
         return XMLValidator(generate_hints=generate_hints)
     
 def _create_csv_validator(model, strict: bool, generate_hints: bool) -> BaseValidator:
     if model is not None:
-        return CSVStructureValidator(model=model, strict=strict)
+        return CSVStructureValidator(model=model, strict=strict, generate_hints=generate_hints)
     else:
         return CSVValidator(generate_hints=generate_hints)
     
 def _create_markdown_validator(model, strict: bool, generate_hints: bool) -> BaseValidator:
     if model is not None:
-        return MarkdownStructureValidator(model=model, strict=strict)
+        return MarkdownStructureValidator(model=model, strict=strict, generate_hints=generate_hints)
     else:
         return MarkdownValidator(generate_hints=generate_hints)
     

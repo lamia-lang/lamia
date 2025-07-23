@@ -10,7 +10,6 @@ class WebManager(Manager):
 
     async def execute(self, web_url: str, validator: Optional[BaseValidator] = None) -> ValidationResult:
         web_content = requests.get(web_url).text
-        print("web_content", web_content)
 
         validation_result = await validator.validate(web_content)
 

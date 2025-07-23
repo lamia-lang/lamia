@@ -222,7 +222,12 @@ class LLMManager(Manager):
             failed_models.append(model.name)
                 
         # All models failed
-        raise RuntimeError(f"All models failed: {', '.join(failed_models)}")
+        return ValidationResult(
+            is_valid=False,
+            raw_text="",
+            validated_text="",
+            error_message=f"All models failed: {', '.join(failed_models)}"
+        )
 
     async def _generate_and_validate(
         self,
@@ -247,10 +252,10 @@ class LLMManager(Manager):
         while attempts < max_attempts:
             attempts += 1
             
-            logger.debug(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
+            logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
             logger.debug(f"Current prompt: {current_prompt}")
             response = await adapter.generate(current_prompt, model=model)
-            logger.debug(f"[Lamia][Answer][Attempt {attempts}] Response from model '{model.name}'")
+            logger.info(f"[Lamia][Answer][Attempt {attempts}] Received response from model '{model.name}'")
             logger.debug(f"Response: {response.text}")
             
             # Validate the response

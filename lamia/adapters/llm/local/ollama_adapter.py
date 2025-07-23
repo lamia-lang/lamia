@@ -122,7 +122,7 @@ class OllamaAdapter(BaseLLMAdapter):
         try:
             subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             for i in range(30):
-                if self.is_ollama_running():
+                if self._is_ollama_running():
                     logger.info("✓ Ollama service started successfully")
                     return True
                 time.sleep(1)

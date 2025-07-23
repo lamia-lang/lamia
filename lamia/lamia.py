@@ -126,7 +126,6 @@ class Lamia:
         # Unpack the models list for the constructor
         return cls(
             *models,
-            validators=[],
             retry_config=retry_config
         )
 
@@ -205,10 +204,10 @@ class Lamia:
             result = run_python_code(command, mode='interactive')
             return LamiaResult(result_text=str(result) if result is not None else "", typed_result=result, executor="python")
         except SyntaxError as e:
-            logger.error(f"Syntax error: {e} in command: {command}")
+            logger.debug(f"Syntax error: {e} in command: {command}")
             pass
         except Exception as e:
-            logger.error(f"Python code execution failed: {e}")
+            logger.debug(f"Python code execution failed: {e}")
             pass
 
         # Always create a fresh parser for each command to avoid reusing the
@@ -218,7 +217,6 @@ class Lamia:
         #    validator = get_return_type_from_str(current_parser.return_type)
 
         if models is not None:
-            print(f"models: {models}")
             self._engine.config_provider.override_model_chain_with(models)
 
         response = await self._engine.execute(
