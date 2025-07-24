@@ -258,12 +258,17 @@ class LLMManager(Manager):
             if validator is not None:
                 validation_result = await validator.validate(response.text)
                 if validation_result.is_valid:
+                    # Add model and usage information to the validation result
+                    validation_result.model = response.model
+                    validation_result.usage = response.usage
                     return validation_result
             else:
                 return ValidationResult(
                     is_valid=True,
                     raw_text=response.text,
-                    validated_text=response.text
+                    validated_text=response.text,
+                    model=response.model,
+                    usage=response.usage
                 )
             
             # Keep validation failures as WARNING but only log once per model, not per attempt

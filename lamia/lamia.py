@@ -21,6 +21,8 @@ class LamiaResult:
     result_text: str
     typed_result: Any
     executor: str
+    model: Optional[str] = None
+    usage: Optional[Dict[str, int]] = None
 
 class Lamia:
     """
@@ -229,7 +231,13 @@ class Lamia:
         if models is not None:
             self._engine.config_provider.reset_model_chain()
 
-        return LamiaResult(result_text=response.raw_text, typed_result=response.result_type, executor=current_parser.command_type)
+        return LamiaResult(
+            result_text=response.raw_text, 
+            typed_result=response.result_type, 
+            executor=current_parser.command_type,
+            model=response.model,
+            usage=response.usage
+        )
 
     def run(
         self,

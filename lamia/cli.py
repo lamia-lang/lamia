@@ -92,8 +92,31 @@ async def interactive_mode(lamia: Lamia):
                 print("----------------------------------------")
                 print(result.result_text)
                 print("----------------------------------------")
-                # Add model info if available
-                print(f"Executed by: {result.executor}")
+                
+                # Show detailed info for LLM responses
+                if hasattr(result, 'executor') and str(result.executor) == "CommandType.LLM":
+                    if result.model:
+                        print(f"Model: {result.model}")
+                    if result.usage:
+                        # Format usage similar to the README example
+                        usage_parts = []
+                        if 'prompt_tokens' in result.usage:
+                            usage_parts.append(f"'prompt_tokens': {result.usage['prompt_tokens']}")
+                        elif 'input_tokens' in result.usage:
+                            usage_parts.append(f"'prompt_tokens': {result.usage['input_tokens']}")
+                        
+                        if 'completion_tokens' in result.usage:
+                            usage_parts.append(f"'completion_tokens': {result.usage['completion_tokens']}")
+                        elif 'output_tokens' in result.usage:
+                            usage_parts.append(f"'completion_tokens': {result.usage['output_tokens']}")
+                        
+                        if 'total_tokens' in result.usage:
+                            usage_parts.append(f"'total_tokens': {result.usage['total_tokens']}")
+                        
+                        if usage_parts:
+                            print(f"Tokens used: {{{', '.join(usage_parts)}}}")
+                else:
+                    print(f"Executed by: {result.executor}")
         except KeyboardInterrupt:
             logger.info("\n\nGoodbye! 👋")
             break

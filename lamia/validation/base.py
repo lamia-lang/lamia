@@ -14,6 +14,8 @@ class ValidationResult:
         validated_text: The valid, extracted part of the response (e.g., document without LLM talking).
         result_type: The validated and resolved type (e.g., parsed Pydantic model or atomic type value).
         info_loss: Optional dict or structure describing info-losing type conversions (e.g., float->int truncation).
+        model: The model name used for LLM responses.
+        usage: Token usage information for LLM responses.
     """
     is_valid: bool
     error_message: Optional[str] = None
@@ -22,6 +24,8 @@ class ValidationResult:
     validated_text: Optional[str] = None
     result_type: Optional[Any] = None
     info_loss: Optional[dict] = None
+    model: Optional[str] = None
+    usage: Optional[Dict[str, int]] = None
 
 class BaseValidator(ABC):
     """Base class for response validators.
