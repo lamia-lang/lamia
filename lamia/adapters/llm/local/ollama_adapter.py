@@ -36,6 +36,7 @@ class OllamaAdapter(BaseLLMAdapter):
             model: Name of the Ollama model to use (must be pulled first)
         """
         self.base_url = base_url.rstrip('/')
+        self.ollama_process = None  # Track the process we start
 
         # Start Ollama service if not running
         if not self._start_ollama_service():
@@ -120,7 +121,7 @@ class OllamaAdapter(BaseLLMAdapter):
             return True
         logger.info("Starting Ollama service...")
         try:
-            subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.ollama_process = subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             for i in range(30):
                 if self._is_ollama_running():
                     logger.info("✓ Ollama service started successfully")
@@ -153,7 +154,24 @@ class OllamaAdapter(BaseLLMAdapter):
         return self.session
 
     async def close(self) -> None:
-        """Close the aiohttp session."""
+        """Close the aiohttp session and terminate Ollama process if we started it."""
         if self.session:
             await self.session.close()
             self.session = None
+        
+        # Terminate the Ollama process if we started it
+        if self.ollama_process:
+            try:
+                self.ollama_process.terminate()
+                # Give it a moment to terminate gracefully
+                try:
+                    self.ollama_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    # Force kill if it doesn't terminate gracefully
+                    self.ollama_process.kill()
+                    self.ollama_process.wait()
+                logger.info("✓ Ollama process terminated")
+            except Exception as e:
+                logger.warning(f"Failed to terminate Ollama process: {e}")
+            finally:
+                self.ollama_process = None

@@ -332,5 +332,23 @@ class Lamia:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit"""
-        # Engine cleans up automatically via __del__
-        pass
+        await self._engine.cleanup()
+
+    def __del__(self):
+        """Clean up resources when the Lamia instance is destroyed."""
+        try:
+            # Try to run cleanup in a new event loop if no loop is running
+            import asyncio
+            try:
+                # Check if there's already a running event loop
+                loop = asyncio.get_running_loop()
+                # There's a running loop, so we can't call asyncio.run()
+                # The cleanup will need to be handled by the user manually
+                # or through the async context manager
+                logger.warning("Lamia instance destroyed while event loop is running. "
+                             "Consider using 'async with lamia:' or manually calling 'await lamia._engine.cleanup()'")
+            except RuntimeError:
+                # No running event loop, safe to create a new one
+                asyncio.run(self._engine.cleanup())
+        except Exception as e:
+            logger.warning(f"Error during Lamia cleanup: {e}")

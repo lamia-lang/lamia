@@ -74,6 +74,13 @@ class LamiaEngine:
         """Get recent validation results from the validation manager."""
         return self.validation_manager.get_recent_results(limit)
 
+    async def cleanup(self):
+        """Cleanup all managed resources asynchronously."""
+        try:
+            await self.manager_factory.close_all()
+        except Exception as e:
+            logger.warning(f"Error during engine cleanup: {e}")
+
     def __del__(self):
         """Cleanup is now handled automatically by individual components."""
         # No more complex async cleanup needed!
