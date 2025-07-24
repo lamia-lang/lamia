@@ -5,9 +5,29 @@ import logging
 import subprocess
 import requests
 import time
+import sys
+import asyncio
+import weakref
+import atexit
 from ..base import BaseLLMAdapter, LLMResponse, LLMModel
 
 logger = logging.getLogger(__name__)
+
+# Global registry to track instances for cleanup
+_active_instances = weakref.WeakSet()
+
+def _cleanup_all_instances():
+    """Cleanup function called at exit."""
+    for instance in list(_active_instances):
+        try:
+            if hasattr(instance, 'session') and instance.session and not instance.session.closed:
+                instance.session.connector.close()
+            if hasattr(instance, 'ollama_process') and instance.ollama_process:
+                instance.ollama_process.terminate()
+        except Exception:
+            pass
+
+atexit.register(_cleanup_all_instances)
 
 class OllamaAdapter(BaseLLMAdapter):
     """Adapter for local Ollama models.
@@ -42,6 +62,9 @@ class OllamaAdapter(BaseLLMAdapter):
         if not self._start_ollama_service():
             raise RuntimeError("Failed to start Ollama service")
         # Initialize session as None - will be created on first use
+        
+        # Register this instance for cleanup
+        _active_instances.add(self)
         self.session = None
 
     @property
@@ -175,3 +198,31 @@ class OllamaAdapter(BaseLLMAdapter):
                 logger.warning(f"Failed to terminate Ollama process: {e}")
             finally:
                 self.ollama_process = None
+
+    def __del__(self):
+        """Ensure cleanup during garbage collection."""
+        # Check if Python is shutting down
+        if sys.meta_path is None:
+            return
+            
+        # Close session if it exists and is not already closed
+        if hasattr(self, 'session') and self.session and not self.session.closed:
+            try:
+                # Try to close the session if no event loop is running
+                try:
+                    asyncio.get_running_loop()
+                    # Event loop is running, can't use asyncio.run()
+                    # The session will be cleaned up by the main cleanup chain
+                except RuntimeError:
+                    # No running event loop, safe to create one
+                    asyncio.run(self.session.close())
+            except Exception:
+                pass
+        
+        # Kill ollama process if it exists
+        if hasattr(self, 'ollama_process') and self.ollama_process:
+            try:
+                self.ollama_process.terminate()
+                self.ollama_process = None
+            except Exception:
+                pass

@@ -1,5 +1,6 @@
 from lamia.engine.engine import LamiaEngine
 import asyncio
+import sys
 from typing import Any, Optional, List, Dict, Union, Tuple
 from lamia.interpreter.python_runner import run_python_code
 from lamia.command_parser import CommandParser
@@ -338,7 +339,6 @@ class Lamia:
         """Clean up resources when the Lamia instance is destroyed."""
         try:
             # Try to run cleanup in a new event loop if no loop is running
-            import asyncio
             try:
                 # Check if there's already a running event loop
                 loop = asyncio.get_running_loop()
