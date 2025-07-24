@@ -222,12 +222,7 @@ class LLMManager(Manager):
             failed_models.append(model.name)
                 
         # All models failed
-        return ValidationResult(
-            is_valid=False,
-            raw_text="",
-            validated_text="",
-            error_message=f"All models failed: {', '.join(failed_models)}"
-        )
+        raise ValueError(f"All models failed: {', '.join(failed_models)}")
 
     async def _generate_and_validate(
         self,
