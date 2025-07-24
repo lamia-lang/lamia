@@ -4,7 +4,7 @@ from lamia.validation.base import ValidationResult, BaseValidator
 from typing import Optional
 
 class FSManager(Manager):
-    def __init__(self, config_provider: ConfigProvider, validator: BaseValidator):
+    def __init__(self, config_provider: ConfigProvider):
         self.config_provider = config_provider
 
     async def execute(self, file_path: str, validator: Optional[BaseValidator] = None) -> ValidationResult:

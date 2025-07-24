@@ -51,7 +51,8 @@ class LamiaEngine:
         if return_type is not None:
             validator = self.validator_factory.get_validator(
                     command_type, 
-                    return_type
+                    return_type,
+                    validation_manager=self.validation_manager
                 )
             # Check contracts for non-built-in validators
             validator_type = type(validator)

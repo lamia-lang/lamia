@@ -15,6 +15,7 @@ from lamia.lamia import Lamia
 from lamia.errors import MissingAPIKeysError
 from lamia.utils import scaffold
 from lamia.utils.cli_styling import setup_cli_logging
+from lamia.command_types import CommandType
 
 logger = logging.getLogger(__name__)
 
@@ -94,29 +95,32 @@ async def interactive_mode(lamia: Lamia):
                 print("----------------------------------------")
                 
                 # Show detailed info for LLM responses
-                if hasattr(result, 'executor') and str(result.executor) == "CommandType.LLM":
-                    if result.model:
-                        print(f"Model: {result.model}")
-                    if result.usage:
-                        # Format usage similar to the README example
-                        usage_parts = []
-                        if 'prompt_tokens' in result.usage:
-                            usage_parts.append(f"'prompt_tokens': {result.usage['prompt_tokens']}")
-                        elif 'input_tokens' in result.usage:
-                            usage_parts.append(f"'prompt_tokens': {result.usage['input_tokens']}")
+                if result.execution_context.command_type == CommandType.LLM:
+                    if result.execution_context:
+                        print(f"Model: {result.execution_context.data_provider_name}")
                         
-                        if 'completion_tokens' in result.usage:
-                            usage_parts.append(f"'completion_tokens': {result.usage['completion_tokens']}")
-                        elif 'output_tokens' in result.usage:
-                            usage_parts.append(f"'completion_tokens': {result.usage['output_tokens']}")
-                        
-                        if 'total_tokens' in result.usage:
-                            usage_parts.append(f"'total_tokens': {result.usage['total_tokens']}")
-                        
-                        if usage_parts:
-                            print(f"Tokens used: {{{', '.join(usage_parts)}}}")
+                        # Extract usage from metadata if available
+                        if result.execution_context.metadata and "usage" in result.execution_context.metadata:
+                            usage = result.execution_context.metadata["usage"]
+                            # Format usage similar to the README example
+                            usage_parts = []
+                            if 'prompt_tokens' in usage:
+                                usage_parts.append(f"'prompt_tokens': {usage['prompt_tokens']}")
+                            elif 'input_tokens' in usage:
+                                usage_parts.append(f"'prompt_tokens': {usage['input_tokens']}")
+                            
+                            if 'completion_tokens' in usage:
+                                usage_parts.append(f"'completion_tokens': {usage['completion_tokens']}")
+                            elif 'output_tokens' in usage:
+                                usage_parts.append(f"'completion_tokens': {usage['output_tokens']}")
+                            
+                            if 'total_tokens' in usage:
+                                usage_parts.append(f"'total_tokens': {usage['total_tokens']}")
+                            
+                            if usage_parts:
+                                print(f"Tokens used: {{{', '.join(usage_parts)}}}")
                 else:
-                    print(f"Executed by: {result.executor}")
+                    print(f"Executed by: {result.execution_context.command_type}")
         except KeyboardInterrupt:
             logger.info("\n\nGoodbye! 👋")
             break

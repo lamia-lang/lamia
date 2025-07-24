@@ -1,6 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 from dataclasses import dataclass
+from lamia.engine.validation_manager import ValidationManager
+from lamia.command_types import CommandType
+
+@dataclass
+class ExecutionContext:
+    """Generic context for tracking execution across different domains."""
+    
+    data_provider_name: str  # e.g., "openai:gpt-4o", "selenium", "local_fs"
+    command_type: CommandType
+    metadata: Optional[Dict[str, Union[str, int, float, bool]]] = None  # Domain-specific additional info
 
 @dataclass
 class ValidationResult:
@@ -14,8 +24,7 @@ class ValidationResult:
         validated_text: The valid, extracted part of the response (e.g., document without LLM talking).
         result_type: The validated and resolved type (e.g., parsed Pydantic model or atomic type value).
         info_loss: Optional dict or structure describing info-losing type conversions (e.g., float->int truncation).
-        model: The model name used for LLM responses.
-        usage: Token usage information for LLM responses.
+        execution_context: Context information about how this result was generated.
     """
     is_valid: bool
     error_message: Optional[str] = None
@@ -24,8 +33,7 @@ class ValidationResult:
     validated_text: Optional[str] = None
     result_type: Optional[Any] = None
     info_loss: Optional[dict] = None
-    model: Optional[str] = None
-    usage: Optional[Dict[str, int]] = None
+    execution_context: Optional[ExecutionContext] = None
 
 class BaseValidator(ABC):
     """Base class for response validators.
@@ -33,9 +41,10 @@ class BaseValidator(ABC):
     Subclasses should implement both validate_strict (forgiving) and validate_permissive (strict) methods.
     The __call__ method dispatches to the correct method based on the strict flag.
     """
-    def __init__(self, strict: bool = True, generate_hints: bool = False):
+    def __init__(self, strict: bool = True, generate_hints: bool = False, validation_manager: Optional['ValidationManager'] = None):
         self.strict = strict
         self.generate_hints = generate_hints
+        self.validation_manager = validation_manager
         cls = self.__class__
         has_validate = cls.validate is not BaseValidator.validate
         has_strict = cls.validate_strict is not BaseValidator.validate_strict
@@ -45,7 +54,14 @@ class BaseValidator(ABC):
         if not (has_validate or (has_strict and has_perm)):
             raise TypeError("Must implement either validate() or both validate_strict and validate_permissive.")
 
-    async def validate(self, response: str, **kwargs) -> ValidationResult:
+    async def validate(self, response: str, execution_context: Optional[ExecutionContext] = None, **kwargs) -> ValidationResult:
+        """Validate response and track intermediate attempts if validation_manager is available.
+        
+        Args:
+            response: The response text to validate
+            execution_context: Optional context for tracking (provider name, command type, metadata)
+            **kwargs: Additional validation parameters
+        """
         cls = self.__class__
         # If validate is overridden, use it
         if cls.validate is not BaseValidator.validate:
@@ -57,6 +73,16 @@ class BaseValidator(ABC):
             result = await self.validate_permissive(response, **kwargs)
 
         result.raw_text = response
+        result.execution_context = execution_context
+        
+        # Track intermediate validation attempt if manager is available
+        if self.validation_manager and execution_context:
+            self.validation_manager.record_intermediate_validation_attempt(
+                provider_name=execution_context.data_provider_name,
+                is_successful=result.is_valid,
+                command_type=execution_context.command_type
+            )
+        
         return result
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:

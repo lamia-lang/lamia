@@ -7,9 +7,10 @@ from lamia.adapters.llm.base import BaseLLMAdapter
 from ...config_provider import ConfigProvider
 from ...managers import Manager
 from .providers import ProviderRegistry
-from lamia.validation.base import ValidationResult, BaseValidator
+from lamia.validation.base import ValidationResult, BaseValidator, ExecutionContext
 from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.errors import ExternalOperationError, MissingAPIKeysError
+from lamia.command_types import CommandType
 import logging
 
 logger = logging.getLogger(__name__)
@@ -256,19 +257,32 @@ class LLMManager(Manager):
             
             # Validate the response
             if validator is not None:
-                validation_result = await validator.validate(response.text)
+                # Create execution context for tracking
+                execution_context = ExecutionContext(
+                    data_provider_name=model.name,
+                    command_type=CommandType.LLM,
+                    metadata={"usage": response.usage, "model": response.model}
+                )
+                
+                validation_result = await validator.validate(
+                    response.text, 
+                    execution_context=execution_context
+                )
                 if validation_result.is_valid:
-                    # Add model and usage information to the validation result
-                    validation_result.model = response.model
-                    validation_result.usage = response.usage
                     return validation_result
             else:
+                # Create execution context even when no validator is used
+                execution_context = ExecutionContext(
+                    data_provider_name=model.name,
+                    command_type=CommandType.LLM,
+                    metadata={"usage": response.usage, "model": response.model}
+                )
+                
                 return ValidationResult(
                     is_valid=True,
                     raw_text=response.text,
                     validated_text=response.text,
-                    model=response.model,
-                    usage=response.usage
+                    execution_context=execution_context
                 )
             
             # Keep validation failures as WARNING but only log once per model, not per attempt

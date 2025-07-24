@@ -1,7 +1,7 @@
 from lamia.engine.engine import LamiaEngine
 import asyncio
 import sys
-from typing import Any, Optional, List, Dict, Union, Tuple
+from typing import Any, Optional, List, Dict, Union, Tuple, TYPE_CHECKING
 from lamia.interpreter.python_runner import run_python_code
 from lamia.command_parser import CommandParser
 from dataclasses import dataclass
@@ -9,7 +9,7 @@ from lamia.engine.config_provider import ConfigProvider
 import logging
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
-from lamia.validation.base import BaseValidator
+from lamia.validation.base import BaseValidator, ExecutionContext
 from lamia.types import BaseType, ExternalOperationRetryConfig
 from typing import Type
 from datetime import timedelta
@@ -20,9 +20,7 @@ logger = logging.getLogger(__name__)
 class LamiaResult:
     result_text: str
     typed_result: Any
-    executor: str
-    model: Optional[str] = None
-    usage: Optional[Dict[str, int]] = None
+    execution_context: ExecutionContext
 
 class Lamia:
     """
@@ -202,10 +200,15 @@ class Lamia:
             ExternalOperationTransientError: If external service has temporary failures (network issues, timeouts)
             ExternalOperationFailedError: If external service fails with unclassified error
         """
-        # Run Python code if this is Python code
+        # Run Python code
         try:
             result = run_python_code(command, mode='interactive')
-            return LamiaResult(result_text=str(result) if result is not None else "", typed_result=result, executor="python")
+            python_context = ExecutionContext(
+                data_provider_name="python",
+                command_type="python",
+                metadata={"mode": "interactive"}
+            )
+            return LamiaResult(result_text=str(result) if result is not None else "", typed_result=result, execution_context=python_context)
         except SyntaxError as e:
             logger.debug(f"Syntax error: {e} in command: {command}")
             pass
@@ -234,9 +237,7 @@ class Lamia:
         return LamiaResult(
             result_text=response.raw_text, 
             typed_result=response.result_type, 
-            executor=current_parser.command_type,
-            model=response.model,
-            usage=response.usage
+            execution_context=response.execution_context
         )
 
     def run(
