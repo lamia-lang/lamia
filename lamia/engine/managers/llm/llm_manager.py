@@ -202,7 +202,8 @@ class LLMManager(Manager):
                 adapter = await self._create_adapter_from_config(model)
                 self._adapter_cache[model] = adapter
 
-            logger.info(f"Trying model '{model.name}' with {model_and_retries.retries} max attempts")
+            # Change from INFO to DEBUG for routine operations
+            logger.debug(f"Trying model '{model.name}' with {model_and_retries.retries} max attempts")
             
             # This will either succeed (return ValidationResult), 
             # exhaust retries (return None), or bubble up exceptions naturally
@@ -265,10 +266,13 @@ class LLMManager(Manager):
                     validated_text=response.text
                 )
             
-            logger.warning(
-                f"Attempt {attempts}/{max_attempts} with model '{model.name}' failed validation: "
-                f"{validation_result.error_message}"
-            )
+            # Keep validation failures as WARNING but only log once per model, not per attempt
+            if attempts == 1:  # Only log first validation failure
+                logger.warning(
+                    f"Model '{model.name}' validation failed: {validation_result.error_message}"
+                )
+            else:
+                logger.debug(f"Retry {attempts} failed validation: {validation_result.error_message}")
 
             # Construct retry prompt based on context memory
             # TODO: Maybe we need to send whole chat history, for telling about all errors that the model made?
