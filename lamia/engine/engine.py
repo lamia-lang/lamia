@@ -40,40 +40,46 @@ class LamiaEngine:
         Args:
             command_type: Type of request ('llm', 'fs', 'web', etc.)
             content: The content to process
-            validators: Optional list of validator classes to use.
-                      If not provided, uses validators from config.
+            return_type: Optional return type for validation
             
         Returns:
             Response from the appropriate manager
         """
-                
-        # Create validator
-        if return_type is not None:
-            validator = self.validator_factory.get_validator(
-                    command_type, 
-                    return_type,
-                    validation_manager=self.validation_manager
-                )
-            # Check contracts for non-built-in validators
-            validator_type = type(validator)
-            passed, violations = self.validator_registry.check_validator(validator_type)
-            if not passed:
-                raise ValueError(f"Validator {validator_type.__name__} does not pass contract checks: {violations}")
-        else:
-            validator = None
-        
-        # Get the appropriate manager with its validation strategy
-        manager = self.manager_factory.get_manager(command_type)
-        
-        return await self.validation_manager.validate(command_type, manager, content, validator)
+        try:
+            # Create validator
+            if return_type is not None:
+                validator = self.validator_factory.get_validator(
+                        command_type, 
+                        return_type,
+                        validation_manager=self.validation_manager
+                    )
+                # Check contracts for non-built-in validators
+                validator_type = type(validator)
+                passed, violations = self.validator_registry.check_validator(validator_type)
+                if not passed:
+                    raise ValueError(f"Validator {validator_type.__name__} does not pass contract checks: {violations}")
+            else:
+                validator = None
+            
+            # Get the appropriate manager
+            manager = self.manager_factory.get_manager(command_type)
+            
+            # Execute validation directly
+            validation_result = await manager.execute(content, validator)
+            
+            # Record successful validation
+            self.validation_manager.record_validation_result(validation_result.is_valid, command_type)
+            
+            return validation_result
+            
+        except Exception as e:
+            # Record failed validation
+            self.validation_manager.record_validation_result(False, command_type)
+            raise
     
     def get_validation_stats(self):
         """Get validation statistics from the validation manager."""
         return self.validation_manager.get_validation_stats()
-    
-    def get_recent_validation_results(self, limit: Optional[int] = None):
-        """Get recent validation results from the validation manager."""
-        return self.validation_manager.get_recent_results(limit)
 
     async def cleanup(self):
         """Cleanup all managed resources asynchronously."""

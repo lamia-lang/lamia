@@ -1,7 +1,7 @@
 from lamia.engine.engine import LamiaEngine
 import asyncio
 import sys
-from typing import Any, Optional, List, Dict, Union, Tuple, TYPE_CHECKING
+from typing import Any, Optional, List, Dict, Union, Tuple
 from lamia.interpreter.python_runner import run_python_code
 from lamia.command_parser import CommandParser
 from dataclasses import dataclass

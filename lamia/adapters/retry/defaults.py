@@ -1,13 +1,11 @@
 """Default configurations for different adapter types based on industry standards."""
 
 from datetime import timedelta
-from typing import Dict, Any, Union, TYPE_CHECKING
+from typing import Dict, Any, Union
 
 from lamia.types import ExternalOperationRetryConfig
-
-if TYPE_CHECKING:
-    from ..llm.base import BaseLLMAdapter
-    from ..filesystem.base import BaseFSAdapter
+from ..llm.base import BaseLLMAdapter
+from ..filesystem.base import BaseFSAdapter
 
 # Industry-tested retry configurations for different adapter types
 # Based on OpenAI cookbook, AWS best practices, and production experience
