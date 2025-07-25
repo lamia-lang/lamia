@@ -351,11 +351,8 @@ class Lamia:
             try:
                 # Check if there's already a running event loop
                 loop = asyncio.get_running_loop()
-                # There's a running loop, so we can't call asyncio.run()
-                # The cleanup will need to be handled by the user manually
-                # or through the async context manager
-                logger.warning("Lamia instance destroyed while event loop is running. "
-                             "Consider using 'async with lamia:' or manually calling 'await lamia._engine.cleanup()'")
+                # There's a running loop, schedule cleanup on it
+                loop.create_task(self._engine.cleanup())
             except RuntimeError:
                 # No running event loop, safe to create a new one
                 asyncio.run(self._engine.cleanup())

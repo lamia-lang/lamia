@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import aiohttp
 import json
 import logging
@@ -175,6 +175,37 @@ class OllamaAdapter(BaseLLMAdapter):
         if self.session is None:
             self.session = aiohttp.ClientSession()
         return self.session
+
+    async def get_available_models(self) -> List[str]:
+        """Get available model names from local Ollama installation."""
+        try:
+            session = await self._ensure_session()
+            async with session.get(f"{self.base_url}/api/tags") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    models = data.get("models", [])
+                    return [model["name"] for model in models]
+                else:
+                    logger.error(f"Failed to fetch Ollama models: {response.status}")
+                    return []
+        except Exception as e:
+            logger.error(f"Error fetching Ollama models: {e}")
+            return []
+    
+    async def get_model_details(self) -> List[Dict[str, Any]]:
+        """Get detailed model information including sizes."""
+        try:
+            session = await self._ensure_session()
+            async with session.get(f"{self.base_url}/api/tags") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("models", [])
+                else:
+                    logger.error(f"Failed to fetch Ollama model details: {response.status}")
+                    return []
+        except Exception as e:
+            logger.error(f"Error fetching Ollama model details: {e}")
+            return []
 
     async def close(self) -> None:
         """Close the aiohttp session and terminate Ollama process if we started it."""

@@ -118,6 +118,23 @@ class OpenAIAdapter(BaseLLMAdapter):
             except aiohttp.ClientError as e:
                 raise RuntimeError(f"Failed to communicate with OpenAI API: {str(e)}")
     
+    async def get_available_models(self) -> list[str]:
+        """Fetch available models from OpenAI API."""
+        if self._use_sdk:
+            # Using OpenAI SDK
+            models = await self.client.models.list()
+            return [model.id for model in models.data]
+        else:
+            # Using HTTP fallback
+            models_url = "https://api.openai.com/v1/models"
+            async with self.session.get(models_url) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise RuntimeError(f"OpenAI API error: {error_text}")
+                
+                data = await response.json()
+                return [model["id"] for model in data["data"]]
+    
     async def close(self) -> None:
         """Cleanup any resources used by the adapter."""
         if self._use_sdk and self.client:

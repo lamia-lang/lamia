@@ -134,7 +134,7 @@ class LLMManager(Manager):
         if missing:
             raise MissingAPIKeysError(missing)
 
-    async def _create_adapter_from_config(self, model: LLMModel) -> BaseLLMAdapter:
+    async def create_adapter_from_config(self, model: LLMModel, with_retries: bool = True) -> BaseLLMAdapter:
         """Create an adapter instance based on the active configuration."""
         # Use the full model name as cache key – guarantees one adapter per model
         cache_key = model.get_provider_name()
@@ -158,14 +158,18 @@ class LLMManager(Manager):
 
         await adapter.async_initialize()
 
-        # Get user-provided retry config or use defaults
-        retry_config = self.config_provider.get_retry_config()
-        adapter_with_retries = RetriableAdapterFactory.create_llm_adapter(adapter, retry_config)
+        if with_retries:
+            # Get user-provided retry config or use defaults
+            retry_config = self.config_provider.get_retry_config()
+            adapter_with_retries = RetriableAdapterFactory.create_llm_adapter(adapter, retry_config)
 
-        # Cache for reuse
-        self._adapter_cache[cache_key] = adapter_with_retries
+            # Cache for reuse
+            self._adapter_cache[cache_key] = adapter_with_retries
 
-        return adapter_with_retries
+            return adapter_with_retries
+        else:
+            # Return raw adapter without retry wrapping
+            return adapter
     
     async def _execute_with_retries(
         self,
@@ -200,7 +204,7 @@ class LLMManager(Manager):
             if model in self._adapter_cache:
                 adapter = self._adapter_cache[model]
             else:
-                adapter = await self._create_adapter_from_config(model)
+                adapter = await self.create_adapter_from_config(model)
                 self._adapter_cache[model] = adapter
 
             # Change from INFO to DEBUG for routine operations
