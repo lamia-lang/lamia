@@ -1,7 +1,6 @@
 import traceback
 from typing import List, Optional, Dict, Any, Callable, Union, Type, Protocol
 from dataclasses import dataclass
-import asyncio
 import logging
 from ..lamia import Lamia, LamiaResult
 from ..types import BaseType
@@ -22,7 +21,6 @@ class EvaluationResult:
     validation_pass_rate: float
     attempts: List[Dict[str, Any]]
     cost: Optional[ModelCost] = None
-    total_cost: Optional[ModelCost] = None
     error_message: Optional[str] = None
 
 class EvaluationTask(Protocol):
@@ -144,9 +142,9 @@ class ModelEvaluator:
         attempts: List[Dict[str, Any]]
     ) -> EvaluationResult:
         """Binary search through models to find the cheapest working one."""
-        left, right = 0, len(models) - 1
         best_model = None
         best_cost = None
+        left, right = 0, len(models) - 1
         
         while left <= right:
             mid = (left + right) // 2
@@ -162,23 +160,15 @@ class ModelEvaluator:
             else:
                 left = mid + 1  # Try more expensive models
         
-        # Calculate total cost (sum only non-None costs)
-        valid_costs = [a["cost"] for a in attempts if a.get("cost") is not None]
-        total_cost = None
-        if valid_costs:
-            total_cost = valid_costs[0]
-            for cost in valid_costs[1:]:
-                total_cost = total_cost + cost
-        
         return EvaluationResult(
             minimum_working_model=best_model,
             success=best_model is not None,
             validation_pass_rate=100.0 if best_model else 0.0,
             attempts=attempts,
-            cost=best_cost,
-            total_cost=total_cost
+            cost=best_cost if best_model else None,
+            error_message=None if best_model else "No model succeeded"
         )
-    
+
     async def _step_back_strategy(
         self, 
         task: EvaluationTask,
@@ -186,7 +176,7 @@ class ModelEvaluator:
         attempts: List[Dict[str, Any]]
     ) -> EvaluationResult:
         """Two-step-back, one-step-forward evaluation strategy."""
-        current_idx = len(models) - 1  # Start with cheapest
+        current_idx = len(models) - 1
         
         while current_idx >= 0:
             model = models[current_idx]
@@ -200,12 +190,10 @@ class ModelEvaluator:
                     success=True,
                     validation_pass_rate=100.0,
                     cost=attempt["cost"],
-                    attempts=attempts,
-                    total_cost=sum([a.get("cost", ModelCost(0, 0, 0)) for a in attempts], ModelCost(0, 0, 0))
+                    attempts=attempts
                 )
-            else:
-                # Step back two, forward one pattern
-                current_idx = max(0, current_idx - 2)
+            
+            current_idx = max(0, current_idx - 2)
         
         return EvaluationResult(
             minimum_working_model=None,
@@ -213,7 +201,6 @@ class ModelEvaluator:
             validation_pass_rate=0.0,
             cost=None,
             attempts=attempts,
-            total_cost=sum([a.get("cost", ModelCost(0, 0, 0)) for a in attempts], ModelCost(0, 0, 0)),
             error_message="No model succeeded"
         )
     
