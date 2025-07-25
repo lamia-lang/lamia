@@ -1,5 +1,5 @@
 import traceback
-from typing import List, Optional, Dict, Any, Callable, Union, Type
+from typing import List, Optional, Dict, Any, Callable, Union, Type, Protocol
 from dataclasses import dataclass
 import asyncio
 import logging
@@ -9,19 +9,56 @@ from .model_pricer import ModelPricer
 from .model_cost import ModelCost
 from ..engine.managers.llm.llm_manager import LLMManager
 from ..command_types import CommandType
+from lamia import LLMModel
+from lamia._internal_types.model_retry import ModelWithRetries
 
 logger = logging.getLogger(__name__)
 
 @dataclass
 class EvaluationResult:
     """Result of model evaluation process."""
-    best_model: Optional[str]
+    minimum_working_model: Optional[str]
     success: bool
     validation_pass_rate: float
     attempts: List[Dict[str, Any]]
     cost: Optional[ModelCost] = None
     total_cost: Optional[ModelCost] = None
     error_message: Optional[str] = None
+
+class EvaluationTask(Protocol):
+    """Protocol for evaluation tasks (prompt or script)."""
+    async def execute(self, model: str, lamia: Lamia) -> Any:
+        """Execute the task using the given model and lamia instance."""
+
+@dataclass
+class PromptTask:
+    """Task for evaluating a prompt."""
+    prompt: str
+    return_type: Optional[Type[BaseType]]
+    
+    async def execute(self, model: str, lamia: Lamia) -> Any:
+        llm_model = LLMModel(model)
+        model_with_retries = ModelWithRetries(llm_model, 1)
+        return await lamia.run_async(self.prompt, self.return_type, models=[model_with_retries])
+
+@dataclass
+class ScriptTask:
+    """Task for evaluating a script function."""
+    script_func: Callable[[Lamia], Any]
+    
+    async def execute(self, model: str, lamia: Lamia) -> Any:
+        # Update lamia to use the specific model for this evaluation
+        llm_model = LLMModel(model)
+        model_with_retries = ModelWithRetries(llm_model, 1)
+        
+        # Temporarily set the model for this script execution
+        original_models = lamia._models
+        lamia._models = [model_with_retries]
+        try:
+            return await self.script_func(lamia)
+        finally:
+            # Restore original models
+            lamia._models = original_models
 
 class ModelEvaluator:
     """
@@ -55,7 +92,6 @@ class ModelEvaluator:
         return_type: Optional[Type[BaseType]],
         max_model: str,
         strategy: str = "binary_search",
-        required_pass_rate_percent: float = 100.0
     ) -> EvaluationResult:
         """
         Evaluate a simple prompt across models to find the most cost-effective solution.
@@ -65,15 +101,9 @@ class ModelEvaluator:
             return_type: Expected return type for validation
             max_model: Maximum (most expensive) model to try
             strategy: Search strategy ("binary_search" or "step_back")
-            required_pass_rate_percent: Required validation pass rate as percentage (default 100.0)
         """
-        models = await self.pricer.get_ordered_models(max_model)
-        attempts = []
-        
-        if strategy == "binary_search":
-            return await self._binary_search_evaluation(prompt, return_type, models, attempts)
-        else:
-            return await self._step_back_evaluation(prompt, return_type, models, attempts)
+        task = PromptTask(prompt, return_type)
+        return await self._evaluate_task(task, max_model, strategy)
     
     async def evaluate_script(
         self,
@@ -89,59 +119,27 @@ class ModelEvaluator:
             max_model: Maximum model to try
             strategy: Search strategy
         """
+        task = ScriptTask(script_func)
+        return await self._evaluate_task(task, max_model, strategy)
+    
+    async def _evaluate_task(
+        self,
+        task: EvaluationTask,
+        max_model: str,
+        strategy: str = "binary_search"
+    ) -> EvaluationResult:
+        """Evaluate a task using the specified strategy."""
         models = await self.pricer.get_ordered_models(max_model)
         attempts = []
         
-        for model in models:
-            lamia = None
-            try:
-                lamia = Lamia((model, 1))
-                result = await script_func(lamia)
-                
-                # If no exception, consider it successful
-                cost = await self.pricer.calculate_cost(model, result)
-                attempts.append({
-                    "model": model,
-                    "success": True,
-                    "cost": cost
-                })
-                
-                return EvaluationResult(
-                    best_model=model,
-                    success=True,
-                    cost=cost,
-                    attempts=attempts,
-                    total_cost=sum([a["cost"] for a in attempts], ModelCost(0, 0, 0))
-                )
-                
-            except Exception as e:
-                attempts.append({
-                    "model": model,
-                    "success": False,
-                    "error": str(e)
-                })
-                continue
-            finally:
-                # Cleanup lamia instance
-                if lamia:
-                    try:
-                        await lamia._engine.cleanup()
-                    except Exception:
-                        pass
-        
-        return EvaluationResult(
-            best_model=None,
-            success=False,
-            cost=None,
-            attempts=attempts,
-            total_cost=sum([a.get("cost", ModelCost(0, 0, 0)) for a in attempts], ModelCost(0, 0, 0)),
-            error_message="No model succeeded"
-        )
+        if strategy == "binary_search":
+            return await self._binary_search_strategy(task, models, attempts)
+        else:
+            return await self._step_back_strategy(task, models, attempts)
     
-    async def _binary_search_evaluation(
+    async def _binary_search_strategy(
         self, 
-        prompt: str, 
-        return_type: Optional[Type[BaseType]], 
+        task: EvaluationTask,
         models: List[str], 
         attempts: List[Dict[str, Any]]
     ) -> EvaluationResult:
@@ -154,35 +152,14 @@ class ModelEvaluator:
             mid = (left + right) // 2
             model = models[mid]
             
-            try:
-                # Use existing lamia instance with specific model
-                from lamia import LLMModel
-                from lamia._internal_types.model_retry import ModelWithRetries
-                llm_model = LLMModel(model)
-                model_with_retries = ModelWithRetries(llm_model, 1)
-                result = await self.lamia.run_async(prompt, return_type, models=[model_with_retries])
-                
-                logger.debug(f"Model {model} generated response: {result.result_text}")
-                
-                cost = await self.pricer.calculate_cost(model, result)
-                attempts.append({
-                    "model": model,
-                    "success": True,
-                    "cost": cost
-                })
-                
+            attempt = await self._evaluate_model(model, task)
+            attempts.append(attempt)
+            
+            if attempt["success"]:
                 best_model = model
-                best_cost = cost
+                best_cost = attempt["cost"]
                 right = mid - 1  # Try cheaper models
-                
-            except Exception as e:
-                traceback.print_exc()
-                attempts.append({
-                    "model": model,
-                    "success": False,
-                    "error": str(e)
-                })
-                logger.debug(f"Model {model} failed with error: {e}")
+            else:
                 left = mid + 1  # Try more expensive models
         
         # Calculate total cost (sum only non-None costs)
@@ -194,7 +171,7 @@ class ModelEvaluator:
                 total_cost = total_cost + cost
         
         return EvaluationResult(
-            best_model=best_model,
+            minimum_working_model=best_model,
             success=best_model is not None,
             validation_pass_rate=100.0 if best_model else 0.0,
             attempts=attempts,
@@ -202,10 +179,9 @@ class ModelEvaluator:
             total_cost=total_cost
         )
     
-    async def _step_back_evaluation(
+    async def _step_back_strategy(
         self, 
-        prompt: str, 
-        return_type: Optional[Type[BaseType]], 
+        task: EvaluationTask,
         models: List[str], 
         attempts: List[Dict[str, Any]]
     ) -> EvaluationResult:
@@ -214,50 +190,54 @@ class ModelEvaluator:
         
         while current_idx >= 0:
             model = models[current_idx]
-            lamia = None
             
-            try:
-                lamia = Lamia((model, 1))
-                result = await lamia.run_async(prompt, return_type)
-                
-                logger.debug(f"Model {model} generated response: {result.result_text}")
-                
-                cost = await self.pricer.calculate_cost(model, result)
-                attempts.append({
-                    "model": model,
-                    "success": True,
-                    "cost": cost
-                })
-                
+            attempt = await self._evaluate_model(model, task)
+            attempts.append(attempt)
+            
+            if attempt["success"]:
                 return EvaluationResult(
-                    best_model=model,
+                    minimum_working_model=model,
                     success=True,
-                    cost=cost,
+                    validation_pass_rate=100.0,
+                    cost=attempt["cost"],
                     attempts=attempts,
                     total_cost=sum([a.get("cost", ModelCost(0, 0, 0)) for a in attempts], ModelCost(0, 0, 0))
                 )
-                
-            except Exception as e:
-                attempts.append({
-                    "model": model,
-                    "success": False,
-                    "error": str(e)
-                })
+            else:
                 # Step back two, forward one pattern
                 current_idx = max(0, current_idx - 2)
-            finally:
-                # Cleanup lamia instance
-                if lamia:
-                    try:
-                        await lamia._engine.cleanup()
-                    except Exception:
-                        pass
         
         return EvaluationResult(
-            best_model=None,
+            minimum_working_model=None,
             success=False,
+            validation_pass_rate=0.0,
             cost=None,
             attempts=attempts,
             total_cost=sum([a.get("cost", ModelCost(0, 0, 0)) for a in attempts], ModelCost(0, 0, 0)),
             error_message="No model succeeded"
         )
+    
+    async def _evaluate_model(self, model: str, task: EvaluationTask) -> Dict[str, Any]:
+        """Atomic evaluation function for a single model and task."""
+        try:
+            result = await task.execute(model, self.lamia)
+            
+            logger.debug(f"Model {model} generated response: {getattr(result, 'result_text', str(result))}")
+            
+            cost = await self.pricer.calculate_cost(model, result)
+            return {
+                "model": model,
+                "success": True,
+                "cost": cost,
+                "result": result
+            }
+            
+        except Exception as e:
+            traceback.print_exc()
+            logger.debug(f"Model {model} failed with error: {e}")
+            return {
+                "model": model,
+                "success": False,
+                "error": str(e)
+            }
+
