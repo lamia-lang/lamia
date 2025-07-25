@@ -15,3 +15,6 @@ class ModelCost:
             output_tokens=self.output_tokens + other.output_tokens,
             total_cost_usd=self.total_cost_usd + other.total_cost_usd
         )
+    
+    def __str__(self):
+        return f"${self.total_cost_usd:.6f} ({self.input_tokens} input + {self.output_tokens} output tokens)"

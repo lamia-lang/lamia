@@ -32,11 +32,10 @@ class ProviderRegistry:
         # Only load needed adapters
         self._needed_providers = needed_providers or set()
         
-        # Build adapter map
+        # Build adapter map - map all builtin adapters since it's just class references
         for adapter_cls in self._builtin_adapters:
             name = adapter_cls.name()
-            if not self._needed_providers or name in self._needed_providers:
-                self._adapter_map[name] = adapter_cls
+            self._adapter_map[name] = adapter_cls
     
     def add_user_adapters(self, search_paths: list[str]):
         """Add user-defined adapters from search paths."""

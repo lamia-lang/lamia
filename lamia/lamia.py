@@ -2,6 +2,8 @@ from lamia.engine.engine import LamiaEngine
 import asyncio
 import sys
 from typing import Any, Optional, List, Dict, Union, Tuple
+# Load environment variables from .env file
+from . import env_loader
 from lamia.interpreter.python_runner import run_python_code
 from lamia.command_parser import CommandParser
 from dataclasses import dataclass

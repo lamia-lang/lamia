@@ -75,11 +75,11 @@ class AnthropicAdapter(BaseLLMAdapter):
     ) -> LLMResponse:
         """Generate response using the Anthropic SDK."""
         response = await self.client.messages.create(
-            model=model.name,
+            model=model.get_model_name_without_provider(),
             messages=[{"role": "user", "content": prompt}],
-            temperature=model.temperature,
-            max_tokens=model.max_tokens,
-            stop_sequences=model.stop_sequences if hasattr(model, 'stop_sequences') else None,
+            temperature=model.temperature or 0.7,
+            max_tokens=model.max_tokens or 1000,
+            top_p=model.top_p or 1.0,
         )
         
         return LLMResponse(
@@ -100,13 +100,12 @@ class AnthropicAdapter(BaseLLMAdapter):
     ) -> LLMResponse:
         """Generate response using direct HTTP calls."""
         payload = {
-            "model": model.name,
+            "model": model.get_model_name_without_provider(),
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": model.max_tokens,
-            "temperature": model.temperature
+            "max_tokens": model.max_tokens or 1000,
+            "temperature": model.temperature or 0.7,
+            "top_p": model.top_p or 1.0
         }
-        if hasattr(model, 'stop_sequences') and model.stop_sequences is not None:
-            payload["stop_sequences"] = model.stop_sequences
         
         try:
             async with self.session.post(self.API_URL, json=payload) as response:
