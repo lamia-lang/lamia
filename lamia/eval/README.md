@@ -22,7 +22,7 @@ async def main():
         required_pass_rate_percent=100.0  # Require 100% validation success
     )
     
-    print(f"Best model: {result.best_model}")
+    print(f"Best model: {result.minimum_working_model}")
     print(f"Success: {result.success}")
     print(f"Total cost: {result.total_cost}")
 

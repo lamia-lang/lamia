@@ -129,6 +129,8 @@ class ModelEvaluator:
         """Evaluate a task using the specified strategy."""
         models = await self.pricer.get_ordered_models(max_model)
         attempts = []
+
+        logger.info(f"Evaluating models: {models}")
         
         if strategy == "binary_search":
             return await self._binary_search_strategy(task, models, attempts)
