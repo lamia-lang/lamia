@@ -112,9 +112,9 @@ class ModelEvaluator:
                 all_models = []
                 for provider_name in models_input:
                     provider = self.pricer._get_provider(provider_name)
-                    if provider and hasattr(provider, 'get_available_models'):
+                    if provider:
                         try:
-                            provider_models = await provider.get_available_models()
+                            provider_models = await provider.get_ordered_models()
                             if isinstance(provider_models, list):
                                 all_models.extend(provider_models)
                         except Exception as e:
