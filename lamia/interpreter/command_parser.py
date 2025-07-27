@@ -8,7 +8,7 @@ domain type and extract arguments for execution.
 import re
 from typing import Tuple, Dict, Any, Optional
 from urllib.parse import urlparse
-from lamia.command_types import CommandType
+from .command_types import CommandType
 from lamia.validation.base import BaseValidator
 
 class CommandParser:

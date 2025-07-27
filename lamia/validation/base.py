@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Union
 from dataclasses import dataclass
-from lamia.command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 from lamia.engine.validation_manager import ValidationStatsTracker
 
 @dataclass

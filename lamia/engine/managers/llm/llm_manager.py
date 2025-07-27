@@ -10,7 +10,7 @@ from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator, ExecutionContext
 from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.errors import ExternalOperationError, MissingAPIKeysError
-from lamia.command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 import logging
 
 logger = logging.getLogger(__name__)

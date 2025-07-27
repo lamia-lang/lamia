@@ -5,7 +5,7 @@ from typing import Any, Optional, List, Dict, Union, Tuple
 # Load environment variables from .env file
 from . import env_loader
 from lamia.interpreter.python_runner import run_python_code
-from lamia.command_parser import CommandParser
+from lamia.interpreter.command_parser import CommandParser
 from dataclasses import dataclass
 from lamia.engine.config_provider import ConfigProvider
 import logging

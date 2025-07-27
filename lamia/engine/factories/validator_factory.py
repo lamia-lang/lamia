@@ -1,6 +1,6 @@
 from typing import Type, Optional
 
-from lamia.command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 from lamia.validation.base import BaseValidator
 from lamia.types import BaseType
 from lamia.type_converter import create_validator

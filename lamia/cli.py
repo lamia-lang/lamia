@@ -15,7 +15,7 @@ from lamia.lamia import Lamia
 from lamia.errors import MissingAPIKeysError
 from lamia.utils import scaffold
 from lamia.utils.cli_styling import setup_cli_logging
-from lamia.command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,5 @@
 from typing import Dict, Type
-from lamia.command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 from ..managers import Manager
 from ..config_provider import ConfigProvider
 from ..managers.llm.llm_manager import LLMManager

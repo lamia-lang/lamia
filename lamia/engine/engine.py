@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List, Type
 from .config_provider import ConfigProvider
 from .factories import ManagerFactory, ValidatorFactory
 from .validation_manager import ValidationStatsTracker
-from lamia.command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.validation.validator_registry import ValidatorRegistry
 from lamia.types import BaseType

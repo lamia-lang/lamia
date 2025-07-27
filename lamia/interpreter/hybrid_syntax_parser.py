@@ -1,0 +1,312 @@
+"""
+Hybrid Python syntax parser for LLM commands.
+
+Handles parsing and AST transformation of hybrid syntax patterns:
+1. def my_func() -> HTML[MyModel]: "command"  # Function with return type
+2. def my_func(): "command"  # Function without return type  
+3. async def my_func(): "command"  # Async function
+4. "regular string"  # Outside functions, treated as normal Python string
+"""
+
+import ast
+import re
+from typing import Optional, Dict, Any
+
+
+class LLMCommandDetector(ast.NodeVisitor):
+    """Detects string literal patterns in function bodies that should be LLM commands."""
+    
+    def __init__(self):
+        self.llm_functions = {}
+    
+    def visit_FunctionDef(self, node):
+        """Handle function definitions that might contain string LLM commands."""
+        self._process_function(node, is_async=False)
+        self.generic_visit(node)
+    
+    def visit_AsyncFunctionDef(self, node):
+        """Handle async function definitions that might contain string LLM commands."""
+        self._process_function(node, is_async=True)
+        self.generic_visit(node)
+    
+    def _process_function(self, node, is_async: bool):
+        """Process both sync and async function definitions."""
+        # Check if function body contains a single string literal (expression statement)
+        if (len(node.body) == 1 and 
+            isinstance(node.body[0], ast.Expr) and
+            isinstance(node.body[0].value, (ast.Constant, ast.Str))):
+            
+            # Extract the command string
+            string_node = node.body[0].value
+            if isinstance(string_node, ast.Constant) and isinstance(string_node.value, str):
+                command = string_node.value
+            elif isinstance(string_node, ast.Str):  # For older Python versions
+                command = string_node.s
+            else:
+                # Not a string constant, skip
+                return
+            
+            return_type = self._extract_return_type(node)
+            parameters = self._extract_parameters(node)
+            
+            self.llm_functions[node.name] = {
+                'type': 'function_with_string_command',
+                'command': command,
+                'return_type': return_type,
+                'parameters': parameters,
+                'is_async': is_async,
+                'node': node
+            }
+    
+    def _extract_return_type(self, func_node):
+        """Extract return type annotation from function node."""
+        if func_node.returns:
+            return_type_info = self._ast_to_type_string(func_node.returns)
+            # Check if it's a parametric type like HTML[MyModel]
+            if '[' in return_type_info and ']' in return_type_info:
+                base_type = return_type_info.split('[')[0]
+                inner_type = return_type_info.split('[')[1].rstrip(']')
+                return {
+                    'type': 'parametric',
+                    'base_type': base_type,
+                    'inner_type': inner_type,
+                    'full_type': return_type_info
+                }
+            else:
+                return {
+                    'type': 'simple',
+                    'base_type': return_type_info,
+                    'full_type': return_type_info
+                }
+        return None
+    
+    def _extract_parameters(self, func_node):
+        """Extract function parameters with their type annotations."""
+        parameters = []
+        for arg in func_node.args.args:
+            param_info = {
+                'name': arg.arg,
+                'type': None
+            }
+            if arg.annotation:
+                param_info['type'] = self._ast_to_type_string(arg.annotation)
+            parameters.append(param_info)
+        return parameters
+    
+    def _ast_to_type_string(self, ast_node):
+        """Convert AST type annotation to string representation."""
+        if isinstance(ast_node, ast.Name):
+            return ast_node.id
+        elif isinstance(ast_node, ast.Subscript):
+            # Handle Generic[Args] syntax like HTML[MyModel]
+            base = self._ast_to_type_string(ast_node.value)
+            if hasattr(ast_node.slice, 'value'):
+                arg = self._ast_to_type_string(ast_node.slice.value)
+            else:
+                arg = self._ast_to_type_string(ast_node.slice)
+            return f"{base}[{arg}]"
+        elif isinstance(ast_node, ast.Attribute):
+            # Handle module.Type syntax
+            return f"{self._ast_to_type_string(ast_node.value)}.{ast_node.attr}"
+        return str(ast_node)
+
+
+class HybridSyntaxTransformer(ast.NodeTransformer):
+    """Transforms string literals in functions into lamia.run() or lamia.run_async() calls."""
+    
+    def __init__(self, lamia_var_name: str = 'lamia'):
+        self.lamia_var_name = lamia_var_name
+        self.detector = LLMCommandDetector()
+    
+    def transform_code(self, source_code: str) -> str:
+        """Transform hybrid syntax code into executable Python."""
+        tree = ast.parse(source_code)
+        
+        # First pass: detect LLM commands
+        self.detector.visit(tree)
+        
+        # Second pass: transform the AST
+        transformed_tree = self.visit(tree)
+        
+        # Fix all missing AST metadata
+        ast.fix_missing_locations(transformed_tree)
+        
+        # Convert back to source code
+        try:
+            import astor
+            return astor.to_source(transformed_tree)
+        except ImportError:
+            # Fallback for when astor is not available
+            return ast.unparse(transformed_tree)
+    
+    def visit_FunctionDef(self, node):
+        """Transform synchronous function definitions with string commands."""
+        return self._transform_function(node, is_async=False)
+    
+    def visit_AsyncFunctionDef(self, node):
+        """Transform asynchronous function definitions with string commands."""
+        return self._transform_function(node, is_async=True)
+    
+    def _transform_function(self, node, is_async: bool):
+        """Transform function based on whether it's async or sync."""
+        if node.name in self.detector.llm_functions:
+            func_info = self.detector.llm_functions[node.name]
+            command = func_info['command']
+            return_type = func_info['return_type']
+            parameters = func_info['parameters']
+            
+            # Process command for parameter substitution
+            processed_command = self._create_parameter_substitution_logic(command, parameters)
+            
+            # Build lamia call
+            args = [processed_command]
+            keywords = []
+            
+            if return_type:
+                # Add return_type parameter as string
+                if return_type['type'] == 'simple':
+                    return_type_node = ast.Constant(value=return_type['base_type'])
+                else:  # parametric
+                    return_type_node = ast.Constant(value=return_type['full_type'])
+                
+                keywords.append(
+                    ast.keyword(
+                        arg='return_type',
+                        value=return_type_node
+                    )
+                )
+            
+            # Choose method and create call based on sync/async
+            if is_async:
+                # async def -> return await lamia.run_async(...)
+                lamia_call = ast.Await(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                            attr='run_async',
+                            ctx=ast.Load()
+                        ),
+                        args=args,
+                        keywords=keywords
+                    )
+                )
+                new_node = ast.AsyncFunctionDef(
+                    name=node.name,
+                    args=node.args,
+                    body=[ast.Return(value=lamia_call)],
+                    decorator_list=node.decorator_list,
+                    returns=node.returns,
+                    type_comment=getattr(node, 'type_comment', None),
+                    lineno=getattr(node, 'lineno', 1),
+                    col_offset=getattr(node, 'col_offset', 0)
+                )
+            else:
+                # def -> return lamia.run(...)
+                lamia_call = ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                        attr='run',
+                        ctx=ast.Load()
+                    ),
+                    args=args,
+                    keywords=keywords
+                )
+                new_node = ast.FunctionDef(
+                    name=node.name,
+                    args=node.args,
+                    body=[ast.Return(value=lamia_call)],
+                    decorator_list=node.decorator_list,
+                    returns=node.returns,
+                    type_comment=getattr(node, 'type_comment', None),
+                    lineno=getattr(node, 'lineno', 1),
+                    col_offset=getattr(node, 'col_offset', 0)
+                )
+            
+            return new_node
+        
+        return self.generic_visit(node)
+    
+    def _create_parameter_substitution_logic(self, command: str, parameters: list) -> ast.AST:
+        """Create AST logic for parameter substitution in the command string."""
+        if not parameters:
+            # No parameters, return command as is
+            return ast.Constant(value=command)
+        
+        # Check if command contains parameter placeholders
+        param_placeholders = re.findall(r'\{(\w+)\}', command)
+        if not param_placeholders:
+            # No placeholders, return command as is
+            return ast.Constant(value=command)
+        
+        # Create f-string or format call for parameter substitution
+        # For simplicity, we'll use string format method
+        # command.format(param1=param1_serialized, param2=param2_serialized, ...)
+        
+        format_kwargs = []
+        for param in parameters:
+            if param['name'] in param_placeholders:
+                # Create serialization logic for this parameter
+                serialized_param = self._create_param_serialization(param)
+                format_kwargs.append(
+                    ast.keyword(
+                        arg=param['name'],
+                        value=serialized_param
+                    )
+                )
+        
+        # Create command.format(...) call
+        return ast.Call(
+            func=ast.Attribute(
+                value=ast.Constant(value=command),
+                attr='format',
+                ctx=ast.Load()
+            ),
+            args=[],
+            keywords=format_kwargs
+        )
+    
+    def _create_param_serialization(self, param: dict) -> ast.AST:
+        """Create AST for serializing a parameter based on its type."""
+        param_name = param['name']
+        param_type = param.get('type')
+        
+        if not param_type or param_type in ['str', 'int', 'float', 'bool']:
+            # Simple types, use string representation
+            return ast.Call(
+                func=ast.Name(id='str', ctx=ast.Load()),
+                args=[ast.Name(id=param_name, ctx=ast.Load())],
+                keywords=[]
+            )
+        else:
+            # Complex types (likely Pydantic models), serialize to JSON
+            return ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=param_name, ctx=ast.Load()),
+                    attr='model_dump_json' if 'Model' in param_type else 'json',
+                    ctx=ast.Load()
+                ),
+                args=[],
+                keywords=[]
+            )
+
+
+class HybridSyntaxParser:
+    """Main interface for parsing and transforming hybrid syntax code."""
+    
+    def __init__(self, lamia_var_name: str = 'lamia'):
+        self.lamia_var_name = lamia_var_name
+        self.transformer = HybridSyntaxTransformer(lamia_var_name)
+    
+    def parse(self, source_code: str) -> Dict[str, Any]:
+        """Parse hybrid syntax and return information about LLM commands."""
+        detector = LLMCommandDetector()
+        tree = ast.parse(source_code)
+        detector.visit(tree)
+        
+        return {
+            'llm_functions': detector.llm_functions
+        }
+    
+    def transform(self, source_code: str) -> str:
+        """Transform hybrid syntax code into executable Python."""
+        return self.transformer.transform_code(source_code)

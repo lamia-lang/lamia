@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List
 import logging
 from datetime import datetime
 from dataclasses import dataclass, field
-from lamia.command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 
 logger = logging.getLogger(__name__)
 
