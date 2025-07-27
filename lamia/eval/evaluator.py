@@ -84,11 +84,58 @@ class ModelEvaluator:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.cleanup()
     
+    async def _resolve_models(self, models_input: Union[str, List[str]]) -> List[str]:
+        """Resolve models from different input formats.
+        
+        Args:
+            models_input: Can be:
+                - A single max_model string (e.g., "openai:gpt-4")
+                - A list of specific models with provider prefixes (e.g., ["openai:gpt-4", "openai:gpt-3.5-turbo", "anthropic:claude-3-sonnet"])
+                - A list of provider names (e.g., ["openai", "anthropic"])
+        
+        Returns:
+            List of model names to evaluate
+        """
+        if isinstance(models_input, str):
+            # Single max_model string - use existing logic
+            return await self.pricer.get_ordered_models(models_input)
+        
+        elif isinstance(models_input, list):
+            if not models_input:
+                raise ValueError("Models list cannot be empty")
+            
+            # Check if it's a list of provider names by checking against available providers
+            available_providers = self.pricer.get_available_providers()
+            
+            if all(item in available_providers for item in models_input):
+                # It's a list of provider names - get all models from these providers
+                all_models = []
+                for provider_name in models_input:
+                    provider = self.pricer._get_provider(provider_name)
+                    if provider and hasattr(provider, 'get_available_models'):
+                        try:
+                            provider_models = await provider.get_available_models()
+                            if isinstance(provider_models, list):
+                                all_models.extend(provider_models)
+                        except Exception as e:
+                            logger.warning(f"Failed to get models from provider {provider_name}: {e}")
+                
+                if not all_models:
+                    raise ValueError(f"No models found for providers: {models_input}")
+                
+                return all_models
+            else:
+                # It's a list of specific model names
+                return models_input
+        
+        else:
+            raise ValueError(f"Invalid models_input type: {type(models_input)}. Expected str or List[str]")
+    
     async def evaluate_prompt(
         self,
         prompt: str,
         return_type: Optional[Type[BaseType]],
-        max_model: str,
+        models: Union[str, List[str]],
         strategy: str = "binary_search",
     ) -> EvaluationResult:
         """
@@ -97,16 +144,19 @@ class ModelEvaluator:
         Args:
             prompt: The prompt to evaluate
             return_type: Expected return type for validation
-            max_model: Maximum (most expensive) model to try
+            models: Can be:
+                - A single max_model string (e.g., "openai:gpt-4")
+                - A list of specific models with provider prefixes (e.g., ["openai:gpt-4", "openai:gpt-3.5-turbo", "anthropic:claude-3-sonnet"])
+                - A list of provider names (e.g., ["openai", "anthropic"])
             strategy: Search strategy ("binary_search" or "step_back")
         """
         task = PromptTask(prompt, return_type)
-        return await self._evaluate_task(task, max_model, strategy)
+        return await self._evaluate_task(task, models, strategy)
     
     async def evaluate_script(
         self,
         script_func: Callable[[Lamia], Any],
-        max_model: str,
+        models: Union[str, List[str]],
         strategy: str = "binary_search"
     ) -> EvaluationResult:
         """
@@ -114,20 +164,23 @@ class ModelEvaluator:
         
         Args:
             script_func: Function that takes a Lamia instance and executes the script
-            max_model: Maximum model to try
+            models: Can be:
+                - A single max_model string (e.g., "openai:gpt-4")
+                - A list of specific models with provider prefixes (e.g., ["openai:gpt-4", "openai:gpt-3.5-turbo", "anthropic:claude-3-sonnet"])
+                - A list of provider names (e.g., ["openai", "anthropic"])
             strategy: Search strategy
         """
         task = ScriptTask(script_func)
-        return await self._evaluate_task(task, max_model, strategy)
+        return await self._evaluate_task(task, models, strategy)
     
     async def _evaluate_task(
         self,
         task: EvaluationTask,
-        max_model: str,
+        models_input: Union[str, List[str]],
         strategy: str = "binary_search"
     ) -> EvaluationResult:
         """Evaluate a task using the specified strategy."""
-        models = await self.pricer.get_ordered_models(max_model)
+        models = await self._resolve_models(models_input)
         attempts = []
 
         logger.info(f"Evaluating models: {models}")

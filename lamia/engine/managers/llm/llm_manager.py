@@ -77,9 +77,9 @@ class LLMManager(Manager):
             if lamia_api_key:
                 return lamia_api_key, True
         
-        lamia_env_api_key = self.provider_registry.get_api_key_from_env("lamia")
-        if lamia_env_api_key:
-            return lamia_env_api_key, True
+            lamia_env_api_key = self.provider_registry.get_api_key_from_env("lamia")
+            if lamia_env_api_key:
+                return lamia_env_api_key, True
 
         api_key = self.config_provider.get_api_key(provider_name)
         if api_key:
