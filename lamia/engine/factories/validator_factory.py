@@ -4,12 +4,12 @@ from lamia.command_types import CommandType
 from lamia.validation.base import BaseValidator
 from lamia.types import BaseType
 from lamia.type_converter import create_validator
-from lamia.engine.validation_manager import ValidationManager
+from lamia.engine.validation_manager import ValidationStatsTracker
 
 class ValidatorFactory:
     """Provide validation strategies for each supported command type."""
 
-    def get_validator(self, command_type: CommandType, return_type: Type[BaseType] = None, validation_manager: Optional[ValidationManager] = None) -> BaseValidator:
+    def get_validator(self, command_type: CommandType, return_type: Type[BaseType] = None, validation_manager: Optional[ValidationStatsTracker] = None) -> BaseValidator:
         """Return a validator for the given *command_type* and *return_type*.
         
         Args:

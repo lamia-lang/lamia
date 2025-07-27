@@ -2,7 +2,7 @@ from typing import Optional, Dict, Any, List, Type
 
 from .config_provider import ConfigProvider
 from .factories import ManagerFactory, ValidatorFactory
-from .validation_manager import ValidationManager
+from .validation_manager import ValidationStatsTracker
 from lamia.command_types import CommandType
 from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.validation.validator_registry import ValidatorRegistry
@@ -26,8 +26,8 @@ class LamiaEngine:
         # Initialize registry for built-in and user-defined validators
         self.validator_registry = ValidatorRegistry(extensions_folder=config_provider.get_extensions_folder())
         
-        # Initialize validation manager for centralized coordination and statistics
-        self.validation_manager = ValidationManager()
+        # Initialize validation stats tracker for centralized coordination and statistics
+        self.validation_manager = ValidationStatsTracker()
 
     async def execute(
         self,

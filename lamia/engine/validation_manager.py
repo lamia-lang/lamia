@@ -18,8 +18,8 @@ class ValidationStats:
     intermediate_failures: Dict[str, int] = field(default_factory=dict)  # provider_name -> failure_count
     intermediate_successes: Dict[str, int] = field(default_factory=dict)  # provider_name -> success_count
 
-class ValidationManager:
-    """Manages validation statistics across all domains."""
+class ValidationStatsTracker:
+    """Tracks validation statistics across all domains."""
     
     def __init__(self):
         # Centralized statistics tracking
@@ -102,5 +102,5 @@ class ValidationManager:
         # Since this class doesn't have async resources, we can do
         # simple cleanup in the destructor
         if self.stats.total_validations > 0:
-            logger.info(f"ValidationManager processed {self.stats.total_validations} validations") 
+            logger.info(f"ValidationStatsTracker processed {self.stats.total_validations} validations") 
         # Future: could save stats to a file here 

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Union
 from dataclasses import dataclass
 from lamia.command_types import CommandType
-from lamia.engine.validation_manager import ValidationManager
+from lamia.engine.validation_manager import ValidationStatsTracker
 
 @dataclass
 class ExecutionContext:
@@ -41,7 +41,7 @@ class BaseValidator(ABC):
     Subclasses should implement both validate_strict (forgiving) and validate_permissive (strict) methods.
     The __call__ method dispatches to the correct method based on the strict flag.
     """
-    def __init__(self, strict: bool = True, generate_hints: bool = False, validation_manager: Optional[ValidationManager] = None):
+    def __init__(self, strict: bool = True, generate_hints: bool = False, validation_manager: Optional[ValidationStatsTracker] = None):
         self.strict = strict
         self.generate_hints = generate_hints
         self.validation_manager = validation_manager
