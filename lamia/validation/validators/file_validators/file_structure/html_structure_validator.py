@@ -90,10 +90,90 @@ class HTMLStructureValidator(DocumentStructureValidator):
         else:
             return BeautifulSoup(payload, "html.parser")
 
-    def find_element(self, tree, key):
+    def find_element(self, tree, key, field_info=None):
+        """Find HTML element using field name or alias with advanced selector support.
+        
+        Args:
+            tree: BeautifulSoup tree to search in
+            key: Field name (fallback if no alias)  
+            field_info: Pydantic field info containing alias and other metadata
+            
+        Returns:
+            Found element or None
+        """
+        # Get selectors from field alias or fallback to field name
+        selectors = self._get_selectors_for_field(key, field_info)
+        
+        # Try each selector until one works
+        for selector in selectors:
+            element = self._find_by_selector(tree, selector)
+            if element:
+                return element
+                
+        return None
+    
+    def _get_selectors_for_field(self, field_name, field_info):
+        """Extract selectors from field alias or generate default selector."""
+        selectors = []
+        
+        if field_info and hasattr(field_info, 'alias') and field_info.alias:
+            alias = field_info.alias
+            
+            # Handle list of selectors (multi-selector fallback)
+            if isinstance(alias, list):
+                selectors.extend(alias)
+            else:
+                selectors.append(alias)
+        
+        # Only add field name as tag selector if no alias provided
+        if not selectors:
+            selectors.append(field_name)
+            
+        return selectors
+    
+    def _find_by_selector(self, tree, selector):
+        """Find element using CSS, XPath, or simple tag selector."""
+        # XPath selector (starts with // or /)
+        if selector.startswith('/'):
+            return self._find_by_xpath(tree, selector)
+        
+        # CSS selector (contains :, ., #, [, or other CSS syntax)
+        elif any(char in selector for char in ['.', '#', ':', '[', '>', '+', '~']):
+            return self._find_by_css_selector(tree, selector)
+        
+        # Simple tag name - search direct children only (current behavior)
+        else:
+            return self._find_by_tag_name(tree, selector)
+    
+    def _find_by_css_selector(self, tree, selector):
+        """Find element using CSS selector."""
+        try:
+            elements = tree.select(selector)
+            return elements[0] if elements else None
+        except Exception:
+            return None
+    
+    def _find_by_xpath(self, tree, xpath):
+        """Find element using XPath selector (convert to CSS or use lxml)."""
+        # For now, convert simple XPath to CSS
+        # More complex XPath support would require lxml
+        try:
+            # Simple conversions for common XPath patterns
+            if xpath.startswith('//') and '[@' in xpath:
+                # //p[@class='temp'] -> p[class='temp']
+                css_selector = xpath.replace('//', '').replace('@', '')
+                return self._find_by_css_selector(tree, css_selector)
+            
+            # Add more XPath to CSS conversions as needed
+            return None
+        except Exception:
+            return None
+    
+    def _find_by_tag_name(self, tree, tag_name):
+        """Find element by simple tag name (original behavior)."""
         # Only direct children that are tags
         for child in tree.children:
-            if getattr(child, 'name', None) == key:
+            if getattr(child, 'name', None) == tag_name:
                 return child
         return None
 

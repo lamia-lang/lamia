@@ -1,5 +1,5 @@
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from lamia.validation.validators.file_validators import HTMLStructureValidator
 from typing import Any, List, Dict, Type, Tuple, Optional
 
