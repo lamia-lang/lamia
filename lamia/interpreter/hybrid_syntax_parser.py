@@ -163,11 +163,17 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             keywords = []
             
             if return_type:
-                # Add return_type parameter as string
+                # Add return_type parameter as actual type object, not string
                 if return_type['type'] == 'simple':
-                    return_type_node = ast.Constant(value=return_type['base_type'])
+                    # For simple types like HTML, pass the actual type
+                    return_type_node = ast.Name(id=return_type['base_type'], ctx=ast.Load())
                 else:  # parametric
-                    return_type_node = ast.Constant(value=return_type['full_type'])
+                    # For parametric types like HTML[WeatherModel], create subscript node
+                    return_type_node = ast.Subscript(
+                        value=ast.Name(id=return_type['base_type'], ctx=ast.Load()),
+                        slice=ast.Name(id=return_type['inner_type'], ctx=ast.Load()),
+                        ctx=ast.Load()
+                    )
                 
                 keywords.append(
                     ast.keyword(
@@ -278,10 +284,25 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 keywords=[]
             )
         else:
-            # Complex types (likely Pydantic models), serialize to JSON
+            # Complex types - use SmartTypeResolver to handle LamiaResult -> Model conversion
+            # Create: SmartTypeResolver.resolve_for_parameter(param_name, param_type).model_dump_json()
+            resolved_param = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id='SmartTypeResolver', ctx=ast.Load()),
+                    attr='resolve_for_parameter',
+                    ctx=ast.Load()
+                ),
+                args=[
+                    ast.Name(id=param_name, ctx=ast.Load()),
+                    ast.Constant(value=param_type)
+                ],
+                keywords=[]
+            )
+            
+            # Then serialize the resolved object
             return ast.Call(
                 func=ast.Attribute(
-                    value=ast.Name(id=param_name, ctx=ast.Load()),
+                    value=resolved_param,
                     attr='model_dump_json' if 'Model' in param_type else 'json',
                     ctx=ast.Load()
                 ),

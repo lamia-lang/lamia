@@ -16,6 +16,10 @@ from lamia.errors import MissingAPIKeysError
 from lamia.utils import scaffold
 from lamia.utils.cli_styling import setup_cli_logging
 from lamia.interpreter.command_types import CommandType
+from lamia.interpreter.hybrid_executor import HybridExecutor
+
+# Hybrid syntax file extensions that should be processed
+HYBRID_EXTENSIONS = {'.hu', '.lm'}
 
 logger = logging.getLogger(__name__)
 
@@ -237,16 +241,29 @@ def main():
     # Add this before running the user script
     add_all_py_dirs_to_syspath_and_check_conflicts(os.getcwd())
 
-    async def run():
-        try:
-            # Create Lamia instance with config
-            logger.info("Creating Lamia instance...")
-            lamia = Lamia.from_config(config_dict)
+    try:
+        # Create Lamia instance with config
+        logger.info("Creating Lamia instance...")
+        lamia = Lamia.from_config(config_dict)
+        
+        logger.info("✅ Lamia instance created successfully")
+        
+        if prompt_file:
+            # File execution - no async needed
+            file_ext = os.path.splitext(prompt_file)[1].lower()
             
-            logger.info("✅ Lamia instance created successfully")
-            
-            if prompt_file:
-                # Read prompt from file and execute as a Python script using runpy
+            if file_ext in HYBRID_EXTENSIONS:
+                # Process hybrid syntax file
+                try:
+                    logger.info(f"Processing hybrid syntax file: {prompt_file}")
+                    executor = HybridExecutor(lamia)
+                    executor.execute_file(prompt_file)
+                    sys.exit(0)
+                except Exception as e:
+                    logger.error(f"❌ Error processing hybrid syntax file: {e}")
+                    sys.exit(1)
+            else:
+                # Regular Python file
                 try:
                     logger.info(f"Executing script: {prompt_file}")
                     runpy.run_path(prompt_file, run_name="__main__")
@@ -254,24 +271,25 @@ def main():
                 except Exception as e:
                     logger.error(f"❌ Error executing script: {e}")
                     sys.exit(1)
-            else:
-                # Run interactive mode
+        else:
+            # Interactive mode - needs async
+            async def run_interactive():
                 await interactive_mode(lamia)
-                
-        except MissingAPIKeysError as e:
-            logger.error(f"❌ Missing API Keys: {str(e)}")
-            logger.error("Please check your .env file or config.yaml for required API keys.")
-            sys.exit(1)
-        except Exception as e:
-            traceback.print_exc()
-            logger.error(f"❌ Error: {e}")
-            logger.error("Check your config.yaml and logs for details.")
-            sys.exit(1)
-        except KeyboardInterrupt:
-            logger.info("\n\nGoodbye! 👋")
-            sys.exit(0)
-
-    asyncio.run(run())
+            
+            asyncio.run(run_interactive())
+            
+    except MissingAPIKeysError as e:
+        logger.error(f"❌ Missing API Keys: {str(e)}")
+        logger.error("Please check your .env file or config.yaml for required API keys.")
+        sys.exit(1)
+    except Exception as e:
+        traceback.print_exc()
+        logger.error(f"❌ Error: {e}")
+        logger.error("Check your config.yaml and logs for details.")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info("\n\nGoodbye! 👋")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main() 
