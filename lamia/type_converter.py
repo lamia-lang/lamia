@@ -37,7 +37,7 @@ def create_validator(validation_type: Type[BaseType], generate_hints: bool = Fal
         base_type = origin
         if len(args) == 1:
             model = args[0]
-            strict = True
+            strict = False
         elif len(args) == 2:
             model = args[0]
             strict_arg = args[1]

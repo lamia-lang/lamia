@@ -14,6 +14,8 @@ import json
 # TODO: we can configure type checking to be different from the file validator strict mode with this flag
 #STRICT_TYPE_MATCH = False
 
+SHOULD_GENERATE_JSON_SCHEMA = False
+
 class BaseValidationError(ValueError):
     """Base exception for validation errors with hint support."""
     def __init__(self, message: str, hint: str = None, original_exception: Exception = None):
@@ -24,7 +26,7 @@ class BaseValidationError(ValueError):
 class TextAroundPayloadError(BaseValidationError):
     def __init__(self, expected_file_format: str, original_text: str, payload_text: str):
         # Generate dynamic message and hint
-        message = f"Invalid {expected_file_format}: unexpected text around payload"
+        message = f"Invalid {expected_file_format}: unexpected text around payload: {original_text}"
         
         hint = f"Please ensure the response is a valid {expected_file_format}."
         
@@ -309,6 +311,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
     def _get_model_schema_hint(self) -> str:
         """Generate the JSON schema hint for this model."""
         if self.model is not None:
+            if not SHOULD_GENERATE_JSON_SCHEMA:
+                return ""
             schema = get_pydantic_json_schema(self.model)
             return f"Expected target pydantic type in JSON format to be extracted from the {self.file_type().upper()}:\n{schema}"
         return ""

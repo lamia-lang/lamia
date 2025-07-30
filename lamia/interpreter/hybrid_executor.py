@@ -251,12 +251,17 @@ class SmartTypeResolver:
         Returns:
             Appropriate value based on parameter type
         """
+        logger.info(f"SmartTypeResolver: resolving {type(lamia_result)} for param_type {param_type}")
+        
         # If parameter has a specific type annotation, try to match it
         if param_type and hasattr(lamia_result, 'result_type') and lamia_result.result_type is not None:
+            logger.info(f"SmartTypeResolver: returning result_type {type(lamia_result.result_type)}")
             return lamia_result.result_type
         
         # Default to raw text for untyped parameters
-        return lamia_result.result_text if hasattr(lamia_result, 'result_text') else lamia_result
+        result = lamia_result.result_text if hasattr(lamia_result, 'result_text') else lamia_result
+        logger.info(f"SmartTypeResolver: returning fallback {type(result)}")
+        return result
 
 
 # Example usage patterns:

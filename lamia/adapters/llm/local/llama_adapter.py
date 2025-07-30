@@ -77,10 +77,4 @@ class LlamaAdapter(BaseLLMAdapter):
 
     @property
     def has_context_memory(self) -> bool:
-        if self._has_context_memory is not None:
-            return self._has_context_memory
-        # Infer from model name (file name): if contains 'chat' or 'instruct', assume context memory
-        model_name = str(self.model_path).lower()
-        if any(x in model_name for x in ["chat", "instruct"]):
-            return True
         return False 

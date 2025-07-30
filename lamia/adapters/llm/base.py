@@ -64,6 +64,10 @@ class BaseLLMAdapter(ABC):
         """
         pass
 
+    @property
+    def has_context_memory(self) -> bool:
+        return False 
+
     @abstractmethod
     async def close(self) -> None:
         """Cleanup any resources used by the adapter."""
