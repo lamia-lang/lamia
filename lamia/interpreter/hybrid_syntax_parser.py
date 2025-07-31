@@ -170,110 +170,18 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             return_type = func_info['return_type']
             parameters = func_info['parameters']
             
-            # Check if this is a web navigation request
-            if self._is_web_navigation(command, return_type):
-                return self._transform_web_navigation(node, command, return_type, parameters, is_async)
-            
             # Process command for parameter substitution
             processed_command = self._create_parameter_substitution_logic(command, parameters)
             
-            # Build lamia call
-            args = [processed_command]
-            keywords = []
-            
-            if return_type:
-                # Add return_type parameter as actual type object, not string
-                if return_type['type'] == 'simple':
-                    # For simple types like HTML, pass the actual type
-                    return_type_node = ast.Name(id=return_type['base_type'], ctx=ast.Load())
-                else:  # parametric
-                    # For parametric types like HTML[WeatherModel], create subscript node
-                    return_type_node = ast.Subscript(
-                        value=ast.Name(id=return_type['base_type'], ctx=ast.Load()),
-                        slice=ast.Name(id=return_type['inner_type'], ctx=ast.Load()),
-                        ctx=ast.Load()
-                    )
-                
-                keywords.append(
-                    ast.keyword(
-                        arg='return_type',
-                        value=return_type_node
-                    )
-                )
-            
-            # Choose method and create call based on sync/async
-            if is_async:
-                # async def -> return await lamia.run_async(...)
-                lamia_call = ast.Await(
-                    value=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
-                            attr='run_async',
-                            ctx=ast.Load()
-                        ),
-                        args=args,
-                        keywords=keywords
-                    )
-                )
-                new_node = ast.AsyncFunctionDef(
-                    name=node.name,
-                    args=node.args,
-                    body=[ast.Return(value=lamia_call)],
-                    decorator_list=node.decorator_list,
-                    returns=node.returns,
-                    type_comment=getattr(node, 'type_comment', None),
-                    lineno=getattr(node, 'lineno', 1),
-                    col_offset=getattr(node, 'col_offset', 0)
-                )
-            else:
-                # def -> return lamia.run(...)
-                lamia_call = ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
-                        attr='run',
-                        ctx=ast.Load()
-                    ),
-                    args=args,
-                    keywords=keywords
-                )
-                new_node = ast.FunctionDef(
-                    name=node.name,
-                    args=node.args,
-                    body=[ast.Return(value=lamia_call)],
-                    decorator_list=node.decorator_list,
-                    returns=node.returns,
-                    type_comment=getattr(node, 'type_comment', None),
-                    lineno=getattr(node, 'lineno', 1),
-                    col_offset=getattr(node, 'col_offset', 0)
-                )
-            
-            return new_node
+            # Generate lamia.run() call (works for both LLM and web commands)
+            return self._create_lamia_call_function(node, processed_command, return_type, is_async)
         
         return self.generic_visit(node)
     
-    def _is_web_navigation(self, command: str, return_type: Optional[Dict]) -> bool:
-        """Check if command looks like a web navigation request."""
-        if not return_type:
-            return False
-        
-        # Only web navigation for functions returning HTML, JSON, XML, etc.
-        web_types = {'HTML', 'JSON', 'XML', 'CSV', 'YAML'}
-        if return_type['base_type'] not in web_types:
-            return False
-        
-        # Check if command looks like a URL or path
-        command = command.strip()
-        return (command.startswith('http://') or 
-                command.startswith('https://') or
-                command.startswith('/') or
-                '.' in command)  # Simple heuristic for domains
     
-    def _transform_web_navigation(self, node, command: str, return_type: Dict, parameters: list, is_async: bool):
-        """Transform web navigation function into web manager call."""
-        # Process command for parameter substitution
-        processed_command = self._create_parameter_substitution_logic(command, parameters)
-        
-        # Create web manager navigation call: web_manager.navigate_and_validate(url, return_type)
+    def _create_lamia_call_function(self, node, processed_command: ast.AST, return_type: Optional[Dict], is_async: bool):
+        """Create a function node that calls lamia.run() or lamia.run_async()."""
+        # Build lamia call arguments
         args = [processed_command]
         keywords = []
         
@@ -295,32 +203,51 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 )
             )
         
-        # Create web manager call - always async since web_manager.navigate_and_validate is async
-        web_call = ast.Await(
-            value=ast.Call(
+        # Choose method and create call based on sync/async
+        if is_async:
+            # async def -> return await lamia.run_async(...)
+            lamia_call = ast.Await(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                        attr='run_async',
+                        ctx=ast.Load()
+                    ),
+                    args=args,
+                    keywords=keywords
+                )
+            )
+            return ast.AsyncFunctionDef(
+                name=node.name,
+                args=node.args,
+                body=[ast.Return(value=lamia_call)],
+                decorator_list=node.decorator_list,
+                returns=node.returns,
+                type_comment=getattr(node, 'type_comment', None),
+                lineno=getattr(node, 'lineno', 1),
+                col_offset=getattr(node, 'col_offset', 0)
+            )
+        else:
+            # def -> return lamia.run(...)
+            lamia_call = ast.Call(
                 func=ast.Attribute(
-                    value=ast.Name(id='web_manager', ctx=ast.Load()),
-                    attr='navigate_and_validate',
+                    value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                    attr='run',
                     ctx=ast.Load()
                 ),
                 args=args,
                 keywords=keywords
             )
-        )
-        
-        # Always create async function since web manager operations are async
-        new_node = ast.AsyncFunctionDef(
-            name=node.name,
-            args=node.args,
-            body=[ast.Return(value=web_call)],
-            decorator_list=node.decorator_list,
-            returns=node.returns,
-            type_comment=getattr(node, 'type_comment', None),
-            lineno=getattr(node, 'lineno', 1),
-            col_offset=getattr(node, 'col_offset', 0)
-        )
-        
-        return new_node
+            return ast.FunctionDef(
+                name=node.name,
+                args=node.args,
+                body=[ast.Return(value=lamia_call)],
+                decorator_list=node.decorator_list,
+                returns=node.returns,
+                type_comment=getattr(node, 'type_comment', None),
+                lineno=getattr(node, 'lineno', 1),
+                col_offset=getattr(node, 'col_offset', 0)
+            )
     
     def _create_parameter_substitution_logic(self, command: str, parameters: list) -> ast.AST:
         """Create AST logic for parameter substitution in the command string."""

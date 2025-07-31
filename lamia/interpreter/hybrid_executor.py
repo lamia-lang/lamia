@@ -91,10 +91,6 @@ class HybridExecutor:
         # Add lamia instance to globals
         globals_dict[self.lamia_var_name] = self.lamia
         
-        # Add web_manager for URL navigation support
-        from lamia.interpreter.command_types import CommandType
-        globals_dict['web_manager'] = self.lamia._engine.manager_factory.get_manager(CommandType.WEB)
-        
         # Inject only the namespaces and types that are actually used
         ast_globals = create_execution_globals(analysis['namespaces'], analysis['types'])
         globals_dict.update(ast_globals)
@@ -177,10 +173,6 @@ class HybridExecutor:
         
         # Add lamia instance to globals
         globals_dict[self.lamia_var_name] = self.lamia
-        
-        # Add web_manager for URL navigation support
-        from lamia.interpreter.command_types import CommandType
-        globals_dict['web_manager'] = self.lamia._engine.manager_factory.get_manager(CommandType.WEB)
         
         # Inject only the namespaces and types that are actually used
         ast_globals = create_execution_globals(analysis['namespaces'], analysis['types'])
