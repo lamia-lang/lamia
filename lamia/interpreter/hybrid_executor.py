@@ -12,6 +12,7 @@ import logging
 from typing import Optional, Dict, Any
 from .hybrid_syntax_parser import HybridSyntaxParser
 from .hybrid_file_cache import HybridFileCache
+from .ast_analyzer import analyze_hybrid_file, create_execution_globals
 
 logger = logging.getLogger(__name__)
 
@@ -76,9 +77,12 @@ class HybridExecutor:
         return "\n".join(imports)
     
     async def execute(self, source_code: str, globals_dict: Optional[Dict] = None) -> Dict[str, Any]:
-        """Execute hybrid syntax code."""
+        """Execute hybrid syntax code with AST-based selective injection."""
         # Transform the code
         transformed_code = self.transform(source_code)
+        
+        # Analyze source code to determine what needs to be injected
+        analysis = analyze_hybrid_file(source_code)
         
         # Prepare execution environment
         if globals_dict is None:
@@ -87,7 +91,15 @@ class HybridExecutor:
         # Add lamia instance to globals
         globals_dict[self.lamia_var_name] = self.lamia
         
-        # Extract and import types from return annotations
+        # Add web_manager for URL navigation support
+        from lamia.interpreter.command_types import CommandType
+        globals_dict['web_manager'] = self.lamia._engine.manager_factory.get_manager(CommandType.WEB)
+        
+        # Inject only the namespaces and types that are actually used
+        ast_globals = create_execution_globals(analysis['namespaces'], analysis['types'])
+        globals_dict.update(ast_globals)
+        
+        # Extract and import types from return annotations (legacy support)
         self._extract_and_import_types(source_code, globals_dict)
         
         # Execute the transformed code
@@ -148,10 +160,13 @@ class HybridExecutor:
                     pass
     
     def execute_file(self, file_path: str, globals_dict: Optional[Dict] = None):
-        """Execute a hybrid syntax file directly."""
+        """Execute a hybrid syntax file directly with AST-based selective injection."""
         # Read source code
         with open(file_path, 'r') as f:
             source_code = f.read()
+        
+        # Analyze source code to determine what needs to be injected
+        analysis = analyze_hybrid_file(source_code)
         
         # Transform the code
         transformed_code = self.transform(source_code)
@@ -162,6 +177,17 @@ class HybridExecutor:
         
         # Add lamia instance to globals
         globals_dict[self.lamia_var_name] = self.lamia
+        
+        # Add web_manager for URL navigation support
+        from lamia.interpreter.command_types import CommandType
+        globals_dict['web_manager'] = self.lamia._engine.manager_factory.get_manager(CommandType.WEB)
+        
+        # Inject only the namespaces and types that are actually used
+        ast_globals = create_execution_globals(analysis['namespaces'], analysis['types'])
+        globals_dict.update(ast_globals)
+        
+        # Extract and import types from return annotations (legacy support)
+        self._extract_and_import_types(source_code, globals_dict)
         
         # Execute the transformed code directly
         compiled_code = compile(transformed_code, file_path, 'exec')

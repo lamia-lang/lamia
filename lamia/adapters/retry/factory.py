@@ -4,12 +4,14 @@ from typing import Optional, TypeVar, cast
 
 from ..llm.base import BaseLLMAdapter
 from ..filesystem.base import BaseFSAdapter
+from ..web.browser.base import BaseBrowserAdapter
 from lamia.types import ExternalOperationRetryConfig
 from .adapter_wrappers.llm import RetryingLLMAdapter
 from .adapter_wrappers.fs import RetryingFSAdapter
+from .adapter_wrappers.browser import RetryingBrowserAdapter
 from .defaults import get_default_config_for_adapter
 
-T = TypeVar('T', bound=BaseLLMAdapter | BaseFSAdapter)
+T = TypeVar('T', bound=BaseLLMAdapter | BaseFSAdapter | BaseBrowserAdapter)
 
 class RetriableAdapterFactory:
     """Factory for creating retriable adapters with intelligent retry configuration.
@@ -107,6 +109,28 @@ class RetriableAdapterFactory:
         )
     
     @classmethod
+    def create_browser_adapter(
+        cls,
+        adapter: BaseBrowserAdapter,
+        retry_config: Optional[ExternalOperationRetryConfig] = None
+    ) -> BaseBrowserAdapter:
+        """Create a browser adapter with intelligent retry capabilities.
+        
+        Args:
+            adapter: The browser adapter instance to wrap
+            retry_config: Optional explicit retry configuration
+            
+        Returns:
+            The adapter wrapped with retry handling using intelligent defaults
+        """
+        effective_config = cls._get_effective_config(adapter, retry_config)
+        return RetryingBrowserAdapter(
+            adapter,
+            effective_config,
+            collect_stats=cls._collect_stats
+        )
+    
+    @classmethod
     def create_adapter(
         cls,
         adapter: T,
@@ -129,4 +153,6 @@ class RetriableAdapterFactory:
             return cast(T, cls.create_llm_adapter(adapter, retry_config))
         elif isinstance(adapter, BaseFSAdapter):
             return cast(T, cls.create_fs_adapter(adapter, retry_config))
+        elif isinstance(adapter, BaseBrowserAdapter):
+            return cast(T, cls.create_browser_adapter(adapter, retry_config))
         return adapter  # Return as-is if no wrapper available 

@@ -31,32 +31,47 @@ class LLMCommandDetector(ast.NodeVisitor):
     
     def _process_function(self, node, is_async: bool):
         """Process both sync and async function definitions."""
+        command = None
+        
         # Check if function body contains a single string literal (expression statement)
         if (len(node.body) == 1 and 
             isinstance(node.body[0], ast.Expr) and
             isinstance(node.body[0].value, (ast.Constant, ast.Str))):
             
-            # Extract the command string
+            # Single string literal case
             string_node = node.body[0].value
             if isinstance(string_node, ast.Constant) and isinstance(string_node.value, str):
                 command = string_node.value
             elif isinstance(string_node, ast.Str):  # For older Python versions
                 command = string_node.s
-            else:
-                # Not a string constant, skip
-                return
+                
+        # Check if function has docstring + string literal (2 statements)
+        elif (len(node.body) == 2 and
+              isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, (ast.Constant, ast.Str)) and
+              isinstance(node.body[1], ast.Expr) and isinstance(node.body[1].value, (ast.Constant, ast.Str))):
             
-            return_type = self._extract_return_type(node)
-            parameters = self._extract_parameters(node)
+            # Docstring + command case - use the second string as the command
+            string_node = node.body[1].value  
+            if isinstance(string_node, ast.Constant) and isinstance(string_node.value, str):
+                command = string_node.value
+            elif isinstance(string_node, ast.Str):  # For older Python versions
+                command = string_node.s
+        
+        if command is None:
+            # Not a pattern we recognize, skip
+            return
             
-            self.llm_functions[node.name] = {
-                'type': 'function_with_string_command',
-                'command': command,
-                'return_type': return_type,
-                'parameters': parameters,
-                'is_async': is_async,
-                'node': node
-            }
+        return_type = self._extract_return_type(node)
+        parameters = self._extract_parameters(node)
+        
+        self.llm_functions[node.name] = {
+            'type': 'function_with_string_command',
+            'command': command,
+            'return_type': return_type,
+            'parameters': parameters,
+            'is_async': is_async,
+            'node': node
+        }
     
     def _extract_return_type(self, func_node):
         """Extract return type annotation from function node."""
@@ -155,6 +170,10 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             return_type = func_info['return_type']
             parameters = func_info['parameters']
             
+            # Check if this is a web navigation request
+            if self._is_web_navigation(command, return_type):
+                return self._transform_web_navigation(node, command, return_type, parameters, is_async)
+            
             # Process command for parameter substitution
             processed_command = self._create_parameter_substitution_logic(command, parameters)
             
@@ -231,6 +250,77 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             return new_node
         
         return self.generic_visit(node)
+    
+    def _is_web_navigation(self, command: str, return_type: Optional[Dict]) -> bool:
+        """Check if command looks like a web navigation request."""
+        if not return_type:
+            return False
+        
+        # Only web navigation for functions returning HTML, JSON, XML, etc.
+        web_types = {'HTML', 'JSON', 'XML', 'CSV', 'YAML'}
+        if return_type['base_type'] not in web_types:
+            return False
+        
+        # Check if command looks like a URL or path
+        command = command.strip()
+        return (command.startswith('http://') or 
+                command.startswith('https://') or
+                command.startswith('/') or
+                '.' in command)  # Simple heuristic for domains
+    
+    def _transform_web_navigation(self, node, command: str, return_type: Dict, parameters: list, is_async: bool):
+        """Transform web navigation function into web manager call."""
+        # Process command for parameter substitution
+        processed_command = self._create_parameter_substitution_logic(command, parameters)
+        
+        # Create web manager navigation call: web_manager.navigate_and_validate(url, return_type)
+        args = [processed_command]
+        keywords = []
+        
+        if return_type:
+            # Add return_type parameter as actual type object
+            if return_type['type'] == 'simple':
+                return_type_node = ast.Name(id=return_type['base_type'], ctx=ast.Load())
+            else:  # parametric
+                return_type_node = ast.Subscript(
+                    value=ast.Name(id=return_type['base_type'], ctx=ast.Load()),
+                    slice=ast.Name(id=return_type['inner_type'], ctx=ast.Load()),
+                    ctx=ast.Load()
+                )
+            
+            keywords.append(
+                ast.keyword(
+                    arg='return_type',
+                    value=return_type_node
+                )
+            )
+        
+        # Create web manager call - always async since web_manager.navigate_and_validate is async
+        web_call = ast.Await(
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id='web_manager', ctx=ast.Load()),
+                    attr='navigate_and_validate',
+                    ctx=ast.Load()
+                ),
+                args=args,
+                keywords=keywords
+            )
+        )
+        
+        # Always create async function since web manager operations are async
+        new_node = ast.AsyncFunctionDef(
+            name=node.name,
+            args=node.args,
+            body=[ast.Return(value=web_call)],
+            decorator_list=node.decorator_list,
+            returns=node.returns,
+            type_comment=getattr(node, 'type_comment', None),
+            lineno=getattr(node, 'lineno', 1),
+            col_offset=getattr(node, 'col_offset', 0)
+        )
+        
+        return new_node
     
     def _create_parameter_substitution_logic(self, command: str, parameters: list) -> ast.AST:
         """Create AST logic for parameter substitution in the command string."""
