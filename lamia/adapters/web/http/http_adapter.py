@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class RequestsAdapter(BaseHttpAdapter):
     """HTTP adapter using the requests library."""
     
-    def __init__(self, timeout: float = 30.0, user_agent: str = "Lamia/1.0 (Web Automation Framework)"):
+    def __init__(self, timeout: float = 30.0, user_agent: str = "Lamia/1.0"):
         self.session = None
         self.default_timeout = timeout
         self.user_agent = user_agent

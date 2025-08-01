@@ -6,7 +6,7 @@ domain type and extract arguments for execution.
 """
 
 import re
-from typing import Optional
+from typing import Optional, Tuple, Any, Dict
 from urllib.parse import urlparse
 from .command_types import CommandType
 from .commands import Command, LLMCommand, WebCommand, FileCommand, WebActionType, FileActionType
