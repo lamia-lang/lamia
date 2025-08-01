@@ -22,6 +22,7 @@ class WebManager(Manager):
         self._http_adapters: Dict[str, BaseHttpAdapter] = {}
         self._default_browser_adapter = "selenium"
         self._default_http_adapter = "requests"
+        self._web_adapter = None  # Will be initialized on first use
     
     async def execute(self, web_url: str, validator: Optional[BaseValidator] = None) -> ValidationResult:
         """Simple web content fetching for backward compatibility."""

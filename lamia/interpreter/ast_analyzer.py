@@ -100,10 +100,14 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str]) ->
     if 'http' in used_namespaces:
         from lamia.actions import http
         execution_globals['http'] = http
+        
+    if 'file' in used_namespaces:
+        from lamia.actions import file
+        execution_globals['file'] = file
     
     # Future namespaces can be added here
-    # if 'file' in used_namespaces:
-    #     from lamia.actions import file
-    #     execution_globals['file'] = file
+    # if 'db' in used_namespaces:
+    #     from lamia.actions import db
+    #     execution_globals['db'] = db
     
     return execution_globals

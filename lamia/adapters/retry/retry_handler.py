@@ -10,6 +10,9 @@ from lamia.errors import ExternalOperationRateLimitError, ExternalOperationTrans
 from .defaults import get_default_config_for_adapter
 from lamia.types import ExternalOperationRetryConfig
 from lamia.adapters.error_classifiers.categories import ErrorCategory
+from lamia.adapters.llm.base import BaseLLMAdapter
+from lamia.adapters.filesystem.base import BaseFSAdapter
+from lamia.adapters.web.browser.base import BaseBrowserAdapter
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,7 +36,7 @@ class RetryHandler:
     
     def __init__(
         self,
-        adapter: Union["BaseLLMAdapter", "BaseFSAdapter"],
+        adapter: Union[BaseLLMAdapter, BaseFSAdapter, BaseBrowserAdapter],
         config: Optional[ExternalOperationRetryConfig] = None,
         collect_stats: bool = True
     ):

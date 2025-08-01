@@ -1,6 +1,6 @@
-"""Browser automation actions with excellent IntelliSense support."""
+"""Web automation actions including browser and HTTP operations with excellent IntelliSense support."""
 
-from typing import Optional
+from typing import Optional, Dict, Any, Union
 from lamia.types import BrowserAction, BrowserActionType, BrowserActionParams, SelectorType
 
 
@@ -308,3 +308,135 @@ class WebActions:
                 timeout=timeout
             )
         )
+    
+    # HTTP Operations
+    def get(self, url: str, headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> str:
+        """Make HTTP GET request.
+        
+        Args:
+            url: URL to request
+            headers: Optional HTTP headers
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Command string for lamia.run() to execute
+            
+        Example:
+            response = web.get("https://api.example.com/users", {"Authorization": "Bearer token"})
+        """
+        import json
+        cmd_parts = [f"GET {url}"]
+        if headers:
+            cmd_parts.append(f"headers:{json.dumps(headers)}")
+        if timeout:
+            cmd_parts.append(f"timeout:{timeout}")
+        return " ".join(cmd_parts)
+    
+    def post(self, url: str, data: Optional[Union[Dict[str, Any], str]] = None, 
+             headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> str:
+        """Make HTTP POST request.
+        
+        Args:
+            url: URL to request  
+            data: Request body data (dict for JSON, str for raw)
+            headers: Optional HTTP headers
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Command string for lamia.run() to execute
+            
+        Example:
+            response = web.post("https://api.example.com/users", {"name": "John", "email": "john@example.com"})
+        """
+        import json
+        cmd_parts = [f"POST {url}"]
+        if data is not None:
+            if isinstance(data, dict):
+                cmd_parts.append(f"json:{json.dumps(data)}")
+            else:
+                cmd_parts.append(f"data:{data}")
+        if headers:
+            cmd_parts.append(f"headers:{json.dumps(headers)}")
+        if timeout:
+            cmd_parts.append(f"timeout:{timeout}")
+        return " ".join(cmd_parts)
+    
+    def put(self, url: str, data: Optional[Union[Dict[str, Any], str]] = None,
+            headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> str:
+        """Make HTTP PUT request.
+        
+        Args:
+            url: URL to request
+            data: Request body data (dict for JSON, str for raw)
+            headers: Optional HTTP headers
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Command string for lamia.run() to execute
+            
+        Example:
+            response = web.put("https://api.example.com/users/123", {"name": "John Updated"})
+        """
+        import json
+        cmd_parts = [f"PUT {url}"]
+        if data is not None:
+            if isinstance(data, dict):
+                cmd_parts.append(f"json:{json.dumps(data)}")
+            else:
+                cmd_parts.append(f"data:{data}")
+        if headers:
+            cmd_parts.append(f"headers:{json.dumps(headers)}")
+        if timeout:
+            cmd_parts.append(f"timeout:{timeout}")
+        return " ".join(cmd_parts)
+    
+    def delete(self, url: str, headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> str:
+        """Make HTTP DELETE request.
+        
+        Args:
+            url: URL to request
+            headers: Optional HTTP headers
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Command string for lamia.run() to execute
+            
+        Example:
+            response = web.delete("https://api.example.com/users/123")
+        """
+        import json
+        cmd_parts = [f"DELETE {url}"]
+        if headers:
+            cmd_parts.append(f"headers:{json.dumps(headers)}")
+        if timeout:
+            cmd_parts.append(f"timeout:{timeout}")
+        return " ".join(cmd_parts)
+    
+    def patch(self, url: str, data: Optional[Union[Dict[str, Any], str]] = None,
+              headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> str:
+        """Make HTTP PATCH request.
+        
+        Args:
+            url: URL to request
+            data: Request body data (dict for JSON, str for raw)
+            headers: Optional HTTP headers
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Command string for lamia.run() to execute
+            
+        Example:
+            response = web.patch("https://api.example.com/users/123", {"email": "newemail@example.com"})
+        """
+        import json
+        cmd_parts = [f"PATCH {url}"]
+        if data is not None:
+            if isinstance(data, dict):
+                cmd_parts.append(f"json:{json.dumps(data)}")
+            else:
+                cmd_parts.append(f"data:{data}")
+        if headers:
+            cmd_parts.append(f"headers:{json.dumps(headers)}")
+        if timeout:
+            cmd_parts.append(f"timeout:{timeout}")
+        return " ".join(cmd_parts)
