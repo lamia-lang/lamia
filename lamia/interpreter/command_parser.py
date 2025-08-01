@@ -6,57 +6,49 @@ domain type and extract arguments for execution.
 """
 
 import re
-from typing import Tuple, Dict, Any, Optional
+from typing import Optional
 from urllib.parse import urlparse
 from .command_types import CommandType
+from .commands import Command, LLMCommand, WebCommand, FileCommand, WebActionType, FileActionType
 from lamia.validation.base import BaseValidator
 
 class CommandParser:
     def __init__(self, command: str):
         self.command = command
-        self._command_type = None
-        self._content = None
+        self._parsed_command = None
         self._return_type = None
-        self._kwargs = {}
         
         # Parse the command
         self._parse()
 
     @property
-    def command_type(self) -> CommandType:
-        return self._command_type
+    def parsed_command(self) -> Command:
+        return self._parsed_command
 
     @property
-    def content(self) -> str:
-        return self._content
-
-    @property
-    def return_type(self) -> Any:
+    def return_type(self) -> Optional[str]:
         return self._return_type
 
-    @property
-    def kwargs(self) -> Dict[str, Any]:
-        return self._kwargs
-
     def _parse(self):
-        # Determine command type
-        self._command_type = self._determine_command_type()
         content, self._return_type = self._split_command_and_return_type()
+        command_type = self._determine_command_type()
         
-        # Extract content and arguments based on type
-        if self._command_type == CommandType.FILESYSTEM:
+        # Create appropriate Command object based on type
+        if command_type == CommandType.FILESYSTEM:
             try:
-                self._content, self._kwargs = self._parse_fs_command(content)
+                self._parsed_command = self._parse_file_command(content)
             except ValueError:
-                self._command_type = CommandType.LLM
-        elif self._command_type == CommandType.WEB:
+                # Fall back to LLM if parsing fails
+                self._parsed_command = LLMCommand(prompt=content)
+        elif command_type == CommandType.WEB:
             try:
-                self._content, self._kwargs = self._parse_web_command(content)
+                self._parsed_command = self._parse_web_command(content)
             except ValueError:
-                self._command_type = CommandType.LLM
-        
-        if self._command_type == CommandType.LLM:
-            self._content, self._kwargs = self._parse_llm_command(content)
+                # Fall back to LLM if parsing fails
+                self._parsed_command = LLMCommand(prompt=content)
+        else:
+            # Default to LLM command
+            self._parsed_command = LLMCommand(prompt=content)
 
     def _determine_command_type(self) -> CommandType:
         """Determine the type of command based on its format."""

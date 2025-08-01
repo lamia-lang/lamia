@@ -57,3 +57,7 @@ class ConfigProvider:
         """Get the retry configuration from config.""" 
         return self._config.get('retry_config') 
 
+    def get_web_config(self) -> Dict[str, Any]:
+        """Get the web adapter configuration from config."""
+        return self._config.get('web_config', {}) 
+

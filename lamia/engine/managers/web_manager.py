@@ -12,6 +12,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Constants for default adapters
+DEFAULT_BROWSER_ADAPTER = "selenium"
+DEFAULT_HTTP_ADAPTER = "requests"
+
 
 class WebManager(Manager):
     """Manages web adapters with retry support and routes actions to browser or HTTP adapter families."""
@@ -20,13 +24,22 @@ class WebManager(Manager):
         self.config_provider = config_provider
         self._browser_adapters: Dict[str, BaseBrowserAdapter] = {}
         self._http_adapters: Dict[str, BaseHttpAdapter] = {}
-        self._default_browser_adapter = "selenium"
-        self._default_http_adapter = "requests"
-        self._web_adapter = None  # Will be initialized on first use
+        self._web_adapter = None  # For backward compatibility - will be initialized on first use
+        
+        # Get configured defaults or use constants
+        web_config = config_provider.get_web_config()
+        self._default_browser_adapter = web_config.get('default_browser_adapter', DEFAULT_BROWSER_ADAPTER)
+        self._default_http_adapter = web_config.get('default_http_adapter', DEFAULT_HTTP_ADAPTER)
+        self._browser_options = web_config.get('browser_options', {})
+        self._http_options = web_config.get('http_options', {})
     
     async def execute(self, web_url: str, validator: Optional[BaseValidator] = None) -> ValidationResult:
         """Simple web content fetching for backward compatibility."""
-        web_content = requests.get(web_url).text
+
+        if self._web_adapter is None:
+            self._web_adapter = await self._create_adapter_from_config(self.config_provider)
+
+        web_content = self._web_adapter.get(web_url)
         
         execution_context = TrackingContext(
             data_provider_name="http_requests",
@@ -43,6 +56,16 @@ class WebManager(Manager):
                 validated_text=web_content,
                 execution_context=execution_context
             )
+    
+    async def _create_adapter_from_config(self, config_provider: ConfigProvider):
+        """Create a simple HTTP adapter for backward compatibility."""
+        # For backward compatibility, create a simple requests adapter
+        from lamia.adapters.web.http.http_adapter import RequestsAdapter
+        timeout = self._http_options.get('timeout', 30.0)
+        user_agent = self._http_options.get('user_agent', 'Lamia/1.0')
+        adapter = RequestsAdapter(timeout=timeout, user_agent=user_agent)
+        await adapter.initialize()
+        return adapter
     
     async def execute_browser_action(self, action: BrowserAction, adapter_name: Optional[str] = None) -> Any:
         """Execute a browser action using the specified or default browser adapter with retry support."""
@@ -111,13 +134,19 @@ class WebManager(Manager):
         if adapter_name in self._browser_adapters:
             return self._browser_adapters[adapter_name]
         
-        # Create raw adapter
+        # Get browser options from config
+        headless = self._browser_options.get('headless', True)
+        timeout = self._browser_options.get('timeout', 10.0)
+        
+        # Create raw adapter with config options
         if adapter_name == "selenium":
             from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
-            raw_adapter = SeleniumAdapter()
+            raw_adapter = SeleniumAdapter(headless=headless, timeout=timeout)
         elif adapter_name == "playwright":
-            from lamia.adapters.web.playwright_adapter import PlaywrightAdapter
-            raw_adapter = PlaywrightAdapter()
+            from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
+            # Convert seconds to milliseconds for Playwright
+            playwright_timeout = timeout * 1000
+            raw_adapter = PlaywrightAdapter(headless=headless, timeout=playwright_timeout)
         else:
             raise ValueError(f"Unsupported browser adapter: {adapter_name}")
         
@@ -137,10 +166,14 @@ class WebManager(Manager):
         if adapter_name in self._http_adapters:
             return self._http_adapters[adapter_name]
         
-        # Create raw adapter  
+        # Get HTTP options from config
+        timeout = self._http_options.get('timeout', 30.0)
+        user_agent = self._http_options.get('user_agent', 'Lamia/1.0')
+        
+        # Create raw adapter with config options  
         if adapter_name == "requests":
-            from lamia.adapters.web.http.requests_adapter import RequestsAdapter
-            raw_adapter = RequestsAdapter()
+            from lamia.adapters.web.http.http_adapter import RequestsAdapter
+            raw_adapter = RequestsAdapter(timeout=timeout, user_agent=user_agent)
         else:
             raise ValueError(f"Unsupported HTTP adapter: {adapter_name}")
         
