@@ -11,7 +11,7 @@ from lamia.engine.config_provider import ConfigProvider
 import logging
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
-from lamia.validation.base import BaseValidator, ExecutionContext
+from lamia.validation.base import BaseValidator, TrackingContext
 from lamia.types import BaseType, ExternalOperationRetryConfig
 from typing import Type
 from datetime import timedelta
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class LamiaResult:
     result_text: str
     typed_result: Any
-    execution_context: ExecutionContext
+    execution_context: TrackingContext
 
 class Lamia:
     """
@@ -205,7 +205,7 @@ class Lamia:
         # Run Python code
         try:
             result = run_python_code(command, mode='interactive')
-            python_context = ExecutionContext(
+            python_context = TrackingContext(
                 data_provider_name="python",
                 command_type="python",
                 metadata={"mode": "interactive"}

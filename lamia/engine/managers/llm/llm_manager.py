@@ -7,7 +7,7 @@ from lamia.adapters.llm.base import BaseLLMAdapter
 from ...config_provider import ConfigProvider
 from ...managers import Manager
 from .providers import ProviderRegistry
-from lamia.validation.base import ValidationResult, BaseValidator, ExecutionContext
+from lamia.validation.base import ValidationResult, BaseValidator, TrackingContext
 from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.errors import ExternalOperationError, MissingAPIKeysError
 from lamia.interpreter.command_types import CommandType
@@ -262,7 +262,7 @@ class LLMManager(Manager):
             # Validate the response
             if validator is not None:
                 # Create execution context for tracking
-                execution_context = ExecutionContext(
+                execution_context = TrackingContext(
                     data_provider_name=model.name,
                     command_type=CommandType.LLM,
                     metadata={"usage": response.usage, "model": response.model}
@@ -276,7 +276,7 @@ class LLMManager(Manager):
                     return validation_result
             else:
                 # Create execution context even when no validator is used
-                execution_context = ExecutionContext(
+                execution_context = TrackingContext(
                     data_provider_name=model.name,
                     command_type=CommandType.LLM,
                     metadata={"usage": response.usage, "model": response.model}

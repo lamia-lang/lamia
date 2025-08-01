@@ -1,6 +1,6 @@
 from lamia.engine.managers import Manager
 from lamia.engine.config_provider import ConfigProvider
-from lamia.validation.base import ValidationResult, BaseValidator, ExecutionContext
+from lamia.validation.base import ValidationResult, BaseValidator, TrackingContext
 from lamia.types import BrowserAction, HttpAction, BrowserActionType, HttpActionType
 from lamia.adapters.web.browser.base import BaseBrowserAdapter
 from lamia.adapters.web.http.base import BaseHttpAdapter
@@ -28,7 +28,7 @@ class WebManager(Manager):
         """Simple web content fetching for backward compatibility."""
         web_content = requests.get(web_url).text
         
-        execution_context = ExecutionContext(
+        execution_context = TrackingContext(
             data_provider_name="http_requests",
             command_type=CommandType.WEB,
             metadata={"url": web_url}

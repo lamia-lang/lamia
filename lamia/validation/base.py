@@ -5,7 +5,7 @@ from lamia.interpreter.command_types import CommandType
 from lamia.engine.validation_manager import ValidationStatsTracker
 
 @dataclass
-class ExecutionContext:
+class TrackingContext:
     """Generic context for tracking execution across different domains."""
     
     data_provider_name: str  # e.g., "openai:gpt-4o", "selenium", "local_fs"
@@ -33,7 +33,7 @@ class ValidationResult:
     validated_text: Optional[str] = None
     result_type: Optional[Any] = None
     info_loss: Optional[dict] = None
-    execution_context: Optional[ExecutionContext] = None
+    execution_context: Optional[TrackingContext] = None
 
 class BaseValidator(ABC):
     """Base class for response validators.
@@ -54,7 +54,7 @@ class BaseValidator(ABC):
         if not (has_validate or (has_strict and has_perm)):
             raise TypeError("Must implement either validate() or both validate_strict and validate_permissive.")
 
-    async def validate(self, response: str, execution_context: Optional[ExecutionContext] = None, **kwargs) -> ValidationResult:
+    async def validate(self, response: str, execution_context: Optional[TrackingContext] = None, **kwargs) -> ValidationResult:
         """Validate response and track intermediate attempts if validation_manager is available.
         
         Args:
