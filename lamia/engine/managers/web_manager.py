@@ -1,11 +1,14 @@
 from lamia.engine.managers import Manager
 from lamia.engine.config_provider import ConfigProvider
 from lamia.validation.base import ValidationResult, BaseValidator, TrackingContext
-from lamia.types import BrowserAction, HttpAction, BrowserActionType, HttpActionType
+from lamia.types import BrowserAction, HttpAction, BrowserActionType, HttpActionType, BrowserActionParams
 from lamia.adapters.web.browser.base import BaseBrowserAdapter
 from lamia.adapters.web.http.base import BaseHttpAdapter
 from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.interpreter.command_types import CommandType
+from lamia.interpreter.command_types import WebCommand
+from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
+from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
 from typing import Optional, Dict, Any
 import requests
 import logging
@@ -33,18 +36,31 @@ class WebManager(Manager):
         self._browser_options = web_config.get('browser_options', {})
         self._http_options = web_config.get('http_options', {})
     
-    async def execute(self, web_url: str, validator: Optional[BaseValidator] = None) -> ValidationResult:
+    async def execute(self, command: WebCommand, validator: Optional[BaseValidator] = None) -> ValidationResult:
         """Simple web content fetching for backward compatibility."""
 
-        if self._web_adapter is None:
-            self._web_adapter = await self._create_adapter_from_config(self.config_provider)
-
-        web_content = self._web_adapter.get(web_url)
+        command_type = command.command_type
+        if command_type == CommandType.WEB:            
+            # Create navigation action
+            action = BrowserAction(
+                action=BrowserActionType.NAVIGATE,
+                params=BrowserActionParams(value=command.url)
+            )
+            
+            # Execute navigation
+            adapter = await self._get_browser_adapter(self._default_browser_adapter)
+            await self.execute_browser_action(action, adapter)
+            web_content = self._web_adapter.get(command.url)
+        elif command_type == CommandType.HTTP:
+            adapter = await self._get_http_adapter(self._default_http_adapter)
+            await self.execute_http_action(command, adapter)
+        else:
+            raise ValueError(f"Unsupported command type: {command_type}")
         
         execution_context = TrackingContext(
             data_provider_name="http_requests",
             command_type=CommandType.WEB,
-            metadata={"url": web_url}
+            metadata={"url": command.url}
         )
         
         if validator:
@@ -67,12 +83,10 @@ class WebManager(Manager):
         await adapter.initialize()
         return adapter
     
-    async def execute_browser_action(self, action: BrowserAction, adapter_name: Optional[str] = None) -> Any:
+    async def execute_browser_action(self, action: BrowserAction, adapter: BaseBrowserAdapter) -> Any:
         """Execute a browser action using the specified or default browser adapter with retry support."""
-        adapter_name = adapter_name or self._default_browser_adapter
-        adapter = await self._get_browser_adapter(adapter_name)
         
-        logger.info(f"Executing {action.action} browser action using {adapter_name} adapter")
+        logger.info(f"Executing {action.action} browser action using {adapter.__class__.__name__} adapter")
         
         # Route to appropriate browser adapter method - errors will bubble up for retry handling
         if action.action == BrowserActionType.NAVIGATE:
@@ -140,10 +154,8 @@ class WebManager(Manager):
         
         # Create raw adapter with config options
         if adapter_name == "selenium":
-            from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
             raw_adapter = SeleniumAdapter(headless=headless, timeout=timeout)
         elif adapter_name == "playwright":
-            from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
             # Convert seconds to milliseconds for Playwright
             playwright_timeout = timeout * 1000
             raw_adapter = PlaywrightAdapter(headless=headless, timeout=playwright_timeout)
@@ -184,36 +196,6 @@ class WebManager(Manager):
         # For now, just cache the raw adapter
         self._http_adapters[adapter_name] = raw_adapter
         return raw_adapter
-    
-    async def navigate_and_validate(self, url: str, return_type: Optional[type] = None, adapter_name: Optional[str] = None) -> Any:
-        """Navigate to URL and optionally validate the result.
-        
-        This method is used by the hybrid syntax parser for simple URL navigation like:
-        def login() -> HTML: "https://www.example.com"
-        """
-        from lamia.types import BrowserAction, BrowserActionType, BrowserActionParams
-        
-        # Create navigation action
-        action = BrowserAction(
-            action=BrowserActionType.NAVIGATE,
-            params=BrowserActionParams(value=url)
-        )
-        
-        # Execute navigation
-        await self.execute_browser_action(action, adapter_name)
-        
-        # For now, return a simple HTML-like object with the URL
-        # In a full implementation, this would validate the page content
-        # and return structured data based on return_type
-        if return_type:
-            logger.info(f"Navigate to {url} with return type {return_type}")
-            # TODO: Add validation logic based on return_type
-        else:
-            logger.info(f"Navigate to {url}")
-        
-        # Return current page content or validation result
-        # For now, just return the URL as confirmation
-        return url
     
     async def close(self):
         """Close and cleanup all managed adapters."""
