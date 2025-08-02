@@ -66,10 +66,10 @@ class LamiaEngine:
             manager = self.manager_factory.get_manager(command.command_type)
             
             # Execute validation directly
-            validation_result = await manager.execute(command.get_primary_content, validator)
+            validation_result = await manager.execute(command, validator)
             
             # Record successful validation
-            self.validation_manager.record_validation_result(validation_result.is_valid, command_type)
+            self.validation_manager.record_validation_result(validation_result.is_valid, command.command_type)
             
             return validation_result
             
