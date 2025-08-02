@@ -38,11 +38,6 @@ class Command(ABC):
     def __init__(self, command_type: CommandType):
         self.command_type = command_type
 
-    @abstractmethod
-    def get_primary_content(self) -> str:
-        """Get the primary content for logging/display purposes."""
-        pass
-
 
 @dataclass
 class LLMCommand(Command):
@@ -51,9 +46,6 @@ class LLMCommand(Command):
     
     def __post_init__(self):
         super().__init__(CommandType.LLM)
-    
-    def get_primary_content(self) -> str:
-        return self.prompt
 
 
 @dataclass
@@ -93,6 +85,3 @@ class FileCommand(Command):
     
     def __post_init__(self):
         super().__init__(CommandType.FILESYSTEM)
-    
-    def get_primary_content(self) -> str:
-        return f"{self.action.value}({self.path})"

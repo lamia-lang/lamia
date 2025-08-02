@@ -54,7 +54,8 @@ class OllamaModel(LLMModel):
     num_thread: Optional[int] = None
     repeat_penalty: Optional[float] = None
 
-from .lamia import Lamia
+from .facade.lamia import Lamia
+from .facade.result_types import LamiaResult
 from .errors import (
     MissingAPIKeysError,
     ExternalOperationError,
@@ -66,6 +67,7 @@ from .errors import (
 
 __all__ = [
     "Lamia",
+    "LamiaResult",
     "MissingAPIKeysError", 
     "ExternalOperationError",
     "ExternalOperationFailedError",
