@@ -183,7 +183,7 @@ class HybridExecutor:
         
         # Use lazy loading if enabled
         if enable_lazy_dependency_loading:
-            from .lazy_loader import create_lazy_loading_globals
+            from .hybrid_files_lazy_loader import create_lazy_loading_globals
             globals_dict = create_lazy_loading_globals(self.lamia, globals_dict)
         
         # Execute the transformed code directly

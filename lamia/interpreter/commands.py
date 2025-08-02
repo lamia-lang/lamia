@@ -31,12 +31,13 @@ class FileActionType(Enum):
     MKDIR = "mkdir"
     LIST_DIR = "list_dir"
 
-
-@dataclass
 class Command(ABC):
     """Base class for all command objects."""
     command_type: CommandType
-    
+
+    def __init__(self, command_type: CommandType):
+        self.command_type = command_type
+
     @abstractmethod
     def get_primary_content(self) -> str:
         """Get the primary content for logging/display purposes."""
@@ -49,7 +50,7 @@ class LLMCommand(Command):
     prompt: str
     
     def __post_init__(self):
-        self.command_type = CommandType.LLM
+        super().__init__(CommandType.LLM)
     
     def get_primary_content(self) -> str:
         return self.prompt
@@ -68,7 +69,7 @@ class WebCommand(Command):
     value: Optional[str] = None  # For input actions
     
     def __post_init__(self):
-        self.command_type = CommandType.WEB
+        super().__init__(CommandType.WEB)
     
     def get_primary_content(self) -> str:
         if self.url:
@@ -91,7 +92,7 @@ class FileCommand(Command):
     pattern: Optional[str] = None  # For list operations
     
     def __post_init__(self):
-        self.command_type = CommandType.FILESYSTEM
+        super().__init__(CommandType.FILESYSTEM)
     
     def get_primary_content(self) -> str:
         return f"{self.action.value}({self.path})"

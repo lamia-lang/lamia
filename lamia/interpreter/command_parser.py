@@ -39,16 +39,16 @@ class CommandParser:
                 self._parsed_command = self._parse_file_command(content)
             except ValueError:
                 # Fall back to LLM if parsing fails
-                self._parsed_command = LLMCommand(prompt=content)
+                self._parsed_command = LLMCommand(content)
         elif command_type == CommandType.WEB:
             try:
                 self._parsed_command = self._parse_web_command(content)
             except ValueError:
                 # Fall back to LLM if parsing fails
-                self._parsed_command = LLMCommand(prompt=content)
+                self._parsed_command = LLMCommand(content)
         else:
             # Default to LLM command
-            self._parsed_command = LLMCommand(prompt=content)
+            self._parsed_command = LLMCommand(content)
 
     def _determine_command_type(self) -> CommandType:
         """Determine the type of command based on its format."""

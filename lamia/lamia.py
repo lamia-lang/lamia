@@ -220,6 +220,7 @@ class Lamia:
 
         # Always create a fresh parser for each command to avoid reusing the
         # previous command's state (which caused the first‐command‐only bug).
+        print(f"Command: {command}")
         current_parser = CommandParser(command)
         #if current_parser.return_type is not None and type(current_parser.return_type) == str:
         #    validator = get_return_type_from_str(current_parser.return_type)
@@ -228,8 +229,7 @@ class Lamia:
             self._engine.config_provider.override_model_chain_with(models)
 
         response = await self._engine.execute(
-            current_parser.command_type,
-            current_parser.content,
+            current_parser.parsed_command,
             return_type=return_type
         )
 

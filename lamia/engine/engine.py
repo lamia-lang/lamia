@@ -1,5 +1,7 @@
 from typing import Optional, Dict, Any, List, Type
 
+from lamia.interpreter.commands import Command
+
 from .config_provider import ConfigProvider
 from .factories import ManagerFactory, ValidatorFactory
 from .validation_manager import ValidationStatsTracker
@@ -31,8 +33,7 @@ class LamiaEngine:
 
     async def execute(
         self,
-        command_type: CommandType,
-        content: str,
+        command: Command,
         return_type: Optional[Type[BaseType]] = None,
     ) -> ValidationResult:
         """Execute a request using the appropriate domain manager.
@@ -49,7 +50,7 @@ class LamiaEngine:
             # Create validator
             if return_type is not None:
                 validator = self.validator_factory.get_validator(
-                        command_type, 
+                        command.command_type, 
                         return_type,
                         validation_manager=self.validation_manager
                     )
@@ -62,10 +63,10 @@ class LamiaEngine:
                 validator = None
             
             # Get the appropriate manager
-            manager = self.manager_factory.get_manager(command_type)
+            manager = self.manager_factory.get_manager(command.command_type)
             
             # Execute validation directly
-            validation_result = await manager.execute(content, validator)
+            validation_result = await manager.execute(command.get_primary_content, validator)
             
             # Record successful validation
             self.validation_manager.record_validation_result(validation_result.is_valid, command_type)
@@ -74,7 +75,7 @@ class LamiaEngine:
             
         except Exception as e:
             # Record failed validation
-            self.validation_manager.record_validation_result(False, command_type)
+            self.validation_manager.record_validation_result(False, command.command_type)
             raise
     
     def get_validation_stats(self):
