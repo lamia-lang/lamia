@@ -225,7 +225,7 @@ def main():
                 try:
                     logger.info(f"Processing hybrid syntax file: {prompt_file}")
                     executor = HybridExecutor(lamia)
-                    executor.execute_file(prompt_file, enable_lazy_loading=True)
+                    executor.execute_file(prompt_file, enable_lazy_dependency_loading=True)
                     sys.exit(0)
                 except Exception as e:
                     logger.error(f"❌ Error processing hybrid syntax file: {e}")

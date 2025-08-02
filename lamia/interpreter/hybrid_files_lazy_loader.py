@@ -19,11 +19,13 @@ logger = logging.getLogger(__name__)
 class LazyLoader:
     """Handles lazy loading of Python and .hu files when functions are not found."""
     
-    def __init__(self, lamia_instance=None):
+    def __init__(self, lamia_instance=None, search_directory=None):
         self.lamia = lamia_instance
+        self.search_directory = search_directory or "."
         self.loaded_modules: Set[str] = set()
         self.loaded_hu_files: Set[str] = set()
         self.function_registry: Dict[str, str] = {}  # function_name -> file_path
+        self.scanned_directories: Set[str] = set()  # Track what we've already scanned
         self._parser = HybridSyntaxParser() if lamia_instance else None
         
     def scan_directory_for_functions(self, directory: str, recursive: bool = True) -> None:
@@ -87,6 +89,24 @@ class LazyLoader:
         except Exception as e:
             logger.warning(f"Could not parse .hu file {hu_file}: {e}")
     
+    def _scan_for_function(self, function_name: str) -> bool:
+        """Scan the search directory for a specific function on demand.
+        
+        Args:
+            function_name: Name of the function to find
+            
+        Returns:
+            True if function was found and cataloged, False otherwise
+        """
+        # Only scan if we haven't already scanned this directory
+        if self.search_directory not in self.scanned_directories:
+            logger.info(f"Lazy loading: scanning directory '{self.search_directory}' for function '{function_name}'")
+            self.scan_directory_for_functions(self.search_directory, recursive=True)
+            self.scanned_directories.add(self.search_directory)
+            logger.info(f"Lazy loading: found {len(self.function_registry)} functions: {list(self.function_registry.keys())}")
+        
+        return function_name in self.function_registry
+
     def load_function_file(self, function_name: str, execution_globals: Dict[str, Any]) -> bool:
         """Load the file containing the specified function.
         
@@ -97,8 +117,11 @@ class LazyLoader:
         Returns:
             True if function was found and loaded, False otherwise
         """
+        # First check if we already know about this function
         if function_name not in self.function_registry:
-            return False
+            # If not, try to find it by scanning
+            if not self._scan_for_function(function_name):
+                return False
             
         file_path = self.function_registry[function_name]
         file_path_obj = Path(file_path)
@@ -169,8 +192,10 @@ class LazyLoader:
             with open(hu_file, 'r') as f:
                 source_code = f.read()
                 
-            # Execute the .hu file and merge results into execution globals
-            local_dict = executor.execute(source_code, globals_dict=execution_globals.copy())
+            # Execute the .hu file with lazy loading enabled and merge results into execution globals
+            temp_globals = execution_globals.copy()
+            executor.execute_file(str(hu_file), globals_dict=temp_globals, enable_lazy_dependency_loading=True)
+            local_dict = temp_globals
             
             # Add all functions from the executed .hu file to execution globals
             for name, obj in local_dict.items():
@@ -187,12 +212,13 @@ class LazyLoader:
         return False
 
 
-def create_lazy_loading_globals(lamia_instance, base_globals: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def create_lazy_loading_globals(lamia_instance, base_globals: Optional[Dict[str, Any]] = None, file_path: Optional[str] = None) -> Dict[str, Any]:
     """Create a globals dictionary with lazy loading capabilities.
     
     Args:
         lamia_instance: Lamia instance for .hu file execution
         base_globals: Base globals dictionary to extend
+        file_path: Path of the file being executed (used to determine search directory)
         
     Returns:
         Enhanced globals dictionary with lazy loading
@@ -200,11 +226,14 @@ def create_lazy_loading_globals(lamia_instance, base_globals: Optional[Dict[str,
     if base_globals is None:
         base_globals = {}
         
-    # Create lazy loader
-    loader = LazyLoader(lamia_instance)
+    # Determine directory to scan based on file path
+    if file_path:
+        search_dir = str(Path(file_path).parent)
+    else:
+        search_dir = "."
     
-    # Scan current directory for functions
-    loader.scan_directory_for_functions(".", recursive=True)
+    # Create lazy loader with search directory - no upfront scanning
+    loader = LazyLoader(lamia_instance, search_dir)
     
     class LazyGlobals(dict):
         """A dictionary that attempts lazy loading when keys are not found."""
@@ -218,8 +247,13 @@ def create_lazy_loading_globals(lamia_instance, base_globals: Optional[Dict[str,
             try:
                 return super().__getitem__(key)
             except KeyError:
-                # Attempt lazy loading if the key looks like a function name
-                if key not in self._loading and key.isidentifier():
+                logger.debug(f"Lazy loading: KeyError for '{key}', checking if should load")
+                # Attempt lazy loading if the key looks like a user-defined function name
+                if (key not in self._loading and 
+                    key.isidentifier() and 
+                    not key.startswith('_') and
+                    self._should_attempt_lazy_load(key)):
+                    logger.debug(f"Lazy loading: conditions met for '{key}', attempting load")
                     self._loading.add(key)
                     try:
                         if self._loader.load_function_file(key, self):
@@ -228,8 +262,37 @@ def create_lazy_loading_globals(lamia_instance, base_globals: Optional[Dict[str,
                                 return super().__getitem__(key)
                     finally:
                         self._loading.discard(key)
+                else:
+                    logger.debug(f"Lazy loading: skipping '{key}' - conditions not met")
                         
                 # If still not found, raise the original KeyError
                 raise
+        
+        def _should_attempt_lazy_load(self, key: str) -> bool:
+            """Determine if we should attempt lazy loading for this key."""
+            # Skip built-in types and functions
+            try:
+                # Check if it's a built-in type/function
+                if hasattr(__builtins__, key):
+                    logger.debug(f"Lazy loading: skipping built-in '{key}'")
+                    return False
+                
+                # Check if it's available in builtins dict (alternative check)
+                if isinstance(__builtins__, dict) and key in __builtins__:
+                    logger.debug(f"Lazy loading: skipping built-in dict '{key}'")
+                    return False
+                    
+            except Exception as e:
+                logger.debug(f"Lazy loading: error checking builtins for '{key}': {e}")
+            
+            # If it looks like a type (starts with uppercase), be more selective
+            if key[0].isupper():
+                # Only attempt lazy loading for uppercase names if they're not common type patterns
+                result = len(key) > 2 and not key.isupper()
+                logger.debug(f"Lazy loading: uppercase check for '{key}': {result}")
+                return result
+            
+            logger.debug(f"Lazy loading: will attempt to load '{key}'")
+            return True
     
     return LazyGlobals(base_globals, loader) 
