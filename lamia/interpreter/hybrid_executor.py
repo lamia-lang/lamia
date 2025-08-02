@@ -155,7 +155,7 @@ class HybridExecutor:
                     logger.warning(f"Could not import type {type_name}: {e}")
                     pass
     
-    def execute_file(self, file_path: str, globals_dict: Optional[Dict] = None):
+    def execute_file(self, file_path: str, globals_dict: Optional[Dict] = None, enable_lazy_dependency_loading: bool = False):
         """Execute a hybrid syntax file directly with AST-based selective injection."""
         # Read source code
         with open(file_path, 'r') as f:
@@ -181,9 +181,21 @@ class HybridExecutor:
         # Extract and import types from return annotations (legacy support)
         self._extract_and_import_types(source_code, globals_dict)
         
+        # Use lazy loading if enabled
+        if enable_lazy_dependency_loading:
+            from .lazy_loader import create_lazy_loading_globals
+            globals_dict = create_lazy_loading_globals(self.lamia, globals_dict)
+        
         # Execute the transformed code directly
         compiled_code = compile(transformed_code, file_path, 'exec')
-        exec(compiled_code, globals_dict)
+        try:
+            exec(compiled_code, globals_dict)
+        except NameError as e:
+            if enable_lazy_dependency_loading:
+                # NameError during execution - the lazy loading should have handled it
+                # Re-raise with more context
+                logger.error(f"Function not found even after lazy loading: {e}")
+            raise
     
     def _execute_in_new_loop(self, code, file_path, globals_dict=None, source_code=None):
         """Execute code in a new event loop to avoid async context conflicts."""

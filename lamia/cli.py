@@ -134,38 +134,6 @@ async def interactive_mode(lamia: Lamia):
             logger.error(traceback.format_exc())
             continue
 
-def add_all_py_dirs_to_syspath_and_check_conflicts(root_dir):
-    module_names = {}
-    function_names = {}
-    if ".lamia" in os.listdir(root_dir):
-        # It's a Lamia special folder we don't allow conflicting filenames and function names
-        for dirpath, dirnames, filenames in os.walk(root_dir):
-            py_files = [f for f in filenames if f.endswith('.py')]
-            if py_files:
-                sys.path.insert(0, dirpath)
-                for f in py_files:
-                    mod_name = os.path.splitext(f)[0]
-                    mod_path = os.path.join(dirpath, f)
-                    # Check for module name conflicts
-                    if mod_name in module_names:
-                        logger.error(f"Module name conflict: '{mod_name}.py' found in both '{module_names[mod_name]}' and '{dirpath}'. Please rename one of them.")
-                        sys.exit(1)
-                    module_names[mod_name] = dirpath
-                    # Check for function name conflicts
-                    try:
-                        with open(mod_path, 'r') as file:
-                            node = ast.parse(file.read(), filename=mod_path)
-                            for n in node.body:
-                                if isinstance(n, ast.FunctionDef):
-                                    func_name = n.name
-                                    if func_name in function_names:
-                                        prev_mod, prev_path = function_names[func_name]
-                                        logger.error(f"Function name conflict: function '{func_name}' found in both '{prev_path}' and '{mod_path}'. Please rename one of them or use explicit imports (e.g., 'from <module> import <func>').")
-                                        sys.exit(1)
-                                    function_names[func_name] = (mod_name, mod_path)
-                    except Exception as e:
-                        logger.warning(f"Could not parse {mod_path}: {e}")
-
 def main():
     """Main entry point for the Lamia CLI."""
     if len(sys.argv) > 1 and sys.argv[1] == "init":
@@ -238,8 +206,8 @@ def main():
         logger.error("❌ Error: --config is required for CLI operation.")
         sys.exit(1)
 
-    # Add this before running the user script
-    add_all_py_dirs_to_syspath_and_check_conflicts(os.getcwd())
+    # Note: Lazy loading is now handled by HybridExecutor for .hu files
+    # Python files still need sys.path management for regular execution
 
     try:
         # Create Lamia instance with config
@@ -253,11 +221,11 @@ def main():
             file_ext = os.path.splitext(prompt_file)[1].lower()
             
             if file_ext in HYBRID_EXTENSIONS:
-                # Process hybrid syntax file
+                # Process hybrid syntax file with lazy loading enabled
                 try:
                     logger.info(f"Processing hybrid syntax file: {prompt_file}")
                     executor = HybridExecutor(lamia)
-                    executor.execute_file(prompt_file)
+                    executor.execute_file(prompt_file, enable_lazy_loading=True)
                     sys.exit(0)
                 except Exception as e:
                     logger.error(f"❌ Error processing hybrid syntax file: {e}")
