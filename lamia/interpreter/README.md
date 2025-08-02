@@ -127,6 +127,28 @@ weather = WeatherModel(city="NYC", temperature=22.5, conditions="sunny")
 report = await generate_report(weather, "New York City")
 ```
 
+## Model Selection
+
+Functions can specify which AI model to use via the `models` parameter. You can specify a single model or a list of models for fallback:
+
+```python
+def analyze_with_gpt(models="openai:gpt-4"):
+    "Analyze the user interface and suggest improvements"
+
+def analyze_with_claude(models="anthropic:claude-3-opus-20240229"):
+    "Write a technical analysis of the market trends"
+
+def analyze_with_fallback(models=["openai:gpt-4", "anthropic:claude-3-haiku-20240307"]):
+    "Generate a comprehensive report with model fallback"
+
+# Usage - the models parameter automatically gets passed to lamia.run()
+result = await analyze_with_gpt()  # Uses OpenAI GPT-4
+analysis = await analyze_with_claude()  # Uses Claude Opus  
+report = await analyze_with_fallback()  # Tries GPT-4, falls back to Claude Haiku
+```
+
+**Note**: The `models` parameter only applies to LLM commands. For web navigation and file operations, the models parameter is ignored since these don't involve language model processing.
+
 Parameters are automatically serialized:
 - **Pydantic models**: Serialized to JSON using `model_dump_json()`
 - **Simple types** (str, int, float): Converted to string representation

@@ -96,15 +96,28 @@ class LLMCommandDetector(ast.NodeVisitor):
         return None
     
     def _extract_parameters(self, func_node):
-        """Extract function parameters with their type annotations."""
+        """Extract function parameters with their type annotations and default values."""
         parameters = []
-        for arg in func_node.args.args:
+        defaults = func_node.args.defaults
+        
+        # Calculate offset for defaults (defaults align with the last N parameters)
+        defaults_offset = len(func_node.args.args) - len(defaults)
+        
+        for i, arg in enumerate(func_node.args.args):
             param_info = {
                 'name': arg.arg,
-                'type': None
+                'type': None,
+                'default': None
             }
+            
             if arg.annotation:
                 param_info['type'] = self._ast_to_type_string(arg.annotation)
+            
+            # Check if this parameter has a default value
+            if i >= defaults_offset:
+                default_index = i - defaults_offset
+                param_info['default'] = self._ast_node_to_value(defaults[default_index])
+            
             parameters.append(param_info)
         return parameters
     
@@ -124,6 +137,18 @@ class LLMCommandDetector(ast.NodeVisitor):
             # Handle module.Type syntax
             return f"{self._ast_to_type_string(ast_node.value)}.{ast_node.attr}"
         return str(ast_node)
+    
+    def _ast_node_to_value(self, node):
+        """Convert AST node to value for models parameter (string or list)."""
+        if isinstance(node, ast.Constant):
+            return node.value
+        elif isinstance(node, ast.Str):  # For older Python versions
+            return node.s
+        elif isinstance(node, ast.List):
+            return [self._ast_node_to_value(item) for item in node.elts]
+        else:
+            # For unsupported types, return None
+            return None
 
 
 class HybridSyntaxTransformer(ast.NodeTransformer):
@@ -181,9 +206,33 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     
     def _create_lamia_call_function(self, node, processed_command: ast.AST, return_type: Optional[Dict], is_async: bool):
         """Create a function node that calls lamia.run() or lamia.run_async()."""
+        func_info = self.detector.llm_functions[node.name]
+        parameters = func_info['parameters']
+        
         # Build lamia call arguments
         args = [processed_command]
         keywords = []
+        
+        # Add models parameter from function signature if present
+        for param in parameters:
+            if param['name'] == 'models' and param.get('default') is not None:
+                # Create models keyword argument with the actual default value
+                default_value = param['default']
+                if isinstance(default_value, list):
+                    # Create list literal for multiple models
+                    list_elements = [ast.Constant(value=model) for model in default_value]
+                    value_node = ast.List(elts=list_elements, ctx=ast.Load())
+                else:
+                    # Single model string
+                    value_node = ast.Constant(value=default_value)
+                
+                keywords.append(
+                    ast.keyword(
+                        arg='models',
+                        value=value_node
+                    )
+                )
+                break  # Only one models parameter expected
         
         if return_type:
             # Add return_type parameter as actual type object
