@@ -9,8 +9,7 @@ from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import WebCommand
 from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
 from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
-from typing import Optional, Dict, Any
-import requests
+from typing import Optional, Any
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,8 @@ class WebConfig:
     DEFAULT_HTTP_TIMEOUT = 30.0     # seconds
     DEFAULT_USER_AGENT = "Lamia/1.0"
 
-class WebManager(Manager):
+
+class WebManager(Manager[WebCommand]):
     """Manages web adapters with retry support and routes actions to browser or HTTP adapter families."""
     
     def __init__(self, config_provider: ConfigProvider):
