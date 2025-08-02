@@ -99,13 +99,13 @@ async def interactive_mode(lamia: Lamia):
                 print("----------------------------------------")
                 
                 # Show detailed info for LLM responses
-                if result.execution_context.command_type == CommandType.LLM:
-                    if result.execution_context:
-                        print(f"Model: {result.execution_context.data_provider_name}")
+                if result.tracking_context.command_type == CommandType.LLM:
+                    if result.tracking_context:
+                        print(f"Model: {result.tracking_context.data_provider_name}")
                         
                         # Extract usage from metadata if available
-                        if result.execution_context.metadata and "usage" in result.execution_context.metadata:
-                            usage = result.execution_context.metadata["usage"]
+                        if result.tracking_context.metadata and "usage" in result.tracking_context.metadata:
+                            usage = result.tracking_context.metadata["usage"]
                             # Format usage similar to the README example
                             usage_parts = []
                             if 'prompt_tokens' in usage:
@@ -124,7 +124,7 @@ async def interactive_mode(lamia: Lamia):
                             if usage_parts:
                                 print(f"Tokens used: {{{', '.join(usage_parts)}}}")
                 else:
-                    print(f"Executed by: {result.execution_context.command_type}")
+                    print(f"Executed by: {result.tracking_context.command_type}")
         except KeyboardInterrupt:
             logger.info("\n\nGoodbye! 👋")
             break

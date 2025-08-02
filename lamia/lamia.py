@@ -6,6 +6,7 @@ from typing import Any, Optional, List, Dict, Union, Tuple
 from . import env_loader
 from lamia.interpreter.python_runner import run_python_code
 from lamia.interpreter.command_parser import CommandParser
+from lamia.interpreter.commands import Command
 from dataclasses import dataclass
 from lamia.engine.config_provider import ConfigProvider
 import logging
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 class LamiaResult:
     result_text: str
     typed_result: Any
-    execution_context: TrackingContext
+    tracking_context: TrackingContext
 
 class Lamia:
     """
@@ -178,7 +179,7 @@ class Lamia:
 
     async def run_async(
         self,
-        command: str, 
+        command: Union[str, Command], 
         return_type: Optional[Type[BaseType]] = None,
         *,
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None, 
@@ -187,7 +188,7 @@ class Lamia:
         Generate a response, trying Python code first, then LLM.
         
         Args:
-            command: The command to execute
+            command: The command to execute (string or Command object)
             models: The models to use, if not provided, the default models will be used
             return_type: The expected return type for validation
             
@@ -202,34 +203,38 @@ class Lamia:
             ExternalOperationTransientError: If external service has temporary failures (network issues, timeouts)
             ExternalOperationFailedError: If external service fails with unclassified error
         """
-        # Run Python code
-        try:
-            result = run_python_code(command, mode='interactive')
-            python_context = TrackingContext(
-                data_provider_name="python",
-                command_type="python",
-                metadata={"mode": "interactive"}
-            )
-            return LamiaResult(result_text=str(result) if result is not None else "", typed_result=result, execution_context=python_context)
-        except SyntaxError as e:
-            logger.debug(f"Syntax error: {e} in command: {command}")
-            pass
-        except Exception as e:
-            logger.debug(f"Python code execution failed: {e}")
-            pass
+        # Handle Command objects vs strings differently
+        if isinstance(command, Command):
+            # Command object passed directly - skip Python execution and parsing
+            print(f"Command: {command.get_primary_content()}")
+            parsed_command = command
+        else:
+            # String command - try Python first, then parse
+            try:
+                result = run_python_code(command, mode='interactive')
+                python_context = TrackingContext(
+                    data_provider_name="python",
+                    command_type="python",
+                    metadata={"mode": "interactive"}
+                )
+                return LamiaResult(result_text=str(result) if result is not None else "", typed_result=result, tracking_context=python_context)
+            except SyntaxError as e:
+                logger.debug(f"Syntax error: {e} in command: {command}")
+                pass
+            except Exception as e:
+                logger.debug(f"Python code execution failed: {e}")
+                pass
 
-        # Always create a fresh parser for each command to avoid reusing the
-        # previous command's state (which caused the first‐command‐only bug).
-        print(f"Command: {command}")
-        current_parser = CommandParser(command)
-        #if current_parser.return_type is not None and type(current_parser.return_type) == str:
-        #    validator = get_return_type_from_str(current_parser.return_type)
+            # Parse string command
+            print(f"Command: {command}")
+            current_parser = CommandParser(command)
+            parsed_command = current_parser.parsed_command
 
         if models is not None:
             self._engine.config_provider.override_model_chain_with(models)
 
         response = await self._engine.execute(
-            current_parser.parsed_command,
+            parsed_command,
             return_type=return_type
         )
 
@@ -239,7 +244,7 @@ class Lamia:
         return LamiaResult(
             result_text=response.raw_text, 
             typed_result=response.result_type, 
-            execution_context=response.execution_context
+            tracking_context=response.execution_context
         )
 
     def run(

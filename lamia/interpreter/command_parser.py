@@ -66,14 +66,19 @@ class CommandParser:
         else:
             return self.command, None
 
-    def _parse_fs_command(self, command) -> Tuple[str, Dict[str, Any]]:
-        """Parse filesystem command into operation and arguments."""
-        return command, {}
+    def _parse_file_command(self, command) -> FileCommand:
+        """Parse filesystem command into FileCommand object."""
+        # For now, default to READ action for file paths
+        return FileCommand(
+            action=FileActionType.READ,
+            path=command,
+        )
     
-    def _parse_web_command(self, command) -> Tuple[str, Dict[str, Any]]:
-        """Parse web command into URL and arguments."""
-        return command, {}
-    
-    def _parse_llm_command(self, command) -> Tuple[str, Dict[str, Any]]:
-        """Parse LLM command into operation and arguments."""
-        return command, {}
+    def _parse_web_command(self, command) -> WebCommand:
+        """Parse web command into WebCommand object."""
+        # For URLs, default to NAVIGATE action
+        print(f"Parsing web command: {command}")
+        return WebCommand(
+            action=WebActionType.NAVIGATE,
+            url=command,
+        )

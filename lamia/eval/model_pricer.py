@@ -66,7 +66,7 @@ class ModelPricer:
             logger.debug(f"No pricing provider for {provider_name}")
             return None
         
-        usage = result.execution_context.metadata.get("usage", {})
+        usage = result.tracking_context.metadata.get("usage", {})
         if not usage:
             logger.debug(f"No usage data available for cost calculation")
             return None
