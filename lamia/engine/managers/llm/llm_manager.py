@@ -11,6 +11,7 @@ from lamia.validation.base import ValidationResult, BaseValidator, TrackingConte
 from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.errors import ExternalOperationError, MissingAPIKeysError
 from lamia.interpreter.command_types import CommandType
+from lamia.interpreter.commands import LLMCommand
 import logging
 
 logger = logging.getLogger(__name__)
@@ -34,19 +35,21 @@ class LLMManager(Manager):
 
     async def execute(
         self,
-        prompt: str,
+        command: LLMCommand,
         validator: Optional[BaseValidator] = None
     ) -> ValidationResult:
         """Generate a response using the managed adapter.
         
         Args:
-            prompt: The input prompt
-            temperature: Optional temperature override
-            max_tokens: Optional max tokens override
+            command: The LLM command containing the prompt
+            validator: Optional validator for the response
             
         Returns:
-            LLMResponse containing the generated text and metadata
+            ValidationResult containing the generated text and metadata
         """
+        # Extract prompt from LLMCommand
+        prompt = command.prompt
+        
         # Use the existing validation logic
         return await self._execute_with_retries(
             prompt=prompt,

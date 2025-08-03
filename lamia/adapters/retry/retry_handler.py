@@ -6,13 +6,14 @@ from typing import Optional, TypeVar, Dict, List, Callable, Awaitable, Union
 import time
 import asyncio
 
-from lamia.errors import ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationFailedError
+from lamia.errors import ExternalOperationError, ExternalOperationPermanentError, ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationFailedError
 from .defaults import get_default_config_for_adapter
 from lamia.types import ExternalOperationRetryConfig
 from lamia.adapters.error_classifiers.categories import ErrorCategory
 from lamia.adapters.llm.base import BaseLLMAdapter
 from lamia.adapters.filesystem.base import BaseFSAdapter
 from lamia.adapters.web.browser.base import BaseBrowserAdapter
+from lamia.adapters.error_classifiers import HttpErrorClassifier, FilesystemErrorClassifier, SelfHostedLLMErrorClassifier
 import logging
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,8 @@ class RetryHandler:
                 
                 return result
 
-            except Exception as e:
+            except ExternalOperationError as e:
+                # External operation errors should be retried based on their type
                 attempts += 1
                 retry_history.append(f"Attempt {attempts}: {type(e).__name__}: {str(e)}")
                 
@@ -92,7 +94,7 @@ class RetryHandler:
                     })
 
                 error_category = self.error_classifier.classify_error(e)
-                logger.debug(f"Error classified as {error_category} on attempt {attempts}: {type(e).__name__}")
+                logger.debug(f"External error classified as {error_category} on attempt {attempts}: {type(e).__name__}")
                 
                 if error_category == ErrorCategory.PERMANENT or attempts >= self.config.max_attempts:
                     if self.stats:
@@ -101,7 +103,7 @@ class RetryHandler:
                         self.stats.total_retries += attempts - 1
                         self.stats.total_operation_time += time.time() - start_time
                     
-                    # Raise specific operation errors that should bubble up to the user
+                     # Raise specific operation errors that should bubble up to the user
                     if error_category == ErrorCategory.PERMANENT:
                         raise ExternalOperationPermanentError(str(e), retry_history, e)
                     elif error_category == ErrorCategory.RATE_LIMIT:
@@ -114,6 +116,12 @@ class RetryHandler:
                 delay = self._calculate_delay(attempts, error_category)
                 logger.info(f"Retrying in {delay:.2f}s due to {error_category} error (attempt {attempts}/{self.config.max_attempts})")
                 await asyncio.sleep(delay)
+                
+            except Exception as e:
+                # Non-ExternalOperationError exceptions are programming bugs
+                # and should never be retried - let them bubble up immediately
+                logger.debug(f"Programming error detected (not ExternalOperationError): {type(e).__name__}: {e}")
+                raise
 
     def get_stats(self) -> Optional[RetryStats]:
         """Get current retry statistics if enabled."""
@@ -140,9 +148,6 @@ class RetryHandler:
 
 def _get_error_classifier_for_adapter(adapter):
     """Get appropriate error classifier based on adapter type and characteristics."""
-    from ..llm.base import BaseLLMAdapter
-    from ..filesystem.base import BaseFSAdapter
-    from ..error_classifiers import HttpErrorClassifier, FilesystemErrorClassifier, SelfHostedLLMErrorClassifier
     
     if isinstance(adapter, BaseLLMAdapter):
         if adapter.is_remote():

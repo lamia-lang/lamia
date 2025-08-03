@@ -2,8 +2,15 @@ from typing import Optional, Dict, Any
 import aiohttp
 import json
 
-from ...utils.dependencies import import_optional
 from .base import BaseLLMAdapter, LLMResponse, LLMModel
+
+# Try to import Anthropic SDK at module level
+try:
+    from anthropic import AsyncAnthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+    AsyncAnthropic = None
 
 class AnthropicAdapter(BaseLLMAdapter):
     """Anthropic API adapter with SDK support and HTTP fallback."""
@@ -30,14 +37,8 @@ class AnthropicAdapter(BaseLLMAdapter):
         self.client = None
         self.session = None
 
-        # Try to import Anthropic SDK (and auto-install if allowed).
-        anthropic_module, success, _ = import_optional(
-            "anthropic",
-            min_version="0.5.0"
-        )
-
-        if success and anthropic_module is not None:
-            self.client = anthropic_module.AsyncAnthropic(api_key=self.api_key)
+        if ANTHROPIC_AVAILABLE:
+            self.client = AsyncAnthropic(api_key=self.api_key)
             self._use_sdk = True
         else:
             # Fall back to HTTP client

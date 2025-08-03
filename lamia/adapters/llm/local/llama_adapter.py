@@ -2,7 +2,11 @@ from typing import Optional
 import os
 from pathlib import Path
 
-from llama_cpp import Llama
+try:
+    from llama_cpp import Llama
+    LLAMA_CPP_AVAILABLE = True
+except ImportError:
+    LLAMA_CPP_AVAILABLE = False
 
 from ..base import BaseLLMAdapter, LLMResponse
 
@@ -21,6 +25,9 @@ class LlamaAdapter(BaseLLMAdapter):
             has_context_memory: Optional override for context memory capability
             configs: Optional dictionary of advanced/extra settings (e.g., n_ctx, n_threads, etc.)
         """
+        if not LLAMA_CPP_AVAILABLE:
+            raise ImportError("llama-cpp-python not installed. Please install with: pip install llama-cpp-python")
+        
         self.model_path = model_path or os.getenv("LLAMA_MODEL_PATH")
         if not self.model_path:
             raise ValueError("LLaMA model path must be provided or set in LLAMA_MODEL_PATH environment variable")

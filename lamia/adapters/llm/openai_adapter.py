@@ -1,8 +1,15 @@
 from typing import Optional, Dict, Any
 import aiohttp
-import openai
 from .base import BaseLLMAdapter, LLMResponse
 from lamia import LLMModel
+
+# Try to import OpenAI SDK at module level
+try:
+    from openai import AsyncOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    AsyncOpenAI = None
 
 class OpenAIAdapter(BaseLLMAdapter):
     """OpenAI API adapter with SDK support and HTTP fallback."""
@@ -25,17 +32,15 @@ class OpenAIAdapter(BaseLLMAdapter):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-        # Detect whether the OpenAI SDK is available. If not, fall back to raw HTTP.
-        self._use_sdk = True
+        self.client = None
+        self.session = None
 
-        try:
-            # Prefer the official SDK when present
-            self.client = openai.AsyncOpenAI(api_key=self.api_key)
-            self.session = None
-        except Exception:
-            # SDK not available or failed to initialise – fall back to HTTP
+        if OPENAI_AVAILABLE:
+            self.client = AsyncOpenAI(api_key=self.api_key)
+            self._use_sdk = True
+        else:
+            # Fall back to HTTP client
             self._use_sdk = False
-            self.client = None
             self.session = None  # Will be created in async_initialize
 
     async def async_initialize(self) -> None:
