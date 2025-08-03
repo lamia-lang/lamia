@@ -13,8 +13,8 @@ import traceback
 
 from lamia import Lamia
 from lamia.errors import MissingAPIKeysError
-from lamia.utils import scaffold
-from lamia.utils.cli_styling import setup_cli_logging
+from .scaffold import create_minimal_config, ensure_extensions_folder, update_config_with_extensions, create_env_file
+from .cli_styling import setup_cli_logging
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.hybrid_executor import HybridExecutor
 
@@ -154,19 +154,19 @@ def main():
         args = parser.parse_args()
         if args.command == "init":
             config_path = os.path.join(os.getcwd(), "config.yaml")
-            created = scaffold.create_minimal_config(config_path, with_extensions=args.with_extensions)
+            created = create_minimal_config(config_path, with_extensions=args.with_extensions)
             if created:
                 logger.info("✅ Created config.yaml")
             else:
                 logger.warning("config.yaml already exists")
             if args.with_extensions:
-                ext_path = scaffold.ensure_extensions_folder(os.getcwd())
-                updated = scaffold.update_config_with_extensions(config_path)
+                ext_path = ensure_extensions_folder(os.getcwd())
+                updated = update_config_with_extensions(config_path)
                 logger.info(f"✅ Extensions folder scaffolded at: {ext_path}")
                 if updated:
                     logger.info("✅ config.yaml updated with extensions_folder key.")
             env_path = os.path.join(os.getcwd(), ".env")
-            env_created = scaffold.create_env_file(env_path)
+            env_created = create_env_file(env_path)
             if env_created:
                 logger.info("✅ Created .env file with dummy API keys.")
             else:
