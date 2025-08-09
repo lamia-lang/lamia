@@ -1,7 +1,9 @@
 """Web automation actions including browser and HTTP operations with excellent IntelliSense support."""
 
+import asyncio
 from typing import Optional, Dict, Any, Union
 from lamia.types import BrowserAction, BrowserActionType, BrowserActionParams, SelectorType
+from lamia.interpreter.commands import WebCommand, WebActionType
 
 
 def _detect_selector_type(selector: str) -> SelectorType:
@@ -28,7 +30,7 @@ class WebActions:
     Access via: web.click(), web.type_text(), web.wait_for(), etc.
     """
     
-    def click(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> BrowserAction:
+    def click(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
         """Click an element with fallback selectors.
         
         Args:
@@ -44,17 +46,15 @@ class WebActions:
         """
         fallbacks = list(fallback_selectors) if fallback_selectors else None
         
-        return BrowserAction(
-            action=BrowserActionType.CLICK,
-            params=BrowserActionParams(
-                selector=selector,
-                selector_type=_detect_selector_type(selector),
-                fallback_selectors=fallbacks,
-                timeout=timeout
-            )
+        return WebCommand(
+            action=WebActionType.CLICK,
+            selector=selector,
+            timeout=timeout
         )
+
+        
     
-    def type_text(self, selector: str, text: str, *fallback_selectors: str, timeout: Optional[float] = None) -> BrowserAction:
+    def type_text(self, selector: str, text: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
         """Type text into an input element.
         
         Args:
@@ -64,22 +64,18 @@ class WebActions:
             timeout: Optional timeout in seconds
             
         Returns:
-            BrowserAction configured for typing
+            WebCommand configured for typing
             
         Example:
             web.type_text("input[name='username']", "john@example.com", "#username")
         """
         fallbacks = list(fallback_selectors) if fallback_selectors else None
         
-        return BrowserAction(
-            action=BrowserActionType.TYPE,
-            params=BrowserActionParams(
-                selector=selector,
-                selector_type=_detect_selector_type(selector),
-                fallback_selectors=fallbacks,
-                value=text,
-                timeout=timeout
-            )
+        return WebCommand(
+            action=WebActionType.TYPE,
+            selector=selector,
+            value=text,
+            timeout=timeout
         )
     
     def wait_for(self, selector: str, condition: str = "visible", *fallback_selectors: str, timeout: Optional[float] = None) -> BrowserAction:

@@ -9,8 +9,10 @@ from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import WebCommand
 from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
 from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
+from lamia.adapters.web.driver_scope_manager import get_scope_manager
 from typing import Optional, Any
 import logging
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +28,8 @@ class WebConfig:
     BROWSER_OPTIONS_KEY = "browser_options"
     HTTP_OPTIONS_KEY = "http_options"
     
-    # Default values
-    DEFAULT_BROWSER_HEADLESS = True
+    # Default values  
+    DEFAULT_BROWSER_HEADLESS = False  # Changed from True to False for development
     DEFAULT_BROWSER_TIMEOUT = 10.0  # seconds
     DEFAULT_HTTP_TIMEOUT = 30.0     # seconds
     DEFAULT_USER_AGENT = "Lamia/1.0"
@@ -43,6 +45,7 @@ class WebManager(Manager[WebCommand]):
         
         # Get configured defaults or use constants
         web_config = config_provider.get_web_config()
+        
         self._browser_engine = web_config.get(
             WebConfig.BROWSER_ENGINE_KEY, 
             WebConfig.DEFAULT_BROWSER_ENGINE
@@ -69,17 +72,8 @@ class WebManager(Manager[WebCommand]):
                 params=BrowserActionParams(value=command.url)
             )
             
-            # Execute navigation - create fresh adapter for this URL
-            adapter = await self._create_browser_adapter(self._browser_engine)
-            await self.execute_browser_action(action, adapter)
-            # Clean up the adapter after use
-            await adapter.close()
-            
-            # For backward compatibility, also fetch content via HTTP
-            http_adapter = await self._create_http_adapter(self._http_client)
-            http_params = HttpActionParams(url=command.url)
-            web_content = await http_adapter.get(http_params)
-            await http_adapter.close()
+            # Execute navigation using scope-managed driver
+            await self.execute_browser_action(action)
             
         elif command_type == CommandType.HTTP:
             adapter = await self._create_http_adapter(self._http_client)
@@ -115,8 +109,12 @@ class WebManager(Manager[WebCommand]):
         await adapter.initialize()
         return adapter
     
-    async def execute_browser_action(self, action: BrowserAction, adapter: BaseBrowserAdapter) -> Any:
-        """Execute a browser action using the specified or default browser adapter with retry support."""
+    async def execute_browser_action(self, action: BrowserAction, adapter: Optional[BaseBrowserAdapter] = None) -> Any:
+        """Execute a browser action using scope-managed driver or provided adapter."""
+        
+        # Use provided adapter or get scope-managed driver
+        if adapter is None:
+            adapter = await self._get_scoped_driver()
         
         logger.info(f"Executing {action.action} browser action using {adapter.__class__.__name__} adapter")
         
@@ -124,6 +122,7 @@ class WebManager(Manager[WebCommand]):
         if action.action == BrowserActionType.NAVIGATE:
             return await adapter.navigate(action.params)
         elif action.action == BrowserActionType.CLICK:
+            print("Clicking")
             return await adapter.click(action.params)
         elif action.action == BrowserActionType.TYPE:
             return await adapter.type_text(action.params)
@@ -180,6 +179,8 @@ class WebManager(Manager[WebCommand]):
         headless = self._browser_options.get('headless', WebConfig.DEFAULT_BROWSER_HEADLESS)
         timeout = self._browser_options.get('timeout', WebConfig.DEFAULT_BROWSER_TIMEOUT)
         
+        logger.info(f"Creating browser adapter with headless={headless}, timeout={timeout}")
+        
         # Create raw adapter with config options
         if engine_name == "selenium":
             raw_adapter = SeleniumAdapter(headless=headless, timeout=timeout)
@@ -219,6 +220,60 @@ class WebManager(Manager[WebCommand]):
         # Note: HTTP adapters don't have retry wrapper yet, but could be added
         return raw_adapter
     
+    async def _get_scoped_driver(self) -> BaseBrowserAdapter:
+        """Get browser driver based on current execution scope."""
+        scope_manager = get_scope_manager()
+        
+        # Determine scope based on call stack
+        scope_type, scope_id = self._detect_execution_scope()
+        
+        # Create adapter factory for this configuration
+        async def adapter_factory():
+            return await self._create_browser_adapter(self._browser_engine)
+        
+        return await scope_manager.get_driver(scope_type, scope_id, adapter_factory)
+    
+    def _detect_execution_scope(self) -> tuple[str, Optional[str]]:
+        """Detect current execution scope from call stack."""
+        frame = inspect.currentframe()
+        try:
+            hu_functions = []
+            module_level_hu = False
+            
+            # Walk up the call stack to find .hu file execution context
+            while frame:
+                frame = frame.f_back
+                if not frame:
+                    break
+                    
+                filename = frame.f_code.co_filename
+                if filename.endswith('.hu'):
+                    function_name = frame.f_code.co_name
+                    
+                    if function_name == '<module>':
+                        # Module level .hu execution
+                        module_level_hu = True
+                    else:
+                        # Function level .hu execution
+                        hu_functions.append(function_name)
+            
+            # Determine scope based on .hu file execution context
+            if module_level_hu and not hu_functions:
+                # Direct module-level execution (no functions involved)
+                return ('global', None)
+            elif hu_functions:
+                # Function-based execution - use the outermost .hu function as scope
+                # This ensures all nested function calls share the same driver
+                outermost_function = hu_functions[-1]  # Last in list = outermost in stack
+                scope_id = f"hu_function.{outermost_function}"
+                return ('function', scope_id)
+            else:
+                # No .hu context found, default to global
+                return ('global', None)
+                
+        finally:
+            del frame
+    
     async def create_browser_session(self, engine_name: Optional[str] = None) -> BaseBrowserAdapter:
         """Create a new browser session for interactive automation.
         
@@ -239,7 +294,11 @@ class WebManager(Manager[WebCommand]):
     
     async def close(self):
         """Close and cleanup any remaining resources."""
-        # Since we're no longer caching adapters, this is mainly for backward compatibility
+        # Cleanup scope-managed drivers
+        scope_manager = get_scope_manager()
+        await scope_manager.cleanup_all()
+        
+        # Backward compatibility cleanup
         if self._web_adapter:
             await self._web_adapter.close()
             self._web_adapter = None

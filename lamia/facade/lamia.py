@@ -113,7 +113,7 @@ class Lamia:
 
     def run(
         self,
-        command: str,
+        command: Union[str, Command], 
         return_type: Optional[Type[BaseType]] = None,
         *,
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None,

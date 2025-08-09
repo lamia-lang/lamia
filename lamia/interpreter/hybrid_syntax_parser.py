@@ -201,7 +201,85 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             # Generate lamia.run() call (works for both LLM and web commands)
             return self._create_lamia_call_function(node, processed_command, return_type, is_async)
         
+        # Check if function returns a web command
+        elif self._is_web_command_function(node):
+            return self._transform_web_command_function(node, is_async)
+        
         return self.generic_visit(node)
+    
+    def _is_web_command_function(self, node):
+        """Check if function returns a web command from method calls like web.type_text()."""
+        # Check for function with just return statement
+        if (len(node.body) == 1 and 
+            isinstance(node.body[0], ast.Return) and
+            isinstance(node.body[0].value, ast.Call)):
+            
+            call_node = node.body[0].value
+            # Check if it's a web.method_name() call
+            if (isinstance(call_node.func, ast.Attribute) and 
+                isinstance(call_node.func.value, ast.Name) and
+                call_node.func.value.id == 'web'):
+                return True
+        
+        # Check for function with docstring + return statement
+        elif (len(node.body) == 2 and
+              isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, (ast.Constant, ast.Str)) and
+              isinstance(node.body[1], ast.Return) and
+              isinstance(node.body[1].value, ast.Call)):
+            
+            call_node = node.body[1].value
+            # Check if it's a web.method_name() call
+            if (isinstance(call_node.func, ast.Attribute) and 
+                isinstance(call_node.func.value, ast.Name) and
+                call_node.func.value.id == 'web'):
+                return True
+        
+        return False
+    
+    def _transform_web_command_function(self, node, is_async: bool):
+        """Transform function that returns web commands to execute via lamia.run()."""
+        # Find the web command call - could be in body[0] or body[1] (after docstring)
+        web_command_call = None
+        if (len(node.body) == 1 and isinstance(node.body[0], ast.Return)):
+            web_command_call = node.body[0].value
+        elif (len(node.body) == 2 and isinstance(node.body[1], ast.Return)):
+            web_command_call = node.body[1].value
+        
+        # Create lamia.run() call with the web command
+        lamia_call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                attr='run_async' if is_async else 'run',
+                ctx=ast.Load()
+            ),
+            args=[web_command_call],
+            keywords=[]
+        )
+        
+        # Wrap in await if async
+        if is_async:
+            lamia_call = ast.Await(value=lamia_call)
+            return ast.AsyncFunctionDef(
+                name=node.name,
+                args=node.args,
+                body=[ast.Return(value=lamia_call)],
+                decorator_list=node.decorator_list,
+                returns=node.returns,
+                type_comment=getattr(node, 'type_comment', None),
+                lineno=getattr(node, 'lineno', 1),
+                col_offset=getattr(node, 'col_offset', 0)
+            )
+        else:
+            return ast.FunctionDef(
+                name=node.name,
+                args=node.args,
+                body=[ast.Return(value=lamia_call)],
+                decorator_list=node.decorator_list,
+                returns=node.returns,
+                type_comment=getattr(node, 'type_comment', None),
+                lineno=getattr(node, 'lineno', 1),
+                col_offset=getattr(node, 'col_offset', 0)
+            )
     
     
     def _create_lamia_call_function(self, node, processed_command: ast.AST, return_type: Optional[Dict], is_async: bool):
