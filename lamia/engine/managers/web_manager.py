@@ -6,7 +6,7 @@ from lamia.adapters.web.browser.base import BaseBrowserAdapter
 from lamia.adapters.web.http.base import BaseHttpAdapter
 from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.interpreter.command_types import CommandType
-from lamia.interpreter.commands import WebCommand
+from lamia.interpreter.commands import WebCommand, WebActionType
 from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
 from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
 from lamia.adapters.web.driver_scope_manager import get_scope_manager
@@ -66,13 +66,116 @@ class WebManager(Manager[WebCommand]):
         web_content = ""
         
         if command_type == CommandType.WEB:            
-            # Create navigation action
-            action = BrowserAction(
-                action=BrowserActionType.NAVIGATE,
-                params=BrowserActionParams(value=command.url)
-            )
+            # Handle different web action types
+            if command.action == WebActionType.NAVIGATE:
+                # Navigation action
+                action = BrowserAction(
+                    action=BrowserActionType.NAVIGATE,
+                    params=BrowserActionParams(value=command.url)
+                )
+            elif command.action == WebActionType.CLICK:
+                # Click action
+                action = BrowserAction(
+                    action=BrowserActionType.CLICK,
+                    params=BrowserActionParams(
+                        selector=command.selector,
+                        timeout=command.timeout
+                    )
+                )
+            elif command.action == WebActionType.TYPE:
+                # Type action
+                action = BrowserAction(
+                    action=BrowserActionType.TYPE,
+                    params=BrowserActionParams(
+                        selector=command.selector,
+                        value=command.value,
+                        timeout=command.timeout
+                    )
+                )
+            elif command.action == WebActionType.WAIT:
+                # Wait action
+                action = BrowserAction(
+                    action=BrowserActionType.WAIT,
+                    params=BrowserActionParams(
+                        selector=command.selector,
+                        timeout=command.timeout
+                    )
+                )
+            elif command.action == WebActionType.GET_TEXT:
+                # Get text action
+                action = BrowserAction(
+                    action=BrowserActionType.GET_TEXT,
+                    params=BrowserActionParams(
+                        selector=command.selector,
+                        timeout=command.timeout
+                    )
+                )
+            elif command.action == WebActionType.HOVER:
+                # Hover action
+                action = BrowserAction(
+                    action=BrowserActionType.HOVER,
+                    params=BrowserActionParams(
+                        selector=command.selector,
+                        timeout=command.timeout
+                    )
+                )
+            elif command.action == WebActionType.SCROLL:
+                # Scroll action
+                action = BrowserAction(
+                    action=BrowserActionType.SCROLL,
+                    params=BrowserActionParams(
+                        selector=command.selector
+                    )
+                )
+            elif command.action == WebActionType.SELECT:
+                # Select action
+                action = BrowserAction(
+                    action=BrowserActionType.SELECT,
+                    params=BrowserActionParams(
+                        selector=command.selector,
+                        value=command.value,
+                        timeout=command.timeout
+                    )
+                )
+            elif command.action == WebActionType.SUBMIT:
+                # Submit action
+                action = BrowserAction(
+                    action=BrowserActionType.SUBMIT,
+                    params=BrowserActionParams(
+                        selector=command.selector,
+                        timeout=command.timeout
+                    )
+                )
+            elif command.action == WebActionType.SCREENSHOT:
+                # Screenshot action
+                action = BrowserAction(
+                    action=BrowserActionType.SCREENSHOT,
+                    params=BrowserActionParams(
+                        value=command.value
+                    )
+                )
+            elif command.action == WebActionType.IS_VISIBLE:
+                # Is visible action
+                action = BrowserAction(
+                    action=BrowserActionType.IS_VISIBLE,
+                    params=BrowserActionParams(
+                        selector=command.selector,
+                        timeout=command.timeout
+                    )
+                )
+            elif command.action == WebActionType.IS_ENABLED:
+                # Is enabled action
+                action = BrowserAction(
+                    action=BrowserActionType.IS_ENABLED,
+                    params=BrowserActionParams(
+                        selector=command.selector,
+                        timeout=command.timeout
+                    )
+                )
+            else:
+                raise ValueError(f"Unsupported web action: {command.action}")
             
-            # Execute navigation using scope-managed driver
+            # Execute browser action using scope-managed driver
             await self.execute_browser_action(action)
             
         elif command_type == CommandType.HTTP:

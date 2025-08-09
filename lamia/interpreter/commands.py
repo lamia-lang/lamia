@@ -16,6 +16,12 @@ class WebActionType(Enum):
     WAIT = "wait"
     GET_TEXT = "get_text"
     SCREENSHOT = "screenshot"
+    HOVER = "hover"
+    SCROLL = "scroll"
+    SELECT = "select"
+    SUBMIT = "submit"
+    IS_VISIBLE = "is_visible"
+    IS_ENABLED = "is_enabled"
 
 
 class FileActionType(Enum):
