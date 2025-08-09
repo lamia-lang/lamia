@@ -1,6 +1,7 @@
 """Real Selenium adapter for browser automation."""
 
 from .base import BaseBrowserAdapter
+from lamia.errors import ExternalOperationTransientError, ExternalOperationPermanentError
 from lamia.types import BrowserActionParams, SelectorType
 import logging
 from typing import Optional
@@ -91,36 +92,25 @@ class SeleniumAdapter(BaseBrowserAdapter):
             # Default to CSS selector
             return (By.CSS_SELECTOR, selector)
     
-    def _find_element_with_fallbacks(self, params: BrowserActionParams):
-        """Find element using primary selector and fallbacks."""
-        selectors = [params.selector] + (params.fallback_selectors or [])
+    def _find_element(self, params: BrowserActionParams):
+        """Find element with single selector, translating exceptions to semantic types."""
         timeout = params.timeout or self.default_timeout
         
-        logger.info(f"Starting selector chain with {len(selectors)} selectors, timeout: {timeout}s")
-        
-        for i, selector in enumerate(selectors):
-            try:
-                logger.info(f"Trying selector {i+1}/{len(selectors)}: '{selector}'")
-                by, value = self._get_by_locator(selector, params.selector_type)
-                element = WebDriverWait(self.driver, timeout).until(
-                    EC.presence_of_element_located((by, value))
-                )
-                logger.info(f"Selector '{selector}' succeeded")
-                return element
-            except TimeoutException:
-                logger.warning(f"Selector '{selector}' failed: TimeoutException after {timeout}s")
-                if i < len(selectors) - 1:
-                    logger.info(f"Continuing to next selector")
-                continue
-            except NoSuchElementException:
-                logger.warning(f"Selector '{selector}' failed: NoSuchElementException")
-                if i < len(selectors) - 1:
-                    logger.info(f"Continuing to next selector")
-                continue
-        
-        # All selectors failed
-        error_msg = f"All selectors failed. Tried: {', '.join([f'{s}' for s in selectors])}"
-        raise NoSuchElementException(error_msg)
+        try:
+            by, value = self._get_by_locator(params.selector, params.selector_type)
+            element = WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located((by, value))
+            )
+            return element
+        except (TimeoutException, NoSuchElementException) as e:
+            # Selector-related errors - let retry handler exhaust retries, then try next selector
+            raise ExternalOperationTransientError(f"Element '{params.selector}' not found: {str(e)}", retry_history=[], original_error=e)
+        except WebDriverException as e:
+            # Browser/driver issues - retry same selector
+            raise ExternalOperationTransientError(f"WebDriver issue: {str(e)}", retry_history=[], original_error=e)
+        except Exception as e:
+            # Other permanent failures
+            raise ExternalOperationPermanentError(f"Permanent error: {str(e)}", retry_history=[], original_error=e)
     
     async def navigate(self, params: BrowserActionParams) -> None:
         """Navigate to a URL."""
@@ -134,35 +124,47 @@ class SeleniumAdapter(BaseBrowserAdapter):
     async def click(self, params: BrowserActionParams) -> None:
         """Click an element."""
         if not self.initialized:
-            raise RuntimeError("SeleniumAdapter not initialized")
+            raise ExternalOperationPermanentError("SeleniumAdapter not initialized", retry_history=[])
         
         logger.info(f"SeleniumAdapter: Click element {params.selector}")
         
-        element = self._find_element_with_fallbacks(params)
+        element = self._find_element(params)
         
         # Wait for element to be clickable
-        timeout = params.timeout or self.default_timeout
-        by, value = self._get_by_locator(params.selector, params.selector_type)
-        WebDriverWait(self.driver, timeout).until(
-            EC.element_to_be_clickable((by, value))
-        )
-        
-        element.click()
-        logger.info(f"SeleniumAdapter: Successfully clicked {params.selector}")
+        try:
+            timeout = params.timeout or self.default_timeout
+            by, value = self._get_by_locator(params.selector, params.selector_type)
+            WebDriverWait(self.driver, timeout).until(
+                EC.element_to_be_clickable((by, value))
+            )
+            
+            element.click()
+            logger.info(f"SeleniumAdapter: Successfully clicked {params.selector}")
+        except (TimeoutException, NoSuchElementException) as e:
+            raise ExternalOperationTransientError(f"Element '{params.selector}' not clickable: {str(e)}", retry_history=[], original_error=e)
+        except WebDriverException as e:
+            raise ExternalOperationTransientError(f"Click failed: {str(e)}", retry_history=[], original_error=e)
+        except Exception as e:
+            raise ExternalOperationPermanentError(f"Click error: {str(e)}", retry_history=[], original_error=e)
     
     async def type_text(self, params: BrowserActionParams) -> None:
         """Type text into an element."""
         if not self.initialized:
-            raise RuntimeError("SeleniumAdapter not initialized")
+            raise ExternalOperationPermanentError("SeleniumAdapter not initialized", retry_history=[])
         
         text = params.value
         logger.info(f"SeleniumAdapter: Type '{text}' into {params.selector}")
         
-        element = self._find_element_with_fallbacks(params)
+        element = self._find_element(params)
         
-        # Clear existing text and type new text
-        element.clear()
-        element.send_keys(text)
+        try:
+            # Clear existing text and type new text
+            element.clear()
+            element.send_keys(text)
+        except WebDriverException as e:
+            raise ExternalOperationTransientError(f"Type text failed: {str(e)}", retry_history=[], original_error=e)
+        except Exception as e:
+            raise ExternalOperationPermanentError(f"Type text error: {str(e)}", retry_history=[], original_error=e)
     
     async def wait_for_element(self, params: BrowserActionParams) -> None:
         """Wait for an element to meet a condition."""
@@ -199,7 +201,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         logger.info(f"SeleniumAdapter: Get text from {params.selector}")
-        element = self._find_element_with_fallbacks(params)
+        element = self._find_element(params)
         return element.text
     
     async def get_attribute(self, params: BrowserActionParams) -> str:
@@ -209,7 +211,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         
         attribute_name = params.value
         logger.info(f"SeleniumAdapter: Get attribute '{attribute_name}' from {params.selector}")
-        element = self._find_element_with_fallbacks(params)
+        element = self._find_element(params)
         return element.get_attribute(attribute_name) or ""
     
     async def is_visible(self, params: BrowserActionParams) -> bool:
@@ -218,7 +220,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         try:
-            element = self._find_element_with_fallbacks(params)
+            element = self._find_element(params)
             visible = element.is_displayed()
             logger.info(f"SeleniumAdapter: Check if {params.selector} is visible -> {visible}")
             return visible
@@ -232,7 +234,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         try:
-            element = self._find_element_with_fallbacks(params)
+            element = self._find_element(params)
             enabled = element.is_enabled()
             logger.info(f"SeleniumAdapter: Check if {params.selector} is enabled -> {enabled}")
             return enabled
@@ -246,7 +248,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         logger.info(f"SeleniumAdapter: Hover over {params.selector}")
-        element = self._find_element_with_fallbacks(params)
+        element = self._find_element(params)
         
         actions = ActionChains(self.driver)
         actions.move_to_element(element).perform()
@@ -257,7 +259,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         logger.info(f"SeleniumAdapter: Scroll to {params.selector}")
-        element = self._find_element_with_fallbacks(params)
+        element = self._find_element(params)
         
         # Scroll element into view
         self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
@@ -270,7 +272,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         
         option_value = params.value
         logger.info(f"SeleniumAdapter: Select option '{option_value}' in {params.selector}")
-        element = self._find_element_with_fallbacks(params)
+        element = self._find_element(params)
         
         select = Select(element)
         try:
@@ -286,7 +288,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         logger.info(f"SeleniumAdapter: Submit form {params.selector}")
-        element = self._find_element_with_fallbacks(params)
+        element = self._find_element(params)
         element.submit()
     
     async def take_screenshot(self, params: BrowserActionParams) -> str:
