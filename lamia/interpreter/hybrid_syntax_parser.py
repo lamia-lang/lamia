@@ -281,6 +281,76 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 col_offset=getattr(node, 'col_offset', 0)
             )
     
+    def visit_Call(self, node):
+        """Transform web method calls directly into WebCommand objects."""
+        # Check if this is a web.method_name() call
+        if (isinstance(node.func, ast.Attribute) and
+            isinstance(node.func.value, ast.Name) and
+            node.func.value.id == 'web'):
+            
+            method_name = node.func.attr
+            
+            # Transform based on web method
+            if method_name == 'click':
+                return self._create_web_command_ast('CLICK', node.args)
+            elif method_name == 'type_text':
+                return self._create_web_command_ast('TYPE', node.args)
+            elif method_name == 'wait_for':
+                return self._create_web_command_ast('WAIT', node.args)
+            elif method_name == 'get_text':
+                return self._create_web_command_ast('GET_TEXT', node.args)
+            elif method_name == 'hover':
+                return self._create_web_command_ast('HOVER', node.args)
+            elif method_name == 'scroll_to':
+                return self._create_web_command_ast('SCROLL', node.args)
+            elif method_name == 'select_option':
+                return self._create_web_command_ast('SELECT', node.args)
+            elif method_name == 'submit_form':
+                return self._create_web_command_ast('SUBMIT', node.args)
+            elif method_name == 'screenshot':
+                return self._create_web_command_ast('SCREENSHOT', node.args)
+            elif method_name == 'is_visible':
+                return self._create_web_command_ast('IS_VISIBLE', node.args)
+            elif method_name == 'is_enabled':
+                return self._create_web_command_ast('IS_ENABLED', node.args)
+        
+        # Not a web call, continue normal processing
+        return self.generic_visit(node)
+    
+    def _create_web_command_ast(self, action_type: str, args: list):
+        """Create AST for WebCommand construction."""
+        # Create WebCommand(action=WebActionType.ACTION, ...)
+        keywords = [
+            ast.keyword(
+                arg='action',
+                value=ast.Attribute(
+                    value=ast.Name(id='WebActionType', ctx=ast.Load()),
+                    attr=action_type,
+                    ctx=ast.Load()
+                )
+            )
+        ]
+        
+        # Add selector from first argument if present
+        if len(args) > 0:
+            keywords.append(
+                ast.keyword(arg='selector', value=args[0])
+            )
+        
+        # Add value from second argument if present (for type_text, select_option)
+        if len(args) > 1 and action_type in ['TYPE', 'SELECT']:
+            keywords.append(
+                ast.keyword(arg='value', value=args[1])
+            )
+        
+        # Add timeout from keyword args or last positional arg
+        # (This is simplified - real implementation would need to parse all args properly)
+        
+        return ast.Call(
+            func=ast.Name(id='WebCommand', ctx=ast.Load()),
+            args=[],
+            keywords=keywords
+        )
     
     def _create_lamia_call_function(self, node, processed_command: ast.AST, return_type: Optional[Dict], is_async: bool):
         """Create a function node that calls lamia.run() or lamia.run_async()."""

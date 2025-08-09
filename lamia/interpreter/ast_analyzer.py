@@ -27,6 +27,9 @@ class ActionNamespaceAnalyzer(ast.NodeVisitor):
         # Check if it's one of our validation types
         if node.id in ['HTML', 'JSON', 'CSV', 'XML', 'YAML', 'Markdown']:
             self.used_types.add(node.id)
+        # Check if it's one of our command types (needed for transformed code)
+        elif node.id in ['WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand']:
+            self.used_types.add(node.id)
         
         self.generic_visit(node)
     
@@ -78,7 +81,7 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str]) ->
     """
     execution_globals = {}
     
-    # Inject validation types
+    # Inject validation types and command types
     type_mapping = {
         'HTML': HTML,
         'JSON': JSON,
@@ -88,14 +91,43 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str]) ->
         'Markdown': Markdown
     }
     
+    # Add command types for transformed code
+    command_mapping = {
+        'WebCommand': None,
+        'WebActionType': None,
+        'LLMCommand': None,
+        'FileCommand': None
+    }
+    
+    # Import command types only if needed
+    for cmd_type in used_types:
+        if cmd_type in command_mapping:
+            if cmd_type == 'WebCommand':
+                from lamia.interpreter.commands import WebCommand
+                command_mapping['WebCommand'] = WebCommand
+            elif cmd_type == 'WebActionType':
+                from lamia.interpreter.commands import WebActionType
+                command_mapping['WebActionType'] = WebActionType
+            elif cmd_type == 'LLMCommand':
+                from lamia.interpreter.commands import LLMCommand
+                command_mapping['LLMCommand'] = LLMCommand
+            elif cmd_type == 'FileCommand':
+                from lamia.interpreter.commands import FileCommand
+                command_mapping['FileCommand'] = FileCommand
+    
     for type_name in used_types:
         if type_name in type_mapping:
             execution_globals[type_name] = type_mapping[type_name]
+        elif type_name in command_mapping and command_mapping[type_name] is not None:
+            execution_globals[type_name] = command_mapping[type_name]
     
     # Inject action namespaces
     if 'web' in used_namespaces:
         from lamia.actions import web
+        from lamia.interpreter.commands import WebCommand, WebActionType
         execution_globals['web'] = web
+        execution_globals['WebCommand'] = WebCommand
+        execution_globals['WebActionType'] = WebActionType
     
     if 'http' in used_namespaces:
         from lamia.actions import http
