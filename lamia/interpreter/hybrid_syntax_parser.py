@@ -281,6 +281,34 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 col_offset=getattr(node, 'col_offset', 0)
             )
     
+    def visit_Expr(self, node):
+        """Handle expression statements, wrapping standalone web.method() calls in lamia.run()."""
+        # Check if this expression is a web.method() call
+        if (isinstance(node.value, ast.Call) and
+            isinstance(node.value.func, ast.Attribute) and
+            isinstance(node.value.func.value, ast.Name) and
+            node.value.func.value.id == 'web'):
+            
+            # Transform the web call into WebCommand
+            web_command = self._transform_web_call(node.value)
+            
+            # Wrap in lamia.run() call
+            lamia_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                    attr='run',
+                    ctx=ast.Load()
+                ),
+                args=[web_command],
+                keywords=[]
+            )
+            
+            # Return new expression statement with lamia.run()
+            return ast.Expr(value=lamia_call)
+        
+        # Not a web expression, continue normal processing
+        return self.generic_visit(node)
+    
     def visit_Call(self, node):
         """Transform web method calls directly into WebCommand objects."""
         # Check if this is a web.method_name() call
@@ -288,34 +316,41 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             isinstance(node.func.value, ast.Name) and
             node.func.value.id == 'web'):
             
-            method_name = node.func.attr
-            
-            # Transform based on web method
-            if method_name == 'click':
-                return self._create_web_command_ast('CLICK', node.args)
-            elif method_name == 'type_text':
-                return self._create_web_command_ast('TYPE', node.args)
-            elif method_name == 'wait_for':
-                return self._create_web_command_ast('WAIT', node.args)
-            elif method_name == 'get_text':
-                return self._create_web_command_ast('GET_TEXT', node.args)
-            elif method_name == 'hover':
-                return self._create_web_command_ast('HOVER', node.args)
-            elif method_name == 'scroll_to':
-                return self._create_web_command_ast('SCROLL', node.args)
-            elif method_name == 'select_option':
-                return self._create_web_command_ast('SELECT', node.args)
-            elif method_name == 'submit_form':
-                return self._create_web_command_ast('SUBMIT', node.args)
-            elif method_name == 'screenshot':
-                return self._create_web_command_ast('SCREENSHOT', node.args)
-            elif method_name == 'is_visible':
-                return self._create_web_command_ast('IS_VISIBLE', node.args)
-            elif method_name == 'is_enabled':
-                return self._create_web_command_ast('IS_ENABLED', node.args)
+            return self._transform_web_call(node)
         
         # Not a web call, continue normal processing
         return self.generic_visit(node)
+    
+    def _transform_web_call(self, node):
+        """Transform a web.method_name() call into WebCommand AST."""
+        method_name = node.func.attr
+        
+        # Transform based on web method
+        if method_name == 'click':
+            return self._create_web_command_ast('CLICK', node.args)
+        elif method_name == 'type_text':
+            return self._create_web_command_ast('TYPE', node.args)
+        elif method_name == 'wait_for':
+            return self._create_web_command_ast('WAIT', node.args)
+        elif method_name == 'get_text':
+            return self._create_web_command_ast('GET_TEXT', node.args)
+        elif method_name == 'hover':
+            return self._create_web_command_ast('HOVER', node.args)
+        elif method_name == 'scroll_to':
+            return self._create_web_command_ast('SCROLL', node.args)
+        elif method_name == 'select_option':
+            return self._create_web_command_ast('SELECT', node.args)
+        elif method_name == 'submit_form':
+            return self._create_web_command_ast('SUBMIT', node.args)
+        elif method_name == 'screenshot':
+            return self._create_web_command_ast('SCREENSHOT', node.args)
+        elif method_name == 'is_visible':
+            return self._create_web_command_ast('IS_VISIBLE', node.args)
+        elif method_name == 'is_enabled':
+            return self._create_web_command_ast('IS_ENABLED', node.args)
+        
+        # If method not recognized, return original node
+        return node
     
     def _create_web_command_ast(self, action_type: str, args: list):
         """Create AST for WebCommand construction."""
