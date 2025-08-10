@@ -2,9 +2,9 @@
 
 import logging
 from typing import Optional
-from .selector_parser import SelectorParser, SelectorType
 from .ai_selector_resolver import AISelectorResolver
 from .selector_cache import SelectorCache
+from .selector_parser import SelectorParser
 
 logger = logging.getLogger(__name__)
 

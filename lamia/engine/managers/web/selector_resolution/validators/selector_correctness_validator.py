@@ -1,7 +1,7 @@
 """Validator for checking AI-generated selector correctness."""
 
 from lamia.validation.base import BaseValidator, ValidationResult
-from .selector_parser import SelectorParser, SelectorType
+from ..selector_parser import SelectorParser, SelectorType
 
 
 class SelectorCorrectnessValidator(BaseValidator):

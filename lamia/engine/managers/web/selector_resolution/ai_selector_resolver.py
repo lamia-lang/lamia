@@ -3,8 +3,8 @@
 import logging
 from typing import Optional
 from lamia.interpreter.commands import LLMCommand
+from .validators.selector_correctness_validator import SelectorCorrectnessValidator
 from .selector_parser import SelectorType
-from .selector_correctness_validator import SelectorCorrectnessValidator
 
 logger = logging.getLogger(__name__)
 
