@@ -12,7 +12,7 @@ import runpy
 import traceback
 
 from lamia import Lamia
-from lamia.errors import MissingAPIKeysError
+from lamia.errors import MissingAPIKeysError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationRateLimitError
 from .scaffold import create_minimal_config, ensure_extensions_folder, update_config_with_extensions, create_env_file
 from .cli_styling import setup_cli_logging
 from lamia.interpreter.command_types import CommandType
@@ -227,8 +227,28 @@ def main():
                     executor = HybridExecutor(lamia)
                     executor.execute_file(prompt_file, enable_lazy_dependency_loading=True)
                     sys.exit(0)
+                except ExternalOperationTransientError as e:
+                    logger.error(f"❌ External operation failed: {e}")
+                    sys.exit(1)
+                except ExternalOperationPermanentError as e:
+                    logger.error(f"❌ Permanent failure: {e}")
+                    sys.exit(1)
+                except ExternalOperationRateLimitError as e:
+                    logger.error(f"❌ Rate limit exceeded: {e}")
+                    sys.exit(1)
+                except SyntaxError as e:
+                    logger.error(f"❌ Syntax error in hybrid file: {e}")
+                    sys.exit(1)
+                except ImportError as e:
+                    logger.error(f"❌ Missing dependency: {e}")
+                    sys.exit(1)
                 except Exception as e:
-                    logger.error(f"❌ Error processing hybrid syntax file: {e}")
+                    # Fallback - check if it looks like a syntax/parsing error
+                    error_msg = str(e).lower()
+                    if any(keyword in error_msg for keyword in ['parse', 'syntax', 'transform', 'ast']):
+                        logger.error(f"❌ Error processing hybrid syntax file: {e}")
+                    else:
+                        logger.error(f"❌ Runtime error: {e}")
                     sys.exit(1)
             else:
                 # Regular Python file
