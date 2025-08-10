@@ -4,7 +4,7 @@ from ..managers import Manager
 from ..config_provider import ConfigProvider
 from ..managers.llm.llm_manager import LLMManager
 from ..managers.fs_manager import FSManager
-from ..managers.web_manager import WebManager
+from ..managers.web import WebManager
 
 class ManagerFactory:
     """Factory for creating domain managers based on request type."""

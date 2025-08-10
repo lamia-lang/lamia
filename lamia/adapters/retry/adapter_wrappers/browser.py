@@ -24,16 +24,16 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
         self.retry_handler = RetryHandler(adapter, retry_config, collect_stats=collect_stats)
     
     async def _execute_with_selector_chain(self, method_name: str, params: BrowserActionParams):
-        """Execute adapter method with universal selector chain fallback logic."""
+        """Execute adapter method with AI-powered selector resolution and fallback logic."""
         selectors = [params.selector] + (params.fallback_selectors or [])
         
         logger.info(f"Starting selector chain with {len(selectors)} selectors for {method_name}")
         
         for i, selector in enumerate(selectors):
             try:
-                logger.info(f"Trying selector {i+1}/{len(selectors)}: '{selector}'")
+                logger.info(f"Processing selector {i+1}/{len(selectors)}: '{selector}'")
                 
-                # Create new params with single selector for this attempt
+                # Create params with current selector (AI resolution happens at BrowserManager level)
                 single_selector_params = BrowserActionParams(
                     selector=selector,
                     selector_type=params.selector_type,

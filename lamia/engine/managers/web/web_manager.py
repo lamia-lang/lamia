@@ -1,0 +1,88 @@
+"""Web operations manager - dispatches to browser or HTTP managers."""
+
+from lamia.engine.managers import Manager
+from lamia.engine.config_provider import ConfigProvider
+from lamia.validation.base import ValidationResult, BaseValidator
+from lamia.interpreter.command_types import CommandType
+from lamia.interpreter.commands import WebCommand, WebActionType
+from .browser_manager import BrowserManager
+from .http_manager import HttpManager
+from typing import Optional, Any
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class WebManager(Manager[WebCommand]):
+    """Thin dispatcher that routes web commands to specialized managers."""
+    
+    def __init__(self, config_provider: ConfigProvider, llm_manager=None):
+        """Initialize web manager with specialized sub-managers.
+        
+        Args:
+            config_provider: Configuration provider
+            llm_manager: LLM manager for AI selector resolution (optional)
+        """
+        self.config_provider = config_provider
+        self.llm_manager = llm_manager
+        
+        # Initialize specialized managers
+        self.browser_manager = BrowserManager(config_provider, llm_manager)
+        self.http_manager = HttpManager(config_provider)
+        
+        # Define which actions go to which manager
+        self.browser_actions = {
+            WebActionType.NAVIGATE,
+            WebActionType.CLICK,
+            WebActionType.TYPE,
+            WebActionType.WAIT,
+            WebActionType.GET_TEXT,
+            WebActionType.SCREENSHOT,
+            WebActionType.HOVER,
+            WebActionType.SCROLL,
+            WebActionType.SELECT,
+            WebActionType.SUBMIT,
+            WebActionType.IS_VISIBLE,
+            WebActionType.IS_ENABLED,
+        }
+        
+        self.http_actions = {
+            WebActionType.HTTP_REQUEST,
+        }
+    
+    async def execute(self, command: WebCommand, validator: Optional[BaseValidator] = None) -> ValidationResult:
+        """Route command to appropriate specialized manager.
+        
+        Args:
+            command: Web command to execute
+            validator: Optional validator for response
+            
+        Returns:
+            ValidationResult from the specialized manager
+        """
+        logger.debug(f"Routing web command: {command.action}")
+        
+        if command.action in self.browser_actions:
+            logger.debug(f"Routing to BrowserManager: {command.action}")
+            result = await self.browser_manager.execute(command, validator)
+        elif command.action in self.http_actions:
+            logger.debug(f"Routing to HttpManager: {command.action}")
+            result = await self.http_manager.execute(command, validator)
+        else:
+            raise ValueError(f"Unsupported web action: {command.action}")
+        
+        # Wrap result in ValidationResult if it's not already
+        if isinstance(result, ValidationResult):
+            return result
+        else:
+            return ValidationResult(
+                is_valid=True,
+                result_type=result,
+                error_message=None
+            )
+    
+    async def close(self):
+        """Close all sub-managers and cleanup resources."""
+        await self.browser_manager.close()
+        await self.http_manager.close()
+        logger.info("WebManager closed")
