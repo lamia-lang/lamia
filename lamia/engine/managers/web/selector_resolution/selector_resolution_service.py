@@ -25,7 +25,7 @@ class SelectorResolutionService:
         self.get_page_html = get_page_html_func
         self.cache = SelectorCache(cache_enabled=cache_enabled)
         
-    async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None) -> str:
+    async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None, operation_type: Optional[str] = None) -> str:
         """Resolve a selector using AI if needed, with caching.
         
         Args:
@@ -71,8 +71,13 @@ class SelectorResolutionService:
             if page_context is None:
                 page_context = await self.get_page_html()
             
+            # Create operation-specific instructions
+            operation_instructions = self._get_operation_instructions(operation_type)
+            
             # Create prompt for LLM
             prompt = f"""You are a web automation expert. Given the following HTML page and a natural language description of an element, return only a valid CSS selector that would find that element.
+
+{operation_instructions}
 
 HTML:
 {page_context}
@@ -113,3 +118,45 @@ Return only the CSS selector, no explanation or extra text:"""
             Number of cached entries
         """
         return self.cache.size()
+    
+    def _get_operation_instructions(self, operation_type: Optional[str]) -> str:
+        """Get operation-specific instructions for the AI prompt.
+        
+        Args:
+            operation_type: The browser operation type (click, type, etc.)
+            
+        Returns:
+            Operation-specific instruction text
+        """
+        if operation_type == "click":
+            return """OPERATION: You need to find a CLICKABLE element (button, link, clickable text, etc.).
+Look for elements like:
+- <button> tags
+- <a> tags with href
+- Elements with onclick handlers
+- Clickable text or icons
+- Submit buttons
+- Navigation links"""
+        elif operation_type == "type":
+            return """OPERATION: You need to find an INPUT element where text can be typed.
+Look for elements like:
+- <input> tags (text, email, password, etc.)
+- <textarea> tags
+- Editable elements with contenteditable="true"
+- Search boxes
+- Form fields"""
+        elif operation_type == "select":
+            return """OPERATION: You need to find a SELECT dropdown element.
+Look for elements like:
+- <select> tags
+- Dropdown menus
+- Option lists"""
+        elif operation_type == "hover":
+            return """OPERATION: You need to find an element that can be hovered over.
+Look for elements like:
+- Menu items
+- Buttons with hover effects
+- Links
+- Interactive elements"""
+        else:
+            return """OPERATION: Find the element that matches the description."""

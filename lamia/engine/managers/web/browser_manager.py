@@ -129,10 +129,11 @@ class BrowserManager:
             scope_manager = get_scope_manager()
             page_url = getattr(scope_manager, 'current_url', 'unknown')
             
-            # Resolve main selector
+            # Resolve main selector with operation context
             resolved_selector = await self._selector_resolution_service.resolve_selector(
                 selector=action.params.selector,
-                page_url=page_url
+                page_url=page_url,
+                operation_type=action.action
             )
             
             # Create new action with resolved selector
