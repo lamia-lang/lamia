@@ -2,13 +2,13 @@
                     │        LAMIA         │
                     │    ⚡ LLM Engine ⚡    │
                     ╰──────────────────────╯
-           🔮 Language Model Interface Automation
+           🔮 Human centric AI-enabled programming language
 
-     Seamlessly connect with OpenAI, Anthropic, & Ollama
+     Seamlessly connect with OpenAI, Anthropic with seay to write and read code.
 
 # Lamia
 
-A Python project for interpreting and interacting with various Large Language Models (LLMs) through a unified interface. Lamia provides a consistent way to work with different LLM providers (OpenAI, Anthropic, Ollama) while ensuring output quality through customizable validation.
+A language and framework for interpreting and interacting with various Large Language Models (LLMs) and other external systems through a unified interface. Lamia provides a consistent way to work with different LLM providers (OpenAI, Anthropic, Ollama) while ensuring output quality through customizable validation.
 
 ## Features
 
@@ -18,6 +18,25 @@ A Python project for interpreting and interacting with various Large Language Mo
 - 🛠 Highly configurable
 - 🔌 Extensible adapter architecture
 - 💻 Can be used though CLI interface and by Python scripts 
+
+## Documentation
+
+📖 **[Full Documentation](https://your-username.github.io/lamia/)** - Complete guides, API reference, and examples
+
+### Documentation Commands
+
+```bash
+# Install documentation dependencies
+pip install -r requirements-docs.txt
+
+# Serve documentation locally
+mkdocs serve
+
+# Deploy to GitHub Pages
+mkdocs gh-deploy
+```
+
+Documentation is automatically deployed on every commit to main branch.
 
 ## Installation
 
@@ -48,6 +67,28 @@ The development installation includes:
 - `flake8`: For code linting
 
 ## Quick Start
+
+### Creating and Running .hu Files
+
+Lamia supports a hybrid Python syntax that allows you to write LLM commands, file operations, and web requests directly as function definitions with automatic type validation. Create a `.hu` file and run it with:
+
+```bash
+lamia your_script.hu
+```
+
+**Example .hu file:**
+```python
+def generate_webpage() -> HTML:
+    "Create a responsive landing page with a contact form"
+
+def read_config() -> JSON:
+    "./config.json"
+
+def fetch_data() -> JSON:
+    "https://api.example.com/data"
+```
+
+**📚 For complete hybrid syntax documentation:** [Interpreter Module Documentation](lamia/interpreter/README.md)
 
 ### Running from any python script
 
@@ -212,6 +253,55 @@ The validation documentation covers:
 
 ## Advanced Configuration
 
+### Web Automation Configuration
+
+Lamia supports both browser automation and HTTP client operations for web-based tasks. You can configure the underlying engines and clients through the `web_config` section:
+
+```yaml
+# Web automation configuration
+web_config:
+  browser_engine: selenium           # Browser automation engine: selenium, playwright
+  http_client: requests             # HTTP client library: requests
+  browser_options:
+    headless: true                  # Run browsers in headless mode
+    timeout: 10.0                   # Default timeout in seconds for browser operations
+  http_options:
+    timeout: 30.0                   # Default timeout in seconds for HTTP requests
+    user_agent: "Lamia/1.0"        # User agent string for HTTP requests
+```
+
+**Browser Engines:**
+- `selenium`: Traditional WebDriver-based automation (default)
+- `playwright`: Modern, fast browser automation
+
+**HTTP Clients:**
+- `requests`: Python requests library (default)
+
+**Browser Options:**
+- `headless`: Run browsers without visible window (recommended for production)
+- `timeout`: Default timeout for browser operations in seconds
+
+**HTTP Options:**
+- `timeout`: Default timeout for HTTP requests in seconds  
+- `user_agent`: Custom user agent string for HTTP requests
+
+**Intelligent Adapter Management:**
+Lamia creates fresh browser and HTTP adapter instances for each web operation to ensure clean state and avoid interference between different URLs or operations. For long-running automation workflows, you can create persistent sessions:
+
+```python
+from lamia.engine.managers.web_manager import WebManager
+
+# Create persistent browser session for complex automation
+browser_session = await web_manager.create_browser_session("playwright")
+# ... perform multiple operations ...
+await browser_session.close()
+
+# Create persistent HTTP session for multiple API calls
+http_session = await web_manager.create_http_session("requests")
+# ... make multiple requests ...
+await http_session.close()
+```
+
 ### External System Retry Configuration
 
 Lamia automatically handles retries for external system operations (API calls, file operations, etc). The default behavior is well-tuned for different operation types:
@@ -255,4 +345,36 @@ For most users, the default retry behavior will be appropriate, and you should f
 
 ## License
 
-# TODO: ...
+### Documentation Commands
+
+```bash
+# Serve docs locally with live reload
+mkdocs serve
+
+# Build static files
+mkdocs build
+
+# Deploy to GitHub Pages
+mkdocs gh-deploy --force
+```
+
+## Project Structure
+
+```
+lamia/
+├── docs/                    # Documentation source
+├── lamia/                   # Main package  
+├── tests/                   # Test suite
+├── mkdocs.yml              # Documentation configuration
+├── requirements-docs.txt   # Documentation dependencies
+└── .github/workflows/      # CI/CD automation
+```
+
+## Making Changes
+
+1. Make your changes to code or documentation
+2. Test locally: `mkdocs serve`
+3. Commit and push to main branch
+4. Documentation auto-deploys via GitHub Actions
+
+That's it! Keep it simple. 🚀

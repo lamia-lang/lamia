@@ -1,0 +1,125 @@
+site_name: Lamia Documentation
+site_description: A comprehensive automation and validation framework for Python
+site_url: https://your-username.github.io/lamia/
+
+repo_url: https://github.com/your-username/lamia
+repo_name: your-username/lamia
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - search.highlight
+    - search.share
+    - toc.follow
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            # Docstring options
+            docstring_style: google
+            docstring_options:
+              ignore_init_summary: true
+            
+            # Signature options
+            show_signature_annotations: true
+            show_root_heading: true
+            show_root_toc_entry: false
+            show_source: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            
+            # Member options
+            inherited_members: true
+            members_order: source
+            separate_signature: true
+            
+            # Filtering options
+            filters:
+              - "!^_"  # Exclude private members
+              - "^__init__$"  # Include __init__ method
+            
+            # Other options
+            heading_level: 2
+            show_category_heading: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Configuration: getting-started/configuration.md
+  - User Guide:
+    - CLI Usage: user-guide/cli.md
+    - Validation: user-guide/validation.md
+    - Actions: user-guide/actions.md
+    - Adapters: user-guide/adapters.md
+  - API Reference: reference/
+  - Examples:
+    - Basic Usage: examples/basic.md
+    - Custom Validators: examples/custom-validators.md
+  - Development: development/
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-username/lamia
+  generator: false
