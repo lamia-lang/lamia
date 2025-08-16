@@ -27,7 +27,7 @@ class WebManager(Manager[WebCommand]):
         self.llm_manager = llm_manager
         
         # Initialize specialized managers
-        self.browser_manager = BrowserManager(config_provider, llm_manager)
+        self.browser_manager = BrowserManager(config_provider)
         self.http_manager = HttpManager(config_provider)
         
         # Define which actions go to which manager

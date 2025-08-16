@@ -51,7 +51,6 @@ def process_string_command(command: str) -> tuple[Command, Optional[LamiaResult]
         pass
 
     # Parse string command to Command object
-    print(f"Command: {command}")
     current_parser = CommandParser(command)
     parsed_command = current_parser.parsed_command
     

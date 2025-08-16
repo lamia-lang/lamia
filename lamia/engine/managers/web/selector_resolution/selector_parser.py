@@ -67,7 +67,9 @@ class SelectorParser:
     def _looks_like_css(self, selector: str) -> bool:
         """Check if selector has CSS-like structure."""
         css_chars = {'.', '#', '[', ']', ':', '>', '+', '~', '*'}
-        return any(char in selector for char in css_chars) or selector.replace('-', '').replace('_', '').isalnum()
+        has_css_chars = any(char in selector for char in css_chars)
+        is_simple_identifier = selector.replace('-', '').replace('_', '').isalnum() and ' ' not in selector
+        return has_css_chars or is_simple_identifier
     
     def _is_valid_xpath(self, selector: str) -> bool:
         """Validate XPath syntax using lxml parser."""

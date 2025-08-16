@@ -1,10 +1,10 @@
 """Orchestrator service for AI-powered selector resolution."""
 
 import logging
-from typing import Optional
-from .ai_selector_resolver import AISelectorResolver
+from typing import Optional, Callable, Awaitable
 from .selector_cache import SelectorCache
-from .selector_parser import SelectorParser
+from .selector_parser import SelectorParser, SelectorType
+from lamia.interpreter.commands import LLMCommand
 
 logger = logging.getLogger(__name__)
 
@@ -12,15 +12,17 @@ logger = logging.getLogger(__name__)
 class SelectorResolutionService:
     """Orchestrates AI-powered selector resolution with caching."""
     
-    def __init__(self, llm_manager, cache_enabled: bool = True):
+    def __init__(self, llm_manager, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, cache_enabled: bool = True):
         """Initialize the selector resolution service.
         
         Args:
-            llm_manager: LLM manager for AI resolution
+            llm_manager: LLM manager for AI-powered selector resolution
+            get_page_html_func: Function to get current page HTML (optional)
             cache_enabled: Whether to enable caching of resolved selectors
         """
         self.parser = SelectorParser()
-        self.ai_resolver = AISelectorResolver(llm_manager)
+        self.llm_manager = llm_manager
+        self.get_page_html = get_page_html_func
         self.cache = SelectorCache(cache_enabled=cache_enabled)
         
     async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None) -> str:
@@ -63,11 +65,32 @@ class SelectorResolutionService:
         
         # Use AI to resolve the selector
         try:
-            resolved_selector = await self.ai_resolver.resolve(
-                selector=original_selector,
-                selector_type=selector_type,
-                page_context=page_context
-            )
+            logger.info(f"Sending selector '{original_selector}' to AI for resolution")
+            
+            # Get current page HTML if not provided
+            if page_context is None:
+                page_context = await self.get_page_html()
+            
+            # Create prompt for LLM
+            prompt = f"""You are a web automation expert. Given the following HTML page and a natural language description of an element, return only a valid CSS selector that would find that element.
+
+HTML:
+{page_context}
+
+Natural language selector: "{original_selector}"
+
+Return only the CSS selector, no explanation or extra text:"""
+
+            # Use llm_manager to get resolved selector
+            llm_command = LLMCommand(prompt=prompt)
+            result = await self.llm_manager.execute(llm_command)
+            resolved_selector = result.validated_text.strip()
+            
+            logger.info(f"AI resolved selector '{original_selector}' to '{resolved_selector}'")
+            
+            if not resolved_selector:
+                raise ValueError("LLM returned empty selector")
+                
         except Exception as e:
             logger.error(f"AI resolution failed for '{original_selector}': {e}")
             raise ValueError(f"Failed to resolve selector '{original_selector}': {e}")

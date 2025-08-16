@@ -20,15 +20,13 @@ logger = logging.getLogger(__name__)
 class BrowserManager:
     """Manages browser automation with AI-powered selector resolution."""
     
-    def __init__(self, config_provider: ConfigProvider, llm_manager=None):
+    def __init__(self, config_provider: ConfigProvider):
         """Initialize browser manager.
         
         Args:
             config_provider: Configuration provider
-            llm_manager: LLM manager for AI selector resolution (optional)
         """
         self.config_provider = config_provider
-        self.llm_manager = llm_manager
         
         # Get browser configuration
         web_config = config_provider.get_web_config()
@@ -53,18 +51,13 @@ class BrowserManager:
         Returns:
             Result of browser action
         """
-        # Initialize selector resolution service early if we have LLM manager
-        if not self._selector_resolution_service and self.llm_manager:
-            self._selector_resolution_service = SelectorResolutionService(
-                llm_manager=self.llm_manager,
-                cache_enabled=True
-            )
+        # Selector resolution service will be created lazily when needed
         
         # Convert WebCommand to BrowserAction
         browser_action = self._web_command_to_browser_action(command)
         
         # Resolve selectors using AI if needed
-        if self._has_selector(browser_action) and self._selector_resolution_service:
+        if self._has_selector(browser_action):
             browser_action = await self._resolve_selectors(browser_action)
         
         # Execute browser action
@@ -112,6 +105,26 @@ class BrowserManager:
     async def _resolve_selectors(self, action: BrowserAction) -> BrowserAction:
         """Resolve selectors using AI service."""
         try:
+            # Check if selector needs AI resolution
+            from .selector_resolution.selector_parser import SelectorParser, SelectorType
+            parser = SelectorParser()
+            selector_type = parser.classify(action.params.selector)
+            
+            # Only resolve if it's natural language
+            if selector_type != SelectorType.NATURAL_LANGUAGE:
+                return action
+                
+            # Create LLM manager and selector resolution service lazily
+            if not self._selector_resolution_service:
+                logger.info("BrowserManager: Creating LLM manager and selector resolution service for natural language selector")
+                from ..llm.llm_manager import LLMManager
+                llm_manager = LLMManager(self.config_provider)
+                self._selector_resolution_service = SelectorResolutionService(
+                    llm_manager,
+                    get_page_html_func=self._get_current_page_html,
+                    cache_enabled=True
+                )
+            
             # Get current page URL from driver scope manager
             scope_manager = get_scope_manager()
             page_url = getattr(scope_manager, 'current_url', 'unknown')
@@ -194,6 +207,11 @@ class BrowserManager:
             self._browser_adapter = RetriableAdapterFactory.create_browser_adapter(base_adapter)
         
         return self._browser_adapter
+    
+    async def _get_current_page_html(self) -> str:
+        """Get current page HTML source."""
+        adapter = await self._get_browser_adapter()
+        return await adapter.get_page_source()
     
     async def close(self):
         """Close browser manager and cleanup resources."""

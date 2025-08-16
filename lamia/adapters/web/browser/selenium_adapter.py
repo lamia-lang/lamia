@@ -301,3 +301,10 @@ class SeleniumAdapter(BaseBrowserAdapter):
         
         self.driver.save_screenshot(file_path)
         return file_path
+    
+    async def get_page_source(self) -> str:
+        """Get the current page HTML source."""
+        if not self.initialized:
+            raise RuntimeError("SeleniumAdapter not initialized")
+        
+        return self.driver.page_source

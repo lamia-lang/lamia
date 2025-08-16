@@ -126,34 +126,35 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
     async def hover(self, params: BrowserActionParams) -> None:
         """Hover with retry."""
         await self.retry_handler.execute(
-            lambda: self.adapter.hover(params),
-            operation_name="browser_hover"
+            lambda: self.adapter.hover(params)
         )
     
     async def scroll(self, params: BrowserActionParams) -> None:
         """Scroll with retry."""
         await self.retry_handler.execute(
-            lambda: self.adapter.scroll(params),
-            operation_name="browser_scroll"
+            lambda: self.adapter.scroll(params)
         )
     
     async def select_option(self, params: BrowserActionParams) -> None:
         """Select option with retry."""
         await self.retry_handler.execute(
-            lambda: self.adapter.select_option(params),
-            operation_name="browser_select"
+            lambda: self.adapter.select_option(params)
         )
     
     async def submit_form(self, params: BrowserActionParams) -> None:
         """Submit form with retry."""
         await self.retry_handler.execute(
-            lambda: self.adapter.submit_form(params),
-            operation_name="browser_submit"
+            lambda: self.adapter.submit_form(params)
         )
     
     async def take_screenshot(self, params: BrowserActionParams) -> str:
         """Take screenshot with retry."""
         return await self.retry_handler.execute(
-            lambda: self.adapter.take_screenshot(params),
-            operation_name="browser_screenshot"
+            lambda: self.adapter.take_screenshot(params)
+        )
+    
+    async def get_page_source(self) -> str:
+        """Get page source with retry."""
+        return await self.retry_handler.execute(
+            lambda: self.adapter.get_page_source()
         )
