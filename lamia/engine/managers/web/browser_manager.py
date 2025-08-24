@@ -122,6 +122,7 @@ class BrowserManager:
                 self._selector_resolution_service = SelectorResolutionService(
                     llm_manager,
                     get_page_html_func=self._get_current_page_html,
+                    get_browser_adapter_func=self._get_browser_adapter,
                     cache_enabled=True
                 )
             

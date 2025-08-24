@@ -12,17 +12,19 @@ logger = logging.getLogger(__name__)
 class SelectorResolutionService:
     """Orchestrates AI-powered selector resolution with caching."""
     
-    def __init__(self, llm_manager, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, cache_enabled: bool = True):
+    def __init__(self, llm_manager, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, get_browser_adapter_func: Optional[Callable[[], Awaitable]] = None, cache_enabled: bool = True):
         """Initialize the selector resolution service.
         
         Args:
             llm_manager: LLM manager for AI-powered selector resolution
             get_page_html_func: Function to get current page HTML (optional)
+            get_browser_adapter_func: Function to get browser adapter for validation (optional)
             cache_enabled: Whether to enable caching of resolved selectors
         """
         self.parser = SelectorParser()
         self.llm_manager = llm_manager
         self.get_page_html = get_page_html_func
+        self.get_browser_adapter = get_browser_adapter_func
         self.cache = SelectorCache(cache_enabled=cache_enabled)
         
     async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None, operation_type: Optional[str] = None) -> str:
@@ -86,9 +88,15 @@ Natural language selector: "{original_selector}"
 
 Return only the CSS selector, no explanation or extra text:"""
 
-            # Use llm_manager to get resolved selector
+            # Use llm_manager to get resolved selector with validation
             llm_command = LLMCommand(prompt=prompt)
-            result = await self.llm_manager.execute(llm_command)
+            
+            # Create AI-resolved selector validator (only for natural language selectors)
+            from .validators.ai_resolved_selector_validator import AIResolvedSelectorValidator
+            browser_adapter = await self.get_browser_adapter()
+            validator = AIResolvedSelectorValidator(browser_adapter)
+            
+            result = await self.llm_manager.execute(llm_command, validator=validator)
             resolved_selector = result.validated_text.strip()
             
             logger.info(f"AI resolved selector '{original_selector}' to '{resolved_selector}'")
