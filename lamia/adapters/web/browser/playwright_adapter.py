@@ -5,6 +5,7 @@ from lamia.types import BrowserActionParams, SelectorType
 import logging
 from typing import Optional
 import time
+import asyncio
 
 try:
     from playwright.async_api import async_playwright, Browser, Page, Playwright
@@ -125,6 +126,10 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         timeout = params.timeout * 1000 if params.timeout else self.default_timeout
         
         await self.page.click(playwright_selector, timeout=timeout)
+        logger.info(f"PlaywrightAdapter: Successfully clicked {params.selector}")
+        
+        # Wait for DOM stabilization after click
+        await self._wait_for_dom_stability()
     
     async def type_text(self, params: BrowserActionParams) -> None:
         """Type text into an element."""
@@ -283,3 +288,24 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         
         await self.page.screenshot(path=file_path)
         return file_path
+    
+    async def _wait_for_dom_stability(self, timeout: float = 2000):
+        """Wait for DOM to stabilize after a click action."""
+        logger.info("PlaywrightAdapter: Waiting for DOM stability after click")
+        start_time = time.time()
+        
+        try:
+            # Wait for network idle (no network requests for 500ms)
+            await self.page.wait_for_load_state("networkidle", timeout=timeout)
+            elapsed = time.time() - start_time
+            logger.info(f"PlaywrightAdapter: DOM stabilized in {elapsed:.2f}s")
+        except Exception:
+            try:
+                # Fallback: wait for DOM content to be ready
+                await self.page.wait_for_load_state("domcontentloaded", timeout=1000)
+                elapsed = time.time() - start_time
+                logger.info(f"PlaywrightAdapter: DOM content loaded in {elapsed:.2f}s")
+            except Exception as e:
+                # Final fallback: short sleep
+                logger.warning(f"PlaywrightAdapter: DOM stability check failed ({e}), using fallback wait")
+                await asyncio.sleep(0.5)

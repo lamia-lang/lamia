@@ -99,7 +99,6 @@ Return only the CSS selector, no explanation or extra text:"""
             result = await self.llm_manager.execute(llm_command, validator=validator)
             resolved_selector = result.validated_text.strip()
             
-            logger.info(f"AI resolved selector '{original_selector}' to '{resolved_selector}'")
             
             if not resolved_selector:
                 raise ValueError("LLM returned empty selector")

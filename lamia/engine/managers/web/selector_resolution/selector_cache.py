@@ -67,7 +67,6 @@ class SelectorCache:
         cache_data[cache_key] = resolved_selector.strip()
         
         self._save_cache(cache_data)
-        logger.info(f"Cached selector resolution: '{original_selector}' → '{resolved_selector}' for {page_url}")
     
     def _create_cache_key(self, original_selector: str, page_url: str) -> str:
         """Create cache key from selector and URL.

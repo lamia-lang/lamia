@@ -140,6 +140,9 @@ class SeleniumAdapter(BaseBrowserAdapter):
             
             element.click()
             logger.info(f"SeleniumAdapter: Successfully clicked {params.selector}")
+            
+            # Wait for DOM stabilization after click
+            self._wait_for_dom_stability()
         except (TimeoutException, NoSuchElementException) as e:
             raise ExternalOperationTransientError(f"Element '{params.selector}' not clickable: {str(e)}", retry_history=[], original_error=e)
         except WebDriverException as e:
@@ -308,3 +311,44 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         return self.driver.page_source
+    
+    def _wait_for_dom_stability(self, timeout: float = 2.0, check_interval: float = 0.1):
+        """Wait for DOM to stabilize after a click action."""
+        logger.info("SeleniumAdapter: Waiting for DOM stability after click")
+        try:
+            # Wait for any pending JavaScript/AJAX to complete
+            start_time = time.time()
+            last_ready_state = None
+            stable_count = 0
+            
+            while time.time() - start_time < timeout:
+                # Check if page is in ready state
+                ready_state = self.driver.execute_script("return document.readyState")
+                
+                # Check for active requests (jQuery if available)
+                try:
+                    active_requests = self.driver.execute_script("return jQuery.active || 0")
+                except:
+                    active_requests = 0
+                
+                if ready_state == "complete" and active_requests == 0:
+                    if last_ready_state == ready_state:
+                        stable_count += 1
+                        if stable_count >= 3:  # 3 consecutive stable checks
+                            elapsed = time.time() - start_time
+                            logger.info(f"SeleniumAdapter: DOM stabilized in {elapsed:.2f}s")
+                            return
+                    else:
+                        stable_count = 0
+                else:
+                    stable_count = 0
+                
+                last_ready_state = ready_state
+                time.sleep(check_interval)
+            
+            logger.warning("SeleniumAdapter: DOM stability wait timed out, proceeding anyway")
+            
+        except Exception as e:
+            # Fallback to simple sleep if JavaScript execution fails
+            logger.warning(f"SeleniumAdapter: DOM stability check failed ({e}), using fallback wait")
+            time.sleep(0.5)

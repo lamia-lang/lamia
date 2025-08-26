@@ -29,6 +29,7 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
         
         logger.info(f"Starting selector chain with {len(selectors)} selectors for {method_name}")
         
+        found_working_selector = None
         for i, selector in enumerate(selectors):
             try:
                 logger.info(f"Processing selector {i+1}/{len(selectors)}: '{selector}'")
