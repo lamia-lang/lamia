@@ -148,8 +148,15 @@ class BrowserManager:
                 params=new_params
             )
         except Exception as e:
-            logger.warning(f"Selector resolution failed: {e}")
-            return action  # Return original action if resolution fails
+            # Check if this is an ambiguity error that should halt execution
+            if "🚨 AMBIGUOUS SELECTOR:" in str(e):
+                logger.warning(f"Selector resolution failed: {e}")
+                # For ambiguity errors, we should NOT fall back to the original selector
+                # Re-raise the error to halt execution and show the helpful message
+                raise e
+            else:
+                logger.warning(f"Selector resolution failed: {e}")
+                return action  # Return original action if resolution fails for other reasons
     
     async def _execute_browser_action(self, action: BrowserAction) -> Any:
         """Execute browser action using appropriate adapter."""

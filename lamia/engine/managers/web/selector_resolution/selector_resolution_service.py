@@ -84,39 +84,72 @@ class SelectorResolutionService:
 
 {operation_instructions}
 
-FORMAT 1 - Single match found:
+CRITICAL RULE: You MUST check for ALL elements that could match the description. If there are 2 or more possible matches, you MUST use AMBIGUOUS format. Do NOT pick just one - always report ambiguity when multiple options exist.
+
+FORMAT 1 - Single match found (ONLY if exactly one element matches):
 Return only the CSS selector, no brackets or extra text.
 
-FORMAT 2 - Multiple ambiguous matches found:
+FORMAT 2 - Multiple ambiguous matches found (REQUIRED when 2+ elements match):
 AMBIGUOUS
-OPTION1: "exact_text_1" -> css_selector_1
-OPTION2: "exact_text_2" -> css_selector_2
+OPTION1: "descriptive_text_1" -> css_selector_1
+OPTION2: "descriptive_text_2" -> css_selector_2
 ...
+
+IMPORTANT: For AMBIGUOUS format, make the option texts DISTINCTIVE and DESCRIPTIVE so users can tell them apart. Examples:
+- Instead of: "Sign in" and "Sign in"
+- Use: "Sign in (main form)" and "Sign in with Apple"
+- Instead of: "Submit" and "Submit" 
+- Use: "Submit form" and "Submit search"
+
+Search Strategy:
+1. First scan ALL buttons, links, and clickable elements
+2. Check text content, aria-labels, and surrounding text
+3. Count how many could reasonably match the description
+4. If count >= 2, use AMBIGUOUS format immediately
 
 HTML:
 {page_context}
 
 Natural language selector: "{original_selector}"
 
-Analyze the HTML and respond in the appropriate format above:"""
+Step 1: Search for ALL elements containing words like "sign", "login", "signin", etc.
+Step 2: Count potential matches for "{original_selector}"
+Step 3: If 2+ matches found, return AMBIGUOUS format. If exactly 1 match, return selector.
 
-            # Use llm_manager to get resolved selector with validation
+Your response:"""
+
+            # Use llm_manager to get raw response first (no validation yet)
             llm_command = LLMCommand(prompt=prompt)
             
-            # Create AI-resolved selector validator (only for natural language selectors)
-            from .validators.ai_resolved_selector_validator import AIResolvedSelectorValidator
-            browser_adapter = await self.get_browser_adapter()
-            validator = AIResolvedSelectorValidator(browser_adapter)
-            
-            result = await self.llm_manager.execute(llm_command, validator=validator)
+            result = await self.llm_manager.execute(llm_command)
             response = result.validated_text.strip()
             
             if not response:
                 raise ValueError("LLM returned empty response")
             
-            # Parse response format
+            # Parse response format first to check for ambiguity
             resolved_selector = self._parse_ai_response(response, original_selector)
+            
+            # Only validate if we got a single selector (not ambiguous)
+            from .validators.ai_resolved_selector_validator import AIResolvedSelectorValidator
+            browser_adapter = await self.get_browser_adapter()
+            validator = AIResolvedSelectorValidator(browser_adapter)
+            
+            validation_result = await validator.validate_strict(resolved_selector)
+            if not validation_result.is_valid:
+                raise ValueError(f"AI-resolved selector validation failed: {validation_result.error_message}")
                 
+        except ValueError as e:
+            # Check if this is an ambiguity error that should be surfaced to the user
+            if "🚨 AMBIGUOUS SELECTOR:" in str(e):
+                # This is a user-friendly ambiguity error - surface it prominently
+                print(f"\n{str(e)}")  # Print to stdout so user sees it immediately
+                logger.info(f"Ambiguous selector detected for '{original_selector}'")
+                # Re-raise the ValueError as-is so the user gets the helpful suggestions
+                raise e
+            else:
+                logger.error(f"AI resolution failed for '{original_selector}': {e}")
+                raise ValueError(f"Failed to resolve selector '{original_selector}': {e}")
         except Exception as e:
             logger.error(f"AI resolution failed for '{original_selector}': {e}")
             raise ValueError(f"Failed to resolve selector '{original_selector}': {e}")
@@ -224,13 +257,57 @@ Look for elements like:
                             options.append((text.strip(), selector.strip()))
             
             if len(options) > 1:
-                suggestions = []
-                for text, selector in options:
-                    suggestions.append(f'if you want to click "{text}" use this text in your code "{text}"')
+                # Format the error message to be very clear and actionable for the user
+                error_lines = [
+                    f"\n🚨 AMBIGUOUS SELECTOR: '{original_selector}'",
+                    f"",
+                    f"Multiple elements match your description. Please be more specific by using one of these exact texts:",
+                    f""
+                ]
                 
-                suggestion_text = ", otherwise ".join(suggestions)
-                logger.error(f"Multiple matches found for '{original_selector}': {suggestion_text}")
-                raise ValueError(f"Ambiguous selector '{original_selector}'. Multiple options found: {suggestion_text}")
+                for i, (text, selector) in enumerate(options, 1):
+                    # Try to make option more descriptive based on selector
+                    descriptive_text = text
+                    if "apple" in selector.lower():
+                        descriptive_text = f"{text} (Apple Login)"
+                    elif "google" in selector.lower():
+                        descriptive_text = f"{text} (Google Login)"
+                    elif "microsoft" in selector.lower():
+                        descriptive_text = f"{text} (Microsoft Login)"
+                    elif "btn__primary" in selector or "login_submit" in selector:
+                        descriptive_text = f"{text} (Main Login Form)"
+                    
+                    error_lines.append(f"   Option {i}: \"{descriptive_text}\"")
+                    error_lines.append(f"   └─ Selector: {selector}")
+                    error_lines.append(f"")
+                
+                # Get descriptive examples for the instructions
+                example1 = options[0][0]
+                example2 = options[1][0] if len(options) > 1 else options[0][0]
+                
+                if "apple" in options[0][1].lower():
+                    example1 = f"{options[0][0]} (Apple Login)"
+                elif "btn__primary" in options[0][1] or "login_submit" in options[0][1]:
+                    example1 = f"{options[0][0]} (Main Login Form)"
+                    
+                if len(options) > 1:
+                    if "apple" in options[1][1].lower():
+                        example2 = f"{options[1][0]} (Apple Login)"
+                    elif "btn__primary" in options[1][1] or "login_submit" in options[1][1]:
+                        example2 = f"{options[1][0]} (Main Login Form)"
+                
+                error_lines.extend([
+                    f"💡 To fix this, replace your selector with one of the exact texts above.",
+                    f"   For example, change:",
+                    f"   FROM: '{original_selector}'",
+                    f"   TO:   '{example1}'  (for option 1)",
+                    f"   OR:   '{example2}'  (for option 2)",
+                    f""
+                ])
+                
+                user_friendly_error = "\n".join(error_lines)
+                logger.error(f"Ambiguous selector detected:\n{user_friendly_error}")
+                raise ValueError(user_friendly_error)
         
         # If not ambiguous, treat first line as the selector
         selector = lines[0]
