@@ -222,8 +222,7 @@ class BrowserManager:
             await self._browser_adapter.close()
             self._browser_adapter = None
         
-        # Clear selector resolution cache if available
-        if self._selector_resolution_service:
-            await self._selector_resolution_service.clear_cache()
+        # Note: We intentionally do NOT clear the selector resolution cache here
+        # The cache should persist across browser sessions to avoid repeated AI calls
         
         logger.info("BrowserManager closed")
