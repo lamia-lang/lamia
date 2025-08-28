@@ -67,6 +67,7 @@ class SelectorCache:
         cache_data[cache_key] = resolved_selector.strip()
         
         self._save_cache(cache_data)
+        logger.info(f"Saved selector to cache: '{original_selector}' -> '{resolved_selector}' for {page_url}")
     
     def _create_cache_key(self, original_selector: str, page_url: str) -> str:
         """Create cache key from selector and URL.
@@ -78,7 +79,9 @@ class SelectorCache:
         Returns:
             Cache key string
         """
-        return f"{original_selector}|{page_url}"
+        cache_key = f"{original_selector}|{page_url}"
+        logger.debug(f"Created cache key: '{cache_key}'")
+        return cache_key
     
     def _get_cache_file_path(self) -> str:
         """Get path to the selector cache file."""
@@ -116,6 +119,7 @@ class SelectorCache:
                 json.dump(cache_data, f, indent=2)
                 
             self._cache_data = cache_data  # Update in-memory copy
+            logger.info(f"Cache file saved to: {cache_file_path} with {len(cache_data)} entries")
         except (OSError, IOError) as e:
             logger.warning(f"Failed to save cache file {cache_file_path}: {e}")
     
@@ -152,3 +156,23 @@ class SelectorCache:
             
         cache_data = self._load_cache()
         return len(cache_data)
+    
+    async def invalidate(self, original_selector: str, page_url: str) -> None:
+        """Invalidate a specific cached selector resolution.
+        
+        Args:
+            original_selector: The original selector to invalidate
+            page_url: URL of the page where selector was used
+        """
+        if not self.cache_enabled:
+            return
+            
+        cache_data = self._load_cache()
+        cache_key = self._create_cache_key(original_selector, page_url)
+        
+        if cache_key in cache_data:
+            del cache_data[cache_key]
+            self._save_cache(cache_data)
+            logger.info(f"Invalidated cached selector: '{original_selector}' for {page_url}")
+        else:
+            logger.debug(f"No cached entry to invalidate for: '{original_selector}' on {page_url}")
