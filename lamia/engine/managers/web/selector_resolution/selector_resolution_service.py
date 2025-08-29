@@ -95,11 +95,16 @@ OPTION1: "descriptive_text_1" -> css_selector_1
 OPTION2: "descriptive_text_2" -> css_selector_2
 ...
 
-IMPORTANT: For AMBIGUOUS format, make the option texts DISTINCTIVE and DESCRIPTIVE so users can tell them apart. Examples:
-- Instead of: "Sign in" and "Sign in"
-- Use: "Sign in (main form)" and "Sign in with Apple"
-- Instead of: "Submit" and "Submit" 
-- Use: "Submit form" and "Submit search"
+IMPORTANT: For AMBIGUOUS format, make the option texts DISTINCTIVE and DESCRIPTIVE so users can tell them apart. Each option text MUST be unique enough that if a user used it as a selector, it would find only ONE element. Examples:
+- Instead of: "Sign in" and "Sign in" 
+- Use: "Sign in with Google" and "Sign in with Apple" and "Sign in button"
+- Instead of: "Submit" and "Submit"
+- Use: "Submit search form" and "Submit contact form"
+- Add context like: "button", "link", "with [service]", "in [location]", etc.
+
+CRITICAL: Each option text you provide MUST be specific enough to uniquely identify ONE element on the page.
+
+NEVER suggest the original failing selector text as one of your options. If the user's selector was "Sign in button", do NOT include "Sign in button" as an option.
 
 Search Strategy:
 1. First scan ALL buttons, links, and clickable elements
@@ -257,6 +262,33 @@ Look for elements like:
                             options.append((text.strip(), selector.strip()))
             
             if len(options) > 1:
+                # Remove any options that are the same as the original failing selector
+                # This prevents the AI from suggesting the same text that just failed
+                filtered_options = []
+                original_normalized = original_selector.strip().lower()
+                logger.debug(f"Original selector normalized: '{original_normalized}'")
+                
+                for text, selector in options:
+                    text_normalized = text.strip().lower()
+                    logger.debug(f"Comparing option '{text}' (normalized: '{text_normalized}') with original")
+                    
+                    if text_normalized != original_normalized:
+                        filtered_options.append((text, selector))
+                        logger.debug(f"Keeping option: '{text}'")
+                    else:
+                        logger.warning(f"AI suggested the same failing selector '{text}' - filtering it out")
+                        logger.warning(f"  Original: '{original_selector}' -> '{original_normalized}'")
+                        logger.warning(f"  Option:   '{text}' -> '{text_normalized}'")
+                
+                # If we filtered out all options or only have one left, we have a deeper issue  
+                if len(filtered_options) < 2:
+                    # The AI failed to provide usable suggestions, so we can't help the user
+                    logger.error(f"AI provided unusable suggestions for '{original_selector}' - all options were duplicates or too few")
+                    raise ValueError(f"Could not find unique alternatives for ambiguous selector '{original_selector}'. The AI suggestions were not specific enough. Please try using a more precise natural language description or a CSS selector.")
+                else:
+                    # Use the filtered options if we have enough good ones
+                    options = filtered_options
+                
                 # Format the error message to be very clear and actionable for the user
                 error_lines = [
                     f"\n🚨 AMBIGUOUS SELECTOR: '{original_selector}'",
@@ -266,35 +298,14 @@ Look for elements like:
                 ]
                 
                 for i, (text, selector) in enumerate(options, 1):
-                    # Try to make option more descriptive based on selector
-                    descriptive_text = text
-                    if "apple" in selector.lower():
-                        descriptive_text = f"{text} (Apple Login)"
-                    elif "google" in selector.lower():
-                        descriptive_text = f"{text} (Google Login)"
-                    elif "microsoft" in selector.lower():
-                        descriptive_text = f"{text} (Microsoft Login)"
-                    elif "btn__primary" in selector or "login_submit" in selector:
-                        descriptive_text = f"{text} (Main Login Form)"
-                    
-                    error_lines.append(f"   Option {i}: \"{descriptive_text}\"")
+                    # Use the AI's suggestions as-is - they should already be descriptive enough
+                    error_lines.append(f"   Option {i}: \"{text}\"")
                     error_lines.append(f"   └─ Selector: {selector}")
                     error_lines.append(f"")
                 
-                # Get descriptive examples for the instructions
+                # Use AI suggestions directly for examples
                 example1 = options[0][0]
                 example2 = options[1][0] if len(options) > 1 else options[0][0]
-                
-                if "apple" in options[0][1].lower():
-                    example1 = f"{options[0][0]} (Apple Login)"
-                elif "btn__primary" in options[0][1] or "login_submit" in options[0][1]:
-                    example1 = f"{options[0][0]} (Main Login Form)"
-                    
-                if len(options) > 1:
-                    if "apple" in options[1][1].lower():
-                        example2 = f"{options[1][0]} (Apple Login)"
-                    elif "btn__primary" in options[1][1] or "login_submit" in options[1][1]:
-                        example2 = f"{options[1][0]} (Main Login Form)"
                 
                 error_lines.extend([
                     f"💡 To fix this, replace your selector with one of the exact texts above.",
