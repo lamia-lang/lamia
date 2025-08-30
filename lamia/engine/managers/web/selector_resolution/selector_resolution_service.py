@@ -4,6 +4,7 @@ import logging
 from typing import Optional, Callable, Awaitable
 from .selector_cache import SelectorCache
 from .selector_parser import SelectorParser, SelectorType
+from .response_parser import ResponseParser, AmbiguousFormatResponseParser
 from lamia.interpreter.commands import LLMCommand
 
 logger = logging.getLogger(__name__)
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 class SelectorResolutionService:
     """Orchestrates AI-powered selector resolution with caching."""
     
-    def __init__(self, llm_manager, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, get_browser_adapter_func: Optional[Callable[[], Awaitable]] = None, cache_enabled: bool = True):
+    def __init__(self, llm_manager, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, get_browser_adapter_func: Optional[Callable[[], Awaitable]] = None, cache_enabled: bool = True, response_parser: Optional[ResponseParser] = None):
         """Initialize the selector resolution service.
         
         Args:
@@ -20,12 +21,14 @@ class SelectorResolutionService:
             get_page_html_func: Function to get current page HTML (optional)
             get_browser_adapter_func: Function to get browser adapter for validation (optional)
             cache_enabled: Whether to enable caching of resolved selectors
+            response_parser: Custom response parser implementation (defaults to AmbiguousFormatResponseParser)
         """
         self.parser = SelectorParser()
         self.llm_manager = llm_manager
         self.get_page_html = get_page_html_func
         self.get_browser_adapter = get_browser_adapter_func
         self.cache = SelectorCache(cache_enabled=cache_enabled)
+        self.response_parser = response_parser or AmbiguousFormatResponseParser()
         
     async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None, operation_type: Optional[str] = None) -> str:
         """Resolve a selector using AI if needed, with caching.
@@ -76,52 +79,9 @@ class SelectorResolutionService:
             if page_context is None:
                 page_context = await self.get_page_html()
             
-            # Create operation-specific instructions
+            # Create operation-specific instructions and build prompt using parser
             operation_instructions = self._get_operation_instructions(operation_type)
-            
-            # Create prompt for LLM
-            prompt = f"""You are a web automation expert. Given the following HTML page and a natural language description of an element, return a response in one of these formats:
-
-{operation_instructions}
-
-CRITICAL RULE: You MUST check for ALL elements that could match the description. If there are 2 or more possible matches, you MUST use AMBIGUOUS format. Do NOT pick just one - always report ambiguity when multiple options exist.
-
-FORMAT 1 - Single match found (ONLY if exactly one element matches):
-Return only the CSS selector, no brackets or extra text.
-
-FORMAT 2 - Multiple ambiguous matches found (REQUIRED when 2+ elements match):
-AMBIGUOUS
-OPTION1: "descriptive_text_1" -> css_selector_1
-OPTION2: "descriptive_text_2" -> css_selector_2
-...
-
-IMPORTANT: For AMBIGUOUS format, make the option texts DISTINCTIVE and DESCRIPTIVE so users can tell them apart. Each option text MUST be unique enough that if a user used it as a selector, it would find only ONE element. Examples:
-- Instead of: "Sign in" and "Sign in" 
-- Use: "Sign in with Google" and "Sign in with Apple" and "Sign in button"
-- Instead of: "Submit" and "Submit"
-- Use: "Submit search form" and "Submit contact form"
-- Add context like: "button", "link", "with [service]", "in [location]", etc.
-
-CRITICAL: Each option text you provide MUST be specific enough to uniquely identify ONE element on the page.
-
-NEVER suggest the original failing selector text as one of your options. If the user's selector was "Sign in button", do NOT include "Sign in button" as an option.
-
-Search Strategy:
-1. First scan ALL buttons, links, and clickable elements
-2. Check text content, aria-labels, and surrounding text
-3. Count how many could reasonably match the description
-4. If count >= 2, use AMBIGUOUS format immediately
-
-HTML:
-{page_context}
-
-Natural language selector: "{original_selector}"
-
-Step 1: Search for ALL elements containing words like "sign", "login", "signin", etc.
-Step 2: Count potential matches for "{original_selector}"
-Step 3: If 2+ matches found, return AMBIGUOUS format. If exactly 1 match, return selector.
-
-Your response:"""
+            prompt = self.response_parser.get_full_prompt_template(operation_instructions, page_context, original_selector)
 
             # Use llm_manager to get raw response first (no validation yet)
             llm_command = LLMCommand(prompt=prompt)
@@ -132,9 +92,14 @@ Your response:"""
             if not response:
                 raise ValueError("LLM returned empty response")
             
-            # Parse response format first to check for ambiguity
-            # If ambiguous, this will validate suggestions before raising the error
-            resolved_selector = await self._parse_ai_response_with_validation(response, original_selector, page_url)
+            # Parse response using the configured parser
+            parse_result = self.response_parser.parse_response(response, original_selector)
+            
+            if parse_result.is_ambiguous:
+                # Handle ambiguous response with validation and deduction
+                resolved_selector = await self._handle_ambiguous_response(parse_result.options, original_selector, page_url, operation_type)
+            else:
+                resolved_selector = parse_result.selector
             
             # Only validate if we got a single selector (not ambiguous)
             from .validators.ai_resolved_selector_validator import AIResolvedSelectorValidator
@@ -187,17 +152,86 @@ Your response:"""
         """
         return self.cache.size()
     
-    def _get_operation_instructions(self, operation_type: Optional[str]) -> str:
+    async def _handle_ambiguous_response(self, options: list, original_selector: str, page_url: str, operation_type: str = None) -> str:
+        """Handle an ambiguous AI response by validating suggestions and applying deduction logic.
+        
+        Args:
+            options: List of (text, selector) tuples from AI response
+            original_selector: The original selector for context
+            page_url: Page URL for caching
+            operation_type: Type of operation for validation
+            
+        Returns:
+            A single CSS selector (if exclusionary description works)
+            
+        Raises:
+            ValueError: If ambiguity cannot be resolved
+        """
+        logger.debug("AI response indicates ambiguity, processing options")
+        
+        # Special case: if the original selector was an exclusionary description we generated,
+        # and the AI still says it's ambiguous, we should trust our deduction and not validate
+        if "but not the" in original_selector.lower():
+            logger.info(f"Original selector '{original_selector}' is an exclusionary description - will bypass validation for generated suggestions")
+            bypass_validation = True
+        else:
+            bypass_validation = False
+        
+        if len(options) > 1:
+            # Filter out suggestions that are exactly the same as the original failing selector
+            filtered_options = []
+            original_exact = original_selector.strip()
+            
+            for text, selector in options:
+                text_exact = text.strip()
+                
+                # Only filter if the suggestion is exactly the same as the original (including case)
+                if text_exact.lower() == original_exact.lower():
+                    logger.warning(f"AI suggested exactly the same failing selector '{text}' - filtering it out")
+                else:
+                    filtered_options.append((text, selector))
+                    logger.debug(f"Keeping suggestion: '{text}' (different from original '{original_exact}')")
+            
+            # Now validate each suggestion to ensure it's actually unique (unless bypassing)
+            if len(filtered_options) >= 2:
+                if bypass_validation:
+                    logger.info(f"Bypassing validation for exclusionary description - trusting {len(filtered_options)} AI suggestions")
+                    validated_options = filtered_options
+                    
+                    # For exclusionary descriptions, we should return the main CSS selector directly
+                    # Find the shortest/simplest option (the main element) and return its CSS selector
+                    main_option = min(filtered_options, key=lambda x: len(x[0].split()))
+                    logger.info(f"Exclusionary description resolved to main element: '{main_option[0]}' -> {main_option[1]}")
+                    
+                    # Cache and return the CSS selector
+                    await self.cache.set(original_selector, page_url, main_option[1])
+                    return main_option[1]
+                else:
+                    logger.info(f"Validating {len(filtered_options)} AI suggestions to ensure they're actually unique")
+                    validated_options = await self._validate_ai_suggestions(filtered_options, original_selector, operation_type)
+                
+                # Handle final options and show ambiguity error
+                final_options = self._prepare_final_options_with_deduction(validated_options, original_selector)
+                self._raise_ambiguity_error(original_selector, final_options)
+            else:
+                # Not enough options after filtering
+                self._raise_insufficient_options_error(original_selector)
+        else:
+            # Single option or no options - this shouldn't happen in ambiguous case
+            raise ValueError("AI reported ambiguity but provided insufficient options")
+    
+    def _get_operation_instructions(self, operation_type: Optional[str], for_validation: bool = False) -> str:
         """Get operation-specific instructions for the AI prompt.
         
         Args:
             operation_type: The browser operation type (click, type, etc.)
+            for_validation: If True, returns validation-specific instructions
             
         Returns:
             Operation-specific instruction text
         """
         if operation_type == "click":
-            return """OPERATION: You need to find a CLICKABLE element (button, link, clickable text, etc.).
+            base_instruction = """OPERATION: You need to find a CLICKABLE element (button, link, clickable text, etc.).
 Look for elements like:
 - <button> tags
 - <a> tags with href
@@ -205,264 +239,106 @@ Look for elements like:
 - Clickable text or icons
 - Submit buttons
 - Navigation links"""
+            if for_validation:
+                return base_instruction + "\n\nVALIDATION: Check if the description matches MULTIPLE clickable elements. If so, use AMBIGUOUS format."
+            return base_instruction
         elif operation_type == "type_text":
-            return """OPERATION: You need to find an INPUT element where text can be typed.
+            base_instruction = """OPERATION: You need to find an INPUT element where text can be typed.
 Look for elements like:
 - <input> tags (text, email, password, etc.)
 - <textarea> tags
 - Editable elements with contenteditable="true"
 - Search boxes
 - Form fields"""
+            if for_validation:
+                return base_instruction + "\n\nVALIDATION: Check if the description matches MULTIPLE input elements. If so, use AMBIGUOUS format."
+            return base_instruction
         elif operation_type == "select":
-            return """OPERATION: You need to find a SELECT dropdown element.
+            base_instruction = """OPERATION: You need to find a SELECT dropdown element.
 Look for elements like:
 - <select> tags
 - Dropdown menus
 - Option lists"""
+            if for_validation:
+                return base_instruction + "\n\nVALIDATION: Check if the description matches MULTIPLE select elements. If so, use AMBIGUOUS format."
+            return base_instruction
         elif operation_type == "hover":
-            return """OPERATION: You need to find an element that can be hovered over.
+            base_instruction = """OPERATION: You need to find an element that can be hovered over.
 Look for elements like:
 - Menu items
 - Buttons with hover effects
 - Links
 - Interactive elements"""
+            if for_validation:
+                return base_instruction + "\n\nVALIDATION: Check if the description matches MULTIPLE hoverable elements. If so, use AMBIGUOUS format."
+            return base_instruction
         elif operation_type == "wait_for":
-            return """OPERATION: You need to find an element that is visible on the page and can be interacted with. It can become visible after a delay.
+            base_instruction = """OPERATION: You need to find an element that is visible on the page and can be interacted with. It can become visible after a delay.
 Look for elements like:
 - Menu items
 - Buttons with hover effects
 - Links
 - Interactive elements"""
+            if for_validation:
+                return base_instruction + "\n\nVALIDATION: Check if the description matches MULTIPLE visible elements. If so, use AMBIGUOUS format."
+            return base_instruction
         elif operation_type == "get_text":
-            return """OPERATION: You need to find an element that has text content.
+            base_instruction = """OPERATION: You need to find an element that has text content.
 Look for elements like:
 - <p> tags
 - <span> tags
 - <div> tags
 - <h1> tags
 - <h2> tags"""
+            if for_validation:
+                return base_instruction + "\n\nVALIDATION: Check if the description matches MULTIPLE text elements. If so, use AMBIGUOUS format."
+            return base_instruction
         elif operation_type == "is_visible":
-            return """OPERATION: You need to find an element that is visible on the page and can be interacted with.
+            base_instruction = """OPERATION: You need to find an element that is visible on the page and can be interacted with.
 Look for elements like:
 - Menu items
 - Buttons with hover effects
 - Links
 - Interactive elements"""
+            if for_validation:
+                return base_instruction + "\n\nVALIDATION: Check if the description matches MULTIPLE visible elements. If so, use AMBIGUOUS format."
+            return base_instruction
         elif operation_type == "is_enabled":
-            return """OPERATION: You need to find an element that is enabled on the page and can be interacted with.
+            base_instruction = """OPERATION: You need to find an element that is enabled on the page and can be interacted with.
 Look for elements like:
 - Menu items
 - Buttons with hover effects
 - Links
 - Interactive elements"""
+            if for_validation:
+                return base_instruction + "\n\nVALIDATION: Check if the description matches MULTIPLE enabled elements. If so, use AMBIGUOUS format."
+            return base_instruction
         else:
-            return """OPERATION: Find the element that matches the description."""
+            base_instruction = """OPERATION: Find the element that matches the description."""
+            if for_validation:
+                return base_instruction + "\n\nVALIDATION: Check if the description matches MULTIPLE elements. If so, use AMBIGUOUS format."
+            return base_instruction
     
-    async def _parse_ai_response_with_validation(self, response: str, original_selector: str, page_url: str = "unknown") -> str:
-        """Parse AI response, validate suggestions if ambiguous, and handle accordingly.
-        
-        Args:
-            response: The AI response text
-            original_selector: The original selector for error messages
-            
-        Returns:
-            A single CSS selector
-            
-        Raises:
-            ValueError: If response is ambiguous with validated suggestions, or invalid
-        """
-        lines = [line.strip() for line in response.split('\n') if line.strip()]
-        
-        if not lines:
-            raise ValueError("Empty AI response")
-        
-        # Check if response indicates ambiguity
-        if response.strip().startswith("AMBIGUOUS"):
-            logger.debug("AI response indicates ambiguity, parsing options")
-            
-            # Special case: if the original selector was an exclusionary description we generated,
-            # and the AI still says it's ambiguous, we should trust our deduction and not validate
-            if "but not the" in original_selector.lower():
-                logger.info(f"Original selector '{original_selector}' is an exclusionary description - will bypass validation for generated suggestions")
-                bypass_validation = True
-            else:
-                bypass_validation = False
-            
-            # Parse AMBIGUOUS response format
-            options = []
-            for line in lines[1:]:  # Skip "AMBIGUOUS" line
-                if ': "' in line and '" ->' in line:
-                    # Parse: OPTION1: "exact text" -> selector
-                    parts = line.split(': "', 1)
-                    if len(parts) == 2:
-                        text_and_selector = parts[1]
-                        if '" ->' in text_and_selector:
-                            text, selector = text_and_selector.split('" ->', 1)
-                            options.append((text.strip(), selector.strip()))
-            
-            if len(options) > 1:
-                # Filter out suggestions that are exactly the same as the original failing selector
-                # Only filter exact matches to avoid removing valid suggestions with slight differences
-                filtered_options = []
-                original_exact = original_selector.strip()
-                
-                for text, selector in options:
-                    text_exact = text.strip()
-                    
-                    # Only filter if the suggestion is exactly the same as the original (including case)
-                    if text_exact.lower() == original_exact.lower():
-                        logger.warning(f"AI suggested exactly the same failing selector '{text}' - filtering it out")
-                    else:
-                        filtered_options.append((text, selector))
-                        logger.debug(f"Keeping suggestion: '{text}' (different from original '{original_exact}')")
-                
-                # Now validate each suggestion to ensure it's actually unique (unless bypassing)
-                if len(filtered_options) >= 2:
-                    if bypass_validation:
-                        logger.info(f"Bypassing validation for exclusionary description - trusting {len(filtered_options)} AI suggestions")
-                        validated_options = filtered_options
-                        
-                        # For exclusionary descriptions, we should return the main CSS selector directly
-                        # Find the shortest/simplest option (the main element) and return its CSS selector
-                        main_option = min(filtered_options, key=lambda x: len(x[0].split()))
-                        logger.info(f"Exclusionary description resolved to main element: '{main_option[0]}' -> {main_option[1]}")
-                        
-                        # Cache and return the CSS selector
-                        await self.cache.set(original_selector, page_url, main_option[1])
-                        return main_option[1]
-                    else:
-                        logger.info(f"Validating {len(filtered_options)} AI suggestions to ensure they're actually unique")
-                        validated_options = []
-                    
-                    if not bypass_validation:
-                        for text, selector in filtered_options:
-                            try:
-                                logger.debug(f"Testing suggestion: '{text}'")
-                                
-                                # Test if this suggestion would itself be ambiguous
-                                page_html = await self.get_page_html()
-                                test_prompt = f"""You are a web automation expert. Given the following HTML page and a natural language description of an element, return a response in one of these formats:
 
-OPERATION: You need to find a CLICKABLE element (button, link, clickable text, etc.).
 
-CRITICAL RULE: You MUST check for ALL elements that could match the description. If there are 2 or more possible matches, you MUST use AMBIGUOUS format.
-
-FORMAT 1 - Single match found (ONLY if exactly one element matches):
-Return only the CSS selector, no brackets or extra text.
-
-FORMAT 2 - Multiple ambiguous matches found (REQUIRED when 2+ elements match):
-AMBIGUOUS
-OPTION1: "descriptive_text_1" -> css_selector_1
-OPTION2: "descriptive_text_2" -> css_selector_2
-
-HTML:
-{page_html}
-
-Natural language selector: "{text}"
-
-Your response:"""
-                                
-                                llm_command = LLMCommand(prompt=test_prompt)
-                                test_result = await self.llm_manager.execute(llm_command)
-                                test_response = test_result.validated_text.strip()
-                                
-                                if test_response.startswith("AMBIGUOUS"):
-                                    logger.warning(f"Suggestion '{text}' is still ambiguous, skipping (will try deduction logic)")
-                                else:
-                                    # This suggestion is unique, keep it
-                                    logger.debug(f"Suggestion '{text}' is unique, keeping it")
-                                    validated_options.append((text, selector))
-                                    
-                            except Exception as validation_error:
-                                logger.warning(f"Could not validate suggestion '{text}': {validation_error}")
-                                # If validation fails, assume it's good and keep it
-                                validated_options.append((text, selector))
-                    
-                    # Apply deduction logic to find the main element
-                    deduced_main_element = self._deduce_main_button(filtered_options, original_selector)
-                    if deduced_main_element:
-                        logger.info(f"Deduced main element: '{deduced_main_element[0]}' -> {deduced_main_element[1]}")
-                        
-                        # If the deduced main element's exclusionary text matches the original selector,
-                        # it means the user is trying to use our suggested exclusionary description.
-                        # In this case, we should not be in this ambiguous path at all - 
-                        # the exclusionary description should have resolved unambiguously.
-                        if deduced_main_element[0] == original_selector:
-                            logger.error(f"User is using our exclusionary suggestion '{original_selector}' but AI still found it ambiguous - this should not happen")
-                            # This indicates the exclusionary description didn't work as expected
-                        
-                        # Otherwise, add the deduced main element to validated options if not already there
-                        if deduced_main_element not in validated_options:
-                            validated_options.insert(0, deduced_main_element)  # Put it first
-                    
-                    # Check if we have enough suggestions (including deduced main element)
-                    if len(validated_options) < 2:
-                        logger.error(f"After validation and deduction, only {len(validated_options)} unique suggestions remain")
-                        raise ValueError(f"Could not find enough unique alternatives for ambiguous selector '{original_selector}'. All AI suggestions were still ambiguous. Please try using a more specific natural language description or a CSS selector.")
-                    else:
-                        logger.info(f"Successfully validated {len(validated_options)} unique suggestions (including deduced main element)")
-                        options = validated_options
-                else:
-                    # Not enough options after filtering
-                    logger.error(f"AI provided unusable suggestions for '{original_selector}'")
-                    raise ValueError(f"Could not find unique alternatives for ambiguous selector '{original_selector}'. The AI suggestions were not specific enough. Please try using a more precise natural language description or a CSS selector.")
-                
-                # Create user-friendly error message with validated options
-                error_lines = [
-                    f"\n🚨 AMBIGUOUS SELECTOR: '{original_selector}'",
-                    f"",
-                    f"Multiple elements match your description. Please be more specific by using one of these exact texts:",
-                    f""
-                ]
-                
-                for i, (text, selector) in enumerate(options, 1):
-                    error_lines.append(f"   Option {i}: \"{text}\"")
-                    error_lines.append(f"   └─ Selector: {selector}")
-                    error_lines.append(f"")
-                
-                # Use AI suggestions directly for examples
-                example1 = options[0][0]
-                example2 = options[1][0] if len(options) > 1 else options[0][0]
-                
-                error_lines.extend([
-                    f"💡 To fix this, replace your selector with one of the exact texts above.",
-                    f"   For example, change:",
-                    f"   FROM: '{original_selector}'",
-                    f"   TO:   '{example1}'  (for option 1)",
-                    f"   OR:   '{example2}'  (for option 2)",
-                    f""
-                ])
-                
-                user_friendly_error = "\n".join(error_lines)
-                raise ValueError(user_friendly_error)
-        
-        # If not ambiguous, treat first line as the selector
-        selector = lines[0]
-        
-        # Clean up common AI formatting issues
-        if selector.startswith('"') and selector.endswith('"'):
-            selector = selector[1:-1]
-        
-        if not selector:
-            raise ValueError("AI returned empty selector")
-            
-        return selector
-
-    def _deduce_main_button(self, all_options: list, original_selector: str) -> tuple:
+    def _deduce_main_element(self, all_options: list, original_selector: str) -> tuple:
         """Deduce which option is the primary/main element using purely generic logic.
         
-        Simple deduction by counting words in option text:
-        - Options with more words are likely more specific/qualified
-        - Options with fewer words are likely more generic/main
-        - Return the option with the shortest text (fewest words)
-        - Enhance the suggestion with context from original selector to make it more descriptive
+        This method uses algorithmic analysis to identify the most likely intended element
+        when multiple options are available. It works for any element type (buttons, links, 
+        inputs, divs, etc.) and any operation (click, type, hover, etc.).
+        
+        Algorithm:
+        - Analyzes word count in option text (shorter = more generic/main)
+        - Creates exclusionary natural language descriptions
+        - Returns enhanced suggestion that can be resolved unambiguously by AI
         
         Args:
-            all_options: List of (text, selector) tuples from AI
+            all_options: List of (text, selector) tuples from AI response
             original_selector: The original user selector for context
             
         Returns:
-            (text, selector) tuple  for the deduced main element, or None if can't deduce
+            (enhanced_text, css_selector) tuple for the deduced main element, or None if can't deduce
         """
         if len(all_options) < 2:
             return None
@@ -536,6 +412,131 @@ Your response:"""
             enhanced = f"{main_text} button"
             
         return enhanced
+
+    async def _validate_ai_suggestions(self, filtered_options: list, original_selector: str, operation_type: str = None) -> list:
+        """Validate each AI suggestion to ensure it's actually unique by testing with AI.
+        
+        Args:
+            filtered_options: List of (text, selector) tuples to validate
+            original_selector: Original selector for context
+            operation_type: Type of operation for generating appropriate prompt
+            
+        Returns:
+            List of validated (text, selector) tuples that are actually unique
+        """
+        logger.info(f"Validating {len(filtered_options)} AI suggestions to ensure they're actually unique")
+        validated_options = []
+        
+        for text, selector in filtered_options:
+            try:
+                logger.debug(f"Testing suggestion: '{text}'")
+                
+                # Test if this suggestion would itself be ambiguous using validation prompt
+                page_html = await self.get_page_html()
+                operation_instructions = self._get_operation_instructions(operation_type, for_validation=True)
+                
+                test_prompt = self.response_parser.get_validation_prompt_template(operation_instructions, page_html, text)
+                
+                llm_command = LLMCommand(prompt=test_prompt)
+                test_result = await self.llm_manager.execute(llm_command)
+                test_response = test_result.validated_text.strip()
+                
+                if self.response_parser.is_ambiguous_response(test_response):
+                    logger.warning(f"Suggestion '{text}' is still ambiguous, skipping (will try deduction logic)")
+                else:
+                    # This suggestion is unique, keep it
+                    logger.debug(f"Suggestion '{text}' is unique, keeping it")
+                    validated_options.append((text, selector))
+                    
+            except Exception as validation_error:
+                logger.warning(f"Could not validate suggestion '{text}': {validation_error}")
+                # If validation fails, assume it's good and keep it
+                validated_options.append((text, selector))
+        
+        return validated_options
+    
+    def _prepare_final_options_with_deduction(self, validated_options: list, original_selector: str) -> list:
+        """Prepare final options for ambiguity error, applying deduction logic if needed.
+        
+        Args:
+            validated_options: List of validated (text, selector) tuples
+            original_selector: Original selector for context
+            
+        Returns:
+            Final list of options with deduced main element prioritized
+        """
+        # Check if we have enough suggestions for ambiguity handling
+        if len(validated_options) < 2:
+            logger.error(f"After validation, only {len(validated_options)} unique suggestions remain")
+            raise ValueError(f"Could not find enough unique alternatives for ambiguous selector '{original_selector}'. All AI suggestions were still ambiguous. Please try using a more specific natural language description or a CSS selector.")
+        
+        logger.info(f"Successfully validated {len(validated_options)} unique suggestions")
+        options = validated_options
+        
+        # Apply deduction logic only when we're about to show ambiguity to the user
+        # This helps prioritize the most likely intended element
+        deduced_main_element = self._deduce_main_element(options, original_selector)
+        if deduced_main_element:
+            logger.info(f"Deduced main element: '{deduced_main_element[0]}' -> {deduced_main_element[1]}")
+            
+            # If the deduced main element's exclusionary text matches the original selector,
+            # it means the user is trying to use our suggested exclusionary description.
+            # In this case, we should not be in this ambiguous path at all - 
+            # the exclusionary description should have resolved unambiguously.
+            if deduced_main_element[0] == original_selector:
+                logger.error(f"User is using our exclusionary suggestion '{original_selector}' but AI still found it ambiguous - this should not happen")
+                # This indicates the exclusionary description didn't work as expected
+            
+            # Add the deduced main element to options if not already there (prioritize it)
+            if deduced_main_element not in options:
+                options.insert(0, deduced_main_element)  # Put it first
+        
+        return options
+    
+    def _raise_ambiguity_error(self, original_selector: str, options: list) -> None:
+        """Raise a user-friendly ambiguity error with suggested options.
+        
+        Args:
+            original_selector: The original selector that was ambiguous
+            options: List of (text, selector) tuples to suggest to user
+        """
+        # Create user-friendly error message with validated options
+        error_lines = [
+            f"\n🚨 AMBIGUOUS SELECTOR: '{original_selector}'",
+            f"",
+            f"Multiple elements match your description. Please be more specific by using one of these exact texts:",
+            f""
+        ]
+        
+        for i, (text, selector) in enumerate(options, 1):
+            error_lines.append(f"   Option {i}: \"{text}\"")
+            error_lines.append(f"   └─ Selector: {selector}")
+            error_lines.append(f"")
+        
+        # Use AI suggestions directly for examples
+        example1 = options[0][0]
+        example2 = options[1][0] if len(options) > 1 else options[0][0]
+        
+        error_lines.extend([
+            f"💡 To fix this, replace your selector with one of the exact texts above.",
+            f"   For example, change:",
+            f"   FROM: '{original_selector}'",
+            f"   TO:   '{example1}'  (for option 1)",
+            f"   OR:   '{example2}'  (for option 2)",
+            f""
+        ])
+        
+        user_friendly_error = "\n".join(error_lines)
+        raise ValueError(user_friendly_error)
+    
+    def _raise_insufficient_options_error(self, original_selector: str) -> None:
+        """Raise an error when not enough unique options are available.
+        
+        Args:
+            original_selector: The original selector that failed
+        """
+        logger.error(f"AI provided unusable suggestions for '{original_selector}'")
+        raise ValueError(f"Could not find unique alternatives for ambiguous selector '{original_selector}'. The AI suggestions were not specific enough. Please try using a more precise natural language description or a CSS selector.")
 
     def _parse_ai_response(self, response: str, original_selector: str) -> str:
         """Parse AI response and handle ambiguity.
