@@ -3,9 +3,11 @@
 from .base import BaseBrowserAdapter
 from lamia.errors import ExternalOperationTransientError, ExternalOperationPermanentError
 from lamia.types import BrowserActionParams, SelectorType
+from ..session_manager import SessionManager
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any, List
 import time
+import json
 
 try:
     from selenium import webdriver
@@ -26,11 +28,18 @@ logger = logging.getLogger(__name__)
 class SeleniumAdapter(BaseBrowserAdapter):
     """Real Selenium adapter for browser automation."""
     
-    def __init__(self, headless: bool = True, timeout: float = 10.0):
+    def __init__(self, headless: bool = True, timeout: float = 10.0, session_config: Optional[Dict[str, Any]] = None, profile_name: Optional[str] = None):
         self.driver = None
         self.headless = headless
         self.default_timeout = timeout
         self.initialized = False
+        
+        # Session persistence setup
+        self.session_manager = SessionManager(session_config or {}) if session_config else None
+        self.profile_name = profile_name or "default"
+        
+        if self.session_manager and self.session_manager.enabled:
+            logger.info(f"Session persistence enabled for profile: {self.profile_name}")
     
     async def initialize(self) -> None:
         """Initialize the Selenium WebDriver."""
@@ -48,9 +57,20 @@ class SeleniumAdapter(BaseBrowserAdapter):
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         
+        # Add user data directory for session persistence
+        if self.session_manager and self.session_manager.enabled:
+            user_data_dir = self.session_manager.get_profile_session_dir(self.profile_name)
+            chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+            logger.info(f"SeleniumAdapter: Using user data directory: {user_data_dir}")
+        
         try:
             self.driver = webdriver.Chrome(options=chrome_options)
             self.driver.implicitly_wait(self.default_timeout)
+            
+            # Load additional session data if not using user data directory
+            if self.session_manager and self.session_manager.enabled:
+                self._load_session_data()
+            
             self.initialized = True
             logger.info("SeleniumAdapter: Chrome WebDriver initialized")
         except Exception as e:
@@ -62,6 +82,10 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if self.driver:
             logger.info("SeleniumAdapter: Closing WebDriver...")
             try:
+                # Save session data before closing
+                if self.session_manager and self.session_manager.enabled:
+                    self._save_session_data()
+                
                 self.driver.quit()
             except Exception as e:
                 logger.warning(f"Warning during driver cleanup: {e}")
@@ -352,3 +376,75 @@ class SeleniumAdapter(BaseBrowserAdapter):
             # Fallback to simple sleep if JavaScript execution fails
             logger.warning(f"SeleniumAdapter: DOM stability check failed ({e}), using fallback wait")
             time.sleep(0.5)
+    
+    def _load_session_data(self):
+        """Load session data (cookies) from files."""
+        if not self.session_manager or not self.session_manager.enabled or not self.driver:
+            return
+        
+        try:
+            # Load and add cookies - need to navigate to domain first
+            cookies = self.session_manager.load_cookies(self.profile_name)
+            if cookies:
+                # Group cookies by domain
+                domain_cookies = {}
+                for cookie in cookies:
+                    domain = cookie.get('domain', '').lstrip('.')
+                    if domain:
+                        if domain not in domain_cookies:
+                            domain_cookies[domain] = []
+                        domain_cookies[domain].append(cookie)
+                
+                # Add cookies for each domain
+                for domain, cookies_for_domain in domain_cookies.items():
+                    try:
+                        # Navigate to domain to set cookies
+                        self.driver.get(f"https://{domain}")
+                        for cookie in cookies_for_domain:
+                            # Remove domain and other selenium-incompatible keys
+                            clean_cookie = {k: v for k, v in cookie.items() 
+                                          if k in ['name', 'value', 'path', 'secure', 'httpOnly']}
+                            self.driver.add_cookie(clean_cookie)
+                        logger.info(f"Loaded {len(cookies_for_domain)} cookies for domain: {domain}")
+                    except Exception as e:
+                        logger.debug(f"Could not load cookies for domain {domain}: {e}")
+            
+            # Update session last used time
+            self.session_manager.update_last_used(self.profile_name)
+            
+        except Exception as e:
+            logger.warning(f"Failed to load session data for profile '{self.profile_name}': {e}")
+    
+    def _save_session_data(self):
+        """Save session data (cookies) to files."""
+        if not self.session_manager or not self.session_manager.enabled or not self.driver:
+            return
+        
+        try:
+            # Save cookies
+            cookies = self.driver.get_cookies()
+            self.session_manager.save_cookies(self.profile_name, cookies)
+            
+            # Save local storage if possible
+            try:
+                local_storage = self.driver.execute_script("""
+                    var storage = {};
+                    for (var i = 0; i < localStorage.length; i++) {
+                        var key = localStorage.key(i);
+                        storage[key] = localStorage.getItem(key);
+                    }
+                    return storage;
+                """)
+                self.session_manager.save_local_storage(self.profile_name, local_storage)
+            except Exception as e:
+                logger.debug(f"Could not save local storage: {e}")
+            
+            # Update session info
+            self.session_manager.save_session_info(self.profile_name, {
+                'browser_engine': 'selenium',
+                'cookies_count': len(cookies)
+            })
+            
+        except Exception as e:
+            logger.warning(f"Failed to save session data for profile '{self.profile_name}': {e}")
+    

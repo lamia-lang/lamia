@@ -2,13 +2,15 @@
 
 from .base import BaseBrowserAdapter
 from lamia.types import BrowserActionParams, SelectorType
+from ..session_manager import SessionManager
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any, List
 import time
 import asyncio
+import json
 
 try:
-    from playwright.async_api import async_playwright, Browser, Page, Playwright
+    from playwright.async_api import async_playwright, Browser, Page, Playwright, BrowserContext
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
@@ -19,13 +21,23 @@ logger = logging.getLogger(__name__)
 class PlaywrightAdapter(BaseBrowserAdapter):
     """Playwright adapter for browser automation."""
     
-    def __init__(self, headless: bool = True, timeout: float = 10000.0):
+    def __init__(self, headless: bool = True, timeout: float = 10000.0, session_config: Optional[Dict[str, Any]] = None, profile_name: Optional[str] = None):
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
+        self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
         self.headless = headless
         self.default_timeout = timeout
         self.initialized = False
+        
+        # Session persistence setup
+        self.session_manager = SessionManager(session_config or {}) if session_config else None
+        self.profile_name = profile_name or "default"
+        self.use_persistent_context = False
+        
+        if self.session_manager and self.session_manager.enabled:
+            self.use_persistent_context = True
+            logger.info(f"Session persistence enabled for profile: {self.profile_name}")
     
     async def initialize(self) -> None:
         """Initialize the Playwright browser."""
@@ -36,11 +48,31 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         
         try:
             self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(
-                headless=self.headless,
-                args=['--no-sandbox', '--disable-dev-shm-usage']
-            )
-            self.page = await self.browser.new_page()
+            
+            if self.use_persistent_context and self.session_manager:
+                # Use persistent context for session management
+                user_data_dir = self.session_manager.get_profile_session_dir(self.profile_name)
+                
+                self.context = await self.playwright.chromium.launch_persistent_context(
+                    user_data_dir=str(user_data_dir),
+                    headless=self.headless,
+                    args=['--no-sandbox', '--disable-dev-shm-usage']
+                )
+                self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
+                logger.info(f"PlaywrightAdapter: Using persistent context for profile: {self.profile_name}")
+            else:
+                # Standard browser initialization
+                self.browser = await self.playwright.chromium.launch(
+                    headless=self.headless,
+                    args=['--no-sandbox', '--disable-dev-shm-usage']
+                )
+                self.context = await self.browser.new_context()
+                self.page = await self.context.new_page()
+                
+                # Load existing cookies if session persistence is enabled
+                if self.session_manager and self.session_manager.enabled:
+                    await self._load_session_data()
+            
             self.page.set_default_timeout(self.default_timeout)
             self.initialized = True
             logger.info("PlaywrightAdapter: Chromium browser initialized")
@@ -52,8 +84,14 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         """Close the browser."""
         logger.info("PlaywrightAdapter: Closing browser...")
         try:
+            # Save session data before closing
+            if self.session_manager and self.session_manager.enabled and not self.use_persistent_context:
+                await self._save_session_data()
+            
             if self.page:
                 await self.page.close()
+            if self.context:
+                await self.context.close()
             if self.browser:
                 await self.browser.close()
             if self.playwright:
@@ -62,6 +100,7 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             logger.warning(f"Warning during browser cleanup: {e}")
         finally:
             self.page = None
+            self.context = None
             self.browser = None
             self.playwright = None
             self.initialized = False
@@ -309,3 +348,59 @@ class PlaywrightAdapter(BaseBrowserAdapter):
                 # Final fallback: short sleep
                 logger.warning(f"PlaywrightAdapter: DOM stability check failed ({e}), using fallback wait")
                 await asyncio.sleep(0.5)
+    
+    async def _load_session_data(self):
+        """Load session data (cookies, local storage) from files."""
+        if not self.session_manager or not self.session_manager.enabled:
+            return
+        
+        try:
+            # Load cookies
+            cookies = self.session_manager.load_cookies(self.profile_name)
+            if cookies and self.context:
+                await self.context.add_cookies(cookies)
+                logger.info(f"Loaded {len(cookies)} cookies for profile: {self.profile_name}")
+            
+            # Update session last used time
+            self.session_manager.update_last_used(self.profile_name)
+            
+        except Exception as e:
+            logger.warning(f"Failed to load session data for profile '{self.profile_name}': {e}")
+    
+    async def _save_session_data(self):
+        """Save session data (cookies, local storage) to files."""
+        if not self.session_manager or not self.session_manager.enabled or not self.context:
+            return
+        
+        try:
+            # Save cookies
+            cookies = await self.context.cookies()
+            self.session_manager.save_cookies(self.profile_name, cookies)
+            
+            # Save local storage for each domain if we have a page
+            if self.page:
+                try:
+                    local_storage = await self.page.evaluate("""
+                        () => {
+                            const storage = {};
+                            for (let i = 0; i < localStorage.length; i++) {
+                                const key = localStorage.key(i);
+                                storage[key] = localStorage.getItem(key);
+                            }
+                            return storage;
+                        }
+                    """)
+                    self.session_manager.save_local_storage(self.profile_name, local_storage)
+                except Exception as e:
+                    logger.debug(f"Could not save local storage: {e}")
+            
+            # Update session info
+            self.session_manager.save_session_info(self.profile_name, {
+                'browser_engine': 'playwright',
+                'cookies_count': len(cookies)
+            })
+            
+        except Exception as e:
+            logger.warning(f"Failed to save session data for profile '{self.profile_name}': {e}")
+    
+
