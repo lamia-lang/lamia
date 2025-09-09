@@ -30,6 +30,9 @@ class ActionNamespaceAnalyzer(ast.NodeVisitor):
         # Check if it's one of our command types (needed for transformed code)
         elif node.id in ['WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand']:
             self.used_types.add(node.id)
+        # Check if it's one of our session functions
+        elif node.id in ['session']:
+            self.used_namespaces.add('session')
         
         self.generic_visit(node)
     
@@ -64,7 +67,7 @@ def analyze_hybrid_file(code: str) -> Dict[str, Any]:
     except SyntaxError as e:
         # If AST parsing fails, inject everything as fallback
         return {
-            'namespaces': {'web', 'http'},  # Default safe set
+            'namespaces': {'web', 'http', 'session'},  # Default safe set
             'types': {'HTML', 'JSON', 'CSV', 'XML', 'YAML', 'Markdown'}
         }
 
@@ -136,6 +139,10 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str]) ->
     if 'file' in used_namespaces:
         from lamia.actions import file
         execution_globals['file'] = file
+    
+    if 'session' in used_namespaces:
+        from lamia.adapters.web.session_blocks import session
+        execution_globals['session'] = session
     
     # Future namespaces can be added here
     # if 'db' in used_namespaces:
