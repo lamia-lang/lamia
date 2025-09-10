@@ -10,27 +10,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class SessionSkipException(Exception):
+    """Exception raised when session should be skipped."""
+    pass
+
+
 
 class SessionStorageType(Enum):
     """Types of session storage for different use cases."""
-    LOGIN = "login"           # Authentication sessions
-    CART = "cart"            # Shopping cart state  
-    FORM = "form"            # Form progress/drafts
-    WORKFLOW = "workflow"    # Multi-step processes
-    PREFERENCES = "prefs"    # User settings
-    TOKENS = "tokens"        # API keys, OAuth tokens
-    CUSTOM = "custom"        # User-defined
+    LOGIN = "login"
 
 
 class SessionDetection(Enum):
     """Strategies for detecting session success."""
-    URL_CHANGE = "url_change"        # Redirect after success
-    ELEMENT_APPEARS = "element"      # Success indicator visible
-    ELEMENT_DISAPPEARS = "no_element" # Login form disappears  
-    CONTENT_MATCH = "content"        # Specific text appears
-    COOKIE_SET = "cookie"            # Auth cookie present
-    LOCAL_STORAGE = "storage"        # localStorage key set
-    MANUAL = "manual"                # User confirms success
+    ELEMENT_APPEARS = "element"
 
 
 class SessionAction:
@@ -279,8 +272,7 @@ class SessionContext:
         # Check if valid session exists
         if self.session_manager.is_session_valid(self.name, self.profile):
             logger.info(f"Valid session found for '{self.name}', skipping execution")
-            self.should_skip = True
-            return "SKIP"
+            raise SessionSkipException(f"Session '{self.name}' already valid")
         
         # Start recording
         logger.info(f"Starting session recording for '{self.name}'")
@@ -293,6 +285,7 @@ class SessionContext:
         global _current_session_context, _recorded_actions
         
         if self.should_skip:
+            logger.debug(f"Session '{self.name}' was skipped, no cleanup needed")
             return False
         
         try:

@@ -151,6 +151,55 @@ class LLMCommandDetector(ast.NodeVisitor):
             return None
 
 
+
+class SessionWithTransformer(ast.NodeTransformer):
+    """Transforms with session() statements to handle SessionSkipException."""
+    
+    def visit_With(self, node):
+        """Wrap with session() in try-catch to handle skipping."""
+        # Check if this is a with session() statement
+        for item in node.items:
+            if (isinstance(item.context_expr, ast.Call) and
+                isinstance(item.context_expr.func, ast.Name) and
+                item.context_expr.func.id == 'session'):
+                
+                # Wrap the with statement in try-catch
+                try_node = ast.Try(
+                    body=[node],
+                    handlers=[
+                        ast.ExceptHandler(
+                            type=ast.Name(id='SessionSkipException', ctx=ast.Load()),
+                            name='e',
+                            body=[
+                                ast.Expr(
+                                    value=ast.Call(
+                                        func=ast.Attribute(
+                                            value=ast.Name(id='logger', ctx=ast.Load()),
+                                            attr='info',
+                                            ctx=ast.Load()
+                                        ),
+                                        args=[
+                                            ast.Call(
+                                                func=ast.Name(id='str', ctx=ast.Load()),
+                                                args=[ast.Name(id='e', ctx=ast.Load())],
+                                                keywords=[]
+                                            )
+                                        ],
+                                        keywords=[]
+                                    )
+                                )
+                            ]
+                        )
+                    ],
+                    orelse=[],
+                    finalbody=[]
+                )
+                return try_node
+        
+        # Not a session with statement, continue normal processing
+        return self.generic_visit(node)
+
+
 class HybridSyntaxTransformer(ast.NodeTransformer):
     """Transforms string literals in functions into lamia.run() or lamia.run_async() calls."""
     
@@ -165,7 +214,11 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         # First pass: detect LLM commands
         self.detector.visit(tree)
         
-        # Second pass: transform the AST
+        # Second pass: handle session with statements
+        session_transformer = SessionWithTransformer()
+        tree = session_transformer.visit(tree)
+        
+        # Third pass: transform the AST
         transformed_tree = self.visit(tree)
         
         # Fix all missing AST metadata

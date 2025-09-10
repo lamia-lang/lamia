@@ -141,8 +141,11 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str]) ->
         execution_globals['file'] = file
     
     if 'session' in used_namespaces:
-        from lamia.adapters.web.session_blocks import session
+        from lamia.adapters.web.session_blocks import session, SessionSkipException
+        import logging
         execution_globals['session'] = session
+        execution_globals['SessionSkipException'] = SessionSkipException
+        execution_globals['logger'] = logging.getLogger(__name__)
     
     # Future namespaces can be added here
     # if 'db' in used_namespaces:
