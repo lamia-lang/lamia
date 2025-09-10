@@ -302,6 +302,96 @@ http_session = await web_manager.create_http_session("requests")
 await http_session.close()
 ```
 
+### Session Management
+
+Lamia provides intelligent session management for multi-step workflows like login sequences, shopping cart operations, and form filling. Sessions are automatically saved and restored to avoid repeating successful operations.
+
+#### Basic Session Usage
+
+Sessions work like Python's `with` statement, but with Lamia-specific behavior for session persistence:
+
+```python
+# In .hu files - sessions are automatically managed
+def login_to_site():
+    with session("login"):
+        web.navigate("https://example.com/login")
+        web.type_text("#username", "your_username")
+        web.type_text("#password", "your_password")
+        web.click("#login-button")
+    
+    # Session is saved after successful completion
+    # On subsequent runs, the session block will be skipped
+    
+    # Continue with post-login operations
+    web.navigate("https://example.com/dashboard")
+    web.click("#profile-menu")
+```
+
+#### How Sessions Work
+
+**First Run (No Session):**
+1. Executes the `with session("login"):` block
+2. Performs all actions inside the block
+3. If block completes without errors, saves the session
+4. Continues with code after the session block
+
+**Subsequent Runs (Session Exists):**
+1. Detects existing valid session for "login"
+2. **Skips the entire session block** (no actions executed)
+3. Continues directly with code after the session block
+
+**Session Validation:**
+- Sessions are considered valid if they exist and haven't expired
+- Sessions are automatically invalidated if they no longer work
+- Failed sessions are cleared and will be re-executed on next run
+
+#### Session Types
+
+Sessions are suitable for various multi-step workflows:
+
+```python
+# Authentication flows
+with session("user_login"):
+    # Login sequence
+
+# Shopping workflows  
+with session("add_to_cart"):
+    # Add items to cart
+
+# Form filling
+with session("profile_setup"):
+    # Multi-step form completion
+```
+
+#### Key Differences from Python `with`
+
+- **Standard Python `with`**: Always executes the block content
+- **Lamia `with session()`**: May skip block content if session already exists
+- **Persistence**: Session state is saved and restored across script runs
+- **Validation**: Automatically detects when sessions are no longer valid
+
+#### Session Storage
+
+Sessions are stored in `.lamia_sessions/` directory:
+- Each session is saved with its actions and metadata
+- Sessions persist across script runs
+- Invalid sessions are automatically cleaned up
+
+```bash
+# View saved sessions
+ls .lamia_sessions/
+
+# Clear all sessions (force re-execution)
+rm -rf .lamia_sessions/
+```
+
+#### Best Practices
+
+1. **Use descriptive session names**: `session("github_login")` not `session("login")`
+2. **Keep session blocks focused**: One logical workflow per session
+3. **Handle validation**: Ensure session blocks end on success pages
+4. **Test session clearing**: Regularly test with `rm -rf .lamia_sessions/`
+
 ### External System Retry Configuration
 
 Lamia automatically handles retries for external system operations (API calls, file operations, etc). The default behavior is well-tuned for different operation types:
