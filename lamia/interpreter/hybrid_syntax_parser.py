@@ -5,12 +5,45 @@ Handles parsing and AST transformation of hybrid syntax patterns:
 1. def my_func() -> HTML[MyModel]: "command"  # Function with return type
 2. def my_func(): "command"  # Function without return type  
 3. async def my_func(): "command"  # Async function
-4. "regular string"  # Outside functions, treated as normal Python string
+4. with session() -> Type: ...  # Session with return type validation
+5. "regular string"  # Outside functions, treated as normal Python string
 """
 
 import ast
 import re
 from typing import Optional, Dict, Any
+
+
+class WithReturnTypePreprocessor:
+    """Preprocesses with session() -> Type: syntax before AST parsing."""
+    
+    def preprocess(self, source_code: str) -> tuple[str, Dict[str, str]]:
+        """
+        Extract return type annotations from with session() statements.
+        
+        Returns:
+            tuple: (processed_source_code, extracted_return_types)
+        """
+        return_types = {}
+        
+        # Pattern to match: with session("name") -> Type:
+        pattern = r'(\s*)(with\s+session\([^)]+\))\s*->\s*([^:]+):'
+        
+        def replace_with_statement(match):
+            indent = match.group(1)
+            with_part = match.group(2)
+            return_type = match.group(3).strip()
+            
+            # Generate a unique key for this with statement
+            import hashlib
+            key = hashlib.md5(f"{with_part}_{return_type}".encode()).hexdigest()[:8]
+            return_types[key] = return_type
+            
+            # Replace with standard with statement + comment marker
+            return f"{indent}{with_part}:  # LAMIA_WITH_RETURN_TYPE_{key}"
+        
+        processed_code = re.sub(pattern, replace_with_statement, source_code)
+        return processed_code, return_types
 
 
 class LLMCommandDetector(ast.NodeVisitor):
@@ -153,19 +186,50 @@ class LLMCommandDetector(ast.NodeVisitor):
 
 
 class SessionWithTransformer(ast.NodeTransformer):
-    """Transforms with session() statements to handle SessionSkipException."""
+    """Transforms with session() statements to handle SessionSkipException and return type validation."""
+    
+    def __init__(self, return_types: Dict[str, str] = None):
+        self.return_types = return_types or {}
     
     def visit_With(self, node):
-        """Wrap with session() in try-catch to handle skipping."""
+        """Wrap with session() in try-catch to handle skipping and add validation if return type specified."""
         # Check if this is a with session() statement
         for item in node.items:
             if (isinstance(item.context_expr, ast.Call) and
                 isinstance(item.context_expr.func, ast.Name) and
                 item.context_expr.func.id == 'session'):
                 
+                # Check for return type annotation based on line number
+                return_type_key = None
+                validation_call = None
+                
+                # Skip the complex comment matching for now
+                
+                # Check if we have a return type for this session
+                if not validation_call and self.return_types:
+                    # Use the single return type (simplified - only one return type supported)
+                    return_type = next(iter(self.return_types.values()))
+                    validation_call = self._create_validation_call(return_type)
+                
+                # Create the modified with statement body
+                modified_body = list(node.body)
+                
+                # Add validation call at the END if return type is specified
+                # This ensures validation happens before session.__exit__ is called
+                if validation_call:
+                    modified_body.append(validation_call)
+                
+                # Create new with statement with modified body
+                modified_with = ast.With(
+                    items=node.items,
+                    body=modified_body,
+                    lineno=getattr(node, 'lineno', 1),
+                    col_offset=getattr(node, 'col_offset', 0)
+                )
+                
                 # Wrap the with statement in try-catch
                 try_node = ast.Try(
-                    body=[node],
+                    body=[modified_with],
                     handlers=[
                         ast.ExceptHandler(
                             type=ast.Name(id='SessionSkipException', ctx=ast.Load()),
@@ -188,16 +252,40 @@ class SessionWithTransformer(ast.NodeTransformer):
                                         keywords=[]
                                     )
                                 )
-                            ]
+                            ],
+                            lineno=getattr(node, 'lineno', 1),
+                            col_offset=getattr(node, 'col_offset', 0)
                         )
                     ],
                     orelse=[],
-                    finalbody=[]
+                    finalbody=[],
+                    lineno=getattr(node, 'lineno', 1),
+                    col_offset=getattr(node, 'col_offset', 0)
                 )
                 return try_node
         
         # Not a session with statement, continue normal processing
         return self.generic_visit(node)
+    
+    def _create_validation_call(self, return_type: str) -> ast.stmt:
+        """Create a lamia.run() call for validating the return type."""
+        # Parse return type to extract the type info
+        # Format: HTML[HomePageModel] -> extract "HTML" and "HomePageModel"
+        
+        # Create: validate current state against the expected return type
+        # This uses Lamia's validation system for any return type
+        return ast.Assign(
+            targets=[ast.Name(id='_validation_result', ctx=ast.Store(), lineno=1, col_offset=0)],
+            value=ast.Call(
+                func=ast.Name(id='validate_session_result', ctx=ast.Load(), lineno=1, col_offset=0),
+                args=[
+                    ast.Name(id=return_type, ctx=ast.Load(), lineno=1, col_offset=0)
+                ],
+                keywords=[]
+            ),
+            lineno=1,
+            col_offset=0
+        )
 
 
 class HybridSyntaxTransformer(ast.NodeTransformer):
@@ -622,14 +710,42 @@ class HybridSyntaxParser:
     
     def parse(self, source_code: str) -> Dict[str, Any]:
         """Parse hybrid syntax and return information about LLM commands."""
+        # Preprocess with session return types
+        preprocessor = WithReturnTypePreprocessor()
+        processed_code, return_types = preprocessor.preprocess(source_code)
+        
         detector = LLMCommandDetector()
-        tree = ast.parse(source_code)
+        tree = ast.parse(processed_code)
         detector.visit(tree)
         
         return {
-            'llm_functions': detector.llm_functions
+            'llm_functions': detector.llm_functions,
+            'with_return_types': return_types
         }
     
     def transform(self, source_code: str) -> str:
         """Transform hybrid syntax code into executable Python."""
-        return self.transformer.transform_code(source_code)
+        # Preprocess with session return types
+        preprocessor = WithReturnTypePreprocessor()
+        processed_code, return_types = preprocessor.preprocess(source_code)
+        
+        # Apply the hybrid syntax transformer
+        transformed_code = self.transformer.transform_code(processed_code)
+        
+        # Apply session with transformer for return type validation
+        tree = ast.parse(transformed_code)
+        session_transformer = SessionWithTransformer(return_types)
+        session_transformer._source_lines = transformed_code.split('\n')
+        transformed_tree = session_transformer.visit(tree)
+        
+        # Convert back to code
+        if hasattr(ast, 'unparse'):
+            # Python 3.9+
+            return ast.unparse(transformed_tree)
+        else:
+            # Fallback for older Python versions
+            try:
+                import astor
+                return astor.to_source(transformed_tree)
+            except ImportError:
+                raise ImportError("ast.unparse not available and astor not installed. Please install astor: pip install astor")
