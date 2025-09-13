@@ -12,65 +12,84 @@ from lamia.engine.managers.web.web_manager import WebManager
 logger = logging.getLogger(__name__)
 
 
-def create_session_validator():
-    """Create a session validator function that validates current content against any return type."""
-    def validate_session_result(return_type):
-        """Validate current content against the expected return type using Lamia's validation system."""
-        try:
-            # Find the lamia instance to access the browser
-            import inspect
-            frame = inspect.currentframe()
-            lamia_instance = None
-            while frame:
-                if 'lamia' in frame.f_locals:
-                    lamia_instance = frame.f_locals['lamia']
-                    break
-                frame = frame.f_back
+def _get_current_page_content(lamia_instance):
+    """Get current page content from the global browser adapter managed by Lamia engine.
+    
+    This reuses the existing browser instance instead of creating new ones.
+    
+    Args:
+        lamia_instance: The Lamia instance from execution context
+        
+    Returns:
+        str: Current page HTML content
+        
+    Raises:
+        Exception: If no browser content can be retrieved
+    """
+    try:
+        # Get the engine from lamia instance
+        engine = lamia_instance._engine
+        
+        # Get the existing web manager from the manager factory (singleton pattern)
+        from lamia.interpreter.command_types import CommandType
+        web_manager = engine.manager_factory.get_manager(CommandType.WEB)
+        
+        # Access the browser manager's cached browser adapter
+        browser_manager = web_manager.browser_manager
+        
+        if browser_manager._browser_adapter:
+            # Use the existing global browser adapter
+            adapter = browser_manager._browser_adapter
             
-            if not lamia_instance:
-                raise Exception("Could not find lamia instance in execution context")
-            
-            # Get current browser content
-            try:
-                # Get the engine from lamia instance
-                engine = lamia_instance._engine
-                
-                # Create a web manager to access the browser
-                web_manager = WebManager(engine.config_provider)
-                
-                # Get the browser adapter and page source
-                browser_adapter = asyncio.run(web_manager.browser_manager._get_browser_adapter())
-                
-                # If it's a RetryingBrowserAdapter, get the underlying adapter. TODO: We need to support get page source from retrying adapter.
-                if hasattr(browser_adapter, 'adapter'):
-                    actual_adapter = browser_adapter.adapter
+            # Handle RetryingBrowserAdapter wrapper - use the retry-aware method
+            if hasattr(adapter, 'get_page_source'):
+                # This is a retrying adapter, use its method which handles retries
+                current_content = asyncio.run(adapter.get_page_source())
+            else:
+                # Fallback: direct access to underlying adapter
+                if hasattr(adapter, 'adapter'):
+                    actual_adapter = adapter.adapter
                 else:
-                    actual_adapter = browser_adapter
-                
+                    actual_adapter = adapter
                 current_content = actual_adapter.driver.page_source
-                
-            except Exception as e:
-                # Fallback: try to access existing browser through engine managers
-                logger.warning(f"Could not access browser directly: {e}")
-                try:
-                    # Try to get existing browser manager
-                    if hasattr(engine, '_managers') and 'web' in engine._managers:
-                        web_manager = engine._managers['web']
-                        browser_manager = web_manager.browser_manager
-                        if browser_manager._browser_adapter:
-                            adapter = browser_manager._browser_adapter
-                            # Handle RetryingBrowserAdapter wrapper
-                            if hasattr(adapter, 'adapter'):
-                                actual_adapter = adapter.adapter
-                            else:
-                                actual_adapter = adapter
-                            current_content = actual_adapter.driver.page_source
-                        else:
-                            raise Exception("No active browser adapter")
-                    else:
-                        raise Exception("No web manager found")
-                except Exception as e2:
-                    raise Exception(f"Could not get browser content: {e2}")
+        else:
+            # No active browser adapter - this means no browser operations have been performed yet
+            raise Exception("No active browser adapter found. Ensure web operations have been performed before validation.")
+        
+        return current_content
+        
+    except Exception as e:
+        logger.error(f"Could not get browser content: {e}")
+        raise Exception(f"Failed to retrieve current page content: {e}")
+
+
+def create_session_validator(lamia_instance):
+    """Create a session validator function that validates current content against any return type.
+    
+    Args:
+        lamia_instance: The Lamia instance to use for validation
+        
+    Returns:
+        A validator function that can validate current page content against return types
+    """
+    def validate_session_result(return_type):
+        """Validate current content against the expected return type using Lamia's validation system.
+        
+        This function reuses the global browser driver managed by the Lamia engine instead of 
+        creating new instances, following the established singleton pattern.
+        
+        Args:
+            return_type: The expected return type to validate against
+            
+        Returns:
+            The validated data conforming to the return type
+            
+        Raises:
+            Exception: If validation fails or browser content cannot be retrieved
+        """
+        try:
+            # Get current browser content using the reusable method
+            current_content = _get_current_page_content(lamia_instance)
             
             # Use Lamia's polymorphic validation system - automatically selects the right validator
             from lamia.type_converter import create_validator
@@ -162,12 +181,13 @@ def analyze_hybrid_file(code: str) -> Dict[str, Any]:
         }
 
 
-def create_execution_globals(used_namespaces: Set[str], used_types: Set[str]) -> Dict[str, Any]:
+def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], lamia_instance=None) -> Dict[str, Any]:
     """Create execution globals dictionary with only needed imports.
     
     Args:
         used_namespaces: Set of namespace names to inject (web, http, etc.)
         used_types: Set of type names to inject (HTML, JSON, etc.)
+        lamia_instance: The Lamia instance to use for session validation (optional)
         
     Returns:
         Dictionary ready for exec() global namespace
@@ -238,7 +258,13 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str]) ->
         execution_globals['logger'] = logging.getLogger(__name__)
         
         # Add session validation support
-        execution_globals['validate_session_result'] = create_session_validator()
+        if lamia_instance:
+            execution_globals['validate_session_result'] = create_session_validator(lamia_instance)
+        else:
+            # Fallback: create a validator that will raise an error if used
+            def no_lamia_validator(return_type):
+                raise Exception("Session validation requires a Lamia instance but none was provided")
+            execution_globals['validate_session_result'] = no_lamia_validator
     
     # Future namespaces can be added here
     # if 'db' in used_namespaces:

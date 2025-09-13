@@ -93,7 +93,7 @@ class HybridExecutor:
         globals_dict[self.lamia_var_name] = self.lamia
         
         # Inject only the namespaces and types that are actually used
-        ast_globals = create_execution_globals(analysis['namespaces'], analysis['types'])
+        ast_globals = create_execution_globals(analysis['namespaces'], analysis['types'], self.lamia)
         globals_dict.update(ast_globals)
         
         # Extract and import types from return annotations (legacy support)
@@ -176,7 +176,7 @@ class HybridExecutor:
         globals_dict[self.lamia_var_name] = self.lamia
         
         # Inject only the namespaces and types that are actually used
-        ast_globals = create_execution_globals(analysis['namespaces'], analysis['types'])
+        ast_globals = create_execution_globals(analysis['namespaces'], analysis['types'], self.lamia)
         globals_dict.update(ast_globals)
         
         # Extract and import types from return annotations (legacy support)
