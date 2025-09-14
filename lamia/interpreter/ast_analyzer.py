@@ -8,6 +8,8 @@ from lamia.types import HTML, JSON, CSV, XML, YAML, Markdown
 from lamia.validation.validators.file_validators.file_structure.html_structure_validator import HTMLStructureValidator
 from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
 from lamia.engine.managers.web.web_manager import WebManager
+from lamia.engine.factories.validator_factory import ValidatorFactory
+from lamia.interpreter.command_types import CommandType
 
 logger = logging.getLogger(__name__)
 
@@ -91,21 +93,19 @@ def create_session_validator(lamia_instance):
             # Get current browser content using the reusable method
             current_content = _get_current_page_content(lamia_instance)
             
-            # Use Lamia's polymorphic validation system - automatically selects the right validator
-            from lamia.type_converter import create_validator
-            validator = create_validator(return_type)
+            # Use Lamia's validator factory for proper validation
+            
+            validator_factory = ValidatorFactory()
+            # Use WEB command type for session validation since it's web-based content
+            validator = validator_factory.get_validator(CommandType.WEB, return_type)
             
             # Validate current content against the model
-            try:
-                validation_result = asyncio.run(validator.validate_strict(current_content))
-            except RuntimeError:
-                # If we're already in an async context, use await instead
-                validation_result = validator.validate_strict(current_content)
-            
+            validation_result = validator.validate(current_content)
+
             if not validation_result.is_valid:
                 raise Exception(f"Validation failed: {validation_result.error_message}")
-            
-            return validation_result.data
+
+            return validation_result.result_type
             
         except Exception as e:
             logger.error(f"Session validation error: {e}")
