@@ -195,16 +195,24 @@ class BrowserManager:
     async def _get_browser_adapter(self) -> BaseBrowserAdapter:
         """Get browser adapter with retry capabilities (cached)."""
         if self._browser_adapter is None:
-            # Create base adapter
+            # Get session persistence configuration
+            web_config = self.config_provider.get_web_config()
+            session_config = web_config.get("session_persistence", {})
+            
+            # Create base adapter with session persistence
             if self._browser_engine == "selenium":
                 base_adapter = SeleniumAdapter(
                     headless=self._browser_options.get("headless", False),
-                    timeout=self._browser_options.get("timeout", 10.0)
+                    timeout=self._browser_options.get("timeout", 10.0),
+                    session_config=session_config,
+                    profile_name="default"
                 )
             elif self._browser_engine == "playwright":
                 base_adapter = PlaywrightAdapter(
                     headless=self._browser_options.get("headless", False),
-                    timeout=self._browser_options.get("timeout", 10.0)
+                    timeout=self._browser_options.get("timeout", 10.0),
+                    session_config=session_config,
+                    profile_name="default"
                 )
             else:
                 raise ValueError(f"Unsupported browser engine: {self._browser_engine}")
