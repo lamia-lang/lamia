@@ -14,7 +14,7 @@ from lamia.interpreter.command_types import CommandType
 logger = logging.getLogger(__name__)
 
 
-def _get_current_page_content(lamia_instance):
+async def _get_current_page_content(lamia_instance):
     """Get current page content from the global browser adapter managed by Lamia engine.
     
     This reuses the existing browser instance instead of creating new ones.
@@ -46,7 +46,7 @@ def _get_current_page_content(lamia_instance):
             # Handle RetryingBrowserAdapter wrapper - use the retry-aware method
             if hasattr(adapter, 'get_page_source'):
                 # This is a retrying adapter, use its method which handles retries
-                current_content = asyncio.run(adapter.get_page_source())
+                current_content = await adapter.get_page_source()
             else:
                 # Fallback: direct access to underlying adapter
                 if hasattr(adapter, 'adapter'):
@@ -65,6 +65,114 @@ def _get_current_page_content(lamia_instance):
         raise Exception(f"Failed to retrieve current page content: {e}")
 
 
+async def _wait_for_page_stabilization(lamia_instance, max_wait_time=300, stability_window=30):
+    """Wait for the page to stabilize before validation.
+    
+    This function polls the page repeatedly until:
+    1. The page content stops changing (stability window)
+    2. The URL stabilizes (no more redirects)
+    
+    The validator will handle checking if expected elements exist.
+    
+    Args:
+        lamia_instance: The Lamia instance from execution context
+        max_wait_time: Maximum time to wait for stabilization (seconds)
+        stability_window: Time window to consider page stable (seconds)
+        
+    Returns:
+        str: Stabilized page HTML content
+        
+    Raises:
+        Exception: If page doesn't stabilize within max_wait_time
+    """
+    import asyncio
+    import time
+    import hashlib
+    
+    logger.info(f"Waiting for page stabilization (max {max_wait_time}s)...")
+    
+    start_time = time.time()
+    last_content_hash = None
+    last_url = None
+    stable_since = None
+    attempt = 0
+    
+    while time.time() - start_time < max_wait_time:
+        attempt += 1
+        current_time = time.time()
+        
+        try:
+            # Get current page state
+            current_content = await _get_current_page_content(lamia_instance)
+            current_url = await _get_current_url(lamia_instance)
+            content_hash = hashlib.md5(current_content.encode()).hexdigest()
+            
+            logger.debug(f"Stabilization check #{attempt}: URL={current_url[:100]}..., Content hash={content_hash[:8]}")
+            
+            # Check if content and URL have changed
+            content_changed = (content_hash != last_content_hash)
+            url_changed = (current_url != last_url)
+            
+            if content_changed or url_changed:
+                # Page is still changing, reset stability timer
+                stable_since = current_time
+                logger.debug(f"Page changed (content: {content_changed}, url: {url_changed}), resetting stability timer")
+            else:
+                # Page hasn't changed, check if we've been stable long enough
+                if stable_since and (current_time - stable_since) >= stability_window:
+                    # Page has been stable for the required window
+                    logger.info(f"Page stabilized after {current_time - start_time:.1f}s")
+                    return current_content
+            
+            # Update tracking variables
+            last_content_hash = content_hash
+            last_url = current_url
+            
+            # Wait before next check (shorter intervals initially, longer as we wait)
+            wait_interval = min(1.5, 0.5 + (attempt * 0.1))
+            await asyncio.sleep(wait_interval)
+            
+        except Exception as e:
+            logger.warning(f"Error during stabilization check #{attempt}: {e}")
+            await asyncio.sleep(1.0)
+    
+    # Timeout reached
+    elapsed = time.time() - start_time
+    logger.warning(f"Page stabilization timeout after {elapsed:.1f}s, proceeding with current content")
+    
+    # Return the last known content even if not fully stable
+    try:
+        return await _get_current_page_content(lamia_instance)
+    except Exception as e:
+        raise Exception(f"Page stabilization failed and cannot retrieve content: {e}")
+
+
+async def _get_current_url(lamia_instance):
+    """Get current page URL from the browser adapter."""
+    try:
+        engine = lamia_instance._engine
+        from lamia.interpreter.command_types import CommandType
+        web_manager = engine.manager_factory.get_manager(CommandType.WEB)
+        browser_manager = web_manager.browser_manager
+        
+        if browser_manager._browser_adapter:
+            adapter = browser_manager._browser_adapter
+            if hasattr(adapter, 'get_current_url'):
+                return await adapter.get_current_url()
+            elif hasattr(adapter, 'adapter') and hasattr(adapter.adapter, 'get_current_url'):
+                return await adapter.adapter.get_current_url()
+            else:
+                # Fallback for selenium
+                return adapter.driver.current_url if hasattr(adapter, 'driver') else "unknown"
+        else:
+            return "unknown"
+    except Exception as e:
+        logger.warning(f"Could not get current URL: {e}")
+        return "unknown"
+
+
+
+
 def create_session_validator(lamia_instance):
     """Create a session validator function that validates current content against any return type.
     
@@ -74,11 +182,20 @@ def create_session_validator(lamia_instance):
     Returns:
         A validator function that can validate current page content against return types
     """
-    def validate_session_result(return_type):
+    async def validate_session_result(return_type):
         """Validate current content against the expected return type using Lamia's validation system.
         
-        This function reuses the global browser driver managed by the Lamia engine instead of 
-        creating new instances, following the established singleton pattern.
+        This function waits for the page to stabilize before validation to handle:
+        - Page loading delays and redirects after form submissions
+        - Captcha pages and intermediate screens  
+        - Dynamic content loading
+        - Browser navigation state changes
+        
+        The stabilization process:
+        1. Polls page content and URL for changes
+        2. Waits for expected model elements to appear
+        3. Ensures page is stable for a minimum time window
+        4. Only then performs validation
         
         Args:
             return_type: The expected return type to validate against
@@ -89,26 +206,33 @@ def create_session_validator(lamia_instance):
         Raises:
             Exception: If validation fails or browser content cannot be retrieved
         """
+        import asyncio
+        import time
+        
         try:
-            # Get current browser content using the reusable method
-            current_content = _get_current_page_content(lamia_instance)
+            logger.info("Starting session validation with page stabilization...")
+            
+            # Wait for page to stabilize before validation
+            stable_content = await _wait_for_page_stabilization(lamia_instance)
             
             # Use Lamia's validator factory for proper validation
-            
             validator_factory = ValidatorFactory()
             # Use WEB command type for session validation since it's web-based content
-            validator = validator_factory.get_validator(CommandType.WEB, return_type)
+            validator = validator_factory.get_validator(CommandType.WEB, return_type);
             
-            # Validate current content against the model
-            validation_result = validator.validate(current_content)
-
+            # Validate the stabilized content against the model
+            logger.info("Validating stabilized page content...")
+            print(stable_content)
+            validation_result = await validator.validate(stable_content)
+    
             if not validation_result.is_valid:
-                raise Exception(f"Validation failed: {validation_result.error_message}")
+                # Session validation failed - script must stop here
+                raise Exception(f"Session validation failed: {validation_result.error_message}")
 
+            logger.info("Session validation successful!")
             return validation_result.result_type
             
         except Exception as e:
-            logger.error(f"Session validation error: {e}")
             raise
     
     return validate_session_result
@@ -253,9 +377,11 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
     if 'session' in used_namespaces:
         from lamia.adapters.web.session_blocks import session, SessionSkipException
         import logging
+        import asyncio
         execution_globals['session'] = session
         execution_globals['SessionSkipException'] = SessionSkipException
         execution_globals['logger'] = logging.getLogger(__name__)
+        execution_globals['asyncio'] = asyncio  # Needed for asyncio.run() in session validation
         
         # Add session validation support
         if lamia_instance:

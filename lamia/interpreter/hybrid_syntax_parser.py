@@ -268,20 +268,34 @@ class SessionWithTransformer(ast.NodeTransformer):
         return self.generic_visit(node)
     
     def _create_validation_call(self, return_type: str) -> ast.stmt:
-        """Create a lamia.run() call for validating the return type."""
+        """Create an asyncio.run(validate_session_result()) call for validating the return type."""
         # Parse return type to extract the type info
         # Format: HTML[HomePageModel] -> extract "HTML" and "HomePageModel"
         
-        # Create: validate current state against the expected return type
-        # This uses Lamia's validation system for any return type
+        # Create: _validation_result = asyncio.run(validate_session_result(return_type))
+        # This allows calling async validation from sync context
         return ast.Assign(
             targets=[ast.Name(id='_validation_result', ctx=ast.Store(), lineno=1, col_offset=0)],
             value=ast.Call(
-                func=ast.Name(id='validate_session_result', ctx=ast.Load(), lineno=1, col_offset=0),
+                func=ast.Attribute(
+                    value=ast.Name(id='asyncio', ctx=ast.Load(), lineno=1, col_offset=0),
+                    attr='run',
+                    ctx=ast.Load(),
+                    lineno=1,
+                    col_offset=0
+                ),
                 args=[
-                    ast.Name(id=return_type, ctx=ast.Load(), lineno=1, col_offset=0)
+                    ast.Call(
+                        func=ast.Name(id='validate_session_result', ctx=ast.Load(), lineno=1, col_offset=0),
+                        args=[
+                            ast.Name(id=return_type, ctx=ast.Load(), lineno=1, col_offset=0)
+                        ],
+                        keywords=[]
+                    )
                 ],
-                keywords=[]
+                keywords=[],
+                lineno=1,
+                col_offset=0
             ),
             lineno=1,
             col_offset=0

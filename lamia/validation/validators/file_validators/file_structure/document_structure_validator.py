@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from ....base import BaseValidator, ValidationResult
 import typing
 import re
+import logging
 from typing import get_origin, get_args, Any, Union, Optional, List, Iterator
 from lamia.validation.utils.type_matcher import TypeMatcher
 from lamia.validation.utils.pydantic_utils import get_pydantic_json_schema, get_ordered_dict_fields
@@ -15,6 +16,8 @@ import json
 #STRICT_TYPE_MATCH = False
 
 SHOULD_GENERATE_JSON_SCHEMA = False
+
+logger = logging.getLogger(__name__)
 
 class BaseValidationError(ValueError):
     """Base exception for validation errors with hint support."""
@@ -695,22 +698,31 @@ class DocumentStructureValidator(BaseValidator, ABC):
             except Exception:
                 tree_string_cache = None
 
-        for field, field_info_or_type in model_fields:
+        for field_name, field_info_or_type in model_fields:
+            element_found_but_filtered = False
             if is_ordered_dict or isinstance(field_info_or_type, type):
                 expected_type = field_info_or_type  # For OrderedDict or __ordered_fields__, it's directly the type
                 field_info = None  # No field info for OrderedDict
+                field = field_name  # Keep original field name
             else:
                 expected_type = field_info_or_type.annotation  # For BaseModel, it's field_info.annotation
                 field_info = field_info_or_type
+                # Use alias if available, otherwise use original field name
+                field = field_info.alias if field_info.alias else field_name
 
-            # Get the appropriate selector for this field
-            selector = self.get_selector_for_field(field, field_info)
+            # Get the appropriate selector for this field (using original field_name for tag-based searching)
+            selector = self.get_selector_for_field(field_name, field_info)
 
             if permissive:
                 elems = self.find_all(tree, selector)
+                initial_count = len(elems)
+                
                 # For string fields, prefer leaf nodes (no nested content)
                 if expected_type is str:
-                    elems = [elem for elem in elems if not self.has_nested(elem)]
+                    filtered_elems = [elem for elem in elems if not self.has_nested(elem)]
+                    if initial_count > 0 and len(filtered_elems) == 0:
+                        element_found_but_filtered = True
+                    elems = filtered_elems
 
                 # When multiple matches exist, prefer a direct child of the current tree (root-level field)
                 prefer_direct = isinstance(tree, dict) or last_selected_position >= 0
@@ -736,11 +748,15 @@ class DocumentStructureValidator(BaseValidator, ABC):
                     elems = valid_elems if valid_elems else elems
 
                 elem = elems[0] if elems else None
+                # Track when elements were found but filtered out
+                if elem is None and initial_count > 0:
+                    element_found_but_filtered = True
             else:
                 elem = self.find_element(tree, selector)
                 
                 # For string fields, ensure it's a leaf node
                 if elem and expected_type is str and self.has_nested(elem):
+                    element_found_but_filtered = True
                     elem = None
 
             # --- Update last_selected_position for ordered field traversal ---
@@ -764,7 +780,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 if is_optional(expected_type):
                     values[field] = None
                     continue
-                errors.append(f"Missing <{field}>")
+                if element_found_but_filtered:
+                    errors.append(f"Field '{field_name}': Element found but filtered out due to type constraint. Field type '{expected_type.__name__}' expects different content structure. Consider using 'Any' type for container elements.")
+                else:
+                    errors.append(f"Missing <{field_name}>")
                 is_valid = False
                 continue
 
@@ -772,7 +791,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
             if is_pydantic_model(expected_type):
                 nested_result = self._validate_tree(elem, expected_type, permissive)
                 if not nested_result.is_valid:
-                    errors.append(f"Field {field}: {nested_result.error_message}")
+                    errors.append(f"Field {field_name}: {nested_result.error_message}")
                     is_valid = False
                     values[field] = None
                 else:
@@ -806,7 +825,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
             # Special handling for str and Any
             if expected_type is str:
                 if self.has_nested(elem):
-                    errors.append(f"Field {field}: Expected a leaf string, but found nested structure.")
+                    errors.append(f"Field {field_name}: Expected a leaf string, but found nested structure.")
                     is_valid = False
                     values[field] = None
                     continue
@@ -819,7 +838,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
             value = self.get_text(elem)
             match_result = self.type_matcher.validate_and_convert(value, expected_type)
             if not match_result.is_valid:
-                errors.append(f"Field {field}: {match_result.error}")
+                errors.append(f"Field {field_name}: {match_result.error}")
                 is_valid = False
                 values[field] = None
             else:

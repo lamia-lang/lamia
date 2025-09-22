@@ -224,7 +224,12 @@ class HTMLStructureValidator(DocumentStructureValidator):
         return getattr(element, 'name', None)
 
     def find_all(self, tree, key):
-        return tree.find_all(key)
+        # If key contains CSS selector syntax, use tree.select()
+        # Otherwise use tree.find_all() for simple tag names
+        if any(char in key for char in ['.', '#', ':', '[', '>', '+', '~']):
+            return tree.select(key)
+        else:
+            return tree.find_all(key)
 
     def get_subtree_string(self, elem):
         # For HTML, return the tag as a string
