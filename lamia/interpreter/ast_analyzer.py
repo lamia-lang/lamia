@@ -222,7 +222,6 @@ def create_session_validator(lamia_instance):
             
             # Validate the stabilized content against the model
             logger.info("Validating stabilized page content...")
-            print(stable_content)
             validation_result = await validator.validate(stable_content)
     
             if not validation_result.is_valid:

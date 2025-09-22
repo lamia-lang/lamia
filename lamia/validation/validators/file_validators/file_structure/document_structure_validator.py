@@ -628,6 +628,23 @@ class DocumentStructureValidator(BaseValidator, ABC):
         # For key-based formats, ignore selectors and just return field name
         return field_name
 
+    def _check_element_existence_ignoring_types(self, tree, selector):
+        """Check if element exists when ignoring type constraints completely.
+        
+        When we encounter a missing element, we re-search ignoring all type constraints
+        to determine if the element exists but was filtered due to type mismatches.
+        
+        Args:
+            tree: The parsed data structure to search
+            selector: The selector to search for
+            
+        Returns:
+            bool: True if element exists (ignoring types), False if truly missing
+        """
+        # Find all elements matching the selector, ignoring any type constraints
+        all_elements = self.find_all(tree, selector)
+        return len(all_elements) > 0
+
     def _validate_tree(self, tree, model, permissive=False):
         errors = []
         values = {}
@@ -699,7 +716,6 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 tree_string_cache = None
 
         for field_name, field_info_or_type in model_fields:
-            element_found_but_filtered = False
             if is_ordered_dict or isinstance(field_info_or_type, type):
                 expected_type = field_info_or_type  # For OrderedDict or __ordered_fields__, it's directly the type
                 field_info = None  # No field info for OrderedDict
@@ -715,14 +731,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
             if permissive:
                 elems = self.find_all(tree, selector)
-                initial_count = len(elems)
                 
                 # For string fields, prefer leaf nodes (no nested content)
                 if expected_type is str:
-                    filtered_elems = [elem for elem in elems if not self.has_nested(elem)]
-                    if initial_count > 0 and len(filtered_elems) == 0:
-                        element_found_but_filtered = True
-                    elems = filtered_elems
+                    elems = [elem for elem in elems if not self.has_nested(elem)]
 
                 # When multiple matches exist, prefer a direct child of the current tree (root-level field)
                 prefer_direct = isinstance(tree, dict) or last_selected_position >= 0
@@ -748,15 +760,11 @@ class DocumentStructureValidator(BaseValidator, ABC):
                     elems = valid_elems if valid_elems else elems
 
                 elem = elems[0] if elems else None
-                # Track when elements were found but filtered out
-                if elem is None and initial_count > 0:
-                    element_found_but_filtered = True
             else:
                 elem = self.find_element(tree, selector)
                 
                 # For string fields, ensure it's a leaf node
                 if elem and expected_type is str and self.has_nested(elem):
-                    element_found_but_filtered = True
                     elem = None
 
             # --- Update last_selected_position for ordered field traversal ---
@@ -780,6 +788,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 if is_optional(expected_type):
                     values[field] = None
                     continue
+                    
+                # Check element existence when we encounter a missing element, ignoring types
+                element_found_but_filtered = self._check_element_existence_ignoring_types(tree, selector)
+                
                 if element_found_but_filtered:
                     errors.append(f"Field '{field_name}': Element found but filtered out due to type constraint. Field type '{expected_type.__name__}' expects different content structure. Consider using 'Any' type for container elements.")
                 else:
