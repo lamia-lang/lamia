@@ -28,6 +28,18 @@ class HTMLStructureValidator(DocumentStructureValidator):
     @classmethod
     def name(cls) -> str:
         return "html_structure"
+
+    def get_selector_for_field(self, field_name: str, field_info: Any) -> str:
+        """Get selector for HTML field, combining tag name with CSS/XPath selector."""
+        base_name = field_name  # The HTML tag name
+        
+        if field_info and hasattr(field_info, 'json_schema_extra') and field_info.json_schema_extra:
+            if 'selector' in field_info.json_schema_extra:
+                selector = field_info.json_schema_extra['selector']
+                # Use the helper method from DocumentStructureValidator
+                return self._combine_tag_and_selector(base_name, selector)
+        
+        return base_name  # Just the tag name
     
     @classmethod  
     def file_type(cls) -> str:

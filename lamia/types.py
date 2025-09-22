@@ -23,7 +23,7 @@ class BaseType(Generic[T, S]):
     def __class_getitem__(cls, params):
         # Allow single parameter usage like HTML[MyModel]
         if not isinstance(params, tuple):
-            params = (params, bool)  # Default S to bool
+            params = (params, False)  # Default S to False (non-strict validation)
         return super().__class_getitem__(params)
 
 class HTML(BaseType[T, S]):

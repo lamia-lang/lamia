@@ -553,6 +553,78 @@ class DocumentStructureValidator(BaseValidator, ABC):
         """
         pass
 
+    def _combine_tag_and_selector(self, tag: str, selector: str) -> str:
+        """Combine tag name with selector. Helper for tag-based validators (HTML/XML).
+        
+        Args:
+            tag: The tag name (e.g., 'div', 'span')
+            selector: The selector from json_schema_extra (e.g., '.class', '#id')
+            
+        Returns:
+            Combined selector string
+            
+        Raises:
+            ValueError: If selector already contains the tag name
+        """
+        # Detect if selector already contains tag name
+        if self._selector_contains_tag(tag, selector):
+            raise ValueError(f"Selector '{selector}' already contains tag '{tag}'. Use just the attribute part (e.g., '.class' not 'div.class').")
+        
+        # CSS selector combining
+        if selector.startswith(('.', '#', ':', '[')):
+            return f"{tag}{selector}"  # div.class, span#id, input[type='text']
+        elif selector.startswith(' '):
+            return f"{tag}{selector}"  # div > child, span + sibling
+        elif selector.startswith('//') or selector.startswith('/'):
+            # XPath - prepend tag to path
+            if selector.startswith('//'):
+                return f"//{tag}{selector[2:]}"
+            else:
+                return f"/{tag}{selector[1:]}"
+        else:
+            # Full selector override - use as-is
+            return selector
+
+    def _selector_contains_tag(self, tag: str, selector: str) -> bool:
+        """Check if selector already contains the tag name.
+        
+        Args:
+            tag: The tag name to check for
+            selector: The selector string
+            
+        Returns:
+            True if selector already contains the tag
+        """
+        # CSS: check if starts with tag name followed by selector chars
+        css_indicators = ['.', '#', '[', ':']
+        for indicator in css_indicators:
+            if selector.startswith(f"{tag}{indicator}"):
+                return True
+        
+        # XPath: check if contains tag in path
+        xpath_patterns = [f"/{tag}[", f"//{tag}[", f"/{tag}.", f"//{tag}."]
+        for pattern in xpath_patterns:
+            if pattern in selector:
+                return True
+                
+        return False
+
+    def get_selector_for_field(self, field_name: str, field_info: Any) -> str:
+        """Get selector for field. Default implementation for key-based formats (JSON, YAML, CSV).
+        
+        For key-based formats, selectors don't make sense, so always return field name.
+        Tag-based formats (HTML, XML) should override this method.
+        
+        Args:
+            field_name: The field name
+            field_info: Pydantic field info object
+            
+        Returns:
+            The selector string to use for finding elements/values
+        """
+        # For key-based formats, ignore selectors and just return field name
+        return field_name
+
     def _validate_tree(self, tree, model, permissive=False):
         errors = []
         values = {}
@@ -626,11 +698,16 @@ class DocumentStructureValidator(BaseValidator, ABC):
         for field, field_info_or_type in model_fields:
             if is_ordered_dict or isinstance(field_info_or_type, type):
                 expected_type = field_info_or_type  # For OrderedDict or __ordered_fields__, it's directly the type
+                field_info = None  # No field info for OrderedDict
             else:
                 expected_type = field_info_or_type.annotation  # For BaseModel, it's field_info.annotation
+                field_info = field_info_or_type
+
+            # Get the appropriate selector for this field
+            selector = self.get_selector_for_field(field, field_info)
 
             if permissive:
-                elems = self.find_all(tree, field)
+                elems = self.find_all(tree, selector)
                 # For string fields, prefer leaf nodes (no nested content)
                 if expected_type is str:
                     elems = [elem for elem in elems if not self.has_nested(elem)]
@@ -638,7 +715,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 # When multiple matches exist, prefer a direct child of the current tree (root-level field)
                 prefer_direct = isinstance(tree, dict) or last_selected_position >= 0
                 if len(elems) > 1 and prefer_direct:
-                    direct_candidate = self.find_element(tree, field)
+                    direct_candidate = self.find_element(tree, selector)
                     if direct_candidate is not None and direct_candidate in elems:
                         # Apply same leaf filtering constraint for strings
                         if not (expected_type is str and self.has_nested(direct_candidate)):
@@ -660,7 +737,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
 
                 elem = elems[0] if elems else None
             else:
-                elem = self.find_element(tree, field)
+                elem = self.find_element(tree, selector)
                 
                 # For string fields, ensure it's a leaf node
                 if elem and expected_type is str and self.has_nested(elem):

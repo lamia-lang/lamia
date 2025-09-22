@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from pydantic import BaseModel, create_model
 import re
+from typing import Any
 from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from .utils import import_model_from_path
 
@@ -20,6 +21,18 @@ class XMLStructureValidator(DocumentStructureValidator):
     @classmethod
     def name(cls) -> str:
         return "xml_structure"
+
+    def get_selector_for_field(self, field_name: str, field_info: Any) -> str:
+        """Get selector for XML field, combining tag name with XPath selector."""
+        base_name = field_name  # The XML tag name
+        
+        if field_info and hasattr(field_info, 'json_schema_extra') and field_info.json_schema_extra:
+            if 'selector' in field_info.json_schema_extra:
+                selector = field_info.json_schema_extra['selector']
+                # Use the helper method from DocumentStructureValidator
+                return self._combine_tag_and_selector(base_name, selector)
+        
+        return base_name  # Just the tag name
 
     @classmethod
     def file_type(cls) -> str:
