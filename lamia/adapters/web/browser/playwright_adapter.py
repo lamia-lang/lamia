@@ -31,7 +31,7 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         self.initialized = False
         
         # Session persistence setup
-        self.session_manager = SessionManager(session_config or {}) if session_config else None
+        self.session_manager = SessionManager(session_config) if session_config else None
         self.profile_name = profile_name or "default"
         self.use_persistent_context = False
         

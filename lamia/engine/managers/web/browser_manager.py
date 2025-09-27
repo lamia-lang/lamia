@@ -195,24 +195,30 @@ class BrowserManager:
     async def _get_browser_adapter(self) -> BaseBrowserAdapter:
         """Get browser adapter with retry capabilities (cached)."""
         if self._browser_adapter is None:
-            # Get session persistence configuration
+            # Get session persistence configuration - always enable session persistence
             web_config = self.config_provider.get_web_config()
             session_config = web_config.get("session_persistence", {})
+            # Always enable session persistence
+            session_config.setdefault("enabled", True)
+            session_config.setdefault("session_timeout", 24)
+            session_config.setdefault("save_cookies", True)
+            session_config.setdefault("save_local_storage", True)
             
-            # Create base adapter with session persistence
+            # Create browser adapter WITHOUT loading any cookies initially
+            logger.info("Creating clean browser adapter (no cookies loaded yet)")
             if self._browser_engine == "selenium":
                 base_adapter = SeleniumAdapter(
                     headless=self._browser_options.get("headless", False),
                     timeout=self._browser_options.get("timeout", 10.0),
-                    session_config=session_config,
-                    profile_name="default"
+                    session_config=session_config
+                    # NO profile_name - cookies loaded later by session blocks
                 )
             elif self._browser_engine == "playwright":
                 base_adapter = PlaywrightAdapter(
                     headless=self._browser_options.get("headless", False),
                     timeout=self._browser_options.get("timeout", 10.0),
-                    session_config=session_config,
-                    profile_name="default"
+                    session_config=session_config
+                    # NO profile_name - cookies loaded later by session blocks
                 )
             else:
                 raise ValueError(f"Unsupported browser engine: {self._browser_engine}")
@@ -230,6 +236,156 @@ class BrowserManager:
         adapter = await self._get_browser_adapter()
         return await adapter.get_page_source()
     
+    async def get_current_url(self) -> str:
+        """Get current page URL."""
+        adapter = await self._get_browser_adapter()
+        if hasattr(adapter, 'get_current_url'):
+            return await adapter.get_current_url()
+        elif hasattr(adapter, 'driver') and hasattr(adapter.driver, 'current_url'):
+            return adapter.driver.current_url
+        else:
+            logger.warning("Browser adapter doesn't support URL retrieval")
+            return "unknown"
+    
+    async def get_page_source(self) -> str:
+        """Get current page HTML source."""
+        adapter = await self._get_browser_adapter()
+        return await adapter.get_page_source()
+    
+    async def load_session_cookies(self, profile_name: str) -> bool:
+        """Load cookies for a specific session profile.
+        
+        Args:
+            profile_name: The session profile name (e.g., "login")
+            
+        Returns:
+            bool: True if cookies were loaded successfully, False if no cookies exist
+        """
+        try:
+            adapter = await self._get_browser_adapter()
+            
+            # Check if adapter has session management capability
+            if not hasattr(adapter, 'session_manager') or not adapter.session_manager:
+                logger.warning("Browser adapter doesn't support session management")
+                return False
+            
+            # Load cookies for this profile
+            cookies = adapter.session_manager.load_cookies(profile_name)
+            if not cookies:
+                logger.info(f"No cookies found for profile '{profile_name}'")
+                return False
+            
+            # Apply cookies to browser using adapter's existing method
+            if hasattr(adapter, '_load_session_data'):
+                # Temporarily set the profile name so adapter loads cookies for this profile
+                original_profile = getattr(adapter, 'profile_name', None)
+                adapter.profile_name = profile_name
+                try:
+                    await adapter._load_session_data()
+                    logger.info(f"Loaded cookies for profile '{profile_name}'")
+                    return True
+                finally:
+                    # Restore original profile
+                    if original_profile is not None:
+                        adapter.profile_name = original_profile
+            else:
+                logger.warning("Browser adapter doesn't support session loading")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to load cookies for profile '{profile_name}': {e}")
+            return False
+    
+    async def save_session_cookies(self, profile_name: str):
+        """Save current browser cookies for a specific session profile.
+        
+        Args:
+            profile_name: The session profile name (e.g., "login")
+        """
+        try:
+            adapter = await self._get_browser_adapter()
+            
+            # Check if adapter has session management capability
+            if not hasattr(adapter, 'session_manager') or not adapter.session_manager:
+                logger.warning("Browser adapter doesn't support session management")
+                return
+            
+            # Get current cookies from browser
+            current_cookies = []
+            if hasattr(adapter, 'driver') and hasattr(adapter.driver, 'get_cookies'):
+                # Selenium
+                current_cookies = adapter.driver.get_cookies()
+            elif hasattr(adapter, 'page') and hasattr(adapter.page, 'context'):
+                # Playwright
+                current_cookies = await adapter.page.context.cookies()
+            
+            if current_cookies:
+                # Save cookies for this profile
+                adapter.session_manager.save_cookies(profile_name, current_cookies)
+                logger.info(f"Saved {len(current_cookies)} cookies for profile '{profile_name}'")
+            else:
+                logger.warning(f"No cookies to save for profile '{profile_name}'")
+                
+        except Exception as e:
+            logger.error(f"Failed to save cookies for profile '{profile_name}': {e}")
+    
+    async def validate_session_cookies(self, profile_name: str, validation_url: str = None) -> bool:
+        """Validate that cookies for a profile are still valid.
+        
+        Args:
+            profile_name: The session profile name
+            validation_url: Optional URL to test the cookies against
+            
+        Returns:
+            bool: True if cookies are valid, False otherwise
+        """
+        try:
+            # Load cookies for the profile
+            if not await self.load_session_cookies(profile_name):
+                return False
+            
+            # If validation URL provided, test the cookies
+            if validation_url:
+                # Navigate to validation URL and check if we're still logged in
+                # This is a simple validation - could be enhanced based on needs
+                await self.execute(WebCommand(action=WebActionType.NAVIGATE, url=validation_url))
+                
+                # Basic validation: check if we're not redirected to login page
+                current_url = await self.get_current_url()
+                if "login" in current_url.lower():
+                    logger.info(f"Session validation failed for profile '{profile_name}' - redirected to login")
+                    return False
+            
+            logger.info(f"Session cookies validated for profile '{profile_name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Session validation failed for profile '{profile_name}': {e}")
+            return False
+    
+    @staticmethod
+    def get_browser_manager_from_lamia(lamia_instance):
+        """Get the BrowserManager from a Lamia instance.
+        
+        This is the centralized way to access browser operations from any context.
+        
+        Args:
+            lamia_instance: The Lamia instance
+            
+        Returns:
+            BrowserManager: The browser manager instance
+            
+        Raises:
+            Exception: If browser manager cannot be accessed
+        """
+        try:
+            from lamia.interpreter.command_types import CommandType
+            engine = lamia_instance._engine
+            web_manager = engine.manager_factory.get_manager(CommandType.WEB)
+            return web_manager.browser_manager
+        except Exception as e:
+            raise Exception(f"Cannot access BrowserManager from Lamia instance: {e}")
+
     async def close(self):
         """Close browser manager and cleanup resources."""
         # Close browser adapter if it exists

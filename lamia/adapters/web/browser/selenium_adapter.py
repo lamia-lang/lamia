@@ -35,11 +35,20 @@ class SeleniumAdapter(BaseBrowserAdapter):
         self.initialized = False
         
         # Session persistence setup
-        self.session_manager = SessionManager(session_config or {}) if session_config else None
-        self.profile_name = profile_name or "default"
+        self.session_manager = SessionManager(session_config) if session_config else None
         
+        # Use provided profile name, otherwise default
+        if profile_name:
+            self.profile_name = profile_name
+        else:
+            self.profile_name = "default"
+        
+        print(f"TO DELETE: session_manager={self.session_manager}, enabled={self.session_manager.enabled if self.session_manager else 'N/A'}")
         if self.session_manager and self.session_manager.enabled:
+            print(f"TO DELETE: Session persistence IS enabled for profile: {self.profile_name}")
             logger.info(f"Session persistence enabled for profile: {self.profile_name}")
+        else:
+            print(f"TO DELETE: Session persistence NOT enabled")
     
     async def initialize(self) -> None:
         """Initialize the Selenium WebDriver."""
@@ -68,8 +77,12 @@ class SeleniumAdapter(BaseBrowserAdapter):
             self.driver.implicitly_wait(self.default_timeout)
             
             # Load additional session data if not using user data directory
+            print(f"TO DELETE: About to check session_manager: {bool(self.session_manager)}, enabled: {self.session_manager.enabled if self.session_manager else 'N/A'}")
             if self.session_manager and self.session_manager.enabled:
+                print("TO DELETE: Calling _load_session_data()")
                 self._load_session_data()
+            else:
+                print("TO DELETE: NOT calling _load_session_data()")
             
             self.initialized = True
             logger.info("SeleniumAdapter: Chrome WebDriver initialized")
@@ -142,6 +155,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         url = params.value
+        exit(0)
         logger.info(f"SeleniumAdapter: Navigate to {url}")
         self.driver.get(url)
     
@@ -379,12 +393,16 @@ class SeleniumAdapter(BaseBrowserAdapter):
     
     def _load_session_data(self):
         """Load session data (cookies) from files."""
+        print(f"TO DELETE: _load_session_data called with profile_name: {self.profile_name}")
         if not self.session_manager or not self.session_manager.enabled or not self.driver:
+            print(f"TO DELETE: Not loading session data - session_manager: {self.session_manager}, enabled: {self.session_manager.enabled if self.session_manager else None}, driver: {bool(self.driver)}")
             return
         
         try:
             # Load and add cookies - need to navigate to domain first
+            print(f"TO DELETE: About to load cookies for profile: {self.profile_name}")
             cookies = self.session_manager.load_cookies(self.profile_name)
+            print(f"TO DELETE: Loaded {len(cookies) if cookies else 0} cookies")
             if cookies:
                 # Group cookies by domain
                 domain_cookies = {}

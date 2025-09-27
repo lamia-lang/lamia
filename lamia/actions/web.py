@@ -42,13 +42,6 @@ class WebActions:
         Example:
             web.click("#submit-btn", ".submit-button", "button[type='submit']")
         """
-        # Record action if in session context
-        try:
-            from lamia.adapters.web.session_blocks import record_action
-            record_action("click", selector, *fallback_selectors, timeout=timeout)
-        except ImportError:
-            pass
-        
         fallbacks = list(fallback_selectors) if fallback_selectors else None
         
         return WebCommand(
@@ -73,14 +66,6 @@ class WebActions:
         Example:
             web.type_text("input[name='username']", "john@example.com", "#username")
         """
-        # Record action if in session context (mask sensitive text)
-        try:
-            from lamia.adapters.web.session_blocks import record_action
-            # Don't record actual text content for security
-            record_action("type_text", selector, "***", *fallback_selectors, timeout=timeout)
-        except ImportError:
-            pass
-        
         fallbacks = list(fallback_selectors) if fallback_selectors else None
         
         return WebCommand(
@@ -415,4 +400,3 @@ class WebActions:
         if timeout:
             cmd_parts.append(f"timeout:{timeout}")
         return " ".join(cmd_parts)
-    

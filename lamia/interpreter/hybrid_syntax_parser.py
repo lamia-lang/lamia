@@ -309,15 +309,15 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         self.lamia_var_name = lamia_var_name
         self.detector = LLMCommandDetector()
     
-    def transform_code(self, source_code: str) -> str:
+    def transform_code(self, source_code: str, return_types: Dict[str, str] = None) -> str:
         """Transform hybrid syntax code into executable Python."""
         tree = ast.parse(source_code)
         
         # First pass: detect LLM commands
         self.detector.visit(tree)
         
-        # Second pass: handle session with statements
-        session_transformer = SessionWithTransformer()
+        # Second pass: handle session with statements with return types
+        session_transformer = SessionWithTransformer(return_types)
         tree = session_transformer.visit(tree)
         
         # Third pass: transform the AST
@@ -743,23 +743,7 @@ class HybridSyntaxParser:
         preprocessor = WithReturnTypePreprocessor()
         processed_code, return_types = preprocessor.preprocess(source_code)
         
-        # Apply the hybrid syntax transformer
-        transformed_code = self.transformer.transform_code(processed_code)
+        # Apply the hybrid syntax transformer with return types
+        transformed_code = self.transformer.transform_code(processed_code, return_types)
         
-        # Apply session with transformer for return type validation
-        tree = ast.parse(transformed_code)
-        session_transformer = SessionWithTransformer(return_types)
-        session_transformer._source_lines = transformed_code.split('\n')
-        transformed_tree = session_transformer.visit(tree)
-        
-        # Convert back to code
-        if hasattr(ast, 'unparse'):
-            # Python 3.9+
-            return ast.unparse(transformed_tree)
-        else:
-            # Fallback for older Python versions
-            try:
-                import astor
-                return astor.to_source(transformed_tree)
-            except ImportError:
-                raise ImportError("ast.unparse not available and astor not installed. Please install astor: pip install astor")
+        return transformed_code

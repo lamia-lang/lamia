@@ -5,6 +5,7 @@ from lamia.engine.config_provider import ConfigProvider
 from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import WebCommand, WebActionType
+from lamia.types import BrowserAction, BrowserActionType, BrowserActionParams
 from .browser_manager import BrowserManager
 from .http_manager import HttpManager
 from typing import Optional, Any

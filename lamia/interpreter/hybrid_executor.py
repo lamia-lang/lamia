@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any
 from .hybrid_syntax_parser import HybridSyntaxParser
 from .hybrid_file_cache import HybridFileCache
 from .ast_analyzer import analyze_hybrid_file, create_execution_globals
-from lamia.adapters.web.session_blocks import SessionSkipException
+from lamia.adapters.web.session_context import SessionSkipException
 
 logger = logging.getLogger(__name__)
 

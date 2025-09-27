@@ -238,6 +238,7 @@ def main():
                     sys.exit(1)
                 except SyntaxError as e:
                     logger.error(f"❌ Syntax error in hybrid file: {e}")
+                    logger.error(f"Line {e.lineno}: {e.text}")
                     sys.exit(1)
                 except ImportError as e:
                     logger.error(f"❌ Missing dependency: {e}")
