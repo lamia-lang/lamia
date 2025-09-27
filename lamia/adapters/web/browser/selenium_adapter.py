@@ -478,3 +478,18 @@ class SeleniumAdapter(BaseBrowserAdapter):
         except Exception as e:
             logger.warning(f"Failed to save session data for profile '{self.profile_name}': {e}")
     
+    # --- New profile/state contract ---
+    def set_profile(self, profile_name: Optional[str]) -> None:
+        self.profile_name = profile_name or "default"
+
+    async def load_session_state(self) -> None:
+        # Ensure driver is ready
+        if not self.initialized:
+            return
+        self._load_session_data()
+
+    async def save_session_state(self) -> None:
+        if not self.initialized:
+            return
+        self._save_session_data()
+

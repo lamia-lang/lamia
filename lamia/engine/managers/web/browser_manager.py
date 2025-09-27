@@ -282,28 +282,11 @@ class BrowserManager:
             # Set active profile hint so adapter is built with correct profile
             self._active_profile = profile_name
             adapter = await self._get_browser_adapter()
-            
-            # Check if adapter has session management capability
-            if not hasattr(adapter, 'session_manager') or not adapter.session_manager:
-                logger.warning("Browser adapter doesn't support session management")
-                return False
-            
-            # Load cookies for this profile
-            cookies = adapter.session_manager.load_cookies(profile_name)
-            if not cookies:
-                logger.info(f"No cookies found for profile '{profile_name}'")
-                return False
-            
-            # Apply cookies to browser using adapter's existing method
-            if hasattr(adapter, '_load_session_data'):
-                # Permanently set the adapter profile to the requested one
-                adapter.profile_name = profile_name
-                await adapter._load_session_data()
-                logger.info(f"Loaded cookies for profile '{profile_name}'")
-                return True
-            else:
-                logger.warning("Browser adapter doesn't support session loading")
-                return False
+            # Set profile on adapter and ask it to load state transactionally
+            adapter.set_profile(profile_name)
+            await adapter.load_session_state()
+            logger.info(f"Loaded session state for profile '{profile_name}'")
+            return True
                 
         except Exception as e:
             logger.error(f"Failed to load cookies for profile '{profile_name}': {e}")
@@ -319,47 +302,8 @@ class BrowserManager:
             # Ensure adapter knows the active profile for saving
             self._active_profile = profile_name
             adapter = await self._get_browser_adapter()
-            
-            # Check if adapter has session management capability
-            if not hasattr(adapter, 'session_manager') or not adapter.session_manager:
-                logger.warning("Browser adapter doesn't support session management")
-                return
-            
-            # Get current cookies from browser
-            current_cookies = []
-            if hasattr(adapter, 'driver') and hasattr(adapter.driver, 'get_cookies'):
-                # Selenium
-                current_cookies = adapter.driver.get_cookies()
-            elif hasattr(adapter, 'page') and hasattr(adapter.page, 'context'):
-                # Playwright
-                current_cookies = await adapter.page.context.cookies()
-            
-            if current_cookies:
-                # Save cookies for this profile
-                adapter.session_manager.save_cookies(profile_name, current_cookies)
-                logger.info(f"Saved {len(current_cookies)} cookies for profile '{profile_name}'")
-            else:
-                logger.warning(f"No cookies to save for profile '{profile_name}'")
-
-            # Also try to persist localStorage for the current origin/context
-            try:
-                if hasattr(adapter, 'driver') and adapter.driver:
-                    local_storage = adapter.driver.execute_script("""
-                        var storage = {};
-                        try {
-                            for (var i = 0; i < localStorage.length; i++) {
-                                var key = localStorage.key(i);
-                                storage[key] = localStorage.getItem(key);
-                            }
-                        } catch (e) {}
-                        return storage;
-                    """)
-                    adapter.session_manager.save_local_storage(profile_name, local_storage)
-                elif hasattr(adapter, 'page') and adapter.page:
-                    # Playwright path if needed (placeholder)
-                    pass
-            except Exception as e:
-                logger.debug(f"Failed to capture localStorage for profile '{profile_name}': {e}")
+            adapter.set_profile(profile_name)
+            await adapter.save_session_state()
                 
         except Exception as e:
             logger.error(f"Failed to save cookies for profile '{profile_name}': {e}")

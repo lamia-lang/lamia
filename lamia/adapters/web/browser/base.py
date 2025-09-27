@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 from lamia.types import BrowserActionParams
 
 
@@ -84,4 +84,20 @@ class BaseBrowserAdapter(ABC):
     @abstractmethod
     async def get_page_source(self) -> str:
         """Get the current page HTML source."""
+        pass
+
+    # --- Session/profile contract ---
+    @abstractmethod
+    def set_profile(self, profile_name: Optional[str]) -> None:
+        """Set active session profile name for persistence operations."""
+        pass
+
+    @abstractmethod
+    async def load_session_state(self) -> None:
+        """Load session state (cookies, localStorage) for current profile."""
+        pass
+
+    @abstractmethod
+    async def save_session_state(self) -> None:
+        """Save session state (cookies, localStorage) for current profile."""
         pass

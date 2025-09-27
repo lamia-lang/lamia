@@ -7,6 +7,7 @@ from ..retry_handler import RetryHandler
 from ...web.browser.base import BaseBrowserAdapter
 from lamia.errors import ExternalOperationTransientError, ExternalOperationPermanentError
 from lamia.types import ExternalOperationRetryConfig, BrowserActionParams
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -158,4 +159,19 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
         """Get page source with retry."""
         return await self.retry_handler.execute(
             lambda: self.adapter.get_page_source()
+        )
+    
+    # --- Session/profile contract proxies ---
+    def set_profile(self, profile_name: Optional[str]) -> None:
+        # Synchronous operation, just forward
+        self.adapter.set_profile(profile_name)
+
+    async def load_session_state(self) -> None:
+        await self.retry_handler.execute(
+            self.adapter.load_session_state
+        )
+
+    async def save_session_state(self) -> None:
+        await self.retry_handler.execute(
+            self.adapter.save_session_state
         )
