@@ -424,6 +424,27 @@ class SeleniumAdapter(BaseBrowserAdapter):
                                           if k in ['name', 'value', 'path', 'secure', 'httpOnly']}
                             self.driver.add_cookie(clean_cookie)
                         logger.info(f"Loaded {len(cookies_for_domain)} cookies for domain: {domain}")
+                        
+                        # Also restore localStorage for this origin if available
+                        try:
+                            local_storage = self.session_manager.load_local_storage(self.profile_name)
+                            if local_storage:
+                                # Set all localStorage items for the current origin
+                                self.driver.execute_script(
+                                    """
+                                    var items = arguments[0];
+                                    for (var k in items) {
+                                        try { localStorage.setItem(k, items[k]); } catch(e) {}
+                                    }
+                                    return Object.keys(items).length;
+                                    """,
+                                    local_storage
+                                )
+                                logger.info(f"Restored {len(local_storage)} localStorage items for domain: {domain}")
+                                # Refresh to let the app pick up restored storage
+                                self.driver.refresh()
+                        except Exception as e:
+                            logger.debug(f"Could not restore localStorage for domain {domain}: {e}")
                     except Exception as e:
                         logger.debug(f"Could not load cookies for domain {domain}: {e}")
             
@@ -447,10 +468,12 @@ class SeleniumAdapter(BaseBrowserAdapter):
             try:
                 local_storage = self.driver.execute_script("""
                     var storage = {};
-                    for (var i = 0; i < localStorage.length; i++) {
-                        var key = localStorage.key(i);
-                        storage[key] = localStorage.getItem(key);
-                    }
+                    try {
+                        for (var i = 0; i < localStorage.length; i++) {
+                            var key = localStorage.key(i);
+                            storage[key] = localStorage.getItem(key);
+                        }
+                    } catch (e) {}
                     return storage;
                 """)
                 self.session_manager.save_local_storage(self.profile_name, local_storage)
