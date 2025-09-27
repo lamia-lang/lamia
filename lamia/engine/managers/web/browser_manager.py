@@ -37,6 +37,8 @@ class BrowserManager:
         self._browser_options.setdefault("headless", False)
         self._browser_options.setdefault("timeout", 10.0)
         
+        # Active session profile name (hint from session blocks)
+        self._active_profile: Optional[str] = None
         # Initialize selector resolution service when we have a browser adapter
         self._selector_resolution_service = None
         self._browser_adapter = None
@@ -51,6 +53,13 @@ class BrowserManager:
         Returns:
             Result of browser action
         """
+        # If a session profile is active and adapter not yet created, ensure
+        # profile state is loaded before first browser command executes.
+        if self._active_profile and self._browser_adapter is None:
+            try:
+                await self.load_session_cookies(self._active_profile)
+            except Exception:
+                pass
         # Selector resolution service will be created lazily when needed
         
         # Convert WebCommand to BrowserAction
@@ -210,15 +219,15 @@ class BrowserManager:
                 base_adapter = SeleniumAdapter(
                     headless=self._browser_options.get("headless", False),
                     timeout=self._browser_options.get("timeout", 10.0),
-                    session_config=session_config
-                    # NO profile_name - cookies loaded later by session blocks
+                    session_config=session_config,
+                    profile_name=self._active_profile
                 )
             elif self._browser_engine == "playwright":
                 base_adapter = PlaywrightAdapter(
                     headless=self._browser_options.get("headless", False),
                     timeout=self._browser_options.get("timeout", 10.0),
-                    session_config=session_config
-                    # NO profile_name - cookies loaded later by session blocks
+                    session_config=session_config,
+                    profile_name=self._active_profile
                 )
             else:
                 raise ValueError(f"Unsupported browser engine: {self._browser_engine}")
@@ -230,6 +239,14 @@ class BrowserManager:
             self._browser_adapter = RetriableAdapterFactory.create_browser_adapter(base_adapter)
         
         return self._browser_adapter
+
+    # --- Session profile control ---
+    def set_active_profile(self, profile_name: Optional[str]) -> None:
+        """Set current session profile hint for adapter creation and state ops."""
+        self._active_profile = profile_name
+
+    def get_active_profile(self) -> Optional[str]:
+        return self._active_profile
     
     async def _get_current_page_html(self) -> str:
         """Get current page HTML source."""
@@ -262,6 +279,8 @@ class BrowserManager:
             bool: True if cookies were loaded successfully, False if no cookies exist
         """
         try:
+            # Set active profile hint so adapter is built with correct profile
+            self._active_profile = profile_name
             adapter = await self._get_browser_adapter()
             
             # Check if adapter has session management capability
@@ -277,17 +296,11 @@ class BrowserManager:
             
             # Apply cookies to browser using adapter's existing method
             if hasattr(adapter, '_load_session_data'):
-                # Temporarily set the profile name so adapter loads cookies for this profile
-                original_profile = getattr(adapter, 'profile_name', None)
+                # Permanently set the adapter profile to the requested one
                 adapter.profile_name = profile_name
-                try:
-                    await adapter._load_session_data()
-                    logger.info(f"Loaded cookies for profile '{profile_name}'")
-                    return True
-                finally:
-                    # Restore original profile
-                    if original_profile is not None:
-                        adapter.profile_name = original_profile
+                await adapter._load_session_data()
+                logger.info(f"Loaded cookies for profile '{profile_name}'")
+                return True
             else:
                 logger.warning("Browser adapter doesn't support session loading")
                 return False
@@ -303,6 +316,8 @@ class BrowserManager:
             profile_name: The session profile name (e.g., "login")
         """
         try:
+            # Ensure adapter knows the active profile for saving
+            self._active_profile = profile_name
             adapter = await self._get_browser_adapter()
             
             # Check if adapter has session management capability
@@ -325,6 +340,26 @@ class BrowserManager:
                 logger.info(f"Saved {len(current_cookies)} cookies for profile '{profile_name}'")
             else:
                 logger.warning(f"No cookies to save for profile '{profile_name}'")
+
+            # Also try to persist localStorage for the current origin/context
+            try:
+                if hasattr(adapter, 'driver') and adapter.driver:
+                    local_storage = adapter.driver.execute_script("""
+                        var storage = {};
+                        try {
+                            for (var i = 0; i < localStorage.length; i++) {
+                                var key = localStorage.key(i);
+                                storage[key] = localStorage.getItem(key);
+                            }
+                        } catch (e) {}
+                        return storage;
+                    """)
+                    adapter.session_manager.save_local_storage(profile_name, local_storage)
+                elif hasattr(adapter, 'page') and adapter.page:
+                    # Playwright path if needed (placeholder)
+                    pass
+            except Exception as e:
+                logger.debug(f"Failed to capture localStorage for profile '{profile_name}': {e}")
                 
         except Exception as e:
             logger.error(f"Failed to save cookies for profile '{profile_name}': {e}")

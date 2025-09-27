@@ -66,23 +66,15 @@ class SeleniumAdapter(BaseBrowserAdapter):
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         
-        # Add user data directory for session persistence
-        if self.session_manager and self.session_manager.enabled:
-            user_data_dir = self.session_manager.get_profile_session_dir(self.profile_name)
-            chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
-            logger.info(f"SeleniumAdapter: Using user data directory: {user_data_dir}")
+        # Do not bind Chrome to a per-profile user data dir here. We manage
+        # session state (cookies/localStorage) explicitly per profile via
+        # BrowserManager + SessionManager to avoid default profile leakage.
         
         try:
             self.driver = webdriver.Chrome(options=chrome_options)
             self.driver.implicitly_wait(self.default_timeout)
             
-            # Load additional session data if not using user data directory
-            print(f"TO DELETE: About to check session_manager: {bool(self.session_manager)}, enabled: {self.session_manager.enabled if self.session_manager else 'N/A'}")
-            if self.session_manager and self.session_manager.enabled:
-                print("TO DELETE: Calling _load_session_data()")
-                self._load_session_data()
-            else:
-                print("TO DELETE: NOT calling _load_session_data()")
+            # Do not auto-load session here; BrowserManager orchestrates per-profile loading
             
             self.initialized = True
             logger.info("SeleniumAdapter: Chrome WebDriver initialized")
@@ -95,9 +87,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if self.driver:
             logger.info("SeleniumAdapter: Closing WebDriver...")
             try:
-                # Save session data before closing
-                if self.session_manager and self.session_manager.enabled:
-                    self._save_session_data()
+                # Do not auto-save here; BrowserManager handles profile-targeted saving
                 
                 self.driver.quit()
             except Exception as e:
@@ -155,7 +145,6 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         url = params.value
-        exit(0)
         logger.info(f"SeleniumAdapter: Navigate to {url}")
         self.driver.get(url)
     

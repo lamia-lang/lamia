@@ -34,6 +34,11 @@ class SessionContext:
             try:
                 # Use existing BrowserManager validation logic
                 browser_manager = self.web_manager.browser_manager
+                # Tell browser manager which profile is active now
+                try:
+                    browser_manager.set_active_profile(self.name)
+                except Exception:
+                    pass
 
                 # Try to load cookies for this profile (run in new event loop)
                 try:
@@ -74,6 +79,10 @@ class SessionContext:
                     loop.close()
                 except Exception as e:
                     logger.warning(f"Failed to save cookies for profile '{self.name}': {e}")
+                try:
+                    browser_manager.set_active_profile(None)
+                except Exception:
+                    pass
             except Exception as e:
                 logger.warning(f"Failed to save cookies for profile '{self.name}': {e}")
         else:
