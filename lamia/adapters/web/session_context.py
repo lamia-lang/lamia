@@ -1,6 +1,7 @@
 """Clean session context manager for browser profile management."""
 
 import logging
+import asyncio
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -14,15 +15,17 @@ class SessionSkipException(Exception):
 class SessionContext:
     """Simple session context manager with profile name only."""
     
-    def __init__(self, name: str, web_manager=None):
+    def __init__(self, name: str, web_manager=None, probe_url: Optional[str] = None):
         """Initialize session context.
         
         Args:
             name: Browser profile name (e.g., "linkedin_login") 
             web_manager: WebManager instance for validation
+            probe_url: Optional URL to probe for logged-in state (e.g., homepage)
         """
         self.name: str = name  # This IS the browser profile name
         self.web_manager = web_manager
+        self.probe_url: Optional[str] = probe_url
         self.should_skip: bool = False
     
     def __enter__(self):
@@ -40,19 +43,21 @@ class SessionContext:
                 except Exception:
                     pass
 
-                # Try to load cookies for this profile (run in new event loop)
+                # Validate session using optional probe URL (e.g., linkedin.com)
                 try:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                    cookies_loaded = loop.run_until_complete(browser_manager.load_session_cookies(self.name))
+                    is_valid = loop.run_until_complete(
+                        browser_manager.validate_session_cookies(self.name, self.probe_url)
+                    )
                     loop.close()
 
-                    if cookies_loaded:
-                        logger.info(f"Session '{self.name}' has valid cookies, skipping execution")
+                    if is_valid:
+                        logger.info(f"Session '{self.name}' valid via probe, skipping execution")
                         self.should_skip = True
                         raise SessionSkipException(f"Session '{self.name}' already valid")
                 except Exception as e:
-                    logger.debug(f"Cookie validation failed for '{self.name}': {e}")
+                    logger.debug(f"Session probe validation failed for '{self.name}': {e}")
                     # Continue with execution if validation fails
 
             except Exception as e:
@@ -100,15 +105,16 @@ def create_session_factory(web_manager=None):
     Returns:
         Session factory function
     """
-    def session(name: str):
-        """Create session context with profile name only.
+    def session(name: str, probe_url: Optional[str] = None):
+        """Create session context with profile name and optional probe URL.
         
         Args:
             name: Browser profile name (e.g., "linkedin_login")
+            probe_url: Optional URL to probe for logged-in state
             
         Returns:
             SessionContext manager
         """
-        return SessionContext(name=name, web_manager=web_manager)
+        return SessionContext(name=name, web_manager=web_manager, probe_url=probe_url)
     
     return session

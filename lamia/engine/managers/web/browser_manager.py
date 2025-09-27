@@ -308,7 +308,7 @@ class BrowserManager:
         except Exception as e:
             logger.error(f"Failed to save cookies for profile '{profile_name}': {e}")
     
-    async def validate_session_cookies(self, profile_name: str, validation_url: str = None) -> bool:
+    async def validate_session_cookies(self, profile_name: str, validation_url: str) -> bool:
         """Validate that cookies for a profile are still valid.
         
         Args:
