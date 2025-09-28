@@ -27,7 +27,7 @@ class WithReturnTypePreprocessor:
         return_types = {}
         
         # Pattern to match: with session("name") -> Type:
-        pattern = r'(\s*)(with\s+session\([^)]+\))\s*->\s*([^:]+):'
+        session_pattern = r'(\s*)(with\s+session\([^)]+\))\s*->\s*([^:]+):'
         
         def replace_with_statement(match):
             indent = match.group(1)
@@ -42,7 +42,21 @@ class WithReturnTypePreprocessor:
             # Replace with standard with statement + comment marker
             return f"{indent}{with_part}:  # LAMIA_WITH_RETURN_TYPE_{key}"
         
-        processed_code = re.sub(pattern, replace_with_statement, source_code)
+        processed_code = re.sub(session_pattern, replace_with_statement, source_code)
+
+        # Pattern to match: web.method(args) -> Type at expression level
+        # We rewrite to __LAMIA_WEB_RT__(Type, web.method(args)) so the transformer can handle it
+        web_expr_pattern = r'(\s*)(web\.[\w_]+\([^\n]*?\))\s*->\s*([^\n]+)'
+        
+        def replace_web_expr(match):
+            indent = match.group(1)
+            call_part = match.group(2)
+            return_type = match.group(3).strip()
+            # Keep order: __LAMIA_WEB_RT__(Type, web.call(...))
+            return f"{indent}__LAMIA_WEB_RT__({return_type}, {call_part})"
+        
+        processed_code = re.sub(web_expr_pattern, replace_web_expr, processed_code)
+        
         return processed_code, return_types
 
 
@@ -266,40 +280,6 @@ class SessionWithTransformer(ast.NodeTransformer):
         
         # Not a session with statement, continue normal processing
         return self.generic_visit(node)
-    
-    def _create_validation_call(self, return_type: str) -> ast.stmt:
-        """Create an asyncio.run(validate_session_result()) call for validating the return type."""
-        # Parse return type to extract the type info
-        # Format: HTML[HomePageModel] -> extract "HTML" and "HomePageModel"
-        
-        # Create: _validation_result = asyncio.run(validate_session_result(return_type))
-        # This allows calling async validation from sync context
-        return ast.Assign(
-            targets=[ast.Name(id='_validation_result', ctx=ast.Store(), lineno=1, col_offset=0)],
-            value=ast.Call(
-                func=ast.Attribute(
-                    value=ast.Name(id='asyncio', ctx=ast.Load(), lineno=1, col_offset=0),
-                    attr='run',
-                    ctx=ast.Load(),
-                    lineno=1,
-                    col_offset=0
-                ),
-                args=[
-                    ast.Call(
-                        func=ast.Name(id='validate_session_result', ctx=ast.Load(), lineno=1, col_offset=0),
-                        args=[
-                            ast.Name(id=return_type, ctx=ast.Load(), lineno=1, col_offset=0)
-                        ],
-                        keywords=[]
-                    )
-                ],
-                keywords=[],
-                lineno=1,
-                col_offset=0
-            ),
-            lineno=1,
-            col_offset=0
-        )
 
 
 class HybridSyntaxTransformer(ast.NodeTransformer):
@@ -400,6 +380,24 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         elif (len(node.body) == 2 and isinstance(node.body[1], ast.Return)):
             web_command_call = node.body[1].value
         
+        # Build optional return_type argument from function annotation for engine validation
+        return_type_kw = None
+        if getattr(node, 'returns', None) is not None:
+            # Create AST node for return type similar to _create_lamia_call_function
+            rt = node.returns
+            return_type_node: ast.AST
+            if isinstance(rt, ast.Subscript):
+                # Parametric type like HTML[Model]
+                return_type_node = ast.Subscript(
+                    value=rt.value,
+                    slice=getattr(rt, 'slice', None) or rt.slice,
+                    ctx=ast.Load(),
+                )
+            else:
+                # Simple type like HTML / JSON, or qualified name
+                return_type_node = rt
+            return_type_kw = ast.keyword(arg='return_type', value=return_type_node)
+
         # Create lamia.run() call with the web command
         lamia_call = ast.Call(
             func=ast.Attribute(
@@ -408,7 +406,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 ctx=ast.Load()
             ),
             args=[web_command_call],
-            keywords=[]
+            keywords=[return_type_kw] if return_type_kw is not None else []
         )
         
         # Wrap in await if async
@@ -438,6 +436,28 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     
     def visit_Expr(self, node):
         """Handle expression statements, wrapping standalone web.method() calls in lamia.run()."""
+        # Support preprocessed web.expr -> Type notation: __LAMIA_WEB_RT__(Type, web.call(...))
+        if (
+            isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == '__LAMIA_WEB_RT__'
+            and len(node.value.args) == 2
+        ):
+            return_type_node = node.value.args[0]
+            web_call = node.value.args[1]
+            # Transform the web call into WebCommand
+            web_command = self._transform_web_call(web_call)
+            lamia_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                    attr='run',
+                    ctx=ast.Load()
+                ),
+                args=[web_command],
+                keywords=[ast.keyword(arg='return_type', value=return_type_node)]
+            )
+            return ast.Expr(value=lamia_call)
+
         # Check if this expression is a web.method() call
         if (isinstance(node.value, ast.Call) and
             isinstance(node.value.func, ast.Attribute) and

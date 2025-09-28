@@ -308,7 +308,7 @@ class BrowserManager:
         except Exception as e:
             logger.error(f"Failed to save cookies for profile '{profile_name}': {e}")
     
-    async def validate_session_cookies(self, profile_name: str, validation_url: str) -> bool:
+    async def validate_session(self, profile_name: str, validation_url: str) -> bool:
         """Validate that cookies for a profile are still valid.
         
         Args:
@@ -327,7 +327,9 @@ class BrowserManager:
             if validation_url:
                 # Navigate to validation URL and check if we're still logged in
                 # This is a simple validation - could be enhanced based on needs
-                await self.execute(WebCommand(action=WebActionType.NAVIGATE, url=validation_url))
+                validator = ValidatorFactory().get_validator(CommandType.WEB, return_type)
+
+                await self.execute(WebCommand(action=WebActionType.NAVIGATE, url=validation_url), validator=validator)
                 
                 # Basic validation: check if we're not redirected to login page
                 current_url = await self.get_current_url()

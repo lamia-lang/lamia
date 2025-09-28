@@ -48,7 +48,7 @@ class SessionContext:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     is_valid = loop.run_until_complete(
-                        browser_manager.validate_session_cookies(self.name, self.probe_url)
+                        browser_manager.validate_session(self.name, self.probe_url)
                     )
                     loop.close()
 

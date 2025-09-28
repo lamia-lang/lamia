@@ -265,7 +265,7 @@ class LLMManager(Manager):
             # Validate the response
             if validator is not None:
                 # Create execution context for tracking
-                execution_context = TrackingContext(
+                tracking_context = TrackingContext(
                     data_provider_name=model.name,
                     command_type=CommandType.LLM,
                     metadata={"usage": response.usage, "model": response.model}
@@ -273,7 +273,7 @@ class LLMManager(Manager):
                 
                 validation_result = await validator.validate(
                     response.text, 
-                    execution_context=execution_context
+                    execution_context=tracking_context
                 )
                 if validation_result.is_valid:
                     return validation_result
