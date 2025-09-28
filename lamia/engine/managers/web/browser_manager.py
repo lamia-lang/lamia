@@ -248,27 +248,22 @@ class BrowserManager:
     def get_active_profile(self) -> Optional[str]:
         return self._active_profile
     
-    async def _get_current_page_html(self) -> str:
-        """Get current page HTML source."""
-        adapter = await self._get_browser_adapter()
-        return await adapter.get_page_source()
-    
-    async def get_current_url(self) -> str:
-        """Get current page URL."""
-        adapter = await self._get_browser_adapter()
-        if hasattr(adapter, 'get_current_url'):
-            return await adapter.get_current_url()
-        elif hasattr(adapter, 'driver') and hasattr(adapter.driver, 'current_url'):
-            return adapter.driver.current_url
-        else:
-            logger.warning("Browser adapter doesn't support URL retrieval")
-            return "unknown"
-    
-    async def get_page_source(self) -> str:
-        """Get current page HTML source."""
-        adapter = await self._get_browser_adapter()
-        return await adapter.get_page_source()
-    
+    async def save_session_cookies(self, profile_name: str):
+        """Save current browser cookies for a specific session profile.
+        
+        Args:
+            profile_name: The session profile name (e.g., "login")
+        """
+        try:
+            # Ensure adapter knows the active profile for saving
+            self._active_profile = profile_name
+            adapter = await self._get_browser_adapter()
+            adapter.set_profile(profile_name)
+            await adapter.save_session_state()
+                
+        except Exception as e:
+            logger.error(f"Failed to save cookies for profile '{profile_name}': {e}")
+
     async def load_session_cookies(self, profile_name: str) -> bool:
         """Load cookies for a specific session profile.
         
@@ -292,57 +287,26 @@ class BrowserManager:
             logger.error(f"Failed to load cookies for profile '{profile_name}': {e}")
             return False
     
-    async def save_session_cookies(self, profile_name: str):
-        """Save current browser cookies for a specific session profile.
-        
-        Args:
-            profile_name: The session profile name (e.g., "login")
-        """
-        try:
-            # Ensure adapter knows the active profile for saving
-            self._active_profile = profile_name
-            adapter = await self._get_browser_adapter()
-            adapter.set_profile(profile_name)
-            await adapter.save_session_state()
-                
-        except Exception as e:
-            logger.error(f"Failed to save cookies for profile '{profile_name}': {e}")
+    async def _get_current_page_html(self) -> str:
+        """Get current page HTML source."""
+        adapter = await self._get_browser_adapter()
+        return await adapter.get_page_source()
     
-    async def validate_session(self, profile_name: str, validation_url: str) -> bool:
-        """Validate that cookies for a profile are still valid.
-        
-        Args:
-            profile_name: The session profile name
-            validation_url: Optional URL to test the cookies against
-            
-        Returns:
-            bool: True if cookies are valid, False otherwise
-        """
-        try:
-            # Load cookies for the profile
-            if not await self.load_session_cookies(profile_name):
-                return False
-            
-            # If validation URL provided, test the cookies
-            if validation_url:
-                # Navigate to validation URL and check if we're still logged in
-                # This is a simple validation - could be enhanced based on needs
-                validator = ValidatorFactory().get_validator(CommandType.WEB, return_type)
-
-                await self.execute(WebCommand(action=WebActionType.NAVIGATE, url=validation_url), validator=validator)
-                
-                # Basic validation: check if we're not redirected to login page
-                current_url = await self.get_current_url()
-                if "login" in current_url.lower():
-                    logger.info(f"Session validation failed for profile '{profile_name}' - redirected to login")
-                    return False
-            
-            logger.info(f"Session cookies validated for profile '{profile_name}'")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Session validation failed for profile '{profile_name}': {e}")
-            return False
+    async def get_current_url(self) -> str:
+        """Get current page URL."""
+        adapter = await self._get_browser_adapter()
+        if hasattr(adapter, 'get_current_url'):
+            return await adapter.get_current_url()
+        elif hasattr(adapter, 'driver') and hasattr(adapter.driver, 'current_url'):
+            return adapter.driver.current_url
+        else:
+            logger.warning("Browser adapter doesn't support URL retrieval")
+            return "unknown"
+    
+    async def get_page_source(self) -> str:
+        """Get current page HTML source."""
+        adapter = await self._get_browser_adapter()
+        return await adapter.get_page_source()
     
     @staticmethod
     def get_browser_manager_from_lamia(lamia_instance):

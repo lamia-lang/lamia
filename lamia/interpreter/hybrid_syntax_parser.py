@@ -223,7 +223,7 @@ class SessionWithTransformer(ast.NodeTransformer):
                 if not validation_call and self.return_types:
                     # Use the single return type (simplified - only one return type supported)
                     return_type = next(iter(self.return_types.values()))
-                    validation_call = self._create_validation_call(return_type)
+                    validation_call = self._create_web_validation_call(return_type)
                 
                 # Create the modified with statement body
                 modified_body = list(node.body)
@@ -281,9 +281,103 @@ class SessionWithTransformer(ast.NodeTransformer):
         # Not a session with statement, continue normal processing
         return self.generic_visit(node)
 
+    def _create_web_validation_call(self, return_type: str) -> ast.stmt:
+        """Create: lamia.run(WebCommand(...), return_type=Type) to validate current page.
+
+        RETURN TYPE HANDLING STRATEGY #3: Session Block Validation
+        ========================================================
+        
+        This method handles the special case of `with session(...) -> Type:` blocks.
+        Unlike functions or expressions, a session block doesn't itself produce content
+        to validate. The arrow means "after this block finishes, validate the current 
+        page state as Type". 
+        
+        We inject a GET_TEXT command at the end of the session block to explicitly 
+        trigger the engine's validation pipeline for the session's return type.
+        This ensures the page content after session execution matches the expected Type.
+
+        We validate by fetching page text via a simple GET_TEXT on the root 'html' element.
+        """
+        # Build return_type AST
+        rt_node: ast.AST
+        if '[' in return_type and return_type.endswith(']'):
+            base = return_type.split('[', 1)[0]
+            inner = return_type[len(base)+1:-1]
+            rt_node = ast.Subscript(
+                value=ast.Name(id=base, ctx=ast.Load()),
+                slice=ast.Name(id=inner, ctx=ast.Load()),
+                ctx=ast.Load(),
+            )
+        else:
+            rt_node = ast.Name(id=return_type, ctx=ast.Load())
+
+        # Build WebCommand(action=WebActionType.GET_TEXT, selector='html')
+        web_command_call = ast.Call(
+            func=ast.Name(id='WebCommand', ctx=ast.Load()),
+            args=[],
+            keywords=[
+                ast.keyword(
+                    arg='action',
+                    value=ast.Attribute(
+                        value=ast.Name(id='WebActionType', ctx=ast.Load()),
+                        attr='GET_TEXT',
+                        ctx=ast.Load()
+                    )
+                ),
+                ast.keyword(
+                    arg='selector',
+                    value=ast.Constant(value='html')
+                )
+            ]
+        )
+
+        # Build lamia.run(WebCommand(...), return_type=rt_node)
+        lamia_run_call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id='lamia', ctx=ast.Load()),
+                attr='run',
+                ctx=ast.Load()
+            ),
+            args=[web_command_call],
+            keywords=[ast.keyword(arg='return_type', value=rt_node)]
+        )
+
+        return ast.Expr(value=lamia_run_call)
+
 
 class HybridSyntaxTransformer(ast.NodeTransformer):
-    """Transforms string literals in functions into lamia.run() or lamia.run_async() calls."""
+    """Transform hybrid syntax AST nodes into executable Python code.
+    
+    RETURN TYPE HANDLING: WHY THREE DIFFERENT STRATEGIES?
+    ====================================================
+    
+    This class handles three distinct syntactic constructs that all use the arrow (->)
+    notation but require different validation approaches. This is NOT a code smell - 
+    each construct has fundamentally different semantics:
+    
+    1. FUNCTIONS: `def func() -> Type:`
+       - Python natively supports this syntax
+       - The function's return value IS the content to validate
+       - Strategy: Extract Type from node.returns, pass to lamia.run(command, return_type=Type)
+    
+    2. EXPRESSIONS: `web.call(...) -> Type`  
+       - Python does NOT support arrows on expressions
+       - The expression result IS the content to validate
+       - Strategy: Preprocess to __LAMIA_WEB_RT__(Type, web.call), transform to lamia.run(command, return_type=Type)
+    
+    3. SESSION BLOCKS: `with session(...) -> Type:`
+       - Python does NOT support arrows on with statements
+       - The session block does NOT produce content - it modifies page state
+       - The arrow means "validate current page state as Type after block execution"
+       - Strategy: Inject validation call at end of block: lamia.run(WebCommand(GET_TEXT, 'html'), return_type=Type)
+    
+    Each strategy is necessary because the SOURCE of validation content differs:
+    - Functions/expressions: their own return value
+    - Session blocks: the current page state after execution
+    
+    A universal approach would be incorrect because it would try to validate
+    the wrong content for session blocks.
+    """
     
     def __init__(self, lamia_var_name: str = 'lamia'):
         self.lamia_var_name = lamia_var_name
@@ -435,7 +529,18 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             )
     
     def visit_Expr(self, node):
-        """Handle expression statements, wrapping standalone web.method() calls in lamia.run()."""
+        """Handle expression statements, wrapping standalone web.method() calls in lamia.run().
+        
+        RETURN TYPE HANDLING STRATEGY #2: Web Expression Validation
+        ==========================================================
+        
+        This method handles `web.call(...) -> Type` expressions. Python doesn't 
+        natively support arrow syntax on expressions, so we preprocess these into
+        `__LAMIA_WEB_RT__(Type, web.call(...))` tokens and transform them here.
+        
+        The web expression itself produces the content to validate, so we pass
+        the return_type directly to lamia.run(web_command, return_type=Type).
+        """
         # Support preprocessed web.expr -> Type notation: __LAMIA_WEB_RT__(Type, web.call(...))
         if (
             isinstance(node.value, ast.Call)
@@ -563,7 +668,18 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         )
     
     def _create_lamia_call_function(self, node, processed_command: ast.AST, return_type: Optional[Dict], is_async: bool):
-        """Create a function node that calls lamia.run() or lamia.run_async()."""
+        """Create a function node that calls lamia.run() or lamia.run_async().
+        
+        RETURN TYPE HANDLING STRATEGY #1: Function Return Type Validation
+        ================================================================
+        
+        This method handles `def func() -> Type:` functions. Python natively supports
+        return type annotations, so we extract the Type from node.returns and pass it
+        to lamia.run/lamia.run_async along with the WebCommand the function produces.
+        
+        The function's return statement produces the content to validate, so we pass
+        the return_type directly to the lamia call for engine validation.
+        """
         func_info = self.detector.llm_functions[node.name]
         parameters = func_info['parameters']
         

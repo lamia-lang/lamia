@@ -151,7 +151,6 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
     
     if 'session' in used_namespaces:
         from lamia.adapters.web.session_context import create_session_factory, SessionSkipException
-        from lamia.interpreter.session_validator import create_session_validator_function
         from lamia.interpreter.command_types import CommandType
         import logging
         import asyncio
@@ -173,12 +172,12 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
         execution_globals['asyncio'] = asyncio  # Needed for asyncio.run() in session validation
         
         # Add session validation support - uses existing validation logic
-        if lamia_instance:
+        """if lamia_instance:
             execution_globals['validate_session_result'] = create_session_validator_function(lamia_instance)
         else:
             def no_lamia_validator(return_type):
                 raise Exception("Session validation requires a Lamia instance but none was provided")
-            execution_globals['validate_session_result'] = no_lamia_validator
+            execution_globals['validate_session_result'] = no_lamia_validator"""
     
     # Future namespaces can be added here
     # if 'db' in used_namespaces:
