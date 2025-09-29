@@ -70,7 +70,18 @@ class BrowserManager:
             browser_action = await self._resolve_selectors(browser_action)
         
         # Execute browser action
-        return await self._execute_browser_action(browser_action)
+        result = await self._execute_browser_action(browser_action)
+
+        # If validation is expected but the action returned no content,
+        # provide the current page HTML so the validator has something to check.
+        if validator is not None and result is None:
+            try:
+                result = await self.get_page_source()
+            except Exception as e:
+                logger.warning(f"Failed to fetch page source for validation: {e}")
+                result = None
+
+        return result
     
         
     
