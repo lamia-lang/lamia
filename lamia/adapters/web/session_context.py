@@ -23,15 +23,15 @@ class SessionContext:
         Args:
             name: Browser profile name (e.g., "linkedin_login") 
             web_manager: WebManager instance for validation
-            probe_url: Optional URL to probe for logged-in state (e.g., homepage)
+            probe_url: Optional URL (kept for compatibility, but not used - validation handles navigation)
         """
         self.name: str = name  # This IS the browser profile name
         self.web_manager = web_manager
-        self.probe_url: Optional[str] = probe_url
+        self.probe_url: Optional[str] = probe_url  # Not used, but kept for compatibility
         self.should_skip: bool = False
     
     def __enter__(self):
-        """Enter session context - validate existing session and load cookies if valid."""
+        """Enter session context - load cookies and session state for the profile."""
         logger.info(f"Starting session context for profile '{self.name}'")
 
         # Check if we have valid session cookies for this profile
@@ -45,7 +45,7 @@ class SessionContext:
                 except Exception:
                     pass
 
-                # Load state and optionally navigate/refresh content via web_manager.execute()
+                # Load session state (cookies/storage) for this profile
                 try:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
@@ -56,27 +56,9 @@ class SessionContext:
                     except Exception as _:
                         pass
 
-                    # If a probe URL is provided, navigate only if different from current URL
-                    if self.probe_url:
-                        try:
-                            current_url = loop.run_until_complete(browser_manager.get_current_url())
-                        except Exception:
-                            current_url = None
-
-                        from lamia.interpreter.commands import WebCommand, WebActionType
-                        if not current_url or (current_url.strip() != self.probe_url.strip()):
-                            loop.run_until_complete(
-                                self.web_manager.execute(WebCommand(action=WebActionType.NAVIGATE, url=self.probe_url))
-                            )
-                        else:
-                            # Same page – just fetch content to warm state; validation handled later by engine
-                            loop.run_until_complete(
-                                self.web_manager.execute(WebCommand(action=WebActionType.GET_TEXT, selector='html'))
-                            )
-
                     loop.close()
                 except Exception as e:
-                    logger.debug(f"Session probe execution failed for '{self.name}': {e}")
+                    logger.debug(f"Session state loading failed for '{self.name}': {e}")
                     # Continue with execution
 
             except Exception as e:

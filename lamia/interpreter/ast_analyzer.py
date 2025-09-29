@@ -3,7 +3,8 @@
 import ast
 import logging
 from typing import Set, Dict, Any
-from lamia.types import HTML, JSON, CSV, XML, YAML, Markdown
+from lamia.types import BaseType
+import lamia.types as lamia_types
 
 logger = logging.getLogger(__name__)
 
@@ -26,25 +27,30 @@ class ActionNamespaceAnalyzer(ast.NodeVisitor):
         self.generic_visit(node)
     
     def visit_Name(self, node: ast.Name) -> None:
-        """Visit name references like HTML, JSON, etc."""
-        # Check if it's one of our validation types
-        if node.id in ['HTML', 'JSON', 'CSV', 'XML', 'YAML', 'Markdown']:
-            self.used_types.add(node.id)
+        """Visit name references like potential validation types or command symbols.
+
+        We don't hard-code type names here. We collect all identifiers that might
+        be types and filter them later against dynamically discovered BaseType subclasses.
+        """
+        # Tentatively record as a type; we'll filter later against dynamic mapping
+        self.used_types.add(node.id)
         # Check if it's one of our command types (needed for transformed code)
-        elif node.id in ['WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand']:
+        if node.id in ['WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand']:
             self.used_types.add(node.id)
         # Check if it's one of our session functions
-        elif node.id in ['session']:
+        if node.id in ['session']:
             self.used_namespaces.add('session')
         
         self.generic_visit(node)
     
     def visit_Subscript(self, node: ast.Subscript) -> None:
-        """Visit subscript access like HTML[Model], JSON[Schema]."""
+        """Visit subscript access like HTML[Model], JSON[Schema].
+
+        Record the base identifier; filtering happens later.
+        """
         if isinstance(node.value, ast.Name):
             type_name = node.value.id
-            if type_name in ['HTML', 'JSON', 'CSV', 'XML', 'YAML', 'Markdown']:
-                self.used_types.add(type_name)
+            self.used_types.add(type_name)
         
         self.generic_visit(node)
 
@@ -68,15 +74,37 @@ def analyze_hybrid_file(code: str) -> Dict[str, Any]:
         analyzer = ActionNamespaceAnalyzer()
         analyzer.visit(tree)
 
+        # Also analyze return types extracted by preprocessor (collect base type names)
+        for return_type in return_types.values():
+            if '[' in return_type and return_type.endswith(']'):
+                base_type = return_type.split('[', 1)[0].strip()
+                analyzer.used_types.add(base_type)
+            else:
+                analyzer.used_types.add(return_type.strip())
+
+        # Build dynamic mapping of available validation types from lamia.types
+        dynamic_type_mapping: Dict[str, type] = {}
+        for name, attr in vars(lamia_types).items():
+            if isinstance(attr, type) and attr is not BaseType and issubclass(attr, BaseType):
+                dynamic_type_mapping[name] = attr
+
+        # Filter used_types to only those that are valid dynamic types
+        filtered_used_types = {t for t in analyzer.used_types if t in dynamic_type_mapping or t in ['WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand']}
+
         return {
             'namespaces': analyzer.used_namespaces,
-            'types': analyzer.used_types
+            'types': filtered_used_types
         }
     except SyntaxError as e:
         # If AST parsing fails, inject everything as fallback
+        # Provide all dynamically discovered types as a safe fallback
+        dynamic_types = set()
+        for name, attr in vars(lamia_types).items():
+            if isinstance(attr, type) and attr is not BaseType and issubclass(attr, BaseType):
+                dynamic_types.add(name)
         return {
             'namespaces': {'web', 'http', 'session'},  # Default safe set
-            'types': {'HTML', 'JSON', 'CSV', 'XML', 'YAML', 'Markdown'}
+            'types': dynamic_types
         }
 
 
@@ -93,15 +121,11 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
     """
     execution_globals = {}
     
-    # Inject validation types and command types
-    type_mapping = {
-        'HTML': HTML,
-        'JSON': JSON,
-        'CSV': CSV,
-        'XML': XML,
-        'YAML': YAML,
-        'Markdown': Markdown
-    }
+    # Inject validation types dynamically discovered from lamia.types
+    dynamic_type_mapping: Dict[str, type] = {}
+    for name, attr in vars(lamia_types).items():
+        if isinstance(attr, type) and attr is not BaseType and issubclass(attr, BaseType):
+            dynamic_type_mapping[name] = attr
     
     # Add command types for transformed code
     command_mapping = {
@@ -128,8 +152,8 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
                 command_mapping['FileCommand'] = FileCommand
     
     for type_name in used_types:
-        if type_name in type_mapping:
-            execution_globals[type_name] = type_mapping[type_name]
+        if type_name in dynamic_type_mapping:
+            execution_globals[type_name] = dynamic_type_mapping[type_name]
         elif type_name in command_mapping and command_mapping[type_name] is not None:
             execution_globals[type_name] = command_mapping[type_name]
     

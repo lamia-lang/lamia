@@ -296,7 +296,7 @@ class SessionWithTransformer(ast.NodeTransformer):
         trigger the engine's validation pipeline for the session's return type.
         This ensures the page content after session execution matches the expected Type.
 
-        We validate by fetching page text via a simple GET_TEXT on the root 'html' element.
+        We validate by fetching page text via a simple GET_TEXT on the 'body' element.
         """
         # Build return_type AST
         rt_node: ast.AST
@@ -311,7 +311,7 @@ class SessionWithTransformer(ast.NodeTransformer):
         else:
             rt_node = ast.Name(id=return_type, ctx=ast.Load())
 
-        # Build WebCommand(action=WebActionType.GET_TEXT, selector='html')
+        # Build WebCommand(action=WebActionType.GET_TEXT, selector='body')
         web_command_call = ast.Call(
             func=ast.Name(id='WebCommand', ctx=ast.Load()),
             args=[],
@@ -326,7 +326,7 @@ class SessionWithTransformer(ast.NodeTransformer):
                 ),
                 ast.keyword(
                     arg='selector',
-                    value=ast.Constant(value='html')
+                    value=ast.Constant(value='body')
                 )
             ]
         )

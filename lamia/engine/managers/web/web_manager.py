@@ -73,14 +73,18 @@ class WebManager(Manager[WebCommand]):
             raise ValueError(f"Unsupported web action: {command.action}")
         
         # Wrap result in ValidationResult if it's not already
-        if isinstance(result, ValidationResult):
-            return result
+        if validator is not None:
+            logger.info(f"Validating result in the web_manager: {result}")
+            validation_result = await validator.validate(result)
         else:
-            return ValidationResult(
+            logger.info(f"Validator is None, returning result as is: {result}")
+            validation_result = ValidationResult(
                 is_valid=True,
                 result_type=result,
                 error_message=None
             )
+
+        return validation_result
     
     async def close(self):
         """Close all sub-managers and cleanup resources."""

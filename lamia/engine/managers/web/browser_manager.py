@@ -72,6 +72,8 @@ class BrowserManager:
         # Execute browser action
         return await self._execute_browser_action(browser_action)
     
+        
+    
     def _web_command_to_browser_action(self, command: WebCommand) -> BrowserAction:
         """Convert WebCommand to BrowserAction."""
         action_type_mapping = {
