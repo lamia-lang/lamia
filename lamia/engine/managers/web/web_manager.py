@@ -1,5 +1,6 @@
 """Web operations manager - dispatches to browser or HTTP managers."""
 
+import rsa
 from lamia.engine.managers import Manager
 from lamia.engine.config_provider import ConfigProvider
 from lamia.validation.base import ValidationResult, BaseValidator
@@ -74,7 +75,7 @@ class WebManager(Manager[WebCommand]):
         
         # Wrap result in ValidationResult if it's not already
         if validator is not None:
-            logger.info(f"Validating result in the web_manager: {result}")
+            logger.info(f"Validating result in the web_manager: {result[0:100] + '...' if result else 'None'}")
             validation_result = await validator.validate(result)
         else:
             logger.info(f"Validator is None, returning result as is: {result}")
