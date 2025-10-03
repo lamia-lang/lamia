@@ -1,26 +1,20 @@
 """
-The original monolithic hybrid_syntax_parser.py has been broken down into:
+Hybrid Python syntax parser for LLM commands.
+
+The original monolithic file has been refactored into focused components:
 
 1. preprocessors/return_type_preprocessor.py - Handles -> Type syntax preprocessing
 2. detectors/llm_command_detector.py - Detects string literal commands in functions  
 3. transformers/session_transformer.py - Transforms with session() blocks
 4. transformers/syntax_transformer.py - Main AST transformation logic
-5. hybrid_parser.py - Clean main parser interface that orchestrates components
 
-Each module now has:
+Each component has:
 - One clear public interface method
 - All other methods are private helpers
 - Single responsibility principle
 - Clear separation of concerns
 
-Use the new HybridSyntaxParser from hybrid_parser.py instead of this file.
-"""
-
-"""
-Clean main interface for hybrid syntax parsing.
-
-This is the main entry point that orchestrates all the parsing components.
-Each component has a single public method and clear responsibilities.
+This file orchestrates all the components through the main HybridSyntaxParser class.
 """
 
 from typing import Dict, Any

@@ -54,12 +54,15 @@ class SessionWithTransformer(ast.NodeTransformer):
             validation_call = self._create_web_validation_call(return_type)
         
         # Create the modified with statement body
-        modified_body = list(node.body)
+        modified_body = []
         
-        # Add validation call at the END if return type is specified
-        # This ensures validation happens before session.__exit__ is called
+        # Add validation call at the BEGINNING if return type is specified
+        # This checks if we're already in the desired state and can skip the session
         if validation_call:
             modified_body.append(validation_call)
+        
+        # Add the original session body after validation
+        modified_body.extend(node.body)
         
         # Create new with statement with modified body
         modified_with = self._create_modified_with_statement(node, modified_body)
@@ -121,12 +124,13 @@ class SessionWithTransformer(ast.NodeTransformer):
         
         This method handles the special case of `with session(...) -> Type:` blocks.
         Unlike functions or expressions, a session block doesn't itself produce content
-        to validate. The arrow means "after this block finishes, validate the current 
-        page state as Type". 
+        to validate. The arrow means "validate current page state as Type and skip 
+        session if already valid". 
         
-        We inject a GET_TEXT command at the end of the session block to explicitly 
-        trigger the engine's validation pipeline for the session's return type.
-        This ensures the page content after session execution matches the expected Type.
+        We inject a GET_TEXT command at the BEGINNING of the session block to check
+        if we're already in the desired state. If validation succeeds, the session
+        context manager will raise SessionSkipException to skip the rest of the block.
+        If validation fails, execution continues with the session actions.
 
         We validate by fetching page text via a simple GET_TEXT on the 'body' element.
         """
