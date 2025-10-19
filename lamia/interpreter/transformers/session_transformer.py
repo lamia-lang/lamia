@@ -11,7 +11,7 @@ from typing import Dict, Optional
 class SessionWithTransformer(ast.NodeTransformer):
     """Transforms with session() statements to handle SessionSkipException and return type validation."""
     
-    def __init__(self, return_types: Dict[str, str] = None):
+    def __init__(self, return_types: Optional[Dict[str, str]] = None):
         self.return_types = return_types or {}
     
     def transform_sessions(self, tree: ast.AST) -> ast.AST:
@@ -132,13 +132,14 @@ class SessionWithTransformer(ast.NodeTransformer):
         SessionSkipException to skip the rest of the block.
         If validation fails, execution continues with the session actions.
 
-        Generated code:
+        Generated code (checks typed_result which is None when validation fails):
         try:
-            lamia.run(WebCommand(action=WebActionType.GET_TEXT, selector='body'), return_type=Type)
-            # If we get here, validation succeeded - skip the session
-            raise SessionSkipException(f"Session validation passed - already in desired state")
+            _lamia_session_probe_result = lamia.run(WebCommand(action=WebActionType.GET_TEXT, selector='body'), return_type=Type)
+            # Check if validation succeeded (typed_result is not None when validation passes)
+            if _lamia_session_probe_result.typed_result is not None:
+                raise SessionSkipException(f"Session validation passed - already in desired state")
         except Exception as e:
-            # Validation failed - continue with session actions
+            # Validation failed or raised an exception - continue with session actions
             if "SessionSkipException" not in str(type(e)):
                 pass  # Continue execution
             else:
@@ -156,24 +157,46 @@ class SessionWithTransformer(ast.NodeTransformer):
         # Create try-except block for validation
         try_block = ast.Try(
             body=[
-                # Try to validate
-                ast.Expr(value=lamia_run_call),
-                # If validation succeeds, raise SessionSkipException
-                ast.Raise(
-                    exc=ast.Call(
-                        func=ast.Name(id='SessionSkipException', ctx=ast.Load()),
-                        args=[ast.Constant(value="Session validation passed - already in desired state")],
-                        keywords=[]
-                    )
-                )
+                # Run validation probe and capture result
+                ast.Assign(
+                    targets=[ast.Name(id='_lamia_session_probe_result', ctx=ast.Store())],
+                    value=lamia_run_call,
+                    lineno=1,
+                    col_offset=0,
+                ),
+                # If validation succeeded (typed_result is not None), skip the session
+                ast.If(
+                    test=ast.Compare(
+                        left=ast.Attribute(
+                            value=ast.Name(id='_lamia_session_probe_result', ctx=ast.Load()),
+                            attr='typed_result',
+                            ctx=ast.Load(),
+                        ),
+                        ops=[ast.IsNot()],
+                        comparators=[ast.Constant(value=None)],
+                    ),
+                    body=[
+                        ast.Raise(
+                            exc=ast.Call(
+                                func=ast.Name(id='SessionSkipException', ctx=ast.Load()),
+                                args=[ast.Constant(value="Session validation passed - already in desired state")],
+                                keywords=[],
+                            ),
+                            lineno=1,
+                            col_offset=0,
+                        )
+                    ],
+                    orelse=[ast.Pass()],
+                    lineno=1,
+                    col_offset=0,
+                ),
             ],
             handlers=[
-                # Catch any validation errors and continue
+                # Catch any errors during the probe and continue, but re-raise SessionSkipException
                 ast.ExceptHandler(
                     type=ast.Name(id='Exception', ctx=ast.Load()),
                     name='e',
                     body=[
-                        # If it's already a SessionSkipException, re-raise it
                         ast.If(
                             test=ast.Compare(
                                 left=ast.Constant(value="SessionSkipException"),
@@ -185,26 +208,32 @@ class SessionWithTransformer(ast.NodeTransformer):
                                             ast.Call(
                                                 func=ast.Name(id='type', ctx=ast.Load()),
                                                 args=[ast.Name(id='e', ctx=ast.Load())],
-                                                keywords=[]
+                                                keywords=[],
                                             )
                                         ],
-                                        keywords=[]
+                                        keywords=[],
                                     )
-                                ]
+                                ],
                             ),
-                            body=[ast.Raise()],  # Re-raise SessionSkipException
-                            orelse=[ast.Pass()]  # Continue execution for other exceptions
+                            body=[ast.Raise()],
+                            orelse=[ast.Pass()],
+                            lineno=1,
+                            col_offset=0,
                         )
-                    ]
+                    ],
+                    lineno=1,
+                    col_offset=0,
                 )
             ],
             orelse=[],
-            finalbody=[]
+            finalbody=[],
+            lineno=1,
+            col_offset=0,
         )
 
         return try_block
     
-    def _build_return_type_ast(self, return_type: str) -> ast.AST:
+    def _build_return_type_ast(self, return_type: str) -> ast.expr:
         """Build AST node for return type."""
         if '[' in return_type and return_type.endswith(']'):
             base = return_type.split('[', 1)[0]
@@ -238,7 +267,7 @@ class SessionWithTransformer(ast.NodeTransformer):
             ]
         )
     
-    def _build_lamia_run_ast(self, web_command_call: ast.Call, return_type_node: ast.AST) -> ast.Call:
+    def _build_lamia_run_ast(self, web_command_call: ast.Call, return_type_node: ast.expr) -> ast.Call:
         """Build lamia.run() AST call."""
         return ast.Call(
             func=ast.Attribute(
