@@ -75,7 +75,7 @@ class WebManager(Manager[WebCommand]):
         
         # Wrap result in ValidationResult if it's not already
         if validator is not None:
-            logger.info(f"Validating result in the web_manager: {result[0:100] + '...' if result else 'None'}")
+            logger.info(f"Validating result in the web_manager: {result[0:1000] + '...' if result else 'None'}")
             validation_result = await validator.validate(result)
         else:
             logger.info(f"Validator is None, returning result as is: {result}")

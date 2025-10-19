@@ -147,6 +147,16 @@ class SeleniumAdapter(BaseBrowserAdapter):
         url = params.value
         logger.info(f"SeleniumAdapter: Navigate to {url}")
         self.driver.get(url)
+        
+        # Wait for page to fully load
+        try:
+            WebDriverWait(self.driver, 10).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
+            logger.info(f"SeleniumAdapter: Page loaded. Current URL: {self.driver.current_url}, Title: {self.driver.title}")
+        except Exception as e:
+            logger.warning(f"Page load wait timed out or failed: {e}")
+            logger.warning(f"Current URL: {self.driver.current_url}, Title: {self.driver.title}")
     
     async def click(self, params: BrowserActionParams) -> None:
         """Click an element."""
@@ -402,38 +412,50 @@ class SeleniumAdapter(BaseBrowserAdapter):
                             domain_cookies[domain] = []
                         domain_cookies[domain].append(cookie)
                 
-                # Add cookies for each domain
+                # Load cookies for each domain
                 for domain, cookies_for_domain in domain_cookies.items():
                     try:
                         # Navigate to domain to set cookies
                         self.driver.get(f"https://{domain}")
+                        WebDriverWait(self.driver, 10).until(
+                            lambda driver: driver.execute_script("return document.readyState") == "complete"
+                        )
+                        
+                        # Add cookies for this domain
                         for cookie in cookies_for_domain:
-                            # Remove domain and other selenium-incompatible keys
-                            clean_cookie = {k: v for k, v in cookie.items() 
-                                          if k in ['name', 'value', 'path', 'secure', 'httpOnly']}
-                            self.driver.add_cookie(clean_cookie)
+                            try:
+                                # Keep all important cookie attributes for proper handling
+                                clean_cookie = {k: v for k, v in cookie.items() 
+                                              if k in ['name', 'value', 'domain', 'path', 'secure', 'httpOnly', 'expiry']}
+                                self.driver.add_cookie(clean_cookie)
+                            except Exception as e:
+                                logger.debug(f"Could not add cookie {cookie.get('name')}: {e}")
+                        
                         logger.info(f"Loaded {len(cookies_for_domain)} cookies for domain: {domain}")
                         
-                        # Also restore localStorage for this origin if available
+                        # Restore localStorage for this domain if available
                         try:
                             local_storage = self.session_manager.load_local_storage(self.profile_name)
                             if local_storage:
-                                # Set all localStorage items for the current origin
                                 self.driver.execute_script(
                                     """
                                     var items = arguments[0];
                                     for (var k in items) {
                                         try { localStorage.setItem(k, items[k]); } catch(e) {}
                                     }
-                                    return Object.keys(items).length;
                                     """,
                                     local_storage
                                 )
                                 logger.info(f"Restored {len(local_storage)} localStorage items for domain: {domain}")
-                                # Refresh to let the app pick up restored storage
-                                self.driver.refresh()
                         except Exception as e:
                             logger.debug(f"Could not restore localStorage for domain {domain}: {e}")
+                        
+                        # Refresh to activate cookies
+                        self.driver.refresh()
+                        WebDriverWait(self.driver, 10).until(
+                            lambda driver: driver.execute_script("return document.readyState") == "complete"
+                        )
+                        
                     except Exception as e:
                         logger.debug(f"Could not load cookies for domain {domain}: {e}")
             
