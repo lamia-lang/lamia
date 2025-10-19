@@ -117,7 +117,7 @@ class SessionWithTransformer(ast.NodeTransformer):
         )
 
     def _create_web_validation_call(self, return_type: str) -> ast.stmt:
-        """Create: lamia.run(WebCommand(...), return_type=Type) to validate current page.
+        """Create validation logic that raises SessionSkipException if page is already valid.
 
         RETURN TYPE HANDLING STRATEGY #3: Session Block Validation
         ========================================================
@@ -127,12 +127,22 @@ class SessionWithTransformer(ast.NodeTransformer):
         to validate. The arrow means "validate current page state as Type and skip 
         session if already valid". 
         
-        We inject a GET_TEXT command at the BEGINNING of the session block to check
-        if we're already in the desired state. If validation succeeds, the session
-        context manager will raise SessionSkipException to skip the rest of the block.
+        We inject validation logic at the BEGINNING of the session block to check
+        if we're already in the desired state. If validation succeeds, we raise
+        SessionSkipException to skip the rest of the block.
         If validation fails, execution continues with the session actions.
 
-        We validate by fetching page text via a simple GET_TEXT on the 'body' element.
+        Generated code:
+        try:
+            lamia.run(WebCommand(action=WebActionType.GET_TEXT, selector='body'), return_type=Type)
+            # If we get here, validation succeeded - skip the session
+            raise SessionSkipException(f"Session validation passed - already in desired state")
+        except Exception as e:
+            # Validation failed - continue with session actions
+            if "SessionSkipException" not in str(type(e)):
+                pass  # Continue execution
+            else:
+                raise  # Re-raise SessionSkipException
         """
         # Build return_type AST
         rt_node = self._build_return_type_ast(return_type)
@@ -143,7 +153,56 @@ class SessionWithTransformer(ast.NodeTransformer):
         # Build lamia.run(WebCommand(...), return_type=rt_node)
         lamia_run_call = self._build_lamia_run_ast(web_command_call, rt_node)
 
-        return ast.Expr(value=lamia_run_call)
+        # Create try-except block for validation
+        try_block = ast.Try(
+            body=[
+                # Try to validate
+                ast.Expr(value=lamia_run_call),
+                # If validation succeeds, raise SessionSkipException
+                ast.Raise(
+                    exc=ast.Call(
+                        func=ast.Name(id='SessionSkipException', ctx=ast.Load()),
+                        args=[ast.Constant(value="Session validation passed - already in desired state")],
+                        keywords=[]
+                    )
+                )
+            ],
+            handlers=[
+                # Catch any validation errors and continue
+                ast.ExceptHandler(
+                    type=ast.Name(id='Exception', ctx=ast.Load()),
+                    name='e',
+                    body=[
+                        # If it's already a SessionSkipException, re-raise it
+                        ast.If(
+                            test=ast.Compare(
+                                left=ast.Constant(value="SessionSkipException"),
+                                ops=[ast.In()],
+                                comparators=[
+                                    ast.Call(
+                                        func=ast.Name(id='str', ctx=ast.Load()),
+                                        args=[
+                                            ast.Call(
+                                                func=ast.Name(id='type', ctx=ast.Load()),
+                                                args=[ast.Name(id='e', ctx=ast.Load())],
+                                                keywords=[]
+                                            )
+                                        ],
+                                        keywords=[]
+                                    )
+                                ]
+                            ),
+                            body=[ast.Raise()],  # Re-raise SessionSkipException
+                            orelse=[ast.Pass()]  # Continue execution for other exceptions
+                        )
+                    ]
+                )
+            ],
+            orelse=[],
+            finalbody=[]
+        )
+
+        return try_block
     
     def _build_return_type_ast(self, return_type: str) -> ast.AST:
         """Build AST node for return type."""

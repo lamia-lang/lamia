@@ -88,7 +88,6 @@ class HybridSyntaxParser:
         tree = ast.parse(processed_code)
         
         # Step 3: Transform session blocks with return types
-        print(f"Return types: {return_types}")
         if return_types:
             session_transformer = SessionWithTransformer(return_types)
             tree = session_transformer.transform_sessions(tree)
@@ -99,5 +98,4 @@ class HybridSyntaxParser:
             return_types
         )
         
-        print(f"Transformed code: {transformed_code}")
         return transformed_code
