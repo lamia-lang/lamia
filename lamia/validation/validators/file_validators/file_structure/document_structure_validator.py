@@ -795,7 +795,9 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 if element_found_but_filtered:
                     errors.append(f"Field '{field_name}': Element found but filtered out due to type constraint. Field type '{expected_type.__name__}' expects different content structure. Consider using 'Any' type for container elements.")
                 else:
-                    errors.append(f"Missing <{field_name}>")
+                    # Log detailed information about the missing element
+                    logger.warning(f"Validation failed: Could not find element with selector '{selector}' for field '{field_name}'")
+                    errors.append(f"Missing <{field_name}>: selector '{selector}' not found")
                 is_valid = False
                 continue
 

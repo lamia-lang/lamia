@@ -459,6 +459,11 @@ class SeleniumAdapter(BaseBrowserAdapter):
                     except Exception as e:
                         logger.debug(f"Could not load cookies for domain {domain}: {e}")
             
+            # Give the final page time to fully render with authentication
+            # This prevents race conditions where validation probe runs before page content loads
+            time.sleep(2)
+            logger.info(f"Session cookies loaded and page stabilized")
+            
             # Update session last used time
             self.session_manager.update_last_used(self.profile_name)
             
