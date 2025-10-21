@@ -328,6 +328,16 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         await self.page.screenshot(path=file_path)
         return file_path
     
+    async def get_page_source(self) -> str:
+        """Get the current page HTML source."""
+        if not self.initialized:
+            raise RuntimeError("PlaywrightAdapter not initialized")
+        
+        if self.page:
+            return await self.page.content()
+        else:
+            return ""
+    
     async def _wait_for_dom_stability(self, timeout: float = 2000):
         """Wait for DOM to stabilize after a click action."""
         logger.info("PlaywrightAdapter: Waiting for DOM stability after click")

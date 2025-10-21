@@ -134,7 +134,7 @@ class SessionWithTransformer(ast.NodeTransformer):
 
         Generated code (checks typed_result which is None when validation fails):
         try:
-            _lamia_session_probe_result = lamia.run(WebCommand(action=WebActionType.GET_TEXT, selector='body'), return_type=Type)
+            _lamia_session_probe_result = lamia.run(WebCommand(action=WebActionType.GET_PAGE_SOURCE), return_type=Type)
             # Check if validation succeeded (typed_result is not None when validation passes)
             if _lamia_session_probe_result.typed_result is not None:
                 raise SessionSkipException(f"Session validation passed - already in desired state")
@@ -247,7 +247,7 @@ class SessionWithTransformer(ast.NodeTransformer):
             return ast.Name(id=return_type, ctx=ast.Load())
     
     def _build_web_command_ast(self) -> ast.Call:
-        """Build WebCommand AST for GET_TEXT action."""
+        """Build WebCommand AST for GET_PAGE_SOURCE action."""
         return ast.Call(
             func=ast.Name(id='WebCommand', ctx=ast.Load()),
             args=[],
@@ -256,13 +256,9 @@ class SessionWithTransformer(ast.NodeTransformer):
                     arg='action',
                     value=ast.Attribute(
                         value=ast.Name(id='WebActionType', ctx=ast.Load()),
-                        attr='GET_TEXT',
+                        attr='GET_PAGE_SOURCE',
                         ctx=ast.Load()
                     )
-                ),
-                ast.keyword(
-                    arg='selector',
-                    value=ast.Constant(value='body')
                 )
             ]
         )

@@ -15,6 +15,7 @@ class WebActionType(Enum):
     TYPE = "type"
     WAIT = "wait"
     GET_TEXT = "get_text"
+    GET_PAGE_SOURCE = "get_page_source"
     SCREENSHOT = "screenshot"
     HOVER = "hover"
     SCROLL = "scroll"

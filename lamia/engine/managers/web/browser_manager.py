@@ -93,6 +93,7 @@ class BrowserManager:
             WebActionType.TYPE: BrowserActionType.TYPE,
             WebActionType.WAIT: BrowserActionType.WAIT,
             WebActionType.GET_TEXT: BrowserActionType.GET_TEXT,
+            WebActionType.GET_PAGE_SOURCE: BrowserActionType.GET_PAGE_SOURCE,
             WebActionType.SCREENSHOT: BrowserActionType.SCREENSHOT,
             WebActionType.HOVER: BrowserActionType.HOVER,
             WebActionType.SCROLL: BrowserActionType.SCROLL,
@@ -197,6 +198,8 @@ class BrowserManager:
             return await adapter.wait_for_element(action.params)
         elif action.action == BrowserActionType.GET_TEXT:
             return await adapter.get_text(action.params)
+        elif action.action == BrowserActionType.GET_PAGE_SOURCE:
+            return await adapter.get_page_source()
         elif action.action == BrowserActionType.SCREENSHOT:
             return await adapter.take_screenshot(action.params)
         elif action.action == BrowserActionType.HOVER:

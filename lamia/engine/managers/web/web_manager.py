@@ -39,6 +39,7 @@ class WebManager(Manager[WebCommand]):
             WebActionType.TYPE,
             WebActionType.WAIT,
             WebActionType.GET_TEXT,
+            WebActionType.GET_PAGE_SOURCE,
             WebActionType.SCREENSHOT,
             WebActionType.HOVER,
             WebActionType.SCROLL,

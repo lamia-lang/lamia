@@ -63,6 +63,7 @@ class BrowserActionType(str, Enum):
     SUBMIT = "submit"
     SCREENSHOT = "screenshot"
     GET_TEXT = "get_text"
+    GET_PAGE_SOURCE = "get_page_source"
     GET_ATTRIBUTE = "get_attribute"
     IS_VISIBLE = "is_visible"
     IS_ENABLED = "is_enabled"
