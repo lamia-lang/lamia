@@ -11,6 +11,7 @@ from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
 from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
 from lamia.adapters.web.driver_scope_manager import get_scope_manager
 from .selector_resolution.selector_resolution_service import SelectorResolutionService
+from .selector_resolution.selector_suggestion_service import SelectorSuggestionService
 from typing import Optional, Any
 import logging
 
@@ -39,8 +40,9 @@ class BrowserManager:
         
         # Active session profile name (hint from session blocks)
         self._active_profile: Optional[str] = None
-        # Initialize selector resolution service when we have a browser adapter
+        # Initialize selector resolution and suggestion services when we have a browser adapter
         self._selector_resolution_service = None
+        self._selector_suggestion_service = None
         self._browser_adapter = None
     
     async def execute(self, command: WebCommand, validator: Optional[BaseValidator] = None) -> Any:
@@ -251,8 +253,14 @@ class BrowserManager:
             # Initialize adapter
             await base_adapter.initialize()
             
-            # Wrap with retry capabilities
-            self._browser_adapter = RetriableAdapterFactory.create_browser_adapter(base_adapter)
+            # Create selector suggestion service for AI-powered suggestions on failures
+            self._selector_suggestion_service = self._create_selector_suggestion_service()
+            
+            # Wrap with retry capabilities and pass suggestion service
+            self._browser_adapter = RetriableAdapterFactory.create_browser_adapter(
+                base_adapter,
+                suggestion_service=self._selector_suggestion_service
+            )
         
         return self._browser_adapter
 
@@ -307,6 +315,20 @@ class BrowserManager:
         """Get current page HTML source."""
         adapter = await self._get_browser_adapter()
         return await adapter.get_page_source()
+    
+    def _create_selector_suggestion_service(self) -> SelectorSuggestionService:
+        """Create selector suggestion service for AI-powered suggestions.
+        
+        Returns:
+            SelectorSuggestionService instance
+        """
+        from ..llm.llm_manager import LLMManager
+        llm_manager = LLMManager(self.config_provider)
+        
+        return SelectorSuggestionService(
+            llm_manager=llm_manager,
+            get_page_html_func=self._get_current_page_html
+        )
     
     async def get_current_url(self) -> str:
         """Get current page URL."""

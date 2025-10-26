@@ -1,6 +1,6 @@
 """Factory for creating retry-enabled adapters."""
 
-from typing import Optional, TypeVar, cast
+from typing import Optional, TypeVar, cast, Any
 
 from ..llm.base import BaseLLMAdapter
 from ..filesystem.base import BaseFSAdapter
@@ -112,22 +112,25 @@ class RetriableAdapterFactory:
     def create_browser_adapter(
         cls,
         adapter: BaseBrowserAdapter,
-        retry_config: Optional[ExternalOperationRetryConfig] = None
+        retry_config: Optional[ExternalOperationRetryConfig] = None,
+        suggestion_service: Optional[Any] = None
     ) -> BaseBrowserAdapter:
-        """Create a browser adapter with intelligent retry capabilities.
+        """Create a browser adapter with intelligent retry capabilities and AI suggestions.
         
         Args:
             adapter: The browser adapter instance to wrap
             retry_config: Optional explicit retry configuration
+            suggestion_service: Optional AI selector suggestion service
             
         Returns:
-            The adapter wrapped with retry handling using intelligent defaults
+            The adapter wrapped with retry handling and AI suggestions using intelligent defaults
         """
         effective_config = cls._get_effective_config(adapter, retry_config)
         return RetryingBrowserAdapter(
             adapter,
             effective_config,
-            collect_stats=cls._collect_stats
+            collect_stats=cls._collect_stats,
+            suggestion_service=suggestion_service
         )
     
     @classmethod
