@@ -38,6 +38,9 @@ class BrowserManager:
         self._browser_options.setdefault("headless", False)
         self._browser_options.setdefault("timeout", 10.0)
         
+        # Pass auto_suggest_selectors flag through to adapter
+        self._browser_options['auto_suggest_selectors'] = web_config.get('auto_suggest_selectors', False)
+        
         # Active session profile name (hint from session blocks)
         self._active_profile: Optional[str] = None
         # Initialize selector resolution and suggestion services when we have a browser adapter
@@ -253,8 +256,14 @@ class BrowserManager:
             # Initialize adapter
             await base_adapter.initialize()
             
-            # Create selector suggestion service for AI-powered suggestions on failures
-            self._selector_suggestion_service = self._create_selector_suggestion_service()
+            # Create selector suggestion service only if auto_suggest_selectors is enabled
+            auto_suggest = web_config.get('auto_suggest_selectors', False)
+            if auto_suggest:
+                logger.info("Auto-suggest selectors enabled, creating suggestion service")
+                self._selector_suggestion_service = self._create_selector_suggestion_service()
+            else:
+                logger.debug("Auto-suggest selectors disabled (default), will save debug files only")
+                self._selector_suggestion_service = None
             
             # Wrap with retry capabilities and pass suggestion service
             self._browser_adapter = RetriableAdapterFactory.create_browser_adapter(

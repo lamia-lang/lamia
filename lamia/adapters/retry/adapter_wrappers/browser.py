@@ -2,6 +2,9 @@
 
 import asyncio
 import logging
+import os
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional, Callable, Awaitable
 from ..retry_handler import RetryHandler
 from ...web.browser.base import BaseBrowserAdapter
@@ -81,58 +84,202 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
         selectors: list,
         last_error: ExternalOperationTransientError
     ):
-        """Handle case when all selectors failed by providing AI suggestions.
+        """Handle case when all selectors failed by saving debug files and optionally calling AI.
         
         Args:
             method_name: Name of the browser method that failed
             selectors: List of all selectors that were tried
             last_error: The last error that occurred
         """
-        error_msg = f"All selectors failed for {method_name}. Tried: {', '.join(selectors)}"
+        # Always save debug files for manual analysis
+        html_file, prompt_file, page_html = await self._save_debug_files(
+            selectors[0], 
+            method_name
+        )
         
-        # Try to get AI suggestions if service is available
-        if self.suggestion_service:
+        # Build base error message
+        error_lines = [
+            f"\n❌ Element not found after all retries",
+            f"Operation: {method_name}",
+            f"Tried selectors: {', '.join(selectors)}",
+            f"",
+            f"📁 Debug files saved:",
+            f"   HTML: {html_file}",
+            f"   Prompt: {prompt_file}",
+            f""
+        ]
+        
+        # Check if auto-suggestions are enabled
+        auto_suggest = self._get_auto_suggest_flag()
+        
+        if auto_suggest and self.suggestion_service:
+            # Auto-execute AI suggestions
             try:
-                logger.info("Attempting to get AI selector suggestions...")
+                logger.info("Auto-suggestions enabled, calling AI...")
                 suggestions = await self.suggestion_service.suggest_alternative_selectors(
-                    failed_selector=selectors[0],  # Use the primary selector
+                    failed_selector=selectors[0],
                     operation_type=method_name,
                     max_suggestions=3
                 )
                 
                 if suggestions:
-                    # Build helpful error message with suggestions
-                    error_lines = [
-                        f"\n❌ Element not found after all retries",
-                        f"Operation: {method_name}",
-                        f"Tried selectors: {', '.join(selectors)}",
-                        f"",
-                        f"🤖 AI-Powered Suggestions:",
+                    error_lines.extend([
+                        f"🤖 AI-Powered Suggestions (auto-generated):",
                         f""
-                    ]
-                    
+                    ])
                     for i, (description, selector) in enumerate(suggestions, 1):
                         error_lines.append(f"  {i}. {description}")
                         error_lines.append(f"     Selector: {selector}")
                         error_lines.append(f"")
-                    
                     error_lines.extend([
                         f"💡 Try replacing your selector with one of the suggestions above.",
-                        f"   The AI analyzed the page HTML and found these potential matches.",
+                        f""
+                    ])
+                else:
+                    error_lines.extend([
+                        f"⚠️  AI could not generate suggestions. Review the debug files manually.",
                         f""
                     ])
                     
-                    error_msg = "\n".join(error_lines)
-                    
-            except Exception as suggestion_error:
-                logger.warning(f"Failed to get AI suggestions: {suggestion_error}")
+            except Exception as e:
+                logger.warning(f"Auto-suggestion failed: {e}")
+                error_lines.extend([
+                    f"⚠️  AI suggestions failed: {str(e)}",
+                    f"   Review the debug files manually.",
+                    f""
+                ])
+        else:
+            # Show manual instructions
+            error_lines.extend([
+                f"💡 To get AI-powered selector suggestions:",
+                f"",
+                f"   Option 1 - Manual (use any LLM):",
+                f"      1. Open: {html_file}",
+                f"      2. Copy the HTML content",
+                f"      3. Open: {prompt_file}",
+                f"      4. Paste both into ChatGPT, Claude, or your preferred LLM",
+                f"      5. Get alternative selector suggestions",
+                f"",
+                f"   Option 2 - Automatic starting from the next run (uses your model_chain):",
+                f"      Add to config.yaml:",
+                f"      web_config:",
+                f"        auto_suggest_selectors: true",
+                f""
+            ])
         
+        error_msg = "\n".join(error_lines)
         logger.error(error_msg)
         raise ExternalOperationTransientError(
             error_msg,
             retry_history=last_error.retry_history,
             original_error=last_error.original_error
         )
+    
+    async def _save_debug_files(
+        self,
+        failed_selector: str,
+        operation_type: str
+    ) -> tuple:
+        """Save debug files for manual AI analysis.
+        
+        Returns:
+            Tuple of (html_file_path, prompt_file_path, page_html)
+        """
+        # Create debug directory
+        debug_dir = Path('.lamia/selector_failures')
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        html_file = debug_dir / f'failure_{timestamp}.html'
+        prompt_file = debug_dir / f'failure_{timestamp}_prompt.txt'
+        
+        # Get page HTML
+        page_html = None
+        try:
+            page_html = await self.adapter.get_page_source()
+            html_file.write_text(page_html, encoding='utf-8')
+            logger.debug(f"Saved page HTML to: {html_file}")
+        except Exception as e:
+            logger.warning(f"Could not save page HTML: {e}")
+            html_file.write_text("<html>Error: Could not capture page source</html>", encoding='utf-8')
+            page_html = "<html unavailable>"
+        
+        # Generate and save prompt
+        prompt = self._generate_suggestion_prompt(
+            failed_selector=failed_selector,
+            operation_type=operation_type
+        )
+        prompt_file.write_text(prompt, encoding='utf-8')
+        logger.debug(f"Saved suggestion prompt to: {prompt_file}")
+        
+        return str(html_file), str(prompt_file), page_html
+    
+    def _generate_suggestion_prompt(
+        self,
+        failed_selector: str,
+        operation_type: str
+    ) -> str:
+        """Generate prompt for AI suggestions (saved to file for manual use).
+        
+        Args:
+            failed_selector: The selector that failed
+            operation_type: Type of browser operation (click, type, etc.)
+            
+        Returns:
+            Prompt text ready to use with any LLM
+        """
+        operation_desc = {
+            'click': 'Finding a clickable element (button, link, etc.)',
+            'type_text': 'Finding an input field to type text into',
+            'select': 'Finding a dropdown/select element',
+            'hover': 'Finding an element to hover over',
+            'wait_for': 'Finding an element that should become visible',
+            'get_text': 'Finding an element to extract text from',
+        }.get(operation_type, f'Finding an element for {operation_type}')
+        
+        return f"""The following CSS selector FAILED to find any elements on the page:
+
+FAILED SELECTOR: {failed_selector}
+
+OPERATION: {operation_desc}
+
+PAGE HTML:
+(Paste the HTML from the accompanying .html file here)
+
+========================================
+
+Your task is to analyze the HTML and suggest up to 3 alternative CSS selectors that might work.
+
+Look for:
+1. Elements with similar attributes, classes, or IDs
+2. Elements that match the likely intent of the failed selector
+3. Elements appropriate for the operation type ({operation_type})
+4. Common selector issues (typos, outdated classes, changed DOM structure)
+
+Return your suggestions in this EXACT format:
+
+SUGGESTION 1: "Description of what this targets" -> css_selector_here
+SUGGESTION 2: "Description of what this targets" -> css_selector_here
+SUGGESTION 3: "Description of what this targets" -> css_selector_here
+
+Example:
+SUGGESTION 1: "Primary login button" -> button.btn-primary[type="submit"]
+SUGGESTION 2: "Login button by aria-label" -> button[aria-label="Log in"]
+SUGGESTION 3: "First submit button in form" -> form button[type="submit"]:first-child
+
+Please provide your suggestions now:
+"""
+    
+    def _get_auto_suggest_flag(self) -> bool:
+        """Check if auto-suggest selectors is enabled in config.
+        
+        Returns:
+            True if auto_suggest_selectors is explicitly set to true, False otherwise
+        """
+        # Check if suggestion_service was provided (indicates flag is true)
+        # This is the most reliable check since BrowserManager only creates
+        # the service when auto_suggest_selectors: true
+        return self.suggestion_service is not None
     
     async def initialize(self) -> None:
         """Initialize the underlying adapter with retry."""
