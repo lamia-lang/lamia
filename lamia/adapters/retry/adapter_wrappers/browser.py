@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Callable, Awaitable
@@ -104,7 +105,8 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
             f"Tried selectors: {', '.join(selectors)}",
             f"",
             f"📁 Debug files saved:",
-            f"   HTML: {html_file}",
+            f"   Full HTML: {html_file}",
+            f"   AI-ready skeleton: {html_file.replace('.html', '_skeleton.html')}",
             f"   Prompt: {prompt_file}",
             f""
         ]
@@ -113,9 +115,15 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
         auto_suggest = self._get_auto_suggest_flag()
         
         if auto_suggest and self.suggestion_service:
-            # Auto-execute AI suggestions
+            # Auto-execute AI suggestions using skeleton HTML
             try:
-                logger.info("Auto-suggestions enabled, calling AI...")
+                logger.info("Auto-suggestions enabled, calling AI with HTML skeleton...")
+                
+                # Check skeleton size before sending to AI
+                skeleton_size_kb = len(page_html.encode('utf-8')) / 1024
+                if skeleton_size_kb > 500:
+                    logger.warning(f"HTML skeleton is large ({skeleton_size_kb:.1f}KB), AI may reject or be expensive")
+                
                 suggestions = await self.suggestion_service.suggest_alternative_selectors(
                     failed_selector=selectors[0],
                     operation_type=method_name,
@@ -150,15 +158,19 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
                 ])
         else:
             # Show manual instructions
+            skeleton_file_path = html_file.replace('.html', '_skeleton.html')
             error_lines.extend([
                 f"💡 To get AI-powered selector suggestions:",
                 f"",
                 f"   Option 1 - Manual (use any LLM):",
-                f"      1. Open: {html_file}",
-                f"      2. Copy the HTML content",
-                f"      3. Open: {prompt_file}",
+                f"      1. Open skeleton: {skeleton_file_path}",
+                f"         (Compact version for AI - faster and cheaper)",
+                f"      2. Copy the skeleton HTML content",
+                f"      3. Open prompt: {prompt_file}",
                 f"      4. Paste both into ChatGPT, Claude, or your preferred LLM",
                 f"      5. Get alternative selector suggestions",
+                f"",
+                f"      Note: Full HTML ({html_file}) available for manual inspection",
                 f"",
                 f"   Option 2 - Automatic starting from the next run (uses your model_chain):",
                 f"      Add to config.yaml:",
@@ -183,7 +195,7 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
         """Save debug files for manual AI analysis.
         
         Returns:
-            Tuple of (html_file_path, prompt_file_path, page_html)
+            Tuple of (html_file_path, prompt_file_path, page_html_skeleton)
         """
         # Create debug directory
         debug_dir = Path('.lamia/selector_failures')
@@ -191,39 +203,57 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         html_file = debug_dir / f'failure_{timestamp}.html'
+        skeleton_file = debug_dir / f'failure_{timestamp}_skeleton.html'
         prompt_file = debug_dir / f'failure_{timestamp}_prompt.txt'
         
         # Get page HTML
         page_html = None
+        html_skeleton = None
+        
         try:
             page_html = await self.adapter.get_page_source()
+            
+            # Save full HTML for user inspection
             html_file.write_text(page_html, encoding='utf-8')
-            logger.debug(f"Saved page HTML to: {html_file}")
+            html_size_kb = len(page_html.encode('utf-8')) / 1024
+            logger.debug(f"Saved full HTML to: {html_file} ({html_size_kb:.1f} KB)")
+            
+            # Create and save compact skeleton for AI
+            html_skeleton = self._create_html_skeleton(page_html)
+            skeleton_file.write_text(html_skeleton, encoding='utf-8')
+            skeleton_size_kb = len(html_skeleton.encode('utf-8')) / 1024
+            logger.debug(f"Saved HTML skeleton to: {skeleton_file} ({skeleton_size_kb:.1f} KB, {skeleton_size_kb/html_size_kb*100:.1f}% of original)")
+            
         except Exception as e:
             logger.warning(f"Could not save page HTML: {e}")
-            html_file.write_text("<html>Error: Could not capture page source</html>", encoding='utf-8')
-            page_html = "<html unavailable>"
+            error_html = "<html>Error: Could not capture page source</html>"
+            html_file.write_text(error_html, encoding='utf-8')
+            skeleton_file.write_text(error_html, encoding='utf-8')
+            html_skeleton = error_html
         
-        # Generate and save prompt
+        # Generate and save prompt (references skeleton file)
         prompt = self._generate_suggestion_prompt(
             failed_selector=failed_selector,
-            operation_type=operation_type
+            operation_type=operation_type,
+            skeleton_filename=skeleton_file.name
         )
         prompt_file.write_text(prompt, encoding='utf-8')
         logger.debug(f"Saved suggestion prompt to: {prompt_file}")
         
-        return str(html_file), str(prompt_file), page_html
+        return str(html_file), str(prompt_file), html_skeleton
     
     def _generate_suggestion_prompt(
         self,
         failed_selector: str,
-        operation_type: str
+        operation_type: str,
+        skeleton_filename: str = None
     ) -> str:
         """Generate prompt for AI suggestions (saved to file for manual use).
         
         Args:
             failed_selector: The selector that failed
             operation_type: Type of browser operation (click, type, etc.)
+            skeleton_filename: Name of the skeleton HTML file
             
         Returns:
             Prompt text ready to use with any LLM
@@ -237,18 +267,24 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
             'get_text': 'Finding an element to extract text from',
         }.get(operation_type, f'Finding an element for {operation_type}')
         
+        skeleton_note = f"""
+NOTE: Use the companion file '{skeleton_filename}' for AI analysis.
+It contains a compact HTML skeleton (structure only, no large content).
+The full HTML file is available for manual inspection if needed.
+""" if skeleton_filename else ""
+        
         return f"""The following CSS selector FAILED to find any elements on the page:
 
 FAILED SELECTOR: {failed_selector}
 
 OPERATION: {operation_desc}
 
-PAGE HTML:
-(Paste the HTML from the accompanying .html file here)
+PAGE HTML:{skeleton_note}
+(Paste the HTML from the accompanying _skeleton.html file here)
 
 ========================================
 
-Your task is to analyze the HTML and suggest up to 3 alternative CSS selectors that might work.
+Your task is to analyze the HTML structure and suggest up to 3 alternative CSS selectors that might work.
 
 Look for:
 1. Elements with similar attributes, classes, or IDs
@@ -269,6 +305,91 @@ SUGGESTION 3: "First submit button in form" -> form button[type="submit"]:first-
 
 Please provide your suggestions now:
 """
+    
+    def _create_html_skeleton(self, html: str, max_text_length: int = 50) -> str:
+        """Create a compact HTML skeleton for AI analysis.
+        
+        Strips out large content while preserving structure, classes, IDs, and attributes
+        that are relevant for CSS selectors.
+        
+        Args:
+            html: Full HTML string
+            max_text_length: Maximum length of text content to keep
+            
+        Returns:
+            Compact HTML skeleton string (typically 5-20% of original size)
+        """
+        try:
+            # Remove HTML comments (can be huge)
+            html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
+            
+            # Remove large inline scripts (keep tag structure)
+            html = re.sub(
+                r'<script[^>]*>(.*?)</script>',
+                lambda m: f'<script{m.group(0)[7:m.group(0).index(">")]}>/* script removed */</script>' if '>' in m.group(0) else m.group(0),
+                html,
+                flags=re.DOTALL | re.IGNORECASE
+            )
+            
+            # Remove large inline styles (keep tag structure)
+            html = re.sub(
+                r'<style[^>]*>(.*?)</style>',
+                lambda m: f'<style{m.group(0)[6:m.group(0).index(">")]}>/* styles removed */</style>' if '>' in m.group(0) else m.group(0),
+                html,
+                flags=re.DOTALL | re.IGNORECASE
+            )
+            
+            # Truncate SVG paths and data (very large)
+            html = re.sub(r'<path[^>]*d="[^"]{100,}"', lambda m: m.group(0)[:50] + '..."', html)
+            html = re.sub(r'<svg[^>]*>(.*?)</svg>', 
+                         lambda m: '<svg' + m.group(0)[4:m.group(0).index('>')+1] + '/* svg content removed */</svg>' if '>' in m.group(0)[:100] else m.group(0),
+                         html, flags=re.DOTALL | re.IGNORECASE)
+            
+            # Truncate very long attribute values (data-* with JSON, etc.)
+            html = re.sub(
+                r'(\w+)="([^"]{200,})"',
+                lambda m: f'{m.group(1)}="{m.group(2)[:100]}..."',
+                html
+            )
+            
+            # Truncate text content between tags (keep structure, truncate long text)
+            def truncate_text_content(match):
+                tag_open = match.group(1)
+                text = match.group(2)
+                tag_close = match.group(3)
+                
+                # Skip if it's just whitespace
+                if not text.strip():
+                    return match.group(0)
+                
+                # Truncate long text
+                if len(text) > max_text_length:
+                    text = text[:max_text_length].strip() + '...'
+                
+                return f'{tag_open}{text}{tag_close}'
+            
+            # Match text between tags (excluding script/style which we already handled)
+            html = re.sub(
+                r'(>)([^<]{' + str(max_text_length) + r',})(<)',
+                truncate_text_content,
+                html
+            )
+            
+            # Add metadata comment
+            skeleton_size = len(html.encode('utf-8'))
+            header = f"<!-- HTML Skeleton for AI Analysis (size: {skeleton_size/1024:.1f}KB) -->\n"
+            header += "<!-- Large content removed: scripts, styles, long text, SVG data -->\n"
+            header += "<!-- Structure preserved: tags, classes, IDs, attributes -->\n\n"
+            
+            return header + html
+            
+        except Exception as e:
+            logger.warning(f"Error creating HTML skeleton: {e}, returning original")
+            # Fallback: at least truncate to a reasonable size
+            max_chars = 200000  # ~200KB max
+            if len(html) > max_chars:
+                return html[:max_chars] + "\n\n<!-- HTML truncated due to size -->"
+            return html
     
     def _get_auto_suggest_flag(self) -> bool:
         """Check if auto-suggest selectors is enabled in config.
