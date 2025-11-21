@@ -71,3 +71,4 @@ class BrowserErrorClassifier(ErrorClassifier):
         """Check if error indicates a transient failure."""
         return any(pattern in error_msg for pattern in BROWSER_TRANSIENT_PATTERNS)
 
+
