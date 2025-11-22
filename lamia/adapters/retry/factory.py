@@ -6,9 +6,9 @@ from ..llm.base import BaseLLMAdapter
 from ..filesystem.base import BaseFSAdapter
 from ..web.browser.base import BaseBrowserAdapter
 from lamia.types import ExternalOperationRetryConfig
-from .adapter_wrappers.llm import RetryingLLMAdapter
-from .adapter_wrappers.fs import RetryingFSAdapter
-from .adapter_wrappers.browser import RetryingBrowserAdapter
+from .adapter_wrappers.retrying_llm_adapter import RetryingLLMAdapter
+from .adapter_wrappers.retrying_fs_adapter import RetryingFSAdapter
+from .adapter_wrappers.retrying_browser_adapter import RetryingBrowserAdapter
 from .defaults import get_default_config_for_adapter
 
 T = TypeVar('T', bound=BaseLLMAdapter | BaseFSAdapter | BaseBrowserAdapter)
@@ -130,7 +130,6 @@ class RetriableAdapterFactory:
             adapter,
             effective_config,
             collect_stats=cls._collect_stats,
-            suggestion_service=suggestion_service
         )
     
     @classmethod

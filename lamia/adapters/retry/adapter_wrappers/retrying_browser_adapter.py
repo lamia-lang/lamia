@@ -17,7 +17,6 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
         adapter: BaseBrowserAdapter,
         retry_config: ExternalOperationRetryConfig,
         collect_stats: bool = True,
-        suggestion_service: Optional[Any] = None
     ):
         self.adapter = adapter
         self.retry_handler = RetryHandler(adapter, retry_config, collect_stats=collect_stats)
