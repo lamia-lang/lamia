@@ -186,13 +186,68 @@ class BrowserManager:
                 logger.warning(f"Selector resolution failed: {e}")
                 return action  # Return original action if resolution fails for other reasons
     
+    # Define which actions use selectors and need fallback
+    SELECTOR_BASED_ACTIONS = {
+        BrowserActionType.CLICK,
+        BrowserActionType.TYPE,
+        BrowserActionType.WAIT,
+        BrowserActionType.GET_TEXT,
+        BrowserActionType.HOVER,
+        BrowserActionType.SELECT,
+        BrowserActionType.IS_VISIBLE,
+        BrowserActionType.IS_ENABLED,
+    }
+
     async def _execute_browser_action(self, action: BrowserAction) -> Any:
-        """Execute browser action using appropriate adapter."""
-        # Get browser adapter (this will create it if needed)
+        """Execute browser action with optional selector chain fallback."""
         adapter = await self._get_browser_adapter()
         
+        # Check if this action uses selectors
+        if action.action in self.SELECTOR_BASED_ACTIONS and action.params.fallback_selectors:
+            # Use selector chain logic
+            return await self._execute_with_selector_chain(action, adapter)
+        else:
+            # Direct execution (no selector chain needed)
+            return await self._execute_single_action(action, adapter)
+
+    async def _execute_with_selector_chain(self, action: BrowserAction, adapter) -> Any:
+        """Execute action with selector chain fallback."""
+        params = action.params
+        selectors = [params.selector] + (params.fallback_selectors or [])
         
-        # Execute action using adapter
+        for i, selector in enumerate(selectors):
+            try:
+                # Create params with single selector
+                single_params = BrowserActionParams(
+                    selector=selector,
+                    value=params.value,
+                    timeout=params.timeout,
+                    # ... copy other params
+                    fallback_selectors=None  # Don't pass fallbacks down
+                )
+                
+                # Execute with this selector
+                action_with_single_selector = BrowserAction(
+                    action=action.action,
+                    params=single_params
+                )
+                return await self._execute_single_action(action_with_single_selector, adapter)
+                
+            except ExternalOperationPermanentError as e:
+                if i == len(selectors) - 1:
+                    # All selectors failed
+                    await self.failed_selector_handler.handle_all_selectors_failed(
+                        method_name=action.action.value,
+                        selectors=selectors,
+                        last_error=e,
+                        adapter=adapter
+                    )
+                # Try next selector
+                continue
+
+    async def _execute_single_action(self, action: BrowserAction, adapter) -> Any:
+        """Execute single action without selector chain logic."""
+        # Your existing switch statement
         if action.action == BrowserActionType.NAVIGATE:
             return await adapter.navigate(action.params)
         elif action.action == BrowserActionType.CLICK:
@@ -340,7 +395,7 @@ class BrowserManager:
         )
     
     async def get_current_url(self) -> str:
-        """Get current page URL."""
+        """Get current page URL.""" 
         adapter = await self._get_browser_adapter()
         if hasattr(adapter, 'get_current_url'):
             return await adapter.get_current_url()
