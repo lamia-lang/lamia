@@ -337,6 +337,16 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             return await self.page.content()
         else:
             return ""
+        
+    async def get_current_url(self) -> Optional[str]:
+        """Get the current page URL."""
+        if not self.initialized:
+            raise RuntimeError("PlaywrightAdapter not initialized")
+        
+        if self.page:
+            return await self.page.url
+        else:
+            return None
     
     async def _wait_for_dom_stability(self, timeout: float = 2000):
         """Wait for DOM to stabilize after a click action."""

@@ -111,6 +111,12 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
             lambda: self.adapter.take_screenshot(params)
         )
     
+    async def get_current_url(self) -> str:
+        """Get current URL with retry."""
+        return await self.retry_handler.execute(
+            lambda: self.adapter.get_current_url()
+        )
+    
     async def get_page_source(self) -> str:
         """Get page source with retry."""
         return await self.retry_handler.execute(

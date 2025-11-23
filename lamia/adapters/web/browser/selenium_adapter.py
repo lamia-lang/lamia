@@ -509,6 +509,16 @@ class SeleniumAdapter(BaseBrowserAdapter):
     def set_profile(self, profile_name: Optional[str]) -> None:
         self.profile_name = profile_name or "default"
 
+    async def get_current_url(self) -> Optional[str]:
+        """Get the current page URL."""
+        if not self.initialized:
+            raise RuntimeError("SeleniumAdapter not initialized")
+        
+        if self.driver:
+            return self.driver.current_url
+        else:
+            return None
+
     async def load_session_state(self) -> None:
         # Ensure driver is ready
         if not self.initialized:

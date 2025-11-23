@@ -80,7 +80,13 @@ class BaseBrowserAdapter(ABC):
     async def take_screenshot(self, params: BrowserActionParams) -> str:
         """Take a screenshot and return file path."""
         pass
-    
+
+
+    @abstractmethod
+    async def get_current_url(self) -> str:
+        """Get the current page URL."""
+        pass
+
     @abstractmethod
     async def get_page_source(self) -> str:
         """Get the current page HTML source."""
