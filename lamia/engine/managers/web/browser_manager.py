@@ -40,9 +40,6 @@ class BrowserManager:
         self._browser_options.setdefault("headless", False)
         self._browser_options.setdefault("timeout", 10.0)
         
-        # Pass auto_suggest_selectors flag through to adapter
-        self._browser_options['auto_suggest_selectors'] = web_config.get('auto_suggest_selectors', False)
-        
         # Active session profile name (hint from session blocks)
         self._active_profile: Optional[str] = None
         # Initialize selector resolution and suggestion services when we have a browser adapter
@@ -210,11 +207,9 @@ class BrowserManager:
         # Check if this action uses selectors
         if action.action in self.SELECTOR_BASED_ACTIONS and action.params.fallback_selectors:
             # Use selector chain logic
-            print("Using selectors logic...")
             return await self._execute_with_selector_chain(action, adapter)
         else:
             # Direct execution (no selector chain needed)
-            print("Not using selectors logic...", action.action, self.SELECTOR_BASED_ACTIONS, action.params.fallback_selectors)
             return await self._execute_single_action(action, adapter)
 
     async def _execute_with_selector_chain(self, action: BrowserAction, adapter: BaseBrowserAdapter) -> Any:

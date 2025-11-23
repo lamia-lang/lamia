@@ -41,9 +41,10 @@ class Lamia:
         *models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], 
         api_keys: Optional[dict] = None, 
         retry_config: Optional['ExternalOperationRetryConfig'] = None,
+        web_config: Optional[Dict[str, Any]] = None,
     ):
         # Initialize engine - ready to use immediately!
-        config_provider = build_config_from_models(models, api_keys, retry_config)
+        config_provider = build_config_from_models(models, api_keys, retry_config, web_config)
         self._engine = LamiaEngine(config_provider)
 
     @classmethod
@@ -51,10 +52,11 @@ class Lamia:
         """Create Lamia instance from configuration dictionary."""
         models, retry_config = build_config_from_dict(config)
         
-        # Unpack the models list for the constructor
+        # Unpack the models list for the constructor and pass web_config
         return cls(
             *models,
-            retry_config=retry_config
+            retry_config=retry_config,
+            web_config=config.get('web_config'),
         )
 
     async def run_async(

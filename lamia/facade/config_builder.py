@@ -102,6 +102,7 @@ def build_config_from_models(
     models: Tuple[Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], ...],
     api_keys: Optional[dict], 
     retry_config: Optional[ExternalOperationRetryConfig],
+    web_config: Optional[Dict[str, Any]]
 ) -> ConfigProvider:
     """Build a ConfigProvider from model specifications."""
     DEFAULT_LLM_RETRIES = 1
@@ -135,6 +136,7 @@ def build_config_from_models(
         "model_chain": models_and_retries,
         "api_keys": api_keys,
         "retry_config": retry_config,
+        "web_config": web_config or {},
     }    
 
     return ConfigProvider(config_dict)
