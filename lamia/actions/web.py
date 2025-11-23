@@ -1,6 +1,6 @@
 """Web automation actions including browser and HTTP operations with excellent IntelliSense support."""
 
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, Tuple
 from lamia.types import BrowserAction, BrowserActionType, BrowserActionParams, SelectorType
 from lamia.interpreter.commands import WebCommand, WebActionType
 
@@ -28,185 +28,29 @@ class WebActions:
     Access via: web.click(), web.type_text(), web.wait_for(), etc.
     """
     
-    def click(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> BrowserAction:
-        """Click an element with fallback selectors.
+    def click(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+        return self._create_web_command(WebActionType.CLICK, selector, fallback_selectors, timeout, None)
         
-        Args:
-            selector: Primary CSS selector, XPath, or ID (auto-detected)
-            *fallback_selectors: Backup selectors if primary fails
-            timeout: Optional timeout in seconds
-            
-        Returns:
-            BrowserAction configured for clicking
-            
-        Example:
-            web.click("#submit-btn", ".submit-button", "button[type='submit']")
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.CLICK,
-            selector=selector,
-            timeout=timeout
-        )
-        
-    
     def type_text(self, selector: str, text: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        """Type text into an input element.
-        
-        Args:
-            selector: Primary selector for the input field
-            text: Text to type into the field
-            *fallback_selectors: Backup selectors if primary fails
-            timeout: Optional timeout in seconds
-            
-        Returns:
-            WebCommand configured for typing
-            
-        Example:
-            web.type_text("input[name='username']", "john@example.com", "#username")
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.TYPE,
-            selector=selector,
-            value=text,
-            timeout=timeout
-        )
+        return self._create_web_command(WebActionType.TYPE, selector, fallback_selectors, timeout, text)
     
     def wait_for(self, selector: str, condition: str = "visible", *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        """Wait for an element to meet a condition.
-        
-        Args:
-            selector: Primary selector for the element
-            condition: Condition to wait for (visible, clickable, present, hidden)
-            *fallback_selectors: Backup selectors if primary fails
-            timeout: Optional timeout in seconds
-            
-        Returns:
-            WebCommand configured for waiting
-            
-        Example:
-            web.wait_for(".loading-spinner", "hidden", timeout=10.0)
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.WAIT,
-            selector=selector,
-            timeout=timeout
-        )
+        return self._create_web_command(WebActionType.WAIT, selector, fallback_selectors, timeout, condition)
     
     def get_text(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        """Get text content from an element.
-        
-        Args:
-            selector: Primary selector for the element
-            *fallback_selectors: Backup selectors if primary fails
-            timeout: Optional timeout in seconds
-            
-        Returns:
-            WebCommand configured for getting text
-            
-        Example:
-            web.get_text(".job-title", "h1", "[data-testid='job-title']")
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.GET_TEXT,
-            selector=selector,
-            timeout=timeout
-        )
+        return self._create_web_command(WebActionType.GET_TEXT, selector, fallback_selectors, timeout, None)
     
     def hover(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        """Hover over an element to reveal dropdown menus or tooltips.
-        
-        Args:
-            selector: Primary selector for the element
-            *fallback_selectors: Backup selectors if primary fails
-            timeout: Optional timeout in seconds
-            
-        Returns:
-            WebCommand configured for hovering
-            
-        Example:
-            web.hover(".menu-item", "[data-menu='dropdown']")
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.HOVER,
-            selector=selector,
-            timeout=timeout
-        )
+        return self._create_web_command(WebActionType.HOVER, selector, fallback_selectors, timeout, None)
     
-    def scroll_to(self, selector: str, *fallback_selectors: str) -> WebCommand:
-        """Scroll the page to bring an element into view.
-        
-        Args:
-            selector: Primary selector for the element
-            *fallback_selectors: Backup selectors if primary fails
-            
-        Returns:
-            WebCommand configured for scrolling
-            
-        Example:
-            web.scroll_to("#footer", ".page-footer")
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.SCROLL,
-            selector=selector
-        )
+    def scroll_to(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+        return self._create_web_command(WebActionType.SCROLL, selector, fallback_selectors, timeout, None)
     
     def select_option(self, selector: str, option_value: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        """Select an option from a dropdown menu.
-        
-        Args:
-            selector: Primary selector for the dropdown element
-            option_value: Value or visible text of the option to select
-            *fallback_selectors: Backup selectors if primary fails
-            timeout: Optional timeout in seconds
-            
-        Returns:
-            WebCommand configured for selecting
-            
-        Example:
-            web.select_option("select[name='country']", "United States", "#country-select")
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.SELECT,
-            selector=selector,
-            value=option_value,
-            timeout=timeout
-        )
+        return self._create_web_command(WebActionType.SELECT, selector, fallback_selectors, timeout, option_value)
     
     def submit_form(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        """Submit a form by clicking submit button or triggering form submission.
-        
-        Args:
-            selector: Primary selector for the form or submit button
-            *fallback_selectors: Backup selectors if primary fails
-            timeout: Optional timeout in seconds
-            
-        Returns:
-            WebCommand configured for form submission
-            
-        Example:
-            web.submit_form("form#login-form", ".login-form")
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.SUBMIT,
-            selector=selector,
-            timeout=timeout
-        )
+        return self._create_web_command(WebActionType.SUBMIT, selector, fallback_selectors, timeout, None)
     
     def screenshot(self, file_path: Optional[str] = None) -> WebCommand:
         """Take a screenshot of the current page.
@@ -226,48 +70,10 @@ class WebActions:
         )
     
     def is_visible(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        """Check if an element is visible on the page.
-        
-        Args:
-            selector: Primary selector for the element
-            *fallback_selectors: Backup selectors if primary fails
-            timeout: Optional timeout in seconds
-            
-        Returns:
-            WebCommand configured for visibility check
-            
-        Example:
-            web.is_visible(".error-message", "#error")
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.IS_VISIBLE,
-            selector=selector,
-            timeout=timeout
-        )
+        return self._create_web_command(WebActionType.IS_VISIBLE, selector, fallback_selectors, timeout, None)
     
     def is_enabled(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        """Check if an element is enabled and interactive.
-        
-        Args:
-            selector: Primary selector for the element
-            *fallback_selectors: Backup selectors if primary fails
-            timeout: Optional timeout in seconds
-            
-        Returns:
-            WebCommand configured for enabled check
-            
-        Example:
-            web.is_enabled("#submit-btn", ".submit-button")
-        """
-        fallbacks = list(fallback_selectors) if fallback_selectors else None
-        
-        return WebCommand(
-            action=WebActionType.IS_ENABLED,
-            selector=selector,
-            timeout=timeout
-        )
+        return self._create_web_command(WebActionType.IS_ENABLED, selector, fallback_selectors, timeout, None)
     
     # HTTP Operations
     def get(self, url: str, headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> str:
@@ -400,3 +206,14 @@ class WebActions:
         if timeout:
             cmd_parts.append(f"timeout:{timeout}")
         return " ".join(cmd_parts)
+    
+    def _create_web_command(self, action: WebActionType, selector: str, fallback_selectors: Tuple[str, ...], timeout: Optional[float] = None, value: Optional[str] = None) -> WebCommand:
+        fallbacks = list(fallback_selectors) if fallback_selectors else None
+        
+        return WebCommand(
+            action=action,
+            selector=selector,
+            fallback_selectors=fallbacks,
+            value=value,
+            timeout=timeout
+        )
