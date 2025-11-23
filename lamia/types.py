@@ -1,24 +1,34 @@
-from typing import TypeVar, Generic, Optional, Union, List, Set
+"""Public API types for Lamia users."""
+
+from typing import TypeVar, Generic, Optional
 from datetime import timedelta
 from pydantic import BaseModel
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any
 
 T = TypeVar('T', bound=BaseModel)
 S = TypeVar('S', bound=bool)
 
+
 @dataclass
 class ExternalOperationRetryConfig:
-    """Configuration for external system retry behavior."""
+    """Configuration for external system retry behavior.
+    
+    Users can configure this in their config.yaml to control
+    retry behavior for external operations (LLM, browser, etc.).
+    """
     max_attempts: int
     base_delay: float
     max_delay: float
     exponential_base: float
     max_total_duration: Optional[timedelta]
 
+
 class BaseType(Generic[T, S]):
-    """Base marker class for all validation types."""
+    """Base marker class for all validation types.
+    
+    Used internally to support parametric types like HTML[Model].
+    Users typically use the concrete types (HTML, JSON, etc.) directly.
+    """
     
     def __class_getitem__(cls, params):
         # Allow single parameter usage like HTML[MyModel]
@@ -26,138 +36,57 @@ class BaseType(Generic[T, S]):
             params = (params, False)  # Default S to False (non-strict validation)
         return super().__class_getitem__(params)
 
+
 class HTML(BaseType[T, S]):
-    """Marker class for HTML validation types."""
+    """Marker class for HTML validation types.
+    
+    Use in function return annotations to validate HTML content:
+    
+    Example:
+        def get_page() -> HTML:
+            return "https://example.com"
+        
+        def get_structured_page() -> HTML[MyModel]:
+            return "https://example.com"
+    """
     pass
+
 
 class YAML(BaseType[T, S]):
-    """Marker class for YAML validation types."""
+    """Marker class for YAML validation types.
+    
+    Use in function return annotations to validate YAML content.
+    """
     pass
+
 
 class JSON(BaseType[T, S]):
-    """Marker class for JSON validation types."""
+    """Marker class for JSON validation types.
+    
+    Use in function return annotations to validate JSON content.
+    """
     pass
+
 
 class XML(BaseType[T, S]):
-    """Marker class for XML validation types."""
+    """Marker class for XML validation types.
+    
+    Use in function return annotations to validate XML content.
+    """
     pass
+
 
 class CSV(BaseType[T, S]):
-    """Marker class for CSV validation types."""
+    """Marker class for CSV validation types.
+    
+    Use in function return annotations to validate CSV content.
+    """
     pass
+
 
 class Markdown(BaseType[T, S]):
-    """Marker class for Markdown validation types."""
+    """Marker class for Markdown validation types.
+    
+    Use in function return annotations to validate Markdown content.
+    """
     pass
-
-
-class BrowserActionType(str, Enum):
-    """Types of browser actions that can be performed."""
-    CLICK = "click"
-    TYPE = "type"
-    WAIT = "wait"
-    NAVIGATE = "navigate"
-    SCROLL = "scroll"
-    HOVER = "hover"
-    SELECT = "select"
-    SUBMIT = "submit"
-    SCREENSHOT = "screenshot"
-    GET_TEXT = "get_text"
-    GET_PAGE_SOURCE = "get_page_source"
-    GET_ATTRIBUTE = "get_attribute"
-    IS_VISIBLE = "is_visible"
-    IS_ENABLED = "is_enabled"
-
-
-class HttpActionType(str, Enum):
-    """Types of HTTP actions that can be performed."""
-    GET = "get"
-    POST = "post"
-    PUT = "put"
-    PATCH = "patch"
-    DELETE = "delete"
-    HEAD = "head"
-    OPTIONS = "options"
-
-
-class SelectorType(str, Enum):
-    """Types of selectors for web elements."""
-    CSS = "css"
-    XPATH = "xpath"
-    ID = "id"
-    NAME = "name"
-    CLASS_NAME = "class_name"
-    TAG_NAME = "tag_name"
-    LINK_TEXT = "link_text"
-    PARTIAL_LINK_TEXT = "partial_link_text"
-    AI_DESCRIPTION = "ai_description"  # For AI-powered element selection
-
-
-class BrowserActionParams(BaseModel):
-    """Parameters for browser actions."""
-    selector: Optional[str] = None
-    selector_type: SelectorType = SelectorType.CSS
-    fallback_selectors: Optional[List[str]] = None
-    value: Optional[str] = None  # For typing, selecting options, URLs, file paths
-    timeout: Optional[float] = None
-    wait_condition: Optional[str] = None
-    description: Optional[str] = None  # For AI-powered actions
-    
-    class Config:
-        use_enum_values = True
-
-
-class HttpActionParams(BaseModel):
-    """Parameters for HTTP actions."""
-    url: str
-    headers: Optional[dict] = None
-    data: Optional[Any] = None  # Can be dict (JSON) or str (form-encoded)
-    params: Optional[dict] = None  # Query parameters
-    
-    class Config:
-        use_enum_values = True
-
-
-class BrowserAction(BaseModel):
-    """Browser automation command for Selenium, Playwright, and AI tools."""
-    action: BrowserActionType
-    params: BrowserActionParams
-    
-    class Config:
-        use_enum_values = True
-
-
-class HttpAction(BaseModel):
-    """HTTP request command for REST APIs and web services."""
-    action: HttpActionType
-    params: HttpActionParams
-    
-    class Config:
-        use_enum_values = True
-
-# Actions that use selectors and support fallback chains
-SELECTOR_BASED_ACTIONS: Set[BrowserActionType] = {
-    BrowserActionType.CLICK,
-    BrowserActionType.TYPE,
-    BrowserActionType.WAIT,
-    BrowserActionType.GET_TEXT,
-    BrowserActionType.HOVER,
-    BrowserActionType.SELECT,
-    BrowserActionType.IS_VISIBLE,
-    BrowserActionType.IS_ENABLED,
-}
-
-# Map method names to action types
-WEB_METHOD_TO_ACTION = {
-    'click': BrowserActionType.CLICK,
-    'type_text': BrowserActionType.TYPE,
-    'wait_for': BrowserActionType.WAIT,
-    'get_text': BrowserActionType.GET_TEXT,
-    'hover': BrowserActionType.HOVER,
-    'scroll_to': BrowserActionType.SCROLL,
-    'select_option': BrowserActionType.SELECT,
-    'submit_form': BrowserActionType.SUBMIT,
-    'screenshot': BrowserActionType.SCREENSHOT,
-    'is_visible': BrowserActionType.IS_VISIBLE,
-    'is_enabled': BrowserActionType.IS_ENABLED
-}

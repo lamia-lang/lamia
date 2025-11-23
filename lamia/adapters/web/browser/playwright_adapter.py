@@ -1,7 +1,7 @@
 """Playwright adapter for browser automation."""
 
 from .base import BaseBrowserAdapter
-from lamia.types import BrowserActionParams, SelectorType
+from lamia.internal_types import BrowserActionParams, SelectorType
 from ..session_manager import SessionManager
 import logging
 from typing import Optional, Dict, Any, List

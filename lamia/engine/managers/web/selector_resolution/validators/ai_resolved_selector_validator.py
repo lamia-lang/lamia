@@ -2,7 +2,7 @@
 
 import logging
 from lamia.validation.base import BaseValidator, ValidationResult, TrackingContext
-from lamia.types import BrowserActionParams
+from lamia.internal_types import BrowserActionParams
 
 logger = logging.getLogger(__name__)
 

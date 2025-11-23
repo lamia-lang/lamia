@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any
-from lamia.types import HttpActionParams
+from lamia.internal_types import HttpActionParams
 
 
 class BaseHttpAdapter(ABC):

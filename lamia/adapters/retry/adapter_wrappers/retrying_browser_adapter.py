@@ -4,7 +4,8 @@ import logging
 from typing import Any, Optional
 from ..retry_handler import RetryHandler
 from ...web.browser.base import BaseBrowserAdapter
-from lamia.types import ExternalOperationRetryConfig, BrowserActionParams
+from lamia.types import ExternalOperationRetryConfig
+from lamia.internal_types import BrowserActionParams
 
 logger = logging.getLogger(__name__)
 

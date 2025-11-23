@@ -3,7 +3,7 @@
 from lamia.engine.managers import Manager
 from lamia.engine.config_provider import ConfigProvider
 from lamia.validation.base import ValidationResult, BaseValidator
-from lamia.types import BrowserAction, BrowserActionType, BrowserActionParams
+from lamia.internal_types import BrowserAction, BrowserActionType, BrowserActionParams
 from lamia.adapters.web.browser.base import BaseBrowserAdapter
 from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.interpreter.commands import WebCommand, WebActionType

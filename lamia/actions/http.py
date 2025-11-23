@@ -1,7 +1,7 @@
 """HTTP request actions with excellent IntelliSense support."""
 
 from typing import Optional
-from lamia.types import HttpAction, HttpActionType, HttpActionParams
+from lamia.internal_types import HttpAction, HttpActionType, HttpActionParams
 
 
 class HttpActions:

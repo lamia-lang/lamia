@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
-from lamia.types import BrowserActionParams
+from lamia.internal_types import BrowserActionParams
 
 
 class BaseBrowserAdapter(ABC):

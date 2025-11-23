@@ -12,7 +12,7 @@ import ast
 import re
 from typing import Dict, Optional, List, Any
 from ..detectors.llm_command_detector import LLMCommandDetector
-from lamia.types import WEB_METHOD_TO_ACTION, SELECTOR_BASED_ACTIONS
+from lamia.internal_types import WEB_METHOD_TO_ACTION, SELECTOR_BASED_ACTIONS
 
 
 class HybridSyntaxTransformer(ast.NodeTransformer):

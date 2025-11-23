@@ -1,7 +1,7 @@
 """HTTP adapter using requests library."""
 
 from .base import BaseHttpAdapter
-from lamia.types import HttpActionParams
+from lamia.internal_types import HttpActionParams
 import logging
 from typing import Any, Optional
 import requests

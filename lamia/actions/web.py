@@ -1,7 +1,7 @@
 """Web automation actions including browser and HTTP operations with excellent IntelliSense support."""
 
 from typing import Optional, Dict, Any, Union, Tuple
-from lamia.types import BrowserAction, BrowserActionType, BrowserActionParams, SelectorType
+from lamia.internal_types import BrowserAction, BrowserActionType, BrowserActionParams, SelectorType
 from lamia.interpreter.commands import WebCommand, WebActionType
 
 def _detect_selector_type(selector: str) -> SelectorType:
