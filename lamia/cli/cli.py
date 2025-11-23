@@ -228,20 +228,30 @@ def main():
                     executor.execute_file(prompt_file, enable_lazy_dependency_loading=True)
                     sys.exit(0)
                 except ExternalOperationTransientError as e:
-                    logger.error(f"❌ External operation failed: {e}")
+                    logger.error(f"❌ External operation failed after all retries: {e}")
+                    if logger.level <= logging.DEBUG:
+                        traceback.print_exc()
                     sys.exit(1)
                 except ExternalOperationPermanentError as e:
                     logger.error(f"❌ Permanent failure: {e}")
+                    if logger.level <= logging.DEBUG:
+                        traceback.print_exc()
                     sys.exit(1)
                 except ExternalOperationRateLimitError as e:
                     logger.error(f"❌ Rate limit exceeded: {e}")
+                    if logger.level <= logging.DEBUG:
+                        traceback.print_exc()
                     sys.exit(1)
                 except SyntaxError as e:
                     logger.error(f"❌ Syntax error in hybrid file: {e}")
                     logger.error(f"Line {e.lineno}: {e.text}")
+                    if logger.level <= logging.DEBUG:
+                        traceback.print_exc()
                     sys.exit(1)
                 except ImportError as e:
                     logger.error(f"❌ Missing dependency: {e}")
+                    if logger.level <= logging.DEBUG:
+                        traceback.print_exc()
                     sys.exit(1)
                 except Exception as e:
                     # Fallback - check if it looks like a syntax/parsing error
@@ -250,6 +260,8 @@ def main():
                         logger.error(f"❌ Error processing hybrid syntax file: {e}")
                     else:
                         logger.error(f"❌ Runtime error: {e}")
+                    # Always show traceback for unexpected errors
+                    traceback.print_exc()
                     sys.exit(1)
             else:
                 # Regular Python file
@@ -259,6 +271,7 @@ def main():
                     sys.exit(0)
                 except Exception as e:
                     logger.error(f"❌ Error executing script: {e}")
+                    traceback.print_exc()
                     sys.exit(1)
         else:
             # Interactive mode - needs async
