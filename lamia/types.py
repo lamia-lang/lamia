@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, Optional, Union, List
+from typing import TypeVar, Generic, Optional, Union, List, Set
 from datetime import timedelta
 from pydantic import BaseModel
 from dataclasses import dataclass
@@ -134,3 +134,30 @@ class HttpAction(BaseModel):
     
     class Config:
         use_enum_values = True
+
+# Actions that use selectors and support fallback chains
+SELECTOR_BASED_ACTIONS: Set[BrowserActionType] = {
+    BrowserActionType.CLICK,
+    BrowserActionType.TYPE,
+    BrowserActionType.WAIT,
+    BrowserActionType.GET_TEXT,
+    BrowserActionType.HOVER,
+    BrowserActionType.SELECT,
+    BrowserActionType.IS_VISIBLE,
+    BrowserActionType.IS_ENABLED,
+}
+
+# Map method names to action types
+WEB_METHOD_TO_ACTION = {
+    'click': BrowserActionType.CLICK,
+    'type_text': BrowserActionType.TYPE,
+    'wait_for': BrowserActionType.WAIT,
+    'get_text': BrowserActionType.GET_TEXT,
+    'hover': BrowserActionType.HOVER,
+    'scroll_to': BrowserActionType.SCROLL,
+    'select_option': BrowserActionType.SELECT,
+    'submit_form': BrowserActionType.SUBMIT,
+    'screenshot': BrowserActionType.SCREENSHOT,
+    'is_visible': BrowserActionType.IS_VISIBLE,
+    'is_enabled': BrowserActionType.IS_ENABLED
+}
