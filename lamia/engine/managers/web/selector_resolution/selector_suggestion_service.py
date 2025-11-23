@@ -94,8 +94,8 @@ FAILED SELECTOR: {failed_selector}
 
 OPERATION: {operation_desc}
 
-PAGE HTML:
-{page_html[:15000]}  # Limit HTML to prevent token overflow
+PAGE HTML (compact skeleton):
+{page_html}
 
 Your task is to analyze the HTML and suggest up to {max_suggestions} alternative CSS selectors that might work.
 
