@@ -12,6 +12,7 @@ import ast
 import re
 from typing import Dict, Optional, List, Any
 from ..detectors.llm_command_detector import LLMCommandDetector
+from lamia.types import WEB_METHOD_TO_ACTION, SELECTOR_BASED_ACTIONS
 
 
 class HybridSyntaxTransformer(ast.NodeTransformer):
@@ -295,22 +296,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         """Transform a web.method_name() call into WebCommand AST."""
         method_name = node.func.attr
         
-        # Map web methods to WebActionType
-        method_mapping = {
-            'click': 'CLICK',
-            'type_text': 'TYPE',
-            'wait_for': 'WAIT',
-            'get_text': 'GET_TEXT',
-            'hover': 'HOVER',
-            'scroll_to': 'SCROLL',
-            'select_option': 'SELECT',
-            'submit_form': 'SUBMIT',
-            'screenshot': 'SCREENSHOT',
-            'is_visible': 'IS_VISIBLE',
-            'is_enabled': 'IS_ENABLED'
-        }
-        
-        action_type = method_mapping.get(method_name)
+        action_type = WEB_METHOD_TO_ACTION.get(method_name)
         if action_type:
             return self._create_web_command_ast(action_type, node.args)
         
@@ -338,10 +324,35 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             )
         
         # Add value from second argument if present (for type_text, select_option)
-        if len(args) > 1 and action_type in ['TYPE', 'SELECT']:
-            keywords.append(
-                ast.keyword(arg='value', value=args[1])
+        if len(args) > 1:
+            if action_type in ['TYPE', 'SELECT']:
+                keywords.append(
+                    ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[1:-1], ctx=ast.Load()))
+                )
+                keywords.append(
+                    ast.keyword(arg='value', value=args[-1])
+                )
+            elif action_type in SELECTOR_BASED_ACTIONS:
+                keywords.append(
+                    ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[1:], ctx=ast.Load()))
+                )
+
+        debug_print = ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id='print', ctx=ast.Load()),
+                args=[
+                    ast.Constant(value='WebCommand created with fallback_selectors:'),
+                    ast.Attribute(
+                        value=ast.Name(id='WebCommand', ctx=ast.Load()),
+                        attr='fallback_selectors',
+                        ctx=ast.Load()
+                    )
+                ],
+                keywords=[]
             )
+        )
+
+
         
         return ast.Call(
             func=ast.Name(id='WebCommand', ctx=ast.Load()),

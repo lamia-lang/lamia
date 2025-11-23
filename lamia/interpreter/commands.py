@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 from enum import Enum
 from .command_types import CommandType
 
@@ -65,6 +65,7 @@ class WebCommand(Command):
     data: Optional[Union[Dict[str, Any], str]] = None
     timeout: Optional[float] = None
     selector: Optional[str] = None  # For browser actions
+    fallback_selectors: Optional[List[str]] = None
     value: Optional[str] = None  # For input actions
     
     def __post_init__(self):

@@ -86,7 +86,6 @@ class Lamia:
         # Handle Command objects vs strings differently
         if isinstance(command, Command):
             # Command object passed directly - skip Python execution and parsing
-            print(f"Command: {command.get_primary_content()}")
             parsed_command = command
         else:
             # String command - try Python first, then parse
