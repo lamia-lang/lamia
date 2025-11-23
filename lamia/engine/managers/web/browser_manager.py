@@ -12,6 +12,8 @@ from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
 from lamia.adapters.web.driver_scope_manager import get_scope_manager
 from .selector_resolution.selector_resolution_service import SelectorResolutionService
 from .selector_resolution.selector_suggestion_service import SelectorSuggestionService
+from lamia.errors import ExternalOperationPermanentError, ExternalOperationTransientError
+from .selector_resolution.failed_selector_handler import FailedSelectorHandler
 from typing import Optional, Any
 import logging
 
@@ -47,6 +49,8 @@ class BrowserManager:
         self._selector_resolution_service = None
         self._selector_suggestion_service = None
         self._browser_adapter = None
+
+        self.failed_selector_handler = None
     
     async def execute(self, command: WebCommand, validator: Optional[BaseValidator] = None) -> Any:
         """Execute browser command with AI selector resolution.
@@ -118,6 +122,7 @@ class BrowserManager:
         else:
             params = BrowserActionParams(
                 selector=command.selector,
+                fallback_selectors=command.fallback_selectors,
                 value=command.value
             )
         
@@ -205,12 +210,14 @@ class BrowserManager:
         # Check if this action uses selectors
         if action.action in self.SELECTOR_BASED_ACTIONS and action.params.fallback_selectors:
             # Use selector chain logic
+            print("Using selectors logic...")
             return await self._execute_with_selector_chain(action, adapter)
         else:
             # Direct execution (no selector chain needed)
+            print("Not using selectors logic...", action.action, self.SELECTOR_BASED_ACTIONS, action.params.fallback_selectors)
             return await self._execute_single_action(action, adapter)
 
-    async def _execute_with_selector_chain(self, action: BrowserAction, adapter) -> Any:
+    async def _execute_with_selector_chain(self, action: BrowserAction, adapter: BaseBrowserAdapter) -> Any:
         """Execute action with selector chain fallback."""
         params = action.params
         selectors = [params.selector] + (params.fallback_selectors or [])
@@ -233,14 +240,15 @@ class BrowserManager:
                 )
                 return await self._execute_single_action(action_with_single_selector, adapter)
                 
-            except ExternalOperationPermanentError as e:
+            except (ExternalOperationPermanentError, ExternalOperationTransientError) as e:
                 if i == len(selectors) - 1:
                     # All selectors failed
+                    if self.failed_selector_handler is None:
+                        self.failed_selector_handler = FailedSelectorHandler(self._selector_suggestion_service, await self.get_current_url(), await self.get_page_source())
                     await self.failed_selector_handler.handle_all_selectors_failed(
-                        method_name=action.action.value,
+                        method_name=action.action,
                         selectors=selectors,
-                        last_error=e,
-                        adapter=adapter
+                        last_error=e
                     )
                 # Try next selector
                 continue
@@ -397,13 +405,7 @@ class BrowserManager:
     async def get_current_url(self) -> str:
         """Get current page URL.""" 
         adapter = await self._get_browser_adapter()
-        if hasattr(adapter, 'get_current_url'):
-            return await adapter.get_current_url()
-        elif hasattr(adapter, 'driver') and hasattr(adapter.driver, 'current_url'):
-            return adapter.driver.current_url
-        else:
-            logger.warning("Browser adapter doesn't support URL retrieval")
-            return "unknown"
+        return await adapter.get_current_url()
     
     async def get_page_source(self) -> str:
         """Get current page HTML source."""
