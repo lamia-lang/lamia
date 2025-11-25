@@ -124,6 +124,12 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
             lambda: self.adapter.get_page_source()
         )
     
+    async def is_dom_stable(self) -> bool:
+        """Check if DOM is stable with retry."""
+        return await self.retry_handler.execute(
+            lambda: self.adapter.is_dom_stable()
+        )
+    
     # --- Session/profile contract proxies ---
     def set_profile(self, profile_name: Optional[str]) -> None:
         # Synchronous operation, just forward

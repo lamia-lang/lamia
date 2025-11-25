@@ -2,6 +2,7 @@
 
 from .base import ErrorClassifier
 from .categories import ErrorCategory
+from lamia.errors import ExternalOperationPermanentError, ExternalOperationTransientError, ExternalOperationRateLimitError
 
 # Browser permanent error patterns
 BROWSER_PERMANENT_PATTERNS = [
@@ -49,6 +50,14 @@ class BrowserErrorClassifier(ErrorClassifier):
         Returns:
             ErrorCategory for retry behavior (no RATE_LIMIT for browsers)
         """
+        # Respect explicit error types from adapters
+        if isinstance(error, ExternalOperationPermanentError):
+            return ErrorCategory.PERMANENT
+        if isinstance(error, ExternalOperationTransientError):
+            return ErrorCategory.TRANSIENT
+        if isinstance(error, ExternalOperationRateLimitError):
+            return ErrorCategory.RATE_LIMIT
+        
         error_msg = str(error).lower()
         
         # Check for permanent errors first (rare for browsers)

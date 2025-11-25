@@ -1,6 +1,12 @@
 """Playwright adapter for browser automation."""
 
-from .base import BaseBrowserAdapter
+from .base import (
+    BaseBrowserAdapter,
+    DOM_STABILITY_CHECK_SCRIPT,
+    DOM_STABLE_MUTATION_QUIET_MS,
+    DOM_STABILITY_TRACKER_BOOTSTRAP,
+)
+from lamia.errors import ExternalOperationTransientError, ExternalOperationPermanentError
 from lamia.internal_types import BrowserActionParams, SelectorType
 from ..session_manager import SessionManager
 import logging
@@ -10,7 +16,15 @@ import asyncio
 import json
 
 try:
-    from playwright.async_api import async_playwright, Browser, Page, Playwright, BrowserContext
+    from playwright.async_api import (
+        async_playwright,
+        Browser,
+        Page,
+        Playwright,
+        BrowserContext,
+        TimeoutError as PlaywrightTimeoutError,
+        Error as PlaywrightError,
+    )
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
@@ -38,6 +52,68 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         if self.session_manager and self.session_manager.enabled:
             self.use_persistent_context = True
             logger.info(f"Session persistence enabled for profile: {self.profile_name}")
+    
+    def _require_selector(self, params: BrowserActionParams) -> str:
+        """Ensure selector is present for selector-based actions."""
+        if not params.selector:
+            raise ExternalOperationPermanentError(
+                "Selector is required for this browser action",
+                retry_history=[]
+            )
+        return params.selector
+    
+    async def _ensure_dom_tracker(self) -> None:
+        """Ensure the DOM stability tracker bootstrap script is installed."""
+        if not self.page:
+            return
+        try:
+            await self.page.evaluate(DOM_STABILITY_TRACKER_BOOTSTRAP)
+        except Exception as exc:
+            logger.debug(f"PlaywrightAdapter: DOM tracker bootstrap failed: {exc}")
+
+    def _has_quiet_dom_window(self, raw_value: Any) -> bool:
+        """Return True if the DOM has been mutation-free for the configured quiet window."""
+        try:
+            time_since_mutation = float(raw_value)
+        except (TypeError, ValueError):
+            time_since_mutation = float("inf")
+        return time_since_mutation >= DOM_STABLE_MUTATION_QUIET_MS
+    
+    async def _raise_dom_classified_error(self, message: str, original_error: Exception) -> None:
+        """Raise permanent or transient error based on DOM stability."""
+        if await self.is_dom_stable():
+            raise ExternalOperationPermanentError(
+                f"{message} (DOM stable)",
+                retry_history=[],
+                original_error=original_error
+            )
+        raise ExternalOperationTransientError(
+            f"{message} (DOM still changing)",
+            retry_history=[],
+            original_error=original_error
+        )
+    
+    async def is_dom_stable(self) -> bool:
+        """Check if DOM is currently stable (no ongoing loads/changes)."""
+        if not self.initialized or not self.page:
+            return False
+        
+        try:
+            await self._ensure_dom_tracker()
+            result = await self.page.evaluate(DOM_STABILITY_CHECK_SCRIPT) or {}
+            return (
+                bool(result.get("readyStateComplete"))
+                and int(result.get("pendingFetches", 0) or 0) == 0
+                and int(result.get("pendingXhrs", 0) or 0) == 0
+                and self._has_quiet_dom_window(result.get("timeSinceMutation"))
+            )
+        except Exception:
+            # Assume unstable if evaluation fails to avoid false permanent errors
+            return False
+    
+    def _get_timeout_ms(self, params: BrowserActionParams) -> float:
+        """Return timeout in milliseconds for Playwright operations."""
+        return params.timeout * 1000 if params.timeout else self.default_timeout
     
     async def initialize(self) -> None:
         """Initialize the Playwright browser."""
@@ -74,6 +150,7 @@ class PlaywrightAdapter(BaseBrowserAdapter):
                     await self._load_session_data()
             
             self.page.set_default_timeout(self.default_timeout)
+            await self._ensure_dom_tracker()
             self.initialized = True
             logger.info("PlaywrightAdapter: Chromium browser initialized")
         except Exception as e:
@@ -154,21 +231,33 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         url = params.value
         logger.info(f"PlaywrightAdapter: Navigate to {url}")
         await self.page.goto(url)
+        await self._ensure_dom_tracker()
     
     async def click(self, params: BrowserActionParams) -> None:
         """Click an element."""
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        logger.info(f"PlaywrightAdapter: Click element {params.selector}")
-        playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
-        timeout = params.timeout * 1000 if params.timeout else self.default_timeout
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Click element {selector}")
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        timeout = self._get_timeout_ms(params)
         
-        await self.page.click(playwright_selector, timeout=timeout)
-        logger.info(f"PlaywrightAdapter: Successfully clicked {params.selector}")
-        
-        # Wait for DOM stabilization after click
-        await self._wait_for_dom_stability()
+        try:
+            await self.page.click(playwright_selector, timeout=timeout)
+            logger.info(f"PlaywrightAdapter: Successfully clicked {selector}")
+            await self._wait_for_dom_stability()
+        except PlaywrightTimeoutError as e:
+            await self._raise_dom_classified_error(
+                f"Element '{selector}' not clickable",
+                e
+            )
+        except PlaywrightError as e:
+            raise ExternalOperationTransientError(
+                f"Click failed for '{selector}': {e}",
+                retry_history=[],
+                original_error=e
+            )
     
     async def type_text(self, params: BrowserActionParams) -> None:
         """Type text into an element."""
@@ -176,11 +265,24 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         text = params.value
-        logger.info(f"PlaywrightAdapter: Type '{text}' into {params.selector}")
-        playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
-        timeout = params.timeout * 1000 if params.timeout else self.default_timeout
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Type '{text}' into {selector}")
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        timeout = self._get_timeout_ms(params)
         
-        await self.page.fill(playwright_selector, text, timeout=timeout)
+        try:
+            await self.page.fill(playwright_selector, text, timeout=timeout)
+        except PlaywrightTimeoutError as e:
+            await self._raise_dom_classified_error(
+                f"Element '{selector}' not found for typing",
+                e
+            )
+        except PlaywrightError as e:
+            raise ExternalOperationTransientError(
+                f"Type text failed for '{selector}': {e}",
+                retry_history=[],
+                original_error=e
+            )
     
     async def wait_for_element(self, params: BrowserActionParams) -> None:
         """Wait for an element to meet a condition."""
@@ -190,31 +292,46 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         timeout = params.timeout * 1000 if params.timeout else self.default_timeout
         condition = params.wait_condition or "visible"
         
-        logger.info(f"PlaywrightAdapter: Wait for {params.selector} to be {condition}")
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Wait for {selector} to be {condition}")
         
-        playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
         
-        if condition == "visible":
-            await self.page.wait_for_selector(playwright_selector, state="visible", timeout=timeout)
-        elif condition == "hidden":
-            await self.page.wait_for_selector(playwright_selector, state="hidden", timeout=timeout)
-        elif condition == "present":
-            await self.page.wait_for_selector(playwright_selector, timeout=timeout)
-        elif condition == "clickable":
-            element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
-            await element.wait_for_element_state("stable")
+        try:
+            if condition == "visible":
+                await self.page.wait_for_selector(playwright_selector, state="visible", timeout=timeout)
+            elif condition == "hidden":
+                await self.page.wait_for_selector(playwright_selector, state="hidden", timeout=timeout)
+            elif condition == "present":
+                await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+            elif condition == "clickable":
+                element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+                await element.wait_for_element_state("stable")
+        except PlaywrightTimeoutError as e:
+            await self._raise_dom_classified_error(
+                f"Condition '{condition}' not met for '{selector}'",
+                e
+            )
     
     async def get_text(self, params: BrowserActionParams) -> str:
         """Get text content of an element."""
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        logger.info(f"PlaywrightAdapter: Get text from {params.selector}")
-        playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
-        timeout = params.timeout * 1000 if params.timeout else self.default_timeout
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Get text from {selector}")
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        timeout = self._get_timeout_ms(params)
         
-        element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
-        return await element.text_content() or ""
+        try:
+            element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+            return await element.text_content() or ""
+        except PlaywrightTimeoutError as e:
+            await self._raise_dom_classified_error(
+                f"Element '{selector}' not found for get_text",
+                e
+            )
+            return ""
     
     async def get_attribute(self, params: BrowserActionParams) -> str:
         """Get attribute value of an element."""
@@ -222,73 +339,109 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         attribute_name = params.value
-        logger.info(f"PlaywrightAdapter: Get attribute '{attribute_name}' from {params.selector}")
-        playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
-        timeout = params.timeout * 1000 if params.timeout else self.default_timeout
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Get attribute '{attribute_name}' from {selector}")
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        timeout = self._get_timeout_ms(params)
         
-        element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
-        return await element.get_attribute(attribute_name) or ""
+        try:
+            element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+            return await element.get_attribute(attribute_name) or ""
+        except PlaywrightTimeoutError as e:
+            await self._raise_dom_classified_error(
+                f"Element '{selector}' not found for get_attribute",
+                e
+            )
+            return ""
     
     async def is_visible(self, params: BrowserActionParams) -> bool:
         """Check if an element is visible."""
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
+        selector = self._require_selector(params)
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        
+        element = await self.page.query_selector(playwright_selector)
+        if not element:
+            await self._raise_dom_classified_error(
+                f"Element '{selector}' not found for visibility check",
+                PlaywrightError("Element not found")
+            )
+        
         try:
-            playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
-            element = await self.page.query_selector(playwright_selector)
-            if element:
-                visible = await element.is_visible()
-                logger.info(f"PlaywrightAdapter: Check if {params.selector} is visible -> {visible}")
-                return visible
-            else:
-                logger.info(f"PlaywrightAdapter: Check if {params.selector} is visible -> False (not found)")
-                return False
-        except Exception:
-            logger.info(f"PlaywrightAdapter: Check if {params.selector} is visible -> False (error)")
-            return False
+            visible = await element.is_visible()
+            logger.info(f"PlaywrightAdapter: Check if {selector} is visible -> {visible}")
+            return visible
+        except PlaywrightError as e:
+            raise ExternalOperationTransientError(
+                f"Visibility check failed for '{selector}': {e}",
+                retry_history=[],
+                original_error=e
+            )
     
     async def is_enabled(self, params: BrowserActionParams) -> bool:
         """Check if an element is enabled."""
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
+        selector = self._require_selector(params)
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        
+        element = await self.page.query_selector(playwright_selector)
+        if not element:
+            await self._raise_dom_classified_error(
+                f"Element '{selector}' not found for enablement check",
+                PlaywrightError("Element not found")
+            )
+        
         try:
-            playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
-            element = await self.page.query_selector(playwright_selector)
-            if element:
-                enabled = await element.is_enabled()
-                logger.info(f"PlaywrightAdapter: Check if {params.selector} is enabled -> {enabled}")
-                return enabled
-            else:
-                logger.info(f"PlaywrightAdapter: Check if {params.selector} is enabled -> False (not found)")
-                return False
-        except Exception:
-            logger.info(f"PlaywrightAdapter: Check if {params.selector} is enabled -> False (error)")
-            return False
+            enabled = await element.is_enabled()
+            logger.info(f"PlaywrightAdapter: Check if {selector} is enabled -> {enabled}")
+            return enabled
+        except PlaywrightError as e:
+            raise ExternalOperationTransientError(
+                f"Enablement check failed for '{selector}': {e}",
+                retry_history=[],
+                original_error=e
+            )
     
     async def hover(self, params: BrowserActionParams) -> None:
         """Hover over an element."""
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        logger.info(f"PlaywrightAdapter: Hover over {params.selector}")
-        playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
-        timeout = params.timeout * 1000 if params.timeout else self.default_timeout
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Hover over {selector}")
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        timeout = self._get_timeout_ms(params)
         
-        await self.page.hover(playwright_selector, timeout=timeout)
+        try:
+            await self.page.hover(playwright_selector, timeout=timeout)
+        except PlaywrightTimeoutError as e:
+            await self._raise_dom_classified_error(
+                f"Element '{selector}' not found for hover",
+                e
+            )
     
     async def scroll(self, params: BrowserActionParams) -> None:
         """Scroll to an element."""
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        logger.info(f"PlaywrightAdapter: Scroll to {params.selector}")
-        playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
-        timeout = params.timeout * 1000 if params.timeout else self.default_timeout
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Scroll to {selector}")
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        timeout = self._get_timeout_ms(params)
         
-        element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
-        await element.scroll_into_view_if_needed()
+        try:
+            element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+            await element.scroll_into_view_if_needed()
+        except PlaywrightTimeoutError as e:
+            await self._raise_dom_classified_error(
+                f"Element '{selector}' not found for scroll",
+                e
+            )
     
     async def select_option(self, params: BrowserActionParams) -> None:
         """Select an option from a dropdown."""
@@ -296,26 +449,37 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         option_value = params.value
-        logger.info(f"PlaywrightAdapter: Select option '{option_value}' in {params.selector}")
-        playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
-        timeout = params.timeout * 1000 if params.timeout else self.default_timeout
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Select option '{option_value}' in {selector}")
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        timeout = self._get_timeout_ms(params)
         
-        await self.page.select_option(playwright_selector, value=option_value, timeout=timeout)
+        try:
+            await self.page.select_option(playwright_selector, value=option_value, timeout=timeout)
+        except PlaywrightTimeoutError as e:
+            await self._raise_dom_classified_error(
+                f"Option '{option_value}' not found for '{selector}'",
+                e
+            )
     
     async def submit_form(self, params: BrowserActionParams) -> None:
         """Submit a form."""
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        logger.info(f"PlaywrightAdapter: Submit form {params.selector}")
-        playwright_selector = self._get_playwright_selector(params.selector, params.selector_type)
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Submit form {selector}")
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
         
         # Find form element and submit
         form_element = await self.page.query_selector(playwright_selector)
         if form_element:
             await form_element.evaluate("form => form.submit()")
         else:
-            raise Exception(f"Form not found with selector: {params.selector}")
+            await self._raise_dom_classified_error(
+                f"Form '{selector}' not found",
+                PlaywrightError("Form element not found")
+            )
     
     async def take_screenshot(self, params: BrowserActionParams) -> str:
         """Take a screenshot."""
@@ -344,30 +508,34 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         if self.page:
-            return await self.page.url
+            return self.page.url
         else:
             return None
     
-    async def _wait_for_dom_stability(self, timeout: float = 2000):
+    async def _wait_for_dom_stability(self, timeout: float = 2.0, check_interval: float = 0.1):
         """Wait for DOM to stabilize after a click action."""
         logger.info("PlaywrightAdapter: Waiting for DOM stability after click")
-        start_time = time.time()
-        
         try:
-            # Wait for network idle (no network requests for 500ms)
-            await self.page.wait_for_load_state("networkidle", timeout=timeout)
-            elapsed = time.time() - start_time
-            logger.info(f"PlaywrightAdapter: DOM stabilized in {elapsed:.2f}s")
-        except Exception:
-            try:
-                # Fallback: wait for DOM content to be ready
-                await self.page.wait_for_load_state("domcontentloaded", timeout=1000)
-                elapsed = time.time() - start_time
-                logger.info(f"PlaywrightAdapter: DOM content loaded in {elapsed:.2f}s")
-            except Exception as e:
-                # Final fallback: short sleep
-                logger.warning(f"PlaywrightAdapter: DOM stability check failed ({e}), using fallback wait")
-                await asyncio.sleep(0.5)
+            await self._ensure_dom_tracker()
+            start_time = time.time()
+            stable_checks = 0
+            
+            while time.time() - start_time < timeout:
+                if await self.is_dom_stable():
+                    stable_checks += 1
+                    if stable_checks >= 3:
+                        elapsed = time.time() - start_time
+                        logger.info(f"PlaywrightAdapter: DOM stabilized in {elapsed:.2f}s")
+                        return
+                else:
+                    stable_checks = 0
+                
+                await asyncio.sleep(check_interval)
+            
+            logger.warning("PlaywrightAdapter: DOM stability wait timed out, proceeding anyway")
+        except Exception as e:
+            logger.warning(f"PlaywrightAdapter: DOM stability check failed ({e}), using fallback wait")
+            await asyncio.sleep(0.5)
     
     async def _load_session_data(self):
         """Load session data (cookies, local storage) from files."""
