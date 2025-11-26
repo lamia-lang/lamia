@@ -2,7 +2,7 @@
 
 import logging
 from typing import Optional, Callable, Awaitable
-from .selector_cache import SelectorCache
+from .ai_selector_cache import AISelectorCache
 from .selector_parser import SelectorParser, SelectorType
 from .response_parser import ResponseParser, AmbiguousFormatResponseParser
 from lamia.interpreter.commands import LLMCommand

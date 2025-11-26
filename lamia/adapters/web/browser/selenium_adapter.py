@@ -6,6 +6,7 @@ from .base import (
     DOM_STABLE_MUTATION_QUIET_MS,
     DOM_STABILITY_TRACKER_BOOTSTRAP,
 )
+from lamia.engine.managers.web.selector_resolution.failed_selector_cache import FailedSelectorCache
 from lamia.errors import ExternalOperationTransientError, ExternalOperationPermanentError
 from lamia.internal_types import BrowserActionParams, SelectorType
 from ..session_manager import SessionManager
@@ -49,6 +50,9 @@ class SeleniumAdapter(BaseBrowserAdapter):
             self.profile_name = profile_name
         else:
             self.profile_name = "default"
+        
+        # Failed selector cache to skip known-failed selectors on repeated runs
+        self.failed_selector_cache = FailedSelectorCache()
         
         print(f"TO DELETE: session_manager={self.session_manager}, enabled={self.session_manager.enabled if self.session_manager else 'N/A'}")
         if self.session_manager and self.session_manager.enabled:
@@ -225,8 +229,24 @@ class SeleniumAdapter(BaseBrowserAdapter):
         timeout = params.timeout or self.default_timeout
         last_error: Optional[Exception] = None
         last_selector = selector_chain[-1]
+        
+        # Get current URL for cache lookups
+        try:
+            current_url = self.driver.current_url if self.driver else ""
+        except AttributeError:
+            current_url = ""
+        
+        # Track which selectors we actually tried (not skipped from cache)
+        tried_selectors: List[str] = []
 
         for selector in selector_chain:
+            # Skip selectors known to permanently fail on this page
+            if self.failed_selector_cache.is_known_failed(selector, current_url):
+                logger.info(f"SeleniumAdapter: Skipping cached-failed selector '{selector}'")
+                continue
+            
+            tried_selectors.append(selector)
+            
             try:
                 by, value = self._get_by_locator(selector, params.selector_type)
                 element = self._wait_for_presence(by, value, timeout)
@@ -250,6 +270,11 @@ class SeleniumAdapter(BaseBrowserAdapter):
                 )
             except Exception as e:
                 raise ExternalOperationPermanentError(f"Permanent error: {str(e)}", retry_history=[], original_error=e)
+
+        # All selectors failed - cache them if DOM is stable (permanent failure)
+        if last_error and self._is_dom_stable_sync():
+            for selector in tried_selectors:
+                self.failed_selector_cache.mark_failed(selector, current_url)
 
         if last_error:
             self._raise_dom_classified_error(f"Element '{last_selector}' not found", last_error)

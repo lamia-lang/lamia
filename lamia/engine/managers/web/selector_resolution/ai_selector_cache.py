@@ -8,7 +8,7 @@ from typing import Optional, Dict, Tuple
 logger = logging.getLogger(__name__)
 
 
-class SelectorCache:
+class AISelectorCache:
     """Filesystem-based cache for AI-resolved selectors to avoid repeated LLM calls."""
     
     def __init__(self, cache_enabled: bool = True, cache_dir_name: str = '.lamia_cache'):
