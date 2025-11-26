@@ -8,7 +8,8 @@ import re
 from typing import Optional
 logger = logging.getLogger(__name__)
 
-class FailedSelectorHandler:
+class AllSelectorsFailedHandler:
+  """Handles the case when all selectors failed by saving debug files and optionally calling AI."""
 
   def __init__(self, suggestion_service: Optional[SelectorSuggestionService], url: str, html: str):
       self.suggestion_service = suggestion_service

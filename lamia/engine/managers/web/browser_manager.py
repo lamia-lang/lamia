@@ -13,7 +13,7 @@ from lamia.adapters.web.driver_scope_manager import get_scope_manager
 from .selector_resolution.selector_resolution_service import SelectorResolutionService
 from .selector_resolution.selector_suggestion_service import SelectorSuggestionService
 from lamia.errors import ExternalOperationPermanentError, ExternalOperationTransientError
-from .selector_resolution.failed_selector_handler import FailedSelectorHandler
+from .selector_resolution.all_selectors_failed_handler import AllSelectorsFailedHandler
 from typing import Optional, Any
 import logging
 
@@ -47,7 +47,7 @@ class BrowserManager:
         self._selector_suggestion_service = None
         self._browser_adapter = None
 
-        self.failed_selector_handler = None
+        self.all_selectors_failed_handler = None
     
     async def execute(self, command: WebCommand, validator: Optional[BaseValidator] = None) -> Any:
         """Execute browser command with AI selector resolution.
@@ -238,9 +238,9 @@ class BrowserManager:
             except (ExternalOperationPermanentError, ExternalOperationTransientError) as e:
                 if i == len(selectors) - 1:
                     # All selectors failed
-                    if self.failed_selector_handler is None:
-                        self.failed_selector_handler = FailedSelectorHandler(self._selector_suggestion_service, await self.get_current_url(), await self.get_page_source())
-                    await self.failed_selector_handler.handle_all_selectors_failed(
+                    if self.all_selectors_failed_handler is None:
+                        self.all_selectors_failed_handler = AllSelectorsFailedHandler(self._selector_suggestion_service, await self.get_current_url(), await self.get_page_source())
+                    await self.all_selectors_failed_handler.handle_all_selectors_failed(
                         method_name=action.action,
                         selectors=selectors,
                         last_error=e
