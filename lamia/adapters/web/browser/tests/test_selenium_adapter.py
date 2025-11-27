@@ -108,6 +108,9 @@ def test_find_element_falls_back_to_secondary_selector(monkeypatch):
     adapter = SeleniumAdapter()
     adapter.initialized = True
     adapter.driver = cast(ChromeWebDriver, object())
+    
+    # Clear cache to ensure clean test
+    adapter.selector_cache.clear_all()
 
     attempted: List[str] = []
 

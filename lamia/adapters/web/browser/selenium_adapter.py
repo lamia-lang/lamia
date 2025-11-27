@@ -228,7 +228,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         Cache strategy:
         1. Check if we have a cached successful selector for this chain
         2. If yes, try it first (fast path)
-        3. If cached selector fails, invalidate and try full chain
+        3. If cached selector fails, invalidate and try full chain (skipping the failed cached one)
         4. When any selector succeeds, cache it for next time
         """
         self._require_selector(params)
@@ -244,6 +244,9 @@ class SeleniumAdapter(BaseBrowserAdapter):
         # Use first selector as cache key for this chain
         cache_key = selector_chain[0]
         
+        # Track which selector to skip (if cached one failed)
+        skip_selector: Optional[str] = None
+        
         # Fast path: try cached successful selector first
         cached_selector = self.selector_cache.get_cached_selector(cache_key, current_url)
         if cached_selector:
@@ -254,8 +257,9 @@ class SeleniumAdapter(BaseBrowserAdapter):
                 return element, cached_selector
             except (TimeoutException, NoSuchElementException):
                 # Cached selector no longer works - invalidate and try full chain
-                logger.info(f"SeleniumAdapter: Cached selector '{cached_selector}' failed, trying full chain")
+                logger.info(f"SeleniumAdapter: Cached selector '{cached_selector}' failed, trying other selectors")
                 self.selector_cache.invalidate(cache_key, current_url)
+                skip_selector = cached_selector  # Don't try it again in the loop below
             except WebDriverException as e:
                 raise ExternalOperationTransientError(
                     f"WebDriver issue while searching for cached selector '{cached_selector}': {str(e)}",
@@ -263,11 +267,16 @@ class SeleniumAdapter(BaseBrowserAdapter):
                     original_error=e
                 )
         
-        # Full chain: try each selector in order
+        # Full chain: try each selector in order (skipping the one that just failed from cache)
         last_error: Optional[Exception] = None
         last_selector = selector_chain[-1]
 
         for selector in selector_chain:
+            # Skip the cached selector that already failed
+            if skip_selector and selector == skip_selector:
+                logger.debug(f"SeleniumAdapter: Skipping '{selector}' (already tried from cache)")
+                continue
+            
             try:
                 by, value = self._get_by_locator(selector, params.selector_type)
                 element = self._wait_for_presence(by, value, timeout)
