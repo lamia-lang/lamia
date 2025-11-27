@@ -245,8 +245,11 @@ class BrowserManager:
                         selectors=selectors,
                         last_error=e
                     )
+                    # if all_selectors_failed_handler is not raising error (when ai suggesting) we need to raise the original error (on the last selector for now)
+                    raise e
                 # Try next selector
                 continue
+            
 
     async def _execute_single_action(self, action: BrowserAction, adapter) -> Any:
         """Execute single action without selector chain logic."""

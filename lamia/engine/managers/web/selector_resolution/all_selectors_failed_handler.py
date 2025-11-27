@@ -90,6 +90,7 @@ class AllSelectorsFailedHandler:
                   f"   Review the debug files manually.",
                   f""
               ])
+              raise e
       else:
           # Show manual instructions
           skeleton_file_path = html_file.replace('.html', '_skeleton.html')
