@@ -117,7 +117,7 @@ class AllSelectorsFailedHandler:
       error_msg = "\n".join(error_lines)
       logger.error(error_msg)
       raise ExternalOperationTransientError(
-          error_msg,
+          "Element not found after all retries",
           retry_history=last_error.retry_history,
           original_error=last_error.original_error
       )
