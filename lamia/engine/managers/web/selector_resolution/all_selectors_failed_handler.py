@@ -116,11 +116,6 @@ class AllSelectorsFailedHandler:
       
       error_msg = "\n".join(error_lines)
       logger.error(error_msg)
-      raise ExternalOperationTransientError(
-          "Element not found after all retries",
-          retry_history=last_error.retry_history,
-          original_error=last_error.original_error
-      )
   
   async def _save_error_files_for_failed_selector_resolution(
       self,
