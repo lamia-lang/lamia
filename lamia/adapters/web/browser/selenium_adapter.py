@@ -6,7 +6,7 @@ from .base import (
     DOM_STABLE_MUTATION_QUIET_MS,
     DOM_STABILITY_TRACKER_BOOTSTRAP,
 )
-from lamia.engine.managers.web.selector_resolution.failed_selector_cache import FailedSelectorCache
+from lamia.engine.managers.web.selector_resolution.successful_selector_cache import SuccessfulSelectorCache
 from lamia.errors import ExternalOperationTransientError, ExternalOperationPermanentError
 from lamia.internal_types import BrowserActionParams, SelectorType
 from ..session_manager import SessionManager
@@ -51,8 +51,8 @@ class SeleniumAdapter(BaseBrowserAdapter):
         else:
             self.profile_name = "default"
         
-        # Failed selector cache to skip known-failed selectors on repeated runs
-        self.failed_selector_cache = FailedSelectorCache()
+        # Successful selector cache to skip directly to working selectors on repeated runs
+        self.selector_cache = SuccessfulSelectorCache()
         
         print(f"TO DELETE: session_manager={self.session_manager}, enabled={self.session_manager.enabled if self.session_manager else 'N/A'}")
         if self.session_manager and self.session_manager.enabled:
@@ -223,12 +223,17 @@ class SeleniumAdapter(BaseBrowserAdapter):
             return (By.CSS_SELECTOR, selector)
     
     def _find_element(self, params: BrowserActionParams):
-        """Find element with single selector, translating exceptions to semantic types."""
+        """Find element with selector chain, using cache for optimization.
+        
+        Cache strategy:
+        1. Check if we have a cached successful selector for this chain
+        2. If yes, try it first (fast path)
+        3. If cached selector fails, invalidate and try full chain
+        4. When any selector succeeds, cache it for next time
+        """
         self._require_selector(params)
         selector_chain = self._selector_chain(params)
         timeout = params.timeout or self.default_timeout
-        last_error: Optional[Exception] = None
-        last_selector = selector_chain[-1]
         
         # Get current URL for cache lookups
         try:
@@ -236,20 +241,40 @@ class SeleniumAdapter(BaseBrowserAdapter):
         except AttributeError:
             current_url = ""
         
-        # Track which selectors we actually tried (not skipped from cache)
-        tried_selectors: List[str] = []
+        # Use first selector as cache key for this chain
+        cache_key = selector_chain[0]
+        
+        # Fast path: try cached successful selector first
+        cached_selector = self.selector_cache.get_cached_selector(cache_key, current_url)
+        if cached_selector:
+            try:
+                by, value = self._get_by_locator(cached_selector, params.selector_type)
+                element = self._wait_for_presence(by, value, timeout)
+                logger.debug(f"SeleniumAdapter: Cache hit - using '{cached_selector}'")
+                return element, cached_selector
+            except (TimeoutException, NoSuchElementException):
+                # Cached selector no longer works - invalidate and try full chain
+                logger.info(f"SeleniumAdapter: Cached selector '{cached_selector}' failed, trying full chain")
+                self.selector_cache.invalidate(cache_key, current_url)
+            except WebDriverException as e:
+                raise ExternalOperationTransientError(
+                    f"WebDriver issue while searching for cached selector '{cached_selector}': {str(e)}",
+                    retry_history=[],
+                    original_error=e
+                )
+        
+        # Full chain: try each selector in order
+        last_error: Optional[Exception] = None
+        last_selector = selector_chain[-1]
 
         for selector in selector_chain:
-            # Skip selectors known to permanently fail on this page
-            if self.failed_selector_cache.is_known_failed(selector, current_url):
-                logger.info(f"SeleniumAdapter: Skipping cached-failed selector '{selector}'")
-                continue
-            
-            tried_selectors.append(selector)
-            
             try:
                 by, value = self._get_by_locator(selector, params.selector_type)
                 element = self._wait_for_presence(by, value, timeout)
+                
+                # Success! Cache this selector for next time
+                self.selector_cache.cache_successful(cache_key, selector, current_url)
+                
                 if selector != selector_chain[0]:
                     logger.info(
                         "SeleniumAdapter: Primary selector '%s' failed, using fallback '%s'",
@@ -271,11 +296,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
             except Exception as e:
                 raise ExternalOperationPermanentError(f"Permanent error: {str(e)}", retry_history=[], original_error=e)
 
-        # All selectors failed - cache them if DOM is stable (permanent failure)
-        if last_error and self._is_dom_stable_sync():
-            for selector in tried_selectors:
-                self.failed_selector_cache.mark_failed(selector, current_url)
-
+        # All selectors failed
         if last_error:
             self._raise_dom_classified_error(f"Element '{last_selector}' not found", last_error)
 
