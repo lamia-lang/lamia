@@ -12,7 +12,11 @@ import ast
 import re
 from typing import Dict, Optional, List, Any
 from ..detectors.llm_command_detector import LLMCommandDetector
-from lamia.internal_types import WEB_METHOD_TO_ACTION, SELECTOR_BASED_ACTIONS
+from lamia.internal_types import (
+    WEB_METHOD_TO_ACTION,
+    SELECTOR_BASED_ACTIONS,
+    BrowserActionType,
+)
 
 
 class HybridSyntaxTransformer(ast.NodeTransformer):
@@ -303,15 +307,22 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         # If method not recognized, return original node
         return node
     
-    def _create_web_command_ast(self, action_type: str, args: list):
+    def _create_web_command_ast(self, action_type, args: list):
         """Create AST for WebCommand construction."""
+        action_type_enum: BrowserActionType
+        if isinstance(action_type, BrowserActionType):
+            action_type_enum = action_type
+        else:
+            action_type_enum = BrowserActionType[str(action_type).upper()]
+        action_attr_name = action_type_enum.name
+
         # Create WebCommand(action=WebActionType.ACTION, ...)
         keywords = [
             ast.keyword(
                 arg='action',
                 value=ast.Attribute(
                     value=ast.Name(id='WebActionType', ctx=ast.Load()),
-                    attr=action_type,
+                    attr=action_attr_name,
                     ctx=ast.Load()
                 )
             )
@@ -325,14 +336,14 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         
         # Add value from second argument if present (for type_text, select_option)
         if len(args) > 1:
-            if action_type in ['TYPE', 'SELECT']:
+            if action_type_enum in {BrowserActionType.TYPE, BrowserActionType.SELECT}:
                 keywords.append(
                     ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[1:-1], ctx=ast.Load()))
                 )
                 keywords.append(
                     ast.keyword(arg='value', value=args[-1])
                 )
-            elif action_type in SELECTOR_BASED_ACTIONS:
+            elif action_type_enum in SELECTOR_BASED_ACTIONS:
                 keywords.append(
                     ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[1:], ctx=ast.Load()))
                 )
