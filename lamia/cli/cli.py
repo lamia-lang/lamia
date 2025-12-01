@@ -12,7 +12,13 @@ import runpy
 import traceback
 
 from lamia import Lamia
-from lamia.errors import MissingAPIKeysError, ExternalOperationTransientError, ExternalOperationPermanentError, ExternalOperationRateLimitError
+from lamia.errors import (
+    MissingAPIKeysError,
+    ExternalOperationTransientError,
+    ExternalOperationPermanentError,
+    ExternalOperationRateLimitError,
+    ExternalOperationError,
+)
 from .scaffold import create_minimal_config, ensure_extensions_folder, update_config_with_extensions, create_env_file
 from .cli_styling import setup_cli_logging
 from lamia.interpreter.command_types import CommandType
@@ -228,19 +234,13 @@ def main():
                     executor.execute_file(prompt_file, enable_lazy_dependency_loading=True)
                     sys.exit(0)
                 except ExternalOperationTransientError as e:
-                    logger.error(f"❌ External operation failed after all retries: {e}")
-                    if logger.level <= logging.DEBUG:
-                        traceback.print_exc()
+                    _log_external_error("❌ External operation failed after all retries", e)
                     sys.exit(1)
                 except ExternalOperationPermanentError as e:
-                    logger.error(f"❌ Permanent failure: {e}")
-                    if logger.level <= logging.DEBUG:
-                        traceback.print_exc()
+                    _log_external_error("❌ Permanent failure", e)
                     sys.exit(1)
                 except ExternalOperationRateLimitError as e:
-                    logger.error(f"❌ Rate limit exceeded: {e}")
-                    if logger.level <= logging.DEBUG:
-                        traceback.print_exc()
+                    _log_external_error("❌ Rate limit exceeded", e)
                     sys.exit(1)
                 except SyntaxError as e:
                     logger.error(f"❌ Syntax error in hybrid file: {e}")
@@ -292,6 +292,14 @@ def main():
     except KeyboardInterrupt:
         logger.info("\n\nGoodbye! 👋")
         sys.exit(0)
+
+
+def _log_external_error(prefix: str, exc: Exception) -> None:
+    """Log user-facing external errors without stack traces unless debugging."""
+    logger.error(f"{prefix}: {exc}")
+    should_show_trace = logger.level <= logging.DEBUG and not isinstance(exc, ExternalOperationError)
+    if should_show_trace:
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main() 

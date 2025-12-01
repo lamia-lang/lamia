@@ -93,25 +93,22 @@ class RetryHandler:
                         'attempt': attempts
                     })
 
-                error_category = self.error_classifier.classify_error(e)
+                error_category = self._derive_error_category(e)
                 logger.debug(f"External error classified as {error_category} on attempt {attempts}: {type(e).__name__}")
                 
-                if error_category == ErrorCategory.PERMANENT or attempts >= self.config.max_attempts:
+                should_abort = (
+                    error_category == ErrorCategory.PERMANENT
+                    or attempts >= self.config.max_attempts
+                )
+
+                if should_abort:
                     if self.stats:
                         self.stats.total_operations += 1
                         self.stats.failed_operations += 1
                         self.stats.total_retries += attempts - 1
                         self.stats.total_operation_time += time.time() - start_time
-                    
-                     # Raise specific operation errors that should bubble up to the user
-                    if error_category == ErrorCategory.PERMANENT:
-                        raise ExternalOperationPermanentError(str(e), retry_history, e)
-                    elif error_category == ErrorCategory.RATE_LIMIT:
-                        raise ExternalOperationRateLimitError(str(e), retry_history, e)
-                    elif error_category == ErrorCategory.TRANSIENT:
-                        raise ExternalOperationTransientError(str(e), retry_history, e)
-                    else:
-                        raise ExternalOperationFailedError(str(e), retry_history, e)
+
+                    raise self._raise_with_category(e, retry_history)
 
                 delay = self._calculate_delay(attempts, error_category)
                 logger.info(f"Retrying in {delay:.2f}s due to {error_category} error (attempt {attempts}/{self.config.max_attempts})")
@@ -145,6 +142,21 @@ class RetryHandler:
         logger.debug(f"Calculated backoff delay: base={base_delay}s, multiplied={delay:.2f}s, final={final_delay:.2f}s")
         return final_delay
 
+    def _derive_error_category(self, error: ExternalOperationError) -> ErrorCategory:
+        if isinstance(error, ExternalOperationPermanentError):
+            return ErrorCategory.PERMANENT
+        if isinstance(error, ExternalOperationRateLimitError):
+            return ErrorCategory.RATE_LIMIT
+        if isinstance(error, ExternalOperationTransientError):
+            return ErrorCategory.TRANSIENT
+        return self.error_classifier.classify_error(error)
+
+    @staticmethod
+    def _raise_with_category(error: ExternalOperationError, retry_history: List[str]) -> ExternalOperationError:
+        # Prefer to bubble original typed exceptions to avoid losing context
+        _update_retry_history(error, retry_history)
+        raise error
+
 
 def _get_error_classifier_for_adapter(adapter):
     """Get appropriate error classifier based on adapter type and characteristics."""
@@ -161,3 +173,9 @@ def _get_error_classifier_for_adapter(adapter):
     else:
         # Default fallback
         return HttpErrorClassifier()
+
+
+def _update_retry_history(error: ExternalOperationError, retry_history: List[str]) -> None:
+    """Replace exception retry history with combined attempts."""
+    if hasattr(error, "retry_history"):
+        error.retry_history = list(retry_history)
