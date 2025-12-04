@@ -75,6 +75,24 @@ class WebActions:
     def is_enabled(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
         return self._create_web_command(WebActionType.IS_ENABLED, selector, fallback_selectors, timeout, None)
     
+    def upload_file(self, file_path: str, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+        """Upload a file to a file input element.
+        
+        Args:
+            file_path: Absolute path to the file to upload
+            selector: CSS selector for the file input element (usually input[type='file'])
+            fallback_selectors: Alternative selectors to try if the primary selector fails
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            WebCommand configured for file upload
+            
+        Example:
+            web.upload_file("/Users/john/Documents/resume.pdf", "input[type='file']")
+            web.upload_file("/path/to/file.pdf", "input[name='file']", "input[type='file']", ".file-input")
+        """
+        return self._create_web_command(WebActionType.UPLOAD_FILE, selector, fallback_selectors, timeout, file_path)
+    
     # HTTP Operations
     def get(self, url: str, headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> str:
         """Make HTTP GET request.

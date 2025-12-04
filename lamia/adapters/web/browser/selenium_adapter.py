@@ -388,6 +388,30 @@ class SeleniumAdapter(BaseBrowserAdapter):
         except Exception as e:
             raise ExternalOperationPermanentError(f"Type text error: {str(e)}", retry_history=[], original_error=e)
     
+    async def upload_file(self, params: BrowserActionParams) -> None:
+        """Upload a file to a file input element."""
+        if not self.initialized:
+            raise RuntimeError("SeleniumAdapter not initialized")
+        
+        if not params.value:
+            raise ValueError("File path is required for upload_file action")
+        
+        file_path = params.value
+        
+        # Find the file input element
+        element, active_selector = self._find_element(params)
+        
+        logger.info(f"SeleniumAdapter: Upload file '{file_path}' to {active_selector}")
+        
+        try:
+            # Send the file path to the input element
+            # Selenium handles the file upload dialog automatically
+            element.send_keys(file_path)
+        except WebDriverException as e:
+            raise ExternalOperationTransientError(f"File upload failed: {str(e)}", retry_history=[], original_error=e)
+        except Exception as e:
+            raise ExternalOperationPermanentError(f"File upload error: {str(e)}", retry_history=[], original_error=e)
+    
     async def wait_for_element(self, params: BrowserActionParams) -> None:
         """Wait for an element to meet a condition."""
         if not self.initialized:

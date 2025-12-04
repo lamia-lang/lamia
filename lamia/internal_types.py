@@ -21,6 +21,7 @@ class BrowserActionType(str, Enum):
     GET_ATTRIBUTE = "get_attribute"
     IS_VISIBLE = "is_visible"
     IS_ENABLED = "is_enabled"
+    UPLOAD_FILE = "upload_file"
 
 
 class HttpActionType(str, Enum):
@@ -100,6 +101,7 @@ SELECTOR_BASED_ACTIONS: Set[BrowserActionType] = {
     BrowserActionType.SELECT,
     BrowserActionType.IS_VISIBLE,
     BrowserActionType.IS_ENABLED,
+    BrowserActionType.UPLOAD_FILE,
 }
 
 # Map method names to action types
@@ -114,6 +116,7 @@ WEB_METHOD_TO_ACTION = {
     'submit_form': BrowserActionType.SUBMIT,
     'screenshot': BrowserActionType.SCREENSHOT,
     'is_visible': BrowserActionType.IS_VISIBLE,
-    'is_enabled': BrowserActionType.IS_ENABLED
+    'is_enabled': BrowserActionType.IS_ENABLED,
+    'upload_file': BrowserActionType.UPLOAD_FILE
 }
 

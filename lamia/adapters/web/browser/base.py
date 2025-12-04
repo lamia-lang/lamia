@@ -100,6 +100,11 @@ class BaseBrowserAdapter(ABC):
         pass
     
     @abstractmethod
+    async def upload_file(self, params: BrowserActionParams) -> None:
+        """Upload a file to a file input element."""
+        pass
+    
+    @abstractmethod
     async def wait_for_element(self, params: BrowserActionParams) -> None:
         """Wait for an element to meet a condition."""
         pass

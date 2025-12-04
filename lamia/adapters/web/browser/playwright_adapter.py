@@ -284,6 +284,34 @@ class PlaywrightAdapter(BaseBrowserAdapter):
                 original_error=e
             )
     
+    async def upload_file(self, params: BrowserActionParams) -> None:
+        """Upload a file to a file input element."""
+        if not self.initialized:
+            raise RuntimeError("PlaywrightAdapter not initialized")
+        
+        if not params.value:
+            raise ValueError("File path is required for upload_file action")
+        
+        file_path = params.value
+        selector = self._require_selector(params)
+        logger.info(f"PlaywrightAdapter: Upload file '{file_path}' to {selector}")
+        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
+        timeout = self._get_timeout_ms(params)
+        
+        try:
+            await self.page.set_input_files(playwright_selector, file_path, timeout=timeout)
+        except PlaywrightTimeoutError as e:
+            await self._raise_dom_classified_error(
+                f"File input '{selector}' not found for upload",
+                e
+            )
+        except PlaywrightError as e:
+            raise ExternalOperationTransientError(
+                f"File upload failed for '{selector}': {e}",
+                retry_history=[],
+                original_error=e
+            )
+    
     async def wait_for_element(self, params: BrowserActionParams) -> None:
         """Wait for an element to meet a condition."""
         if not self.initialized:

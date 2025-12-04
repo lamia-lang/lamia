@@ -107,6 +107,7 @@ class BrowserManager:
             WebActionType.SUBMIT: BrowserActionType.SUBMIT,
             WebActionType.IS_VISIBLE: BrowserActionType.IS_VISIBLE,
             WebActionType.IS_ENABLED: BrowserActionType.IS_ENABLED,
+            WebActionType.UPLOAD_FILE: BrowserActionType.UPLOAD_FILE,
         }
         
         browser_action_type = action_type_mapping.get(command.action)
@@ -198,6 +199,7 @@ class BrowserManager:
         BrowserActionType.SELECT,
         BrowserActionType.IS_VISIBLE,
         BrowserActionType.IS_ENABLED,
+        BrowserActionType.UPLOAD_FILE,
     }
 
     async def _execute_browser_action(self, action: BrowserAction) -> Any:
@@ -280,6 +282,8 @@ class BrowserManager:
             return await adapter.is_visible(action.params)
         elif action.action == BrowserActionType.IS_ENABLED:
             return await adapter.is_enabled(action.params)
+        elif action.action == BrowserActionType.UPLOAD_FILE:
+            return await adapter.upload_file(action.params)
         else:
             raise ValueError(f"Unsupported browser action: {action.action}")
     

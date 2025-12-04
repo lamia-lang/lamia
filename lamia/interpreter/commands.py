@@ -23,6 +23,7 @@ class WebActionType(Enum):
     SUBMIT = "submit"
     IS_VISIBLE = "is_visible"
     IS_ENABLED = "is_enabled"
+    UPLOAD_FILE = "upload_file"
 
 
 class FileActionType(Enum):
