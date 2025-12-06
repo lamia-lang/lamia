@@ -173,6 +173,10 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
         from lamia.actions import file
         execution_globals['file'] = file
     
+    if 'files' in used_namespaces:
+        from lamia.engine.managers.files_context_manager import files
+        execution_globals['files'] = files
+    
     if 'session' in used_namespaces:
         from lamia.adapters.web.session_context import create_session_factory, SessionSkipException
         from lamia.interpreter.command_types import CommandType

@@ -63,6 +63,8 @@ from .errors import (
     ExternalOperationTransientError,
     ExternalOperationRateLimitError,
     ExternalOperationPermanentError,
+    AmbiguousFileError,
+    FileReferenceError,
 )
 
 __all__ = [
@@ -74,4 +76,6 @@ __all__ = [
     "ExternalOperationTransientError", 
     "ExternalOperationRateLimitError",
     "ExternalOperationPermanentError",
+    "AmbiguousFileError",
+    "FileReferenceError",
 ] 

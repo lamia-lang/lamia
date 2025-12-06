@@ -6,6 +6,7 @@ and guide users on appropriate responses.
 
 Import these exceptions from the main lamia module:
     from lamia import MissingAPIKeysError, ExternalOperationPermanentError
+    from lamia import FileNotFoundError, AmbiguousFileError
 """
 
 from typing import List, Optional
@@ -155,4 +156,76 @@ class ExternalOperationPermanentError(ExternalOperationError):
             print(f"Error details: {e.original_error}")
             # Fix configuration before retrying
     """
-    pass 
+    pass
+
+
+class AmbiguousFileError(Exception):
+    """Raised when multiple files match a file reference with similar scores.
+    
+    This occurs when using {@filename} syntax in a files context and multiple
+    files have similar match scores, making it unclear which file was intended.
+    
+    What to do:
+    - Be more specific with the filename (include more of the path)
+    - Use the full filename with extension
+    - Check the suggested matches in the error message
+    
+    Example:
+        with files("~/Documents/"):
+            try:
+                result = lamia.run("Extract from {@config}")
+            except AmbiguousFileError as e:
+                print(f"Multiple files match '{e.query}':")
+                for path, score in e.matches:
+                    print(f"  - {path} (score: {score:.2f})")
+    """
+    
+    def __init__(self, query: str, matches: List[tuple]):
+        import os
+        self.query = query
+        self.matches = matches
+        
+        match_list = "\n".join([
+            f"  {i+1}. {os.path.basename(path)} (score: {score:.2f})"
+            for i, (path, score) in enumerate(matches[:5])
+        ])
+        
+        message = (
+            f"Multiple files match '{{{query}}}':\n{match_list}\n\n"
+            f"Please be more specific with the filename or path."
+        )
+        super().__init__(message)
+
+
+class FileReferenceError(Exception):
+    """Raised when a file reference cannot be resolved.
+    
+    This occurs when using {@filename} syntax in a files context but the
+    file cannot be found in the indexed files.
+    
+    What to do:
+    - Check the filename spelling
+    - Verify the file exists in the paths provided to files()
+    - Check the suggested similar filenames in the error message
+    - Use with files() to include the directory containing the file
+    
+    Example:
+        with files("~/Documents/"):
+            try:
+                result = lamia.run("Extract from {@resum.pdf}")
+            except FileReferenceError as e:
+                print(f"File not found: {e.query}")
+                print(f"Did you mean: {e.suggestions}")
+    """
+    
+    def __init__(self, query: str, suggestions: List[str]):
+        self.query = query
+        self.suggestions = suggestions
+        
+        if suggestions:
+            suggestion_list = "\n".join([f"  - {s}" for s in suggestions[:3]])
+            message = f"File '{{{query}}}' not found.\n\nDid you mean:\n{suggestion_list}"
+        else:
+            message = f"File '{{{query}}}' not found in files context."
+        
+        super().__init__(message)

@@ -50,12 +50,24 @@ class LLMManager(Manager):
         # Extract prompt from LLMCommand
         prompt = command.prompt
         
+        # Inject file references if in a files context
+        prompt = self._inject_file_references(prompt)
+        
         # Use the existing validation logic
         return await self._execute_with_retries(
             prompt=prompt,
             validator=validator
         )
 
+    def _inject_file_references(self, prompt: str) -> str:
+        """Inject file references from active files context."""
+        from ..files_context_manager import get_active_files_context
+        
+        context = get_active_files_context()
+        if context:
+            return context.inject_file_references(prompt)
+        return prompt
+    
     def _get_needed_providers(self) -> Set[str]:
         """Get the set of providers that are actually needed based on config."""
         needed = set()
