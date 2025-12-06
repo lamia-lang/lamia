@@ -61,7 +61,7 @@ class LLMManager(Manager):
 
     def _inject_file_references(self, prompt: str) -> str:
         """Inject file references from active files context."""
-        from ..files_context_manager import get_active_files_context
+        from .files_context_manager import get_active_files_context
         
         context = get_active_files_context()
         if context:

@@ -168,9 +168,7 @@ class FilesContext:
                 # Walk directory, skip common ignore patterns
                 for root, dirs, files in os.walk(path):
                     # Skip hidden directories and common patterns
-                    dirs[:] = [d for d in dirs if not d.startswith('.') and d not in [
-                        'node_modules', '__pycache__', '.venv', 'venv', '.git'
-                    ]]
+                    dirs[:] = [d for d in dirs if not d.startswith('.')]
                     
                     for file in files:
                         if not file.startswith('.'):
