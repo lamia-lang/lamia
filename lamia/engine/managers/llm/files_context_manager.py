@@ -11,7 +11,6 @@ from lamia.errors import AmbiguousFileError, FileReferenceError
 
 logger = logging.getLogger(__name__)
 
-
 class FileSearcher:
     """Smart file search with multiple strategies."""
     
@@ -133,7 +132,7 @@ class FilesContext:
     # Ambiguity threshold: if top 2 matches differ by less than this, it's ambiguous
     AMBIGUITY_THRESHOLD = 10.0
     
-    def __init__(self, *paths: str):
+    def __init__(self, *paths: str, _push_to_stack: bool = False):
         """Initialize file context with paths.
         
         Args:
@@ -148,10 +147,20 @@ class FilesContext:
         self.indexed_files = self._index_files(self.paths)
         self.searcher = FileSearcher(self.indexed_files)
         logger.info(f"Indexed {len(self.indexed_files)} files for context")
+        
+        # Push to global stack
+        _context_stack.append(self)
+        logger.info(f"FilesContext pushed to stack (size={len(_context_stack)})")
+        
         return self
     
     def __exit__(self, *args):
         """Clean up on context exit."""
+        # Pop from global stack if we pushed
+        if _context_stack and _context_stack[-1] is self:
+            _context_stack.pop()
+            logger.info(f"FilesContext popped from stack (size={len(_context_stack)})")
+        
         self.indexed_files.clear()
         self.searcher = None
     
@@ -347,26 +356,8 @@ def files(*paths: str) -> FilesContext:
         *paths: File or directory paths to include in context
     
     Returns:
-        FilesContext manager
+        FilesContext manager that pushes itself to the global stack
     """
-    context = FilesContext(*paths)
-    
-    # Wrap __enter__ and __exit__ to manage global stack
-    original_enter = context.__enter__
-    original_exit = context.__exit__
-    
-    def wrapped_enter():
-        result = original_enter()
-        _context_stack.append(context)
-        return result
-    
-    def wrapped_exit(*args):
-        if _context_stack and _context_stack[-1] is context:
-            _context_stack.pop()
-        return original_exit(*args)
-    
-    context.__enter__ = wrapped_enter
-    context.__exit__ = wrapped_exit
-    
-    return context
+    # Create context with _push_to_stack=True
+    return FilesContext(*paths, _push_to_stack=True)
 

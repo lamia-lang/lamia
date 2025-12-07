@@ -9,9 +9,10 @@ from ...managers import Manager
 from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator, TrackingContext
 from lamia.adapters.retry.factory import RetriableAdapterFactory
-from lamia.errors import ExternalOperationError, MissingAPIKeysError
+from lamia.errors import MissingAPIKeysError
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import LLMCommand
+from .files_context_manager import get_active_files_context
 import logging
 
 logger = logging.getLogger(__name__)
@@ -61,8 +62,6 @@ class LLMManager(Manager):
 
     def _inject_file_references(self, prompt: str) -> str:
         """Inject file references from active files context."""
-        from .files_context_manager import get_active_files_context
-        
         context = get_active_files_context()
         if context:
             return context.inject_file_references(prompt)

@@ -40,6 +40,9 @@ class ActionNamespaceAnalyzer(ast.NodeVisitor):
         # Check if it's one of our session functions
         if node.id in ['session']:
             self.used_namespaces.add('session')
+        # Add 'files' context manager to used namespaces
+        if node.id in ['files']:
+            self.used_namespaces.add('files')
         
         self.generic_visit(node)
     
