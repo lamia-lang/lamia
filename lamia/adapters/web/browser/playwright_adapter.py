@@ -206,14 +206,20 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             return selector
     
     async def _find_element_with_fallbacks(self, params: BrowserActionParams):
-        """Find element using primary selector and fallbacks."""
+        """Find element using primary selector and fallbacks.
+        
+        Supports scoped search if params.scope_element_handle is provided.
+        """
         selectors = [params.selector] + (params.fallback_selectors or [])
         timeout = params.timeout * 1000 if params.timeout else self.default_timeout
+        
+        # Determine search root: scoped element or page
+        search_root = params.scope_element_handle if params.scope_element_handle else self.page
         
         for selector in selectors:
             try:
                 playwright_selector = self._get_playwright_selector(selector, params.selector_type)
-                element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+                element = await search_root.wait_for_selector(playwright_selector, timeout=timeout)
                 logger.debug(f"Found element with selector: {selector}")
                 return element
             except Exception:
@@ -433,6 +439,103 @@ class PlaywrightAdapter(BaseBrowserAdapter):
                 retry_history=[],
                 original_error=e
             )
+    
+    async def is_checked(self, params: BrowserActionParams) -> bool:
+        """Check if a checkbox or radio button is checked."""
+        if not self.initialized:
+            raise RuntimeError("PlaywrightAdapter not initialized")
+        
+        element = await self._find_element_with_fallbacks(params)
+        try:
+            checked = await element.is_checked()
+            logger.info(f"PlaywrightAdapter: Check if element is checked -> {checked}")
+            return checked
+        except PlaywrightError as e:
+            raise ExternalOperationTransientError(
+                f"Checked state check failed: {e}",
+                retry_history=[],
+                original_error=e
+            )
+    
+    async def get_input_type(self, params: BrowserActionParams) -> str:
+        """Detect the type of an input element.
+        
+        Returns InputType enum value as string.
+        """
+        if not self.initialized:
+            raise RuntimeError("PlaywrightAdapter not initialized")
+        
+        from lamia.types import InputType
+        
+        element = await self._find_element_with_fallbacks(params)
+        try:
+            # Get tag name
+            tag_name = await element.evaluate("el => el.tagName.toLowerCase()")
+            
+            # For input elements, get the type attribute
+            if tag_name == "input":
+                type_value = (await element.get_attribute("type") or "text").lower()
+            else:
+                # For select, textarea, button - use tag name as type
+                type_value = tag_name
+            
+            # Direct enum lookup - covers all cases
+            try:
+                result = InputType(type_value)
+            except ValueError:
+                result = InputType.UNKNOWN
+            
+            logger.info(f"PlaywrightAdapter: Detected input type -> {result.value}")
+            return result.value
+            
+        except PlaywrightError as e:
+            raise ExternalOperationTransientError(
+                f"Input type detection failed: {e}",
+                retry_history=[],
+                original_error=e
+            )
+    
+    async def get_elements(self, params: BrowserActionParams) -> List[Any]:
+        """Get multiple elements matching selector.
+        
+        Returns list of Playwright ElementHandle objects for scoping.
+        """
+        if not self.initialized:
+            raise RuntimeError("PlaywrightAdapter not initialized")
+        
+        selector = self._require_selector(params)
+        timeout = self._get_timeout_ms(params)
+        
+        # Use scope element if provided
+        search_root = params.scope_element_handle if params.scope_element_handle else self.page
+        
+        # Try all selectors in fallback chain
+        selectors = [selector]
+        if params.fallback_selectors:
+            selectors.extend(params.fallback_selectors)
+        
+        for sel in selectors:
+            try:
+                playwright_selector = self._get_playwright_selector(sel, params.selector_type)
+                
+                # Wait for at least one element
+                await search_root.wait_for_selector(playwright_selector, timeout=timeout)
+                
+                # Get all matching elements
+                elements = await search_root.query_selector_all(playwright_selector)
+                
+                logger.info(f"PlaywrightAdapter: Found {len(elements)} elements matching '{sel}'")
+                return elements
+                
+            except PlaywrightTimeoutError:
+                logger.debug(f"PlaywrightAdapter: Selector '{sel}' did not match")
+                continue
+        
+        # All selectors failed
+        raise ExternalOperationPermanentError(
+            f"No elements found matching '{selector}' (or fallbacks)",
+            retry_history=[]
+        )
     
     async def hover(self, params: BrowserActionParams) -> None:
         """Hover over an element."""

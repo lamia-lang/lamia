@@ -576,6 +576,60 @@ class SeleniumAdapter(BaseBrowserAdapter):
                 original_error=e
             )
     
+    async def is_checked(self, params: BrowserActionParams) -> bool:
+        """Check if a checkbox or radio button is checked."""
+        if not self.initialized:
+            raise RuntimeError("SeleniumAdapter not initialized")
+        
+        element, active_selector = self._find_element(params)
+        try:
+            checked = element.is_selected()
+            logger.info(f"SeleniumAdapter: Check if {active_selector} is checked -> {checked}")
+            return checked
+        except (NoSuchElementException, WebDriverException) as e:
+            raise ExternalOperationTransientError(
+                f"Checked state check failed for '{active_selector}': {e}",
+                retry_history=[],
+                original_error=e
+            )
+    
+    async def get_input_type(self, params: BrowserActionParams) -> str:
+        """Detect the type of an input element.
+        
+        Returns InputType enum value as string.
+        """
+        if not self.initialized:
+            raise RuntimeError("SeleniumAdapter not initialized")
+        
+        from lamia.types import InputType
+        
+        element, active_selector = self._find_element(params)
+        try:
+            tag_name = element.tag_name.lower()
+            
+            # For input elements, get the type attribute
+            if tag_name == "input":
+                type_value = (element.get_attribute("type") or "text").lower()
+            else:
+                # For select, textarea, button - use tag name as type
+                type_value = tag_name
+            
+            # Direct enum lookup - covers all cases
+            try:
+                result = InputType(type_value)
+            except ValueError:
+                result = InputType.UNKNOWN
+            
+            logger.info(f"SeleniumAdapter: Detected input type for {active_selector} -> {result.value}")
+            return result.value
+            
+        except (NoSuchElementException, WebDriverException) as e:
+            raise ExternalOperationTransientError(
+                f"Input type detection failed for '{active_selector}': {e}",
+                retry_history=[],
+                original_error=e
+            )
+    
     async def hover(self, params: BrowserActionParams) -> None:
         """Hover over an element."""
         if not self.initialized:

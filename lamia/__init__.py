@@ -9,6 +9,7 @@ __version__ = "0.1.0"
 
 from dataclasses import dataclass
 from typing import Optional, Union, Dict
+from lamia.types import InputType
 
 @dataclass(frozen=True)
 class LLMModel:
@@ -70,6 +71,7 @@ from .errors import (
 __all__ = [
     "Lamia",
     "LamiaResult",
+    "InputType",  # For form automation
     "MissingAPIKeysError", 
     "ExternalOperationError",
     "ExternalOperationFailedError",

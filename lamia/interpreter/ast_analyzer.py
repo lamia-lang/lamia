@@ -180,6 +180,10 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
         from lamia.engine.managers.llm.files_context_manager import files
         execution_globals['files'] = files
     
+    # Always inject InputType for form automation
+    from lamia.types import InputType
+    execution_globals['InputType'] = InputType
+    
     if 'session' in used_namespaces:
         from lamia.adapters.web.session_context import create_session_factory, SessionSkipException
         from lamia.interpreter.command_types import CommandType

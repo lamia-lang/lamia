@@ -196,10 +196,13 @@ class BrowserManager:
         BrowserActionType.WAIT,
         BrowserActionType.GET_TEXT,
         BrowserActionType.GET_ELEMENTS,
+        BrowserActionType.GET_INPUT_TYPE,
+        BrowserActionType.GET_ATTRIBUTE,
         BrowserActionType.HOVER,
         BrowserActionType.SELECT,
         BrowserActionType.IS_VISIBLE,
         BrowserActionType.IS_ENABLED,
+        BrowserActionType.IS_CHECKED,
         BrowserActionType.UPLOAD_FILE,
     }
 
@@ -283,6 +286,12 @@ class BrowserManager:
             return await adapter.is_visible(action.params)
         elif action.action == BrowserActionType.IS_ENABLED:
             return await adapter.is_enabled(action.params)
+        elif action.action == BrowserActionType.IS_CHECKED:
+            return await adapter.is_checked(action.params)
+        elif action.action == BrowserActionType.GET_INPUT_TYPE:
+            return await adapter.get_input_type(action.params)
+        elif action.action == BrowserActionType.GET_ATTRIBUTE:
+            return await adapter.get_attribute(action.params)
         elif action.action == BrowserActionType.UPLOAD_FILE:
             return await adapter.upload_file(action.params)
         elif action.action == BrowserActionType.GET_ELEMENTS:

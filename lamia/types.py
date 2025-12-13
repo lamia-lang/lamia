@@ -4,9 +4,61 @@ from typing import TypeVar, Generic, Optional
 from datetime import timedelta
 from pydantic import BaseModel
 from dataclasses import dataclass
+from enum import Enum
 
 T = TypeVar('T', bound=BaseModel)
 S = TypeVar('S', bound=bool)
+
+
+class InputType(str, Enum):
+    """HTML input element types for form automation.
+    
+    Use with web.get_input_type() to determine how to interact with form fields.
+    
+    Example:
+        field = web.get_element("div.form-field")
+        input_type = field.get_input_type()
+        
+        if input_type == InputType.TEXT:
+            field.type_text("input", "answer")
+        elif input_type == InputType.FILE:
+            field.upload_file("input", "~/file.pdf")
+    """
+    # Text-based inputs (use type_text)
+    TEXT = "text"
+    EMAIL = "email"
+    TEL = "tel"
+    NUMBER = "number"
+    PASSWORD = "password"
+    TEXTAREA = "textarea"
+    URL = "url"
+    SEARCH = "search"
+    
+    # Date/Time inputs (use type_text with formatted string)
+    DATE = "date"
+    TIME = "time"
+    DATETIME_LOCAL = "datetime-local"
+    MONTH = "month"
+    WEEK = "week"
+    
+    # Special inputs
+    FILE = "file"          # Use upload_file()
+    CHECKBOX = "checkbox"  # Use click() + is_checked()
+    RADIO = "radio"        # Use click()
+    COLOR = "color"        # Use type_text() with hex color
+    RANGE = "range"        # Use type_text() with number
+    
+    # Selection
+    SELECT = "select"      # Use select_option()
+    
+    # Buttons
+    BUTTON = "button"      # Use click()
+    SUBMIT = "submit"      # Use click()
+    RESET = "reset"        # Use click()
+    
+    # Special
+    HIDDEN = "hidden"      # Usually not interacted with
+    UNKNOWN = "unknown"    # Unrecognized type
 
 
 @dataclass

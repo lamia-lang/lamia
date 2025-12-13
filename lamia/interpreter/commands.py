@@ -16,7 +16,9 @@ class WebActionType(Enum):
     WAIT = "wait"
     GET_TEXT = "get_text"
     GET_PAGE_SOURCE = "get_page_source"
-    GET_ELEMENTS = "get_elements"  # NEW: Get multiple elements for iteration
+    GET_ELEMENTS = "get_elements"  # Get multiple elements for iteration
+    GET_INPUT_TYPE = "get_input_type"  # Detect input type
+    GET_ATTRIBUTE = "get_attribute"  # Get element attribute
     SCREENSHOT = "screenshot"
     HOVER = "hover"
     SCROLL = "scroll"
@@ -24,6 +26,7 @@ class WebActionType(Enum):
     SUBMIT = "submit"
     IS_VISIBLE = "is_visible"
     IS_ENABLED = "is_enabled"
+    IS_CHECKED = "is_checked"  # Check if checkbox/radio is checked
     UPLOAD_FILE = "upload_file"
 
 

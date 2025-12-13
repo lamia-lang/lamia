@@ -41,6 +41,8 @@ class WebManager(Manager[WebCommand]):
             WebActionType.GET_TEXT,
             WebActionType.GET_PAGE_SOURCE,
             WebActionType.GET_ELEMENTS,
+            WebActionType.GET_INPUT_TYPE,
+            WebActionType.GET_ATTRIBUTE,
             WebActionType.SCREENSHOT,
             WebActionType.HOVER,
             WebActionType.SCROLL,
@@ -48,6 +50,7 @@ class WebManager(Manager[WebCommand]):
             WebActionType.SUBMIT,
             WebActionType.IS_VISIBLE,
             WebActionType.IS_ENABLED,
+            WebActionType.IS_CHECKED,
         }
         
         self.http_actions = {
