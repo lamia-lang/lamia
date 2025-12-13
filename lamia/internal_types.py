@@ -19,6 +19,7 @@ class BrowserActionType(str, Enum):
     GET_TEXT = "get_text"
     GET_PAGE_SOURCE = "get_page_source"
     GET_ATTRIBUTE = "get_attribute"
+    GET_ELEMENTS = "get_elements"  # NEW: Get multiple elements for iteration/scoping
     IS_VISIBLE = "is_visible"
     IS_ENABLED = "is_enabled"
     UPLOAD_FILE = "upload_file"
@@ -57,6 +58,7 @@ class BrowserActionParams(BaseModel):
     timeout: Optional[float] = None
     wait_condition: Optional[str] = None
     description: Optional[str] = None  # For AI-powered actions
+    scope_element_handle: Optional[Any] = None  # Selenium WebElement or Playwright ElementHandle to scope within
     
     class Config:
         use_enum_values = True
@@ -110,6 +112,7 @@ WEB_METHOD_TO_ACTION = {
     'type_text': BrowserActionType.TYPE,
     'wait_for': BrowserActionType.WAIT,
     'get_text': BrowserActionType.GET_TEXT,
+    'get_elements': BrowserActionType.GET_ELEMENTS,
     'hover': BrowserActionType.HOVER,
     'scroll_to': BrowserActionType.SCROLL,
     'select_option': BrowserActionType.SELECT,

@@ -195,6 +195,7 @@ class BrowserManager:
         BrowserActionType.TYPE,
         BrowserActionType.WAIT,
         BrowserActionType.GET_TEXT,
+        BrowserActionType.GET_ELEMENTS,
         BrowserActionType.HOVER,
         BrowserActionType.SELECT,
         BrowserActionType.IS_VISIBLE,
@@ -284,6 +285,12 @@ class BrowserManager:
             return await adapter.is_enabled(action.params)
         elif action.action == BrowserActionType.UPLOAD_FILE:
             return await adapter.upload_file(action.params)
+        elif action.action == BrowserActionType.GET_ELEMENTS:
+            # Get list of element handles from adapter
+            element_handles = await adapter.get_elements(action.params)
+            # Wrap each handle in a WebActions instance
+            from lamia.actions.web import WebActions
+            return [WebActions(element_handle=handle) for handle in element_handles]
         else:
             raise ValueError(f"Unsupported browser action: {action.action}")
     

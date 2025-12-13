@@ -16,6 +16,7 @@ class WebActionType(Enum):
     WAIT = "wait"
     GET_TEXT = "get_text"
     GET_PAGE_SOURCE = "get_page_source"
+    GET_ELEMENTS = "get_elements"  # NEW: Get multiple elements for iteration
     SCREENSHOT = "screenshot"
     HOVER = "hover"
     SCROLL = "scroll"
@@ -68,6 +69,7 @@ class WebCommand(Command):
     selector: Optional[str] = None  # For browser actions
     fallback_selectors: Optional[List[str]] = None
     value: Optional[str] = None  # For input actions
+    scope_element_handle: Optional[Any] = None  # NEW: Element to scope search within (Selenium WebElement or Playwright ElementHandle)
     
     def __post_init__(self):
         super().__init__(CommandType.WEB)

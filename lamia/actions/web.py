@@ -1,6 +1,6 @@
 """Web automation actions including browser and HTTP operations with excellent IntelliSense support."""
 
-from typing import Optional, Dict, Any, Union, Tuple
+from typing import Optional, Dict, Any, Union, Tuple, List
 from lamia.internal_types import BrowserAction, BrowserActionType, BrowserActionParams, SelectorType
 from lamia.interpreter.commands import WebCommand, WebActionType
 
@@ -25,32 +25,112 @@ def _detect_selector_type(selector: str) -> SelectorType:
 class WebActions:
     """Browser automation actions with excellent IntelliSense support.
     
+    Can be used globally (web.click()) or scoped to elements (field.click()).
+    
     Access via: web.click(), web.type_text(), web.wait_for(), etc.
     """
     
+    def __init__(self, element_handle: Optional[Any] = None):
+        """Initialize WebActions, optionally scoped to an element.
+        
+        Args:
+            element_handle: Optional Selenium WebElement or Playwright ElementHandle
+                          to scope all operations to. If None, operations are global.
+        """
+        self._element_handle = element_handle
+    
+    def get_element(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> 'WebActions':
+        """Get a single element as a scoped WebActions instance.
+        
+        Returns a new WebActions object that operates only within the found element.
+        The adapter will find the element and return a handle that's used for scoping.
+        
+        Args:
+            selector: CSS selector to find the element
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            New WebActions instance scoped to the found element
+            
+        Example:
+            modal = web.get_element("div.modal")
+            modal.click("button")  # Clicks button within the modal only
+            
+            field = web.get_element("div.form-field:nth-child(2)")
+            field.get_text("label")  # Gets label within that specific field
+        """
+        # This will be handled by the web manager:
+        # 1. Execute command to find element
+        # 2. Adapter returns element handle (WebElement/ElementHandle)
+        # 3. Manager wraps in new WebActions(element_handle=handle)
+        command = self._create_web_command(
+            WebActionType.GET_ELEMENTS,  # Reuse GET_ELEMENTS 
+            selector,
+            fallback_selectors,
+            timeout,
+            None,
+            scope_element=self._element_handle
+        )
+        return command  # type: ignore  # Manager will return WebActions
+    
+    def get_elements(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> List['WebActions']:
+        """Get multiple elements as scoped WebActions instances.
+        
+        Returns a list of WebActions objects, each scoped to one matched element.
+        The adapter finds all matching elements and returns handles.
+        
+        Args:
+            selector: CSS selector to find elements
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            List of WebActions instances, each scoped to one element
+            
+        Example:
+            fields = web.get_elements("div.form-field")
+            for field in fields:
+                q = field.get_text("label")
+                field.type_text("input", answer)
+        """
+        # This will be handled by the web manager:
+        # 1. Execute command to find all elements
+        # 2. Adapter returns list of element handles
+        # 3. Manager wraps each in WebActions(element_handle=handle)
+        command = self._create_web_command(
+            WebActionType.GET_ELEMENTS, 
+            selector, 
+            fallback_selectors, 
+            timeout, 
+            None,
+            scope_element=self._element_handle
+        )
+        return command  # type: ignore  # Manager will return List[WebActions]
+    
     def click(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.CLICK, selector, fallback_selectors, timeout, None)
+        return self._create_web_command(WebActionType.CLICK, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
         
     def type_text(self, selector: str, text: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.TYPE, selector, fallback_selectors, timeout, text)
+        return self._create_web_command(WebActionType.TYPE, selector, fallback_selectors, timeout, text, scope_element=self._element_handle)
     
     def wait_for(self, selector: str, condition: str = "visible", *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.WAIT, selector, fallback_selectors, timeout, condition)
+        return self._create_web_command(WebActionType.WAIT, selector, fallback_selectors, timeout, condition, scope_element=self._element_handle)
     
     def get_text(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.GET_TEXT, selector, fallback_selectors, timeout, None)
+        return self._create_web_command(WebActionType.GET_TEXT, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
     
     def hover(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.HOVER, selector, fallback_selectors, timeout, None)
+        return self._create_web_command(WebActionType.HOVER, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
     
     def scroll_to(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.SCROLL, selector, fallback_selectors, timeout, None)
+        return self._create_web_command(WebActionType.SCROLL, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
     
     def select_option(self, selector: str, option_value: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.SELECT, selector, fallback_selectors, timeout, option_value)
+        return self._create_web_command(WebActionType.SELECT, selector, fallback_selectors, timeout, option_value, scope_element=self._element_handle)
     
     def submit_form(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.SUBMIT, selector, fallback_selectors, timeout, None)
+        return self._create_web_command(WebActionType.SUBMIT, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
     
     def screenshot(self, file_path: Optional[str] = None) -> WebCommand:
         """Take a screenshot of the current page.
@@ -70,10 +150,10 @@ class WebActions:
         )
     
     def is_visible(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.IS_VISIBLE, selector, fallback_selectors, timeout, None)
+        return self._create_web_command(WebActionType.IS_VISIBLE, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
     
     def is_enabled(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.IS_ENABLED, selector, fallback_selectors, timeout, None)
+        return self._create_web_command(WebActionType.IS_ENABLED, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
     
     def upload_file(self, file_path: str, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
         """Upload a file to a file input element.
@@ -91,7 +171,7 @@ class WebActions:
             web.upload_file("/Users/john/Documents/resume.pdf", "input[type='file']")
             web.upload_file("/path/to/file.pdf", "input[name='file']", "input[type='file']", ".file-input")
         """
-        return self._create_web_command(WebActionType.UPLOAD_FILE, selector, fallback_selectors, timeout, file_path)
+        return self._create_web_command(WebActionType.UPLOAD_FILE, selector, fallback_selectors, timeout, file_path, scope_element=self._element_handle)
     
     # HTTP Operations
     def get(self, url: str, headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> str:
@@ -225,7 +305,7 @@ class WebActions:
             cmd_parts.append(f"timeout:{timeout}")
         return " ".join(cmd_parts)
     
-    def _create_web_command(self, action: WebActionType, selector: str, fallback_selectors: Tuple[str, ...], timeout: Optional[float] = None, value: Optional[str] = None) -> WebCommand:
+    def _create_web_command(self, action: WebActionType, selector: str, fallback_selectors: Tuple[str, ...], timeout: Optional[float] = None, value: Optional[str] = None, scope_element: Optional[Any] = None) -> WebCommand:
         fallbacks = list(fallback_selectors) if fallback_selectors else None
         
         return WebCommand(
@@ -233,5 +313,6 @@ class WebActions:
             selector=selector,
             fallback_selectors=fallbacks,
             value=value,
-            timeout=timeout
+            timeout=timeout,
+            scope_element_handle=scope_element  # Pass the element handle for scoping
         )

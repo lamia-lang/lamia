@@ -279,7 +279,8 @@ class SeleniumAdapter(BaseBrowserAdapter):
             
             try:
                 by, value = self._get_by_locator(selector, params.selector_type)
-                element = self._wait_for_presence(by, value, timeout)
+                # Use scope element if provided
+                element = self._wait_for_presence(by, value, timeout, scope_element=params.scope_element_handle)
                 
                 # Success! Cache this selector for next time
                 self.selector_cache.cache_successful(cache_key, selector, current_url)
@@ -314,10 +315,25 @@ class SeleniumAdapter(BaseBrowserAdapter):
             retry_history=[]
         )
 
-    def _wait_for_presence(self, by, value, timeout):
-        return WebDriverWait(self.driver, timeout).until(
-            EC.presence_of_element_located((by, value))
-        )
+    def _wait_for_presence(self, by, value, timeout, scope_element=None):
+        """Wait for element presence, optionally scoped to a parent element.
+        
+        Args:
+            by: Selenium By locator type
+            value: Locator value
+            timeout: Timeout in seconds
+            scope_element: Optional WebElement to search within
+        """
+        if scope_element:
+            # Search within the scoped element
+            def find_in_scope(driver):
+                return scope_element.find_element(by, value)
+            return WebDriverWait(self.driver, timeout).until(find_in_scope)
+        else:
+            # Global search
+            return WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located((by, value))
+            )
     
     async def navigate(self, params: BrowserActionParams) -> None:
         """Navigate to a URL."""
@@ -467,6 +483,54 @@ class SeleniumAdapter(BaseBrowserAdapter):
         element, active_selector = self._find_element(params)
         logger.info(f"SeleniumAdapter: Get text from {active_selector}")
         return element.text
+    
+    async def get_elements(self, params: BrowserActionParams) -> List[Any]:
+        """Get multiple elements matching selector.
+        
+        Returns list of Selenium WebElement objects that can be used for scoping.
+        """
+        if not self.initialized:
+            raise RuntimeError("SeleniumAdapter not initialized")
+        
+        selector = self._require_selector(params)
+        timeout = params.timeout or self.default_timeout
+        
+        # Use scope element if provided
+        search_root = params.scope_element_handle if params.scope_element_handle else self.driver
+        
+        # Try all selectors in fallback chain
+        selector_chain = [selector]
+        if params.fallback_selectors:
+            selector_chain.extend(params.fallback_selectors)
+        
+        for sel in selector_chain:
+            try:
+                by, value = self._get_by_locator(sel, params.selector_type)
+                
+                # Wait for at least one element to be present
+                if params.scope_element_handle:
+                    def find_in_scope(driver):
+                        elements = search_root.find_elements(by, value)
+                        return elements if elements else False
+                    elements = WebDriverWait(self.driver, timeout).until(find_in_scope)
+                else:
+                    WebDriverWait(self.driver, timeout).until(
+                        EC.presence_of_element_located((by, value))
+                    )
+                    elements = search_root.find_elements(by, value)
+                
+                logger.info(f"SeleniumAdapter: Found {len(elements)} elements matching '{sel}'")
+                return elements
+                
+            except (TimeoutException, NoSuchElementException) as e:
+                logger.debug(f"SeleniumAdapter: Selector '{sel}' did not match: {e}")
+                continue
+        
+        # All selectors failed
+        raise ExternalOperationPermanentError(
+            f"No elements found matching '{selector}' (or fallbacks)",
+            retry_history=[]
+        )
     
     async def get_attribute(self, params: BrowserActionParams) -> str:
         """Get attribute value of an element."""
