@@ -1,11 +1,12 @@
 """Retry wrapper for browser adapters."""
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, List
 from ..retry_handler import RetryHandler
 from ...web.browser.base import BaseBrowserAdapter
 from lamia.types import ExternalOperationRetryConfig
 from lamia.internal_types import BrowserActionParams
+from lamia.types import InputType
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,36 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
         """Check if DOM is stable with retry."""
         return await self.retry_handler.execute(
             lambda: self.adapter.is_dom_stable()
+        )
+    
+    async def get_elements(self, params: BrowserActionParams) -> List[Any]:
+        """Get elements with retry."""
+        return await self.retry_handler.execute(
+            lambda: self.adapter.get_elements(params)
+        )
+    
+    async def get_input_type(self, params: BrowserActionParams) -> InputType:
+        """Get input type with retry."""
+        return await self.retry_handler.execute(
+            lambda: self.adapter.get_input_type(params)
+        )
+    
+    async def get_attribute(self, params: BrowserActionParams) -> str:
+        """Get attribute with retry."""
+        return await self.retry_handler.execute(
+            lambda: self.adapter.get_attribute(params)
+        )
+    
+    async def upload_file(self, params: BrowserActionParams) -> None:
+        """Upload file with retry."""
+        return await self.retry_handler.execute(
+            lambda: self.adapter.upload_file(params)
+        )
+    
+    async def get_options(self, params: BrowserActionParams) -> List[str]:
+        """Get options with retry."""
+        return await self.retry_handler.execute(
+            lambda: self.adapter.get_options(params)
         )
     
     # --- Session/profile contract proxies ---
