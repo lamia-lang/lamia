@@ -197,6 +197,7 @@ class BrowserManager:
         BrowserActionType.GET_TEXT,
         BrowserActionType.GET_ELEMENTS,
         BrowserActionType.GET_INPUT_TYPE,
+        BrowserActionType.GET_OPTIONS,
         BrowserActionType.GET_ATTRIBUTE,
         BrowserActionType.HOVER,
         BrowserActionType.SELECT,
@@ -290,6 +291,8 @@ class BrowserManager:
             return await adapter.is_checked(action.params)
         elif action.action == BrowserActionType.GET_INPUT_TYPE:
             return await adapter.get_input_type(action.params)
+        elif action.action == BrowserActionType.GET_OPTIONS:
+            return await adapter.get_options(action.params)
         elif action.action == BrowserActionType.GET_ATTRIBUTE:
             return await adapter.get_attribute(action.params)
         elif action.action == BrowserActionType.UPLOAD_FILE:

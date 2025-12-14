@@ -495,6 +495,142 @@ class PlaywrightAdapter(BaseBrowserAdapter):
                 original_error=e
             )
     
+    async def get_options(self, params: BrowserActionParams) -> List[str]:
+        """Get all selectable option texts from radio/checkbox/select within scope.
+        
+        Auto-detects and validates that exactly one option group exists.
+        """
+        if not self.initialized:
+            raise RuntimeError("PlaywrightAdapter not initialized")
+        
+        from lamia.errors import MultipleSelectableInputsError, NoSelectableInputError
+        
+        # Get scope element or use page
+        search_root = params.scope_element_handle if params.scope_element_handle else self.page
+        
+        # Find all selectable inputs within scope
+        try:
+            radios = await search_root.query_selector_all("input[type='radio']")
+            checkboxes = await search_root.query_selector_all("input[type='checkbox']")
+            selects = await search_root.query_selector_all("select")
+        except PlaywrightError as e:
+            raise ExternalOperationTransientError(
+                f"Failed to search for selectable inputs: {e}",
+                retry_history=[],
+                original_error=e
+            )
+        
+        # Count how many types of inputs we have
+        found_types = []
+        elements = None
+        input_type = None
+        
+        if radios:
+            # Check if multiple radio groups (different 'name' attributes)
+            radio_names = set()
+            for r in radios:
+                name = await r.get_attribute("name")
+                if name:
+                    radio_names.add(name)
+            if len(radio_names) > 1:
+                raise MultipleSelectableInputsError(
+                    f"Found {len(radio_names)} radio button groups with different names: {radio_names}. "
+                    "Please narrow the scope to target a specific radio group."
+                )
+            found_types.append("radio")
+            elements = radios
+            input_type = "radio"
+        
+        if checkboxes:
+            # Check if multiple checkbox groups (different 'name' attributes)
+            checkbox_names = set()
+            for c in checkboxes:
+                name = await c.get_attribute("name")
+                if name:
+                    checkbox_names.add(name)
+            if len(checkbox_names) > 1:
+                raise MultipleSelectableInputsError(
+                    f"Found {len(checkbox_names)} checkbox groups with different names: {checkbox_names}. "
+                    "Please narrow the scope to target a specific checkbox group."
+                )
+            found_types.append("checkbox")
+            elements = checkboxes
+            input_type = "checkbox"
+        
+        if selects:
+            if len(selects) > 1:
+                raise MultipleSelectableInputsError(
+                    f"Found {len(selects)} dropdown (<select>) elements in scope. "
+                    "Please narrow the scope to target a specific dropdown."
+                )
+            found_types.append("select")
+            elements = selects[0]  # Single select element
+            input_type = "select"
+        
+        # Validate: exactly one type
+        if len(found_types) == 0:
+            raise NoSelectableInputError(
+                "No radio buttons, checkboxes, or dropdowns found in the current scope"
+            )
+        
+        if len(found_types) > 1:
+            raise MultipleSelectableInputsError(
+                f"Found multiple input types in scope: {found_types}. "
+                "Please narrow the scope to target a specific input type."
+            )
+        
+        # Extract options from the single input group
+        options = []
+        
+        try:
+            if input_type in ["radio", "checkbox"]:
+                # Get labels for each input
+                for elem in elements:
+                    # Try to find associated label
+                    input_id = await elem.get_attribute("id")
+                    if input_id:
+                        label = await search_root.query_selector(f"label[for='{input_id}']")
+                        if label:
+                            text = await label.text_content()
+                            options.append(text.strip())
+                            continue
+                    
+                    # Try parent label
+                    label = await elem.evaluate("el => el.closest('label')")
+                    if label:
+                        text = await elem.evaluate("el => el.closest('label').textContent")
+                        options.append(text.strip())
+                        continue
+                    
+                    # Try sibling label
+                    label = await elem.evaluate("el => el.nextElementSibling?.tagName === 'LABEL' ? el.nextElementSibling : null")
+                    if label:
+                        text = await elem.evaluate("el => el.nextElementSibling.textContent")
+                        options.append(text.strip())
+                        continue
+                    
+                    # Last resort: use value attribute
+                    value = await elem.get_attribute("value") or "Unknown option"
+                    options.append(value)
+            
+            elif input_type == "select":
+                # Get all option elements
+                option_elements = await elements.query_selector_all("option")
+                for opt in option_elements:
+                    text = await opt.text_content()
+                    if text and text.strip():
+                        options.append(text.strip())
+            
+            logger.info(f"PlaywrightAdapter: Found {len(options)} options: {options}")
+            return options
+            
+        except PlaywrightError as e:
+            raise ExternalOperationTransientError(
+                f"Failed to extract option texts: {e}",
+                retry_history=[],
+                original_error=e
+            )
+    
     async def get_elements(self, params: BrowserActionParams) -> List[Any]:
         """Get multiple elements matching selector.
         

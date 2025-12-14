@@ -19,6 +19,7 @@ class WebActionType(Enum):
     GET_ELEMENTS = "get_elements"  # Get multiple elements for iteration
     GET_INPUT_TYPE = "get_input_type"  # Detect input type
     GET_ATTRIBUTE = "get_attribute"  # Get element attribute
+    GET_OPTIONS = "get_options"  # Get selectable options from radio/checkbox/select
     SCREENSHOT = "screenshot"
     HOVER = "hover"
     SCROLL = "scroll"

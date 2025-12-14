@@ -21,6 +21,7 @@ class BrowserActionType(str, Enum):
     GET_ATTRIBUTE = "get_attribute"
     GET_ELEMENTS = "get_elements"  # Get multiple elements for iteration/scoping
     GET_INPUT_TYPE = "get_input_type"  # Detect input element type (text, file, checkbox, etc.)
+    GET_OPTIONS = "get_options"  # Get selectable options from radio/checkbox/select
     IS_VISIBLE = "is_visible"
     IS_ENABLED = "is_enabled"
     IS_CHECKED = "is_checked"  # Check if checkbox/radio is checked
@@ -116,6 +117,7 @@ WEB_METHOD_TO_ACTION = {
     'get_text': BrowserActionType.GET_TEXT,
     'get_elements': BrowserActionType.GET_ELEMENTS,
     'get_input_type': BrowserActionType.GET_INPUT_TYPE,
+    'get_options': BrowserActionType.GET_OPTIONS,
     'is_checked': BrowserActionType.IS_CHECKED,
     'hover': BrowserActionType.HOVER,
     'scroll_to': BrowserActionType.SCROLL,

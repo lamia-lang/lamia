@@ -66,6 +66,8 @@ from .errors import (
     ExternalOperationPermanentError,
     AmbiguousFileError,
     FileReferenceError,
+    MultipleSelectableInputsError,
+    NoSelectableInputError,
 )
 
 __all__ = [
@@ -80,4 +82,6 @@ __all__ = [
     "ExternalOperationPermanentError",
     "AmbiguousFileError",
     "FileReferenceError",
+    "MultipleSelectableInputsError",
+    "NoSelectableInputError",
 ] 

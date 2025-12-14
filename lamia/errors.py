@@ -12,6 +12,27 @@ Import these exceptions from the main lamia module:
 from typing import List, Optional
 
 
+class MultipleSelectableInputsError(Exception):
+    """Raised when get_options() finds multiple radio/checkbox/select groups in scope.
+    
+    This helps identify ambiguous situations where the scope contains multiple
+    option groups and Lamia can't determine which one you want.
+    
+    Solution: Narrow the scope or provide a specific selector.
+    """
+    pass
+
+
+class NoSelectableInputError(Exception):
+    """Raised when get_options() finds no radio/checkbox/select in scope.
+    
+    This means the current scope doesn't contain any selectable input elements.
+    
+    Solution: Check the scope or use a different selector.
+    """
+    pass
+
+
 class MissingAPIKeysError(Exception):
     """Raised when one or more required API keys are missing for LLM engines."""
     

@@ -630,6 +630,131 @@ class SeleniumAdapter(BaseBrowserAdapter):
                 original_error=e
             )
     
+    async def get_options(self, params: BrowserActionParams) -> List[str]:
+        """Get all selectable option texts from radio/checkbox/select within scope.
+        
+        Auto-detects and validates that exactly one option group exists.
+        """
+        if not self.initialized:
+            raise RuntimeError("SeleniumAdapter not initialized")
+        
+        from lamia.errors import MultipleSelectableInputsError, NoSelectableInputError
+        
+        # Get scope element or use driver
+        search_root = params.scope_element_handle if params.scope_element_handle else self.driver
+        
+        # Find all selectable inputs within scope
+        try:
+            radios = search_root.find_elements(By.XPATH, ".//input[@type='radio']")
+            checkboxes = search_root.find_elements(By.XPATH, ".//input[@type='checkbox']")
+            selects = search_root.find_elements(By.TAG_NAME, "select")
+        except WebDriverException as e:
+            raise ExternalOperationTransientError(
+                f"Failed to search for selectable inputs: {e}",
+                retry_history=[],
+                original_error=e
+            )
+        
+        # Count how many types of inputs we have
+        found_types = []
+        elements = None
+        input_type = None
+        
+        if radios:
+            # Check if multiple radio groups (different 'name' attributes)
+            radio_names = {r.get_attribute("name") for r in radios if r.get_attribute("name")}
+            if len(radio_names) > 1:
+                raise MultipleSelectableInputsError(
+                    f"Found {len(radio_names)} radio button groups with different names: {radio_names}. "
+                    "Please narrow the scope to target a specific radio group."
+                )
+            found_types.append("radio")
+            elements = radios
+            input_type = "radio"
+        
+        if checkboxes:
+            # Check if multiple checkbox groups (different 'name' attributes)
+            checkbox_names = {c.get_attribute("name") for c in checkboxes if c.get_attribute("name")}
+            if len(checkbox_names) > 1:
+                raise MultipleSelectableInputsError(
+                    f"Found {len(checkbox_names)} checkbox groups with different names: {checkbox_names}. "
+                    "Please narrow the scope to target a specific checkbox group."
+                )
+            found_types.append("checkbox")
+            elements = checkboxes
+            input_type = "checkbox"
+        
+        if selects:
+            if len(selects) > 1:
+                raise MultipleSelectableInputsError(
+                    f"Found {len(selects)} dropdown (<select>) elements in scope. "
+                    "Please narrow the scope to target a specific dropdown."
+                )
+            found_types.append("select")
+            elements = selects[0]  # Single select element
+            input_type = "select"
+        
+        # Validate: exactly one type
+        if len(found_types) == 0:
+            raise NoSelectableInputError(
+                "No radio buttons, checkboxes, or dropdowns found in the current scope"
+            )
+        
+        if len(found_types) > 1:
+            raise MultipleSelectableInputsError(
+                f"Found multiple input types in scope: {found_types}. "
+                "Please narrow the scope to target a specific input type."
+            )
+        
+        # Extract options from the single input group
+        options = []
+        
+        try:
+            if input_type in ["radio", "checkbox"]:
+                # Get labels for each input
+                for elem in elements:
+                    # Try to find associated label
+                    input_id = elem.get_attribute("id")
+                    if input_id:
+                        try:
+                            label = search_root.find_element(By.XPATH, f".//label[@for='{input_id}']")
+                            options.append(label.text.strip())
+                            continue
+                        except NoSuchElementException:
+                            pass
+                    
+                    # Try parent label
+                    try:
+                        label = elem.find_element(By.XPATH, "./ancestor::label[1]")
+                        options.append(label.text.strip())
+                        continue
+                    except NoSuchElementException:
+                        pass
+                    
+                    # Try sibling label
+                    try:
+                        label = elem.find_element(By.XPATH, "./following-sibling::label[1]")
+                        options.append(label.text.strip())
+                    except NoSuchElementException:
+                        # Last resort: use value attribute
+                        value = elem.get_attribute("value") or "Unknown option"
+                        options.append(value)
+            
+            elif input_type == "select":
+                # Get all option elements
+                option_elements = elements.find_elements(By.TAG_NAME, "option")
+                options = [opt.text.strip() for opt in option_elements if opt.text.strip()]
+            
+            logger.info(f"SeleniumAdapter: Found {len(options)} options: {options}")
+            return options
+            
+        except WebDriverException as e:
+            raise ExternalOperationTransientError(
+                f"Failed to extract option texts: {e}",
+                retry_history=[],
+                original_error=e
+            )
+    
     async def hover(self, params: BrowserActionParams) -> None:
         """Hover over an element."""
         if not self.initialized:

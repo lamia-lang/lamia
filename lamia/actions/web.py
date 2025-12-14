@@ -221,6 +221,46 @@ class WebActions:
         """
         return self._create_web_command(WebActionType.GET_ATTRIBUTE, selector, fallback_selectors, timeout, attribute_name, scope_element=self._element_handle)
     
+    def get_options(self, selector: str = None, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+        """Get all selectable option texts from radio buttons, checkboxes, or dropdown.
+        
+        Auto-detects and returns options from within the current scope. Works universally for:
+        - Radio buttons: Returns all radio option labels
+        - Checkboxes: Returns all checkbox option labels  
+        - Dropdowns (<select>): Returns all <option> texts
+        
+        Smart behavior:
+        - If exactly 1 option group found → Returns option texts
+        - If multiple groups found → Raises MultipleSelectableInputsError
+        - If no options found → Raises NoSelectableInputError
+        
+        Args:
+            selector: Optional specific selector for the options container (auto-detects if None)
+            fallback_selectors: Alternative selectors
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            WebCommand that will return List[str] of option texts
+        
+        Raises:
+            MultipleSelectableInputsError: Multiple radio/checkbox/select groups in scope
+            NoSelectableInputError: No radio/checkbox/select found in scope
+            
+        Example:
+            # Auto-detect and get options
+            field = web.get_element("div.form-field")
+            options = field.get_options()
+            # Returns: ["Entry Level", "Mid-Level", "Senior"]
+            
+            # AI picks which to select
+            selected = pick_best_options(question, options)
+            
+            # Click selected option(s)
+            for opt in selected:
+                field.click(opt)  # AI resolves natural language selector
+        """
+        return self._create_web_command(WebActionType.GET_OPTIONS, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+    
     def upload_file(self, file_path: str, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
         """Upload a file to a file input element.
         

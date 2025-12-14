@@ -42,6 +42,7 @@ class WebManager(Manager[WebCommand]):
             WebActionType.GET_PAGE_SOURCE,
             WebActionType.GET_ELEMENTS,
             WebActionType.GET_INPUT_TYPE,
+            WebActionType.GET_OPTIONS,
             WebActionType.GET_ATTRIBUTE,
             WebActionType.SCREENSHOT,
             WebActionType.HOVER,
