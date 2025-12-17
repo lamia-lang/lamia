@@ -65,17 +65,18 @@ class Lamia:
         return_type: Optional[Type[BaseType]] = None,
         *,
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None, 
-    ) -> LamiaResult:
+    ) -> Union[Any, LamiaResult]:
         """
         Generate a response, trying Python code first, then LLM.
         
         Args:
             command: The command to execute (string or Command object)
             models: The models to use, if not provided, the default models will be used
-            return_type: The expected return type for validation
+            return_type: The expected return type for validation (optional)
             
         Returns:
-            LamiaResult: Generated response with result text and typed result
+            If return_type is None: Plain result (Any) for direct usage
+            If return_type is specified: LamiaResult with validation info
             
         Raises:
             MissingAPIKeysError: If API keys are missing for LLM requests
@@ -106,11 +107,16 @@ class Lamia:
         if models is not None:
             self._engine.config_provider.reset_model_chain()
 
-        return LamiaResult(
-            result_text=response.raw_text, 
-            typed_result=response.result_type, 
-            tracking_context=response.execution_context
-        )
+        # If no return_type specified, return plain result for direct usage
+        # If return_type specified, wrap in LamiaResult with validation info
+        if return_type is None:
+            return response.result_type
+        else:
+            return LamiaResult(
+                result_text=response.raw_text, 
+                typed_result=response.result_type, 
+                tracking_context=response.execution_context
+            )
 
     def run(
         self,
@@ -118,17 +124,18 @@ class Lamia:
         return_type: Optional[Type[BaseType]] = None,
         *,
         models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None,
-    ) -> LamiaResult:
+    ) -> Union[Any, LamiaResult]:
         """
         Run a command synchronously.
         
         Args:
             command: The command to execute
             models: The models to use, if not provided, the default models will be used
-            return_type: The expected return type for validation
+            return_type: The expected return type for validation (optional)
         
         Returns:
-            LamiaResult: Generated response with result text and typed result
+            If return_type is None: Plain result (Any) for direct usage
+            If return_type is specified: LamiaResult with validation info
         
         Raises:
             MissingAPIKeysError: If API keys are missing

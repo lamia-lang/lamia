@@ -100,6 +100,10 @@ class BrowserManager:
             WebActionType.WAIT: BrowserActionType.WAIT,
             WebActionType.GET_TEXT: BrowserActionType.GET_TEXT,
             WebActionType.GET_PAGE_SOURCE: BrowserActionType.GET_PAGE_SOURCE,
+            WebActionType.GET_ELEMENTS: BrowserActionType.GET_ELEMENTS,
+            WebActionType.GET_INPUT_TYPE: BrowserActionType.GET_INPUT_TYPE,
+            WebActionType.GET_OPTIONS: BrowserActionType.GET_OPTIONS,
+            WebActionType.GET_ATTRIBUTE: BrowserActionType.GET_ATTRIBUTE,
             WebActionType.SCREENSHOT: BrowserActionType.SCREENSHOT,
             WebActionType.HOVER: BrowserActionType.HOVER,
             WebActionType.SCROLL: BrowserActionType.SCROLL,
@@ -107,6 +111,7 @@ class BrowserManager:
             WebActionType.SUBMIT: BrowserActionType.SUBMIT,
             WebActionType.IS_VISIBLE: BrowserActionType.IS_VISIBLE,
             WebActionType.IS_ENABLED: BrowserActionType.IS_ENABLED,
+            WebActionType.IS_CHECKED: BrowserActionType.IS_CHECKED,
             WebActionType.UPLOAD_FILE: BrowserActionType.UPLOAD_FILE,
         }
         

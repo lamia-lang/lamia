@@ -668,10 +668,7 @@ class PlaywrightAdapter(BaseBrowserAdapter):
                 continue
         
         # All selectors failed
-        raise ExternalOperationPermanentError(
-            f"No elements found matching '{selector}' (or fallbacks)",
-            retry_history=[]
-        )
+        return []
     
     async def hover(self, params: BrowserActionParams) -> None:
         """Hover over an element."""

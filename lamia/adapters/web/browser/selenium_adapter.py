@@ -527,10 +527,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
                 continue
         
         # All selectors failed
-        raise ExternalOperationPermanentError(
-            f"No elements found matching '{selector}' (or fallbacks)",
-            retry_history=[]
-        )
+        return []
     
     async def get_attribute(self, params: BrowserActionParams) -> str:
         """Get attribute value of an element."""
