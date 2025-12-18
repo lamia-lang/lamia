@@ -27,7 +27,7 @@ class SelectorResolutionService:
         self.llm_manager = llm_manager
         self.get_page_html = get_page_html_func
         self.get_browser_adapter = get_browser_adapter_func
-        self.cache = SelectorCache(cache_enabled=cache_enabled)
+        self.cache = AISelectorCache(cache_enabled=cache_enabled)
         self.response_parser = response_parser or AmbiguousFormatResponseParser()
         
     async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None, operation_type: Optional[str] = None) -> str:
