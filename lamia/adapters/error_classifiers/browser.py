@@ -13,6 +13,9 @@ BROWSER_PERMANENT_PATTERNS = [
     "invalid argument",
     "invalid selector syntax",
     "malformed selector",
+    "connection refused",  # Browser/driver was closed
+    "session deleted",
+    "chrome not reachable",
 ]
 
 # Browser transient error patterns

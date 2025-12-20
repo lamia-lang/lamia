@@ -6,7 +6,6 @@ import subprocess
 import requests
 import time
 import sys
-import asyncio
 import weakref
 import atexit
 from ..base import BaseLLMAdapter, LLMResponse, LLMModel
@@ -20,8 +19,6 @@ def _cleanup_all_instances():
     """Cleanup function called at exit."""
     for instance in list(_active_instances):
         try:
-            if hasattr(instance, 'session') and instance.session and not instance.session.closed:
-                instance.session.connector.close()
             if hasattr(instance, 'ollama_process') and instance.ollama_process:
                 instance.ollama_process.terminate()
         except Exception:
@@ -61,11 +58,9 @@ class OllamaAdapter(BaseLLMAdapter):
         # Start Ollama service if not running
         if not self._start_ollama_service():
             raise RuntimeError("Failed to start Ollama service")
-        # Initialize session as None - will be created on first use
         
         # Register this instance for cleanup
         _active_instances.add(self)
-        self.session = None
 
     @property
     def has_context_memory(self) -> bool:
@@ -78,7 +73,6 @@ class OllamaAdapter(BaseLLMAdapter):
         model: LLMModel,
     ) -> LLMResponse:
         """Generate a response using the Ollama model."""
-        await self._ensure_session()
         
         # Ensure model is pulled
         if not self._ensure_ollama_model_pulled(model.get_model_name_without_provider()):
@@ -102,31 +96,32 @@ class OllamaAdapter(BaseLLMAdapter):
         }
 
         try:
-            async with self.session.post(
-                f"{self.base_url}/api/generate",
-                json=payload
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise RuntimeError(
-                        f"Ollama API error (status {response.status}): {error_text}"
-                    )
-                
-                result = await response.json()
-                
-                # Extract token counts if available
-                usage = {
-                    "prompt_tokens": result.get("prompt_eval_count", 0),
-                    "completion_tokens": result.get("eval_count", 0),
-                    "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
-                }
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300)) as session: # 5 minutes total timeout, local models on normal computers are slow
+                async with session.post(
+                    f"{self.base_url}/api/generate",
+                    json=payload
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise RuntimeError(
+                            f"Ollama API error (status {response.status}): {error_text}"
+                        )
+                    
+                    result = await response.json()
+                    
+                    # Extract token counts if available
+                    usage = {
+                        "prompt_tokens": result.get("prompt_eval_count", 0),
+                        "completion_tokens": result.get("eval_count", 0),
+                        "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
+                    }
 
-                return LLMResponse(
-                    text=result["response"],
-                    raw_response=result,
-                    usage=usage,
-                    model=model.name
-                )
+            return LLMResponse(
+                text=result["response"],
+                raw_response=result,
+                usage=usage,
+                model=model.name
+            )
 
         except aiohttp.ClientError as e:
             raise ConnectionError(f"Failed to communicate with Ollama server: {str(e)}") from e
@@ -170,24 +165,18 @@ class OllamaAdapter(BaseLLMAdapter):
             logger.error(f"Failed to check/pull Ollama model: {str(e)}")
             return False
 
-    async def _ensure_session(self):
-        """Ensure we have an active session."""
-        if self.session is None:
-            self.session = aiohttp.ClientSession()
-        return self.session
-
     async def get_available_models(self) -> List[str]:
         """Get available model names from local Ollama installation."""
         try:
-            session = await self._ensure_session()
-            async with session.get(f"{self.base_url}/api/tags") as response:
-                if response.status == 200:
-                    data = await response.json()
-                    models = data.get("models", [])
-                    return [model["name"] for model in models]
-                else:
-                    logger.error(f"Failed to fetch Ollama models: {response.status}")
-                    return []
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.base_url}/api/tags") as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        models = data.get("models", [])
+                        return [model["name"] for model in models]
+                    else:
+                        logger.error(f"Failed to fetch Ollama models: {response.status}")
+                        return []
         except Exception as e:
             logger.error(f"Error fetching Ollama models: {e}")
             return []
@@ -195,23 +184,19 @@ class OllamaAdapter(BaseLLMAdapter):
     async def get_model_details(self) -> List[Dict[str, Any]]:
         """Get detailed model information including sizes."""
         try:
-            session = await self._ensure_session()
-            async with session.get(f"{self.base_url}/api/tags") as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("models", [])
-                else:
-                    logger.error(f"Failed to fetch Ollama model details: {response.status}")
-                    return []
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.base_url}/api/tags") as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get("models", [])
+                    else:
+                        logger.error(f"Failed to fetch Ollama model details: {response.status}")
+                        return []
         except Exception as e:
             logger.error(f"Error fetching Ollama model details: {e}")
             return []
 
     async def close(self) -> None:
-        """Close the aiohttp session and terminate Ollama process if we started it."""
-        if self.session:
-            await self.session.close()
-            self.session = None
         
         # Terminate the Ollama process if we started it
         if self.ollama_process:
@@ -235,20 +220,6 @@ class OllamaAdapter(BaseLLMAdapter):
         # Check if Python is shutting down
         if sys.meta_path is None:
             return
-            
-        # Close session if it exists and is not already closed
-        if hasattr(self, 'session') and self.session and not self.session.closed:
-            try:
-                # Try to close the session if no event loop is running
-                try:
-                    asyncio.get_running_loop()
-                    # Event loop is running, can't use asyncio.run()
-                    # The session will be cleaned up by the main cleanup chain
-                except RuntimeError:
-                    # No running event loop, safe to create one
-                    asyncio.run(self.session.close())
-            except Exception:
-                pass
         
         # Kill ollama process if it exists
         if hasattr(self, 'ollama_process') and self.ollama_process:
