@@ -121,11 +121,22 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         return self.generic_visit(node)
     
     def visit_Call(self, node):
-        """Transform web method calls directly into WebCommand objects."""
+        """Transform web method calls directly into WebCommand objects, wrapped in lamia.run()."""
         # Check if this is a web.method_name() call
         if self._is_web_call(node):
-            # _transform_web_call handles starred arguments internally
-            return self._transform_web_call(node)
+            # Transform to WebCommand (_transform_web_call handles starred arguments internally)
+            web_command = self._transform_web_call(node)
+            
+            # Wrap in lamia.run() call
+            return ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                    attr='run',
+                    ctx=ast.Load()
+                ),
+                args=[web_command],
+                keywords=[]
+            )
         
         # Not a web call, continue normal processing
         return self.generic_visit(node)
@@ -237,11 +248,14 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         # Find the web command call - could be in body[0] or body[1] (after docstring)
         web_command_call = self._extract_web_command_call(node)
         
+        # Transform web.method() to WebCommand AST
+        web_command_ast = self._transform_web_call(web_command_call)
+        
         # Build optional return_type argument from function annotation for engine validation
         return_type_kw = self._build_return_type_keyword(node)
 
         # Create lamia.run() call with the web command
-        lamia_call = self._build_lamia_call(web_command_call, return_type_kw, is_async)
+        lamia_call = self._build_lamia_call(web_command_ast, return_type_kw, is_async)
         
         # Wrap in await if async
         if is_async:
