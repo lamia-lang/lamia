@@ -102,6 +102,7 @@ SELECTOR_BASED_ACTIONS: Set[BrowserActionType] = {
     BrowserActionType.TYPE,
     BrowserActionType.WAIT,
     BrowserActionType.GET_TEXT,
+    BrowserActionType.GET_ELEMENTS,
     BrowserActionType.HOVER,
     BrowserActionType.SELECT,
     BrowserActionType.IS_VISIBLE,

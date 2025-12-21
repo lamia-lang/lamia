@@ -11,6 +11,7 @@ Handles transformation of:
 import ast
 import re
 from typing import Dict, Optional, List, Any
+
 from ..detectors.llm_command_detector import LLMCommandDetector
 from lamia.internal_types import (
     WEB_METHOD_TO_ACTION,
@@ -21,6 +22,20 @@ from lamia.internal_types import (
 
 class HybridSyntaxTransformer(ast.NodeTransformer):
     """Transform hybrid syntax AST nodes into executable Python code.
+    
+    ARCHITECTURE: WEB CALL TRANSFORMATION FLOW
+    ==========================================
+    
+    Web method calls (web.click(), web.type_text(), etc.) can appear in multiple contexts:
+    1. Expression statements: `web.click(...)`  -> handled by visit_Expr
+    2. Assignments: `result = web.click(...)`   -> handled by visit_Call  
+    3. Conditions: `if web.click(...):`         -> handled by visit_Call
+    
+    ALL paths converge at _transform_web_call(), which is the SINGLE point where:
+    - Starred arguments are processed (_inline_starred_literal_sequences)
+    - WebCommand AST is created (_create_web_command_ast)
+    
+    This centralized approach prevents bugs from duplicate logic in multiple places.
     
     RETURN TYPE HANDLING: WHY THREE DIFFERENT STRATEGIES?
     ====================================================
@@ -109,6 +124,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         """Transform web method calls directly into WebCommand objects."""
         # Check if this is a web.method_name() call
         if self._is_web_call(node):
+            # _transform_web_call handles starred arguments internally
             return self._transform_web_call(node)
         
         # Not a web call, continue normal processing
@@ -172,6 +188,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     def _transform_web_expression(self, node):
         """Transform web method expression."""
         # Transform the web call into WebCommand
+        # (_transform_web_call handles starred arguments internally)
         web_command = self._transform_web_call(node.value)
         
         # Wrap in lamia.run() call
@@ -297,12 +314,20 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         )
     
     def _transform_web_call(self, node):
-        """Transform a web.method_name() call into WebCommand AST."""
+        """
+        Transform a web.method_name() call into WebCommand AST.
+        
+        This is the SINGLE point where all web calls are transformed, regardless of
+        whether they appear as expression statements or within other expressions.
+        We handle starred arguments here to avoid duplicating logic.
+        """
         method_name = node.func.attr
         
         action_type = WEB_METHOD_TO_ACTION.get(method_name)
         if action_type:
-            return self._create_web_command_ast(action_type, node.args)
+            # Handle starred arguments (must be done before creating WebCommand)
+            processed_args = self._inline_starred_literal_sequences(node.args)
+            return self._create_web_command_ast(action_type, processed_args)
         
         # If method not recognized, return original node
         return node
@@ -316,6 +341,46 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             action_type_enum = BrowserActionType[str(action_type).upper()]
         action_attr_name = action_type_enum.name
 
+        # Check if we have any Starred nodes in args (from *variable unpacking)
+        has_starred = any(isinstance(arg, ast.Starred) for arg in args)
+        
+        if has_starred and len(args) == 2 and isinstance(args[0], ast.Subscript) and isinstance(args[1], ast.Starred):
+            # web.method(*selectors) was expanded to (selectors[0], *selectors[1:])
+            # We need to generate: WebCommand(..., selector=selectors[0], fallback_selectors=list(selectors[1:]))
+            # But we can't use *selectors[1:] in a keyword argument, so we convert to list()
+            
+            keywords = [
+                ast.keyword(
+                    arg='action',
+                    value=ast.Attribute(
+                        value=ast.Name(id='WebActionType', ctx=ast.Load()),
+                        attr=action_attr_name,
+                        ctx=ast.Load()
+                    )
+                ),
+                ast.keyword(arg='selector', value=args[0])
+            ]
+            
+            # Convert *selectors[1:] to list(selectors[1:])
+            if action_type_enum in SELECTOR_BASED_ACTIONS:
+                keywords.append(
+                    ast.keyword(
+                        arg='fallback_selectors',
+                        value=ast.Call(
+                            func=ast.Name(id='list', ctx=ast.Load()),
+                            args=[args[1].value],  # args[1] is Starred, .value is the Subscript
+                            keywords=[]
+                        )
+                    )
+                )
+            
+            return ast.Call(
+                func=ast.Name(id='WebCommand', ctx=ast.Load()),
+                args=[],
+                keywords=keywords
+            )
+        
+        # Normal case: no starred arguments
         # Create WebCommand(action=WebActionType.ACTION, ...)
         keywords = [
             ast.keyword(
@@ -347,23 +412,6 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 keywords.append(
                     ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[1:], ctx=ast.Load()))
                 )
-
-        debug_print = ast.Expr(
-            value=ast.Call(
-                func=ast.Name(id='print', ctx=ast.Load()),
-                args=[
-                    ast.Constant(value='WebCommand created with fallback_selectors:'),
-                    ast.Attribute(
-                        value=ast.Name(id='WebCommand', ctx=ast.Load()),
-                        attr='fallback_selectors',
-                        ctx=ast.Load()
-                    )
-                ],
-                keywords=[]
-            )
-        )
-
-
         
         return ast.Call(
             func=ast.Name(id='WebCommand', ctx=ast.Load()),
@@ -557,3 +605,54 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         except ImportError:
             # Fallback for when astor is not available
             return ast.unparse(tree)
+        
+    def _inline_starred_literal_sequences(self, args: list) -> list:
+        """
+        Inline starred sequences into the argument list.
+        
+        Handles two cases:
+        1. Starred literal sequences: web.click(*['a', 'b']) -> web.click('a', 'b')
+        2. Starred variables: web.click(*selectors) -> Expand to: selectors[0], *selectors[1:]
+        
+        For starred variables, we expand them at compile time to:
+        - First element as selector: selectors[0]
+        - Rest as individual args: *selectors[1:]
+        This way they get properly distributed to selector and fallback_selectors.
+        """
+        new_args = None
+
+        for i, arg in enumerate(args):
+            # Handle starred literal sequences (lists/tuples)
+            if isinstance(arg, ast.Starred) and isinstance(arg.value, (ast.List, ast.Tuple)):
+                if new_args is None:
+                    new_args = list(args[:i])  # copy everything before the first starred literal
+                new_args.extend(arg.value.elts)
+            # Handle starred variables - expand to selectors[0], *selectors[1:]
+            elif isinstance(arg, ast.Starred):
+                if new_args is None:
+                    new_args = list(args[:i])
+                
+                # Add selectors[0] as first argument
+                new_args.append(
+                    ast.Subscript(
+                        value=arg.value,
+                        slice=ast.Constant(value=0),
+                        ctx=ast.Load()
+                    )
+                )
+                
+                # Add *selectors[1:] as remaining arguments
+                new_args.append(
+                    ast.Starred(
+                        value=ast.Subscript(
+                            value=arg.value,
+                            slice=ast.Slice(lower=ast.Constant(value=1), upper=None, step=None),
+                            ctx=ast.Load()
+                        ),
+                        ctx=ast.Load()
+                    )
+                )
+            elif new_args is not None:
+                new_args.append(arg)
+
+        return new_args if new_args is not None else args
