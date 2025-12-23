@@ -191,6 +191,7 @@ def main():
         parser.add_argument('--file', '-f', type=str, help='Read prompt from a file instead of interactive mode')
         parser.add_argument('--config', '-c', type=str, help='Path to config file (optional)')
         parser.add_argument('--log-level', default='INFO', help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+        parser.add_argument('--no-cache', action='store_true', help='Disable selector resolution cache (forces fresh resolution)')
         args = parser.parse_args()
 
     # Setup colored logging for CLI
@@ -216,6 +217,17 @@ def main():
     # Python files still need sys.path management for regular execution
 
     try:
+        # Handle --no-cache flag
+        if args.no_cache:
+            logger.info("Cache disabled via --no-cache flag")
+            if config_dict is None:
+                config_dict = {}
+            if 'web' not in config_dict:
+                config_dict['web'] = {}
+            if 'selector_resolution' not in config_dict['web']:
+                config_dict['web']['selector_resolution'] = {}
+            config_dict['web']['selector_resolution']['cache_enabled'] = False
+        
         # Create Lamia instance with config
         logger.info("Creating Lamia instance...")
         lamia = Lamia.from_config(config_dict)

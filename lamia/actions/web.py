@@ -39,40 +39,42 @@ class WebActions:
         """
         self._element_handle = element_handle
     
-    def get_element(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> 'WebActions':
+    def get_element(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> Optional['WebActions']:
         """Get a single element as a scoped WebActions instance.
         
         Returns a new WebActions object that operates only within the found element.
-        The adapter will find the element and return a handle that's used for scoping.
+        The adapter will find the first matching element and return a handle.
         
         Args:
-            selector: CSS selector to find the element
+            selector: CSS selector, XPath, or natural language description
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
         Returns:
-            New WebActions instance scoped to the found element
+            New WebActions instance scoped to the found element, or None if not found
             
         Example:
             modal = web.get_element("div.modal")
-            modal.click("button")  # Clicks button within the modal only
+            if modal:
+                modal.click("button")  # Clicks button within the modal only
             
             field = web.get_element("div.form-field:nth-child(2)")
-            field.get_text("label")  # Gets label within that specific field
+            if field:
+                label = field.get_text("label")
         """
         # This will be handled by the web manager:
-        # 1. Execute command to find element
-        # 2. Adapter returns element handle (WebElement/ElementHandle)
-        # 3. Manager wraps in new WebActions(element_handle=handle)
+        # 1. Execute command to find first element
+        # 2. Adapter returns element handle or None
+        # 3. Manager wraps in new WebActions(element_handle=handle) or returns None
         command = self._create_web_command(
-            WebActionType.GET_ELEMENTS,  # Reuse GET_ELEMENTS 
+            WebActionType.GET_ELEMENT,  # Use GET_ELEMENT (singular)
             selector,
             fallback_selectors,
             timeout,
             None,
             scope_element=self._element_handle
         )
-        return command  # type: ignore  # Manager will return WebActions
+        return command  # type: ignore  # Manager will return WebActions or None
     
     def get_elements(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> List['WebActions']:
         """Get multiple elements as scoped WebActions instances.
@@ -81,28 +83,31 @@ class WebActions:
         The adapter finds all matching elements and returns handles.
         
         Args:
-            selector: CSS selector to find elements
+            selector: CSS selector, XPath, or natural language description
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
         Returns:
-            List of WebActions instances, each scoped to one element
+            List of WebActions instances, each scoped to one element (empty list if none found)
             
         Example:
             fields = web.get_elements("div.form-field")
             for field in fields:
                 q = field.get_text("label")
                 field.type_text("input", answer)
+            
+            # Natural language with cache reset
+            buttons = web.get_elements("all submit buttons")
         """
         # This will be handled by the web manager:
         # 1. Execute command to find all elements
         # 2. Adapter returns list of element handles
         # 3. Manager wraps each in WebActions(element_handle=handle)
         command = self._create_web_command(
-            WebActionType.GET_ELEMENTS, 
-            selector, 
-            fallback_selectors, 
-            timeout, 
+            WebActionType.GET_ELEMENTS,
+            selector,
+            fallback_selectors,
+            timeout,
             None,
             scope_element=self._element_handle
         )
@@ -221,7 +226,7 @@ class WebActions:
         """
         return self._create_web_command(WebActionType.GET_ATTRIBUTE, selector, fallback_selectors, timeout, attribute_name, scope_element=self._element_handle)
     
-    def get_options(self, selector: str = None, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+    def get_options(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
         """Get all selectable option texts from radio buttons, checkboxes, or dropdown.
         
         Auto-detects and returns options from within the current scope. Works universally for:
@@ -259,7 +264,7 @@ class WebActions:
             for opt in selected:
                 field.click(opt)  # AI resolves natural language selector
         """
-        return self._create_web_command(WebActionType.GET_OPTIONS, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._create_web_command(WebActionType.GET_OPTIONS, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
     
     def upload_file(self, file_path: str, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
         """Upload a file to a file input element.

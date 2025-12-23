@@ -16,6 +16,7 @@ class WebActionType(Enum):
     WAIT = "wait"
     GET_TEXT = "get_text"
     GET_PAGE_SOURCE = "get_page_source"
+    GET_ELEMENT = "get_element"  # Get single element (returns first match or None)
     GET_ELEMENTS = "get_elements"  # Get multiple elements for iteration
     GET_INPUT_TYPE = "get_input_type"  # Detect input type
     GET_ATTRIBUTE = "get_attribute"  # Get element attribute
