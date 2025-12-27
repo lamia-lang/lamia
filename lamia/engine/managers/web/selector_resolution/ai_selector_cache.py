@@ -176,3 +176,89 @@ class AISelectorCache:
             logger.info(f"Invalidated cached selector: '{original_selector}' for {page_url}")
         else:
             logger.debug(f"No cached entry to invalidate for: '{original_selector}' on {page_url}")
+    
+    async def reset_for_description(self, description: str) -> int:
+        """Reset cache entries matching a specific description.
+        
+        Args:
+            description: The selector description to match
+            
+        Returns:
+            Number of entries removed
+        """
+        if not self.cache_enabled:
+            return 0
+            
+        cache_data = self._load_cache()
+        keys_to_remove = [k for k in cache_data if description in k.split('|')[0]]
+        
+        for key in keys_to_remove:
+            del cache_data[key]
+        
+        if keys_to_remove:
+            self._save_cache(cache_data)
+            logger.info(f"Reset cache for description '{description}': removed {len(keys_to_remove)} entries")
+        
+        return len(keys_to_remove)
+    
+    async def reset_for_url(self, url: str) -> int:
+        """Reset cache entries for a specific URL.
+        
+        Args:
+            url: The page URL to match
+            
+        Returns:
+            Number of entries removed
+        """
+        if not self.cache_enabled:
+            return 0
+            
+        cache_data = self._load_cache()
+        keys_to_remove = [k for k in cache_data if url in k.split('|')[1]]
+        
+        for key in keys_to_remove:
+            del cache_data[key]
+        
+        if keys_to_remove:
+            self._save_cache(cache_data)
+            logger.info(f"Reset cache for URL '{url}': removed {len(keys_to_remove)} entries")
+        
+        return len(keys_to_remove)
+    
+    async def reset_all(self) -> int:
+        """Reset entire cache.
+        
+        Returns:
+            Number of entries removed
+        """
+        if not self.cache_enabled:
+            return 0
+            
+        cache_data = self._load_cache()
+        count = len(cache_data)
+        
+        if count > 0:
+            self._save_cache({})
+            logger.info(f"Reset entire cache: removed {count} entries")
+        
+        return count
+    
+    async def show(self) -> Dict[str, Tuple[str, str, str]]:
+        """Get all cached selectors in human-readable format.
+        
+        Returns:
+            Dict mapping cache_key to (description, url, resolved_selector)
+        """
+        if not self.cache_enabled:
+            return {}
+            
+        cache_data = self._load_cache()
+        result = {}
+        
+        for key, resolved_selector in cache_data.items():
+            parts = key.split('|', 1)
+            if len(parts) == 2:
+                description, url = parts
+                result[key] = (description, url, resolved_selector)
+        
+        return result

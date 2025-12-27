@@ -11,7 +11,7 @@ from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
 from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
 from lamia.adapters.web.driver_scope_manager import get_scope_manager
 from .selector_resolution.selector_resolution_service import SelectorResolutionService
-from .selector_resolution.selector_suggestion_service import SelectorSuggestionService
+from .selector_resolution.suggestions import SelectorSuggestionService
 from lamia.errors import ExternalOperationPermanentError, ExternalOperationTransientError
 from .selector_resolution.all_selectors_failed_handler import AllSelectorsFailedHandler
 from typing import Optional, Any
@@ -68,6 +68,9 @@ class BrowserManager:
                 pass
         # Selector resolution service will be created lazily when needed
         
+        # Store original action type for GET_ELEMENT vs GET_ELEMENTS distinction
+        original_action_type = command.action
+        
         # Convert WebCommand to BrowserAction
         browser_action = self._web_command_to_browser_action(command)
         
@@ -76,7 +79,7 @@ class BrowserManager:
             browser_action = await self._resolve_selectors(browser_action)
         
         # Execute browser action
-        result = await self._execute_browser_action(browser_action)
+        result = await self._execute_browser_action(browser_action, original_action_type=original_action_type)
 
         # If validation is expected but the action returned no content,
         # provide the current page HTML so the validator has something to check.
@@ -100,6 +103,7 @@ class BrowserManager:
             WebActionType.WAIT: BrowserActionType.WAIT,
             WebActionType.GET_TEXT: BrowserActionType.GET_TEXT,
             WebActionType.GET_PAGE_SOURCE: BrowserActionType.GET_PAGE_SOURCE,
+            WebActionType.GET_ELEMENT: BrowserActionType.GET_ELEMENTS,  # Use same adapter method
             WebActionType.GET_ELEMENTS: BrowserActionType.GET_ELEMENTS,
             WebActionType.GET_INPUT_TYPE: BrowserActionType.GET_INPUT_TYPE,
             WebActionType.GET_OPTIONS: BrowserActionType.GET_OPTIONS,
@@ -139,7 +143,11 @@ class BrowserManager:
         return action.params.selector is not None
     
     async def _resolve_selectors(self, action: BrowserAction) -> BrowserAction:
-        """Resolve selectors using AI service."""
+        """Resolve selectors using AI service.
+        
+        Args:
+            action: Browser action with selector to resolve
+        """
         try:
             # Check if selector needs AI resolution
             from .selector_resolution.selector_parser import SelectorParser, SelectorType
@@ -154,18 +162,27 @@ class BrowserManager:
             if not self._selector_resolution_service:
                 logger.info("BrowserManager: Creating LLM manager and selector resolution service for natural language selector")
                 from ..llm.llm_manager import LLMManager
+                
+                # Check if cache is enabled in config
+                web_config = self.config_provider.get_web_config()
+                selector_config = web_config.get("selector_resolution", {})
+                cache_enabled = selector_config.get("cache_enabled", True)
+                
+                if not cache_enabled:
+                    logger.info("Selector resolution cache is DISABLED")
+                
                 llm_manager = LLMManager(self.config_provider)
                 self._selector_resolution_service = SelectorResolutionService(
                     llm_manager,
                     get_page_html_func=self._get_current_page_html,
                     get_browser_adapter_func=self._get_browser_adapter,
-                    cache_enabled=True
+                    cache_enabled=cache_enabled
                 )
             
             # Get current page URL from driver scope manager
             scope_manager = get_scope_manager()
             page_url = getattr(scope_manager, 'current_url', 'unknown')
-            
+
             # Resolve main selector with operation context
             resolved_selector = await self._selector_resolution_service.resolve_selector(
                 selector=action.params.selector,
@@ -212,19 +229,24 @@ class BrowserManager:
         BrowserActionType.UPLOAD_FILE,
     }
 
-    async def _execute_browser_action(self, action: BrowserAction) -> Any:
-        """Execute browser action with optional selector chain fallback."""
+    async def _execute_browser_action(self, action: BrowserAction, original_action_type: Optional[WebActionType] = None) -> Any:
+        """Execute browser action with optional selector chain fallback.
+        
+        Args:
+            action: Browser action to execute
+            original_action_type: Original WebActionType (to distinguish GET_ELEMENT vs GET_ELEMENTS)
+        """
         adapter = await self._get_browser_adapter()
         
         # Check if this action uses selectors
         if action.action in self.SELECTOR_BASED_ACTIONS and action.params.fallback_selectors:
             # Use selector chain logic
-            return await self._execute_with_selector_chain(action, adapter)
+            return await self._execute_with_selector_chain(action, adapter, original_action_type)
         else:
             # Direct execution (no selector chain needed)
-            return await self._execute_single_action(action, adapter)
+            return await self._execute_single_action(action, adapter, original_action_type)
 
-    async def _execute_with_selector_chain(self, action: BrowserAction, adapter: BaseBrowserAdapter) -> Any:
+    async def _execute_with_selector_chain(self, action: BrowserAction, adapter: BaseBrowserAdapter, original_action_type: Optional[WebActionType] = None) -> Any:
         """Execute action with selector chain fallback."""
         params = action.params
         selectors = [params.selector] + (params.fallback_selectors or [])
@@ -245,9 +267,13 @@ class BrowserManager:
                     action=action.action,
                     params=single_params
                 )
-                return await self._execute_single_action(action_with_single_selector, adapter)
+                return await self._execute_single_action(action_with_single_selector, adapter, original_action_type)
                 
             except (ExternalOperationPermanentError, ExternalOperationTransientError) as e:
+                # Auto-invalidate cache on permanent errors (page structure changed)
+                if isinstance(e, ExternalOperationPermanentError) and self._selector_resolution_service:
+                    await self._auto_invalidate_cache_on_error(selector, e)
+                
                 if i == len(selectors) - 1:
                     # All selectors failed
                     if self.all_selectors_failed_handler is None:
@@ -263,7 +289,40 @@ class BrowserManager:
                 continue
             
 
-    async def _execute_single_action(self, action: BrowserAction, adapter) -> Any:
+    async def _auto_invalidate_cache_on_error(self, selector: str, error: Exception) -> None:
+        """Auto-invalidate cache when selector causes permanent error.
+        
+        Args:
+            selector: The selector that failed
+            error: The permanent error that occurred
+        """
+        try:
+            from .selector_resolution.selector_parser import SelectorParser, SelectorType
+            from lamia.adapters.web.driver_scope_manager import get_scope_manager
+            
+            # Only invalidate if this was an AI-resolved selector (natural language)
+            parser = SelectorParser()
+            selector_type = parser.classify(selector)
+            
+            if selector_type == SelectorType.NATURAL_LANGUAGE:
+                scope_manager = get_scope_manager()
+                page_url = getattr(scope_manager, 'current_url', 'unknown')
+                
+                logger.warning(
+                    f"⚠️  Permanent error with AI-resolved selector '{selector}': {error}\n"
+                    f"   Auto-invalidating cache to force re-resolution on next attempt.\n"
+                    f"   This may indicate the page structure has changed."
+                )
+                
+                await self._selector_resolution_service.invalidate_cached_selector(
+                    selector,
+                    page_url
+                )
+        except Exception as e:
+            # Don't let cache invalidation errors break the main flow
+            logger.debug(f"Failed to auto-invalidate cache: {e}")
+    
+    async def _execute_single_action(self, action: BrowserAction, adapter, original_action_type: Optional[WebActionType] = None) -> Any:
         """Execute single action without selector chain logic."""
         # Your existing switch statement
         if action.action == BrowserActionType.NAVIGATE:
@@ -307,7 +366,17 @@ class BrowserManager:
             element_handles = await adapter.get_elements(action.params)
             # Wrap each handle in a WebActions instance
             from lamia.actions.web import WebActions
-            return [WebActions(element_handle=handle) for handle in element_handles]
+            
+            # Check if this was originally GET_ELEMENT (singular) - return first or None
+            if original_action_type == WebActionType.GET_ELEMENT:
+                # Return first element or None
+                if element_handles:
+                    return WebActions(element_handle=element_handles[0])
+                else:
+                    return None
+            else:
+                # Return list of all elements
+                return [WebActions(element_handle=handle) for handle in element_handles]
         else:
             raise ValueError(f"Unsupported browser action: {action.action}")
     

@@ -15,13 +15,24 @@ When you provide a natural language description, the AI analyzes the page HTML a
 
 ```
 selector_resolution/
-├── selector_resolution_service.py    # Main orchestrator service
-├── response_parser.py                # AI response parsing interface
-├── selector_parser.py               # Selector classification
-├── selector_cache.py                # Caching layer
-├── ai_selector_resolver.py          # Legacy AI resolver
-└── validators/                      # Validation components
-    └── ai_resolved_selector_validator.py
+├── README.md                              # This file
+├── selector_resolution_service.py         # Main orchestrator
+├── selector_parser.py                     # Selector classification
+├── response_parser.py                     # AI response parsing
+├── ai_selector_cache.py                   # Caching layer
+├── cache_manager.py                       # Cache management API
+├── strategy_based/                        # Strategy-based resolution
+│   ├── README.md                          # Strategy system docs
+│   ├── strategy_generator.py             # Generate selector strategies
+│   ├── strategy_resolver.py              # Try strategies progressively
+│   ├── relationship_validator.py         # Validate element relationships
+│   └── ambiguity_resolver.py             # Human-in-the-loop selection
+├── suggestions/                           # AI suggestions on failure
+│   ├── README.md                          # Suggestion system docs
+│   └── suggestion_service.py             # Generate alternative selectors
+└── validators/                            # Validation components
+    ├── ai_resolved_selector_validator.py
+    └── selector_correctness_validator.py
 ```
 
 ## Key Components
@@ -32,7 +43,7 @@ The main service that orchestrates the entire resolution process:
 
 - **Input**: Any selector (CSS, XPath, or natural language)
 - **Output**: Valid CSS selector ready for browser automation
-- **Features**: Caching, validation, ambiguity handling, deduction logic
+- **Features**: Caching, validation, ambiguity handling, strategy-based resolution
 
 ```python
 # Usage example
@@ -45,21 +56,35 @@ resolved = await service.resolve_selector(
 # Returns: "button.btn-primary"
 ```
 
-### 2. Response Parser Interface
+### 2. Strategy-Based Resolution (`strategy_based/`)
 
-Handles different AI response formats:
+Modern approach for natural language selectors (99.8% cheaper than old approach):
 
-- **AmbiguousFormatResponseParser**: Uses `AMBIGUOUS` format for multiple matches
-- **Extensible**: Can add JSON, XML, or other response formats
+- **No HTML sent to LLM** - Only the description!
+- **Multiple strategies** - Tries specific → generic progressively
+- **Relationship validation** - Validates siblings, common ancestors
+- **Human-in-the-loop** - Interactive ambiguity resolution
 
-### 3. Caching Layer
+See [`strategy_based/README.md`](strategy_based/README.md) for details.
+
+### 3. AI Suggestions (`suggestions/`)
+
+Provides intelligent alternatives when selectors fail:
+
+- **Context-aware** - Analyzes actual page HTML
+- **Operation-specific** - Tailored to click, type, hover, etc.
+- **Automatic** - No configuration needed
+
+See [`suggestions/README.md`](suggestions/README.md) for details.
+
+### 4. Caching Layer
 
 Intelligent caching to avoid repeated AI calls:
 
 - **Location**: `.lamia_cache/selectors/selector_resolutions.json`
 - **Key Format**: `"{selector}|{page_url}"`
 - **Persistence**: Survives across runs
-- **Invalidation**: Automatic when selectors fail validation
+- **Auto-invalidation**: On permanent errors
 
 ## AI Selector Features
 

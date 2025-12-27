@@ -29,6 +29,7 @@ class SelectorResolutionService:
         self.get_browser_adapter = get_browser_adapter_func
         self.cache = AISelectorCache(cache_enabled=cache_enabled)
         self.response_parser = response_parser or AmbiguousFormatResponseParser()
+        self._progressive_resolver = None  # Lazy initialized
         
     async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None, operation_type: Optional[str] = None) -> str:
         """Resolve a selector using AI if needed, with caching.
@@ -75,40 +76,80 @@ class SelectorResolutionService:
         try:
             logger.info(f"Sending selector '{original_selector}' to AI for resolution")
             
-            # Get current page HTML if not provided
-            if page_context is None:
-                page_context = await self.get_page_html()
+            # For natural language selectors, use progressive resolution
+            if selector_type == SelectorType.NATURAL_LANGUAGE:
+                logger.info("Using progressive selector resolution (no HTML sent to LLM)")
+                
+                # Initialize strategy-based resolver lazily
+                if self._progressive_resolver is None:
+                    from .progressive import ProgressiveSelectorResolver
+                    
+                    if self.get_browser_adapter is None:
+                        raise ValueError("Browser adapter function not provided for progressive resolution")
+                    
+                    browser_adapter = await self.get_browser_adapter()
+                    self._progressive_resolver = ProgressiveSelectorResolver(
+                        browser_adapter,
+                        self.llm_manager,
+                        self.cache,
+                        max_ambiguous_matches=10
+                    )
+                
+                # Resolve using progressive strategies
+                resolved_selector, found_elements = await self._progressive_resolver.resolve(
+                    original_selector,
+                    page_url
+                )
+                
+                logger.info(f"Progressive resolution succeeded: '{original_selector}' → '{resolved_selector}'")
             
-            # Create operation-specific instructions and build prompt using parser
-            operation_instructions = self._get_operation_instructions(operation_type)
-            prompt = self.response_parser.get_full_prompt_template(operation_instructions, page_context, original_selector)
-
-            # Use llm_manager to get raw response first (no validation yet)
-            llm_command = LLMCommand(prompt=prompt)
-            
-            result = await self.llm_manager.execute(llm_command)
-            response = result.validated_text.strip()
-            
-            if not response:
-                raise ValueError("LLM returned empty response")
-            
-            # Parse response using the configured parser
-            parse_result = self.response_parser.parse_response(response, original_selector)
-            
-            if parse_result.is_ambiguous:
-                # Handle ambiguous response with validation and deduction
-                resolved_selector = await self._handle_ambiguous_response(parse_result.options, original_selector, page_url, operation_type)
             else:
-                resolved_selector = parse_result.selector
-            
-            # Only validate if we got a single selector (not ambiguous)
-            from .validators.ai_resolved_selector_validator import AIResolvedSelectorValidator
-            browser_adapter = await self.get_browser_adapter()
-            validator = AIResolvedSelectorValidator(browser_adapter)
-            
-            validation_result = await validator.validate_strict(resolved_selector)
-            if not validation_result.is_valid:
-                raise ValueError(f"AI-resolved selector validation failed: {validation_result.error_message}")
+                # For invalid CSS/XPath, use old approach (fix syntax)
+                logger.info("Using legacy resolution for invalid CSS/XPath")
+                
+                # Get current page HTML if not provided
+                if page_context is None:
+                    if self.get_page_html is None:
+                        raise ValueError("Page HTML function not provided for legacy resolution")
+                    page_context = await self.get_page_html()
+                
+                # Create operation-specific instructions and build prompt using parser
+                operation_instructions = self._get_operation_instructions(operation_type or "")
+                prompt = self.response_parser.get_full_prompt_template(operation_instructions, page_context, original_selector)
+
+                # Use llm_manager to get raw response first (no validation yet)
+                llm_command = LLMCommand(prompt=prompt)
+                
+                result = await self.llm_manager.execute(llm_command)
+                response = result.validated_text.strip()
+                
+                if not response:
+                    raise ValueError("LLM returned empty response")
+                
+                # Parse response using the configured parser
+                parse_result = self.response_parser.parse_response(response, original_selector)
+                
+                if parse_result.is_ambiguous:
+                    # Handle ambiguous response with validation and deduction
+                    resolved_selector = await self._handle_ambiguous_response(parse_result.options, original_selector, page_url, operation_type or "")
+                else:
+                    resolved_selector = parse_result.selector
+                
+                # Only validate if we got a single selector (not ambiguous)
+                from .validators.ai_resolved_selector_validator import AIResolvedSelectorValidator
+                
+                if self.get_browser_adapter is None:
+                    raise ValueError("Browser adapter function not provided for validation")
+                
+                browser_adapter = await self.get_browser_adapter()
+                validator = AIResolvedSelectorValidator(browser_adapter)
+                
+                if resolved_selector is None:
+                    raise ValueError("Resolved selector is None")
+                
+                validation_result = await validator.validate_strict(resolved_selector)
+                if not validation_result.is_valid:
+                    raise ValueError(f"AI-resolved selector validation failed: {validation_result.error_message}")
                 
         except ValueError as e:
             # Check if this is an ambiguity error that should be surfaced to the user
@@ -152,7 +193,7 @@ class SelectorResolutionService:
         """
         return self.cache.size()
     
-    async def _handle_ambiguous_response(self, options: list, original_selector: str, page_url: str, operation_type: str = None) -> str:
+    async def _handle_ambiguous_response(self, options: list, original_selector: str, page_url: str, operation_type: str) -> str:
         """Handle an ambiguous AI response by validating suggestions and applying deduction logic.
         
         Args:
@@ -219,6 +260,9 @@ class SelectorResolutionService:
         else:
             # Single option or no options - this shouldn't happen in ambiguous case
             raise ValueError("AI reported ambiguity but provided insufficient options")
+        
+        # This line should never be reached, but satisfies type checker
+        raise ValueError("Ambiguity resolution failed")
     
     def _get_operation_instructions(self, operation_type: Optional[str], for_validation: bool = False) -> str:
         """Get operation-specific instructions for the AI prompt.
@@ -341,7 +385,7 @@ Look for elements like:
             (enhanced_text, css_selector) tuple for the deduced main element, or None if can't deduce
         """
         if len(all_options) < 2:
-            return None
+            return None  # type: ignore[return-value]
             
         # Sort options by text length (word count) - shortest first
         options_by_length = sorted(all_options, key=lambda x: len(x[0].split()))
@@ -359,7 +403,7 @@ Look for elements like:
             return (exclusionary_text, shortest_option[1])
         
         logger.debug("Could not deduce main element - all options have similar complexity")
-        return None
+        return None  # type: ignore[return-value]
     
     def _create_exclusionary_description(self, main_text: str, all_options: list) -> str:
         """Create a natural language description that excludes other options.
@@ -413,7 +457,7 @@ Look for elements like:
             
         return enhanced
 
-    async def _validate_ai_suggestions(self, filtered_options: list, original_selector: str, operation_type: str = None) -> list:
+    async def _validate_ai_suggestions(self, filtered_options: list, original_selector: str, operation_type: str) -> list:
         """Validate each AI suggestion to ensure it's actually unique by testing with AI.
         
         Args:
@@ -432,6 +476,11 @@ Look for elements like:
                 logger.debug(f"Testing suggestion: '{text}'")
                 
                 # Test if this suggestion would itself be ambiguous using validation prompt
+                if self.get_page_html is None:
+                    logger.warning("Cannot validate suggestions without page HTML function")
+                    validated_options.append((text, selector))
+                    continue
+                
                 page_html = await self.get_page_html()
                 operation_instructions = self._get_operation_instructions(operation_type, for_validation=True)
                 

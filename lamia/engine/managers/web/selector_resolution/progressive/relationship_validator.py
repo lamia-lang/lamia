@@ -1,0 +1,283 @@
+"""Validator for element relationships and spatial constraints."""
+
+import logging
+from typing import List, Dict, Any, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+class ElementRelationshipValidator:
+    """
+    Validates spatial and hierarchical relationships between found elements.
+    
+    Unlike HTMLStructureValidator (which validates LLM output structure),
+    this validates that found elements have expected relationships in the DOM.
+    """
+    
+    def __init__(self, browser_adapter):
+        """Initialize the validator.
+        
+        Args:
+            browser_adapter: Browser adapter for DOM queries
+        """
+        self.browser = browser_adapter
+    
+    async def validate_strategy_match(
+        self,
+        found_elements: List[Any],
+        strategy: Dict[str, Any]
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Validate that found elements match strategy expectations.
+        
+        Args:
+            found_elements: List of element handles found by selectors
+            strategy: Strategy dict with validation rules
+            
+        Returns:
+            (is_valid, reason_if_invalid)
+        """
+        if not found_elements:
+            return False, "No elements found"
+        
+        validation = strategy.get('validation', {})
+        
+        # 1. Validate count
+        count_valid, count_reason = self._validate_count(
+            found_elements,
+            validation.get('count', 'at_least_1')
+        )
+        if not count_valid:
+            return False, count_reason
+        
+        # 2. Validate relationship
+        relationship = validation.get('relationship', 'none')
+        
+        if relationship == 'common_ancestor':
+            max_levels = validation.get('max_ancestor_levels', 5)
+            ancestor = await self._find_common_ancestor(found_elements, max_levels)
+            
+            if not ancestor:
+                return False, f"Elements not grouped under common ancestor (searched {max_levels} levels)"
+            
+            logger.debug(f"Found common ancestor at level <= {max_levels}")
+        
+        elif relationship == 'siblings':
+            are_siblings = await self._are_siblings(found_elements)
+            if not are_siblings:
+                return False, "Elements are not siblings"
+        
+        # 3. Validate strictness (for siblings, check adjacency)
+        if strategy.get('strictness') == 'strict' and relationship == 'siblings':
+            are_adjacent = await self._are_adjacent_siblings(found_elements)
+            if not are_adjacent:
+                return False, "Elements not adjacent siblings (strict mode)"
+        
+        return True, None
+    
+    def _validate_count(
+        self,
+        elements: List[Any],
+        count_spec: str
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Validate element count based on specification.
+        
+        Args:
+            elements: List of found elements
+            count_spec: Count specification (e.g., "exactly_2", "at_least_1", "any")
+            
+        Returns:
+            (is_valid, reason_if_invalid)
+        """
+        actual_count = len(elements)
+        
+        if count_spec == 'any':
+            return True, None
+        
+        parts = count_spec.split('_')
+        if len(parts) < 2:
+            return True, None  # Invalid spec, allow
+        
+        operator = parts[0]
+        try:
+            expected = int(parts[1])
+        except ValueError:
+            return True, None  # Invalid spec, allow
+        
+        if operator == 'exactly':
+            if actual_count != expected:
+                return False, f"Expected exactly {expected} element(s), found {actual_count}"
+        
+        elif operator == 'at':
+            if len(parts) >= 3:
+                modifier = parts[2]
+                if modifier == 'least':
+                    if actual_count < expected:
+                        return False, f"Expected at least {expected} element(s), found {actual_count}"
+                elif modifier == 'most':
+                    if actual_count > expected:
+                        return False, f"Expected at most {expected} element(s), found {actual_count}"
+        
+        return True, None
+    
+    async def _find_common_ancestor(
+        self,
+        elements: List[Any],
+        max_levels: int = 5
+    ) -> Optional[Any]:
+        """
+        Find nearest common ancestor of all elements.
+        
+        Args:
+            elements: List of element handles
+            max_levels: Maximum levels to search up the DOM tree
+            
+        Returns:
+            Common ancestor element handle or None
+        """
+        if not elements:
+            return None
+        
+        if len(elements) == 1:
+            # Single element: return its parent
+            try:
+                parent = await self.browser.execute_script(
+                    "return arguments[0].parentElement",
+                    elements[0]
+                )
+                return parent
+            except Exception as e:
+                logger.debug(f"Failed to get parent of single element: {e}")
+                return None
+        
+        # Get ancestors of first element
+        first_elem = elements[0]
+        ancestors = []
+        current = first_elem
+        
+        try:
+            for level in range(max_levels):
+                current = await self.browser.execute_script(
+                    "return arguments[0].parentElement",
+                    current
+                )
+                if not current:
+                    break
+                ancestors.append(current)
+        except Exception as e:
+            logger.debug(f"Failed to traverse ancestors: {e}")
+            return None
+        
+        # Find first ancestor that contains all other elements
+        for ancestor in ancestors:
+            try:
+                contains_all = True
+                for elem in elements[1:]:
+                    is_contained = await self.browser.execute_script(
+                        "return arguments[0].contains(arguments[1])",
+                        ancestor,
+                        elem
+                    )
+                    if not is_contained:
+                        contains_all = False
+                        break
+                
+                if contains_all:
+                    return ancestor
+            except Exception as e:
+                logger.debug(f"Failed to check containment: {e}")
+                continue
+        
+        return None
+    
+    async def _are_siblings(self, elements: List[Any]) -> bool:
+        """
+        Check if all elements are siblings (share same parent).
+        
+        Args:
+            elements: List of element handles
+            
+        Returns:
+            True if all elements have the same parent
+        """
+        if len(elements) <= 1:
+            return True
+        
+        try:
+            # Get parent of first element
+            first_parent = await self.browser.execute_script(
+                "return arguments[0].parentElement",
+                elements[0]
+            )
+            
+            if not first_parent:
+                return False
+            
+            # Check if all other elements have the same parent
+            for elem in elements[1:]:
+                parent = await self.browser.execute_script(
+                    "return arguments[0].parentElement",
+                    elem
+                )
+                
+                if not parent:
+                    return False
+                
+                are_same = await self.browser.execute_script(
+                    "return arguments[0] === arguments[1]",
+                    first_parent,
+                    parent
+                )
+                
+                if not are_same:
+                    return False
+            
+            return True
+        except Exception as e:
+            logger.debug(f"Failed to check sibling relationship: {e}")
+            return False
+    
+    async def _are_adjacent_siblings(self, elements: List[Any]) -> bool:
+        """
+        Check if elements are adjacent siblings (no other elements between them).
+        
+        Args:
+            elements: List of element handles
+            
+        Returns:
+            True if elements are adjacent in DOM order
+        """
+        if len(elements) <= 1:
+            return True
+        
+        try:
+            # Check each consecutive pair
+            for i in range(len(elements) - 1):
+                current = elements[i]
+                next_elem = elements[i + 1]
+                
+                # Get next sibling of current
+                next_sibling = await self.browser.execute_script(
+                    "return arguments[0].nextElementSibling",
+                    current
+                )
+                
+                if not next_sibling:
+                    return False
+                
+                # Check if next sibling is the expected next element
+                are_same = await self.browser.execute_script(
+                    "return arguments[0] === arguments[1]",
+                    next_sibling,
+                    next_elem
+                )
+                
+                if not are_same:
+                    return False
+            
+            return True
+        except Exception as e:
+            logger.debug(f"Failed to check adjacent siblings: {e}")
+            return False
+

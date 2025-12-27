@@ -1,5 +1,5 @@
 import logging
-from lamia.engine.managers.web.selector_resolution.selector_suggestion_service import SelectorSuggestionService
+from lamia.engine.managers.web.selector_resolution.suggestions import SelectorSuggestionService
 from lamia.errors import ExternalOperationError, ExternalOperationTransientError
 from pathlib import Path
 from datetime import datetime
