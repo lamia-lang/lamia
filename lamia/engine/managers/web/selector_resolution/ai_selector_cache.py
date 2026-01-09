@@ -23,12 +23,13 @@ class AISelectorCache:
         self.cache_file_name = 'selector_resolutions.json'
         self._cache_data = None  # Lazy loaded
     
-    async def get(self, original_selector: str, page_url: str) -> Optional[str]:
+    async def get(self, original_selector: str, page_url: str, parent_context: Optional[str] = None) -> Optional[str]:
         """Get cached resolved selector.
         
         Args:
             original_selector: The original selector that was resolved
             page_url: URL of the page where selector was used
+            parent_context: Optional parent element context (e.g., "fieldset", "div.modal")
             
         Returns:
             Cached resolved selector or None if not found
@@ -37,23 +38,24 @@ class AISelectorCache:
             return None
             
         cache_data = self._load_cache()
-        cache_key = self._create_cache_key(original_selector, page_url)
+        cache_key = self._create_cache_key(original_selector, page_url, parent_context)
         
         resolved = cache_data.get(cache_key)
         if resolved:
-            logger.debug(f"Cache hit for selector '{original_selector}' on {page_url}")
+            logger.debug(f"Cache hit for selector '{original_selector}' on {page_url} (context: {parent_context})")
         else:
-            logger.debug(f"Cache miss for selector '{original_selector}' on {page_url}")
+            logger.debug(f"Cache miss for selector '{original_selector}' on {page_url} (context: {parent_context})")
             
         return resolved
     
-    async def set(self, original_selector: str, page_url: str, resolved_selector: str) -> None:
+    async def set(self, original_selector: str, page_url: str, resolved_selector: str, parent_context: Optional[str] = None) -> None:
         """Store resolved selector in cache.
         
         Args:
             original_selector: The original selector that was resolved
             page_url: URL of the page where selector was used
             resolved_selector: The AI-resolved selector
+            parent_context: Optional parent element context (e.g., "fieldset", "div.modal")
         """
         if not self.cache_enabled:
             return
@@ -63,23 +65,27 @@ class AISelectorCache:
             return
             
         cache_data = self._load_cache()
-        cache_key = self._create_cache_key(original_selector, page_url)
+        cache_key = self._create_cache_key(original_selector, page_url, parent_context)
         cache_data[cache_key] = resolved_selector.strip()
         
         self._save_cache(cache_data)
-        logger.info(f"Saved selector to cache: '{original_selector}' -> '{resolved_selector}' for {page_url}")
+        logger.info(f"Saved selector to cache: '{original_selector}' -> '{resolved_selector}' for {page_url} (context: {parent_context})")
     
-    def _create_cache_key(self, original_selector: str, page_url: str) -> str:
-        """Create cache key from selector and URL.
+    def _create_cache_key(self, original_selector: str, page_url: str, parent_context: Optional[str] = None) -> str:
+        """Create cache key from selector, URL, and optional parent context.
         
         Args:
             original_selector: The original selector
             page_url: The page URL
+            parent_context: Optional parent element context
             
         Returns:
             Cache key string
         """
-        cache_key = f"{original_selector}|{page_url}"
+        if parent_context:
+            cache_key = f"{original_selector}|{page_url}|within:{parent_context}"
+        else:
+            cache_key = f"{original_selector}|{page_url}"
         logger.debug(f"Created cache key: '{cache_key}'")
         return cache_key
     
@@ -157,25 +163,26 @@ class AISelectorCache:
         cache_data = self._load_cache()
         return len(cache_data)
     
-    async def invalidate(self, original_selector: str, page_url: str) -> None:
+    async def invalidate(self, original_selector: str, page_url: str, parent_context: Optional[str] = None) -> None:
         """Invalidate a specific cached selector resolution.
         
         Args:
             original_selector: The original selector to invalidate
             page_url: URL of the page where selector was used
+            parent_context: Optional parent element context
         """
         if not self.cache_enabled:
             return
             
         cache_data = self._load_cache()
-        cache_key = self._create_cache_key(original_selector, page_url)
+        cache_key = self._create_cache_key(original_selector, page_url, parent_context)
         
         if cache_key in cache_data:
             del cache_data[cache_key]
             self._save_cache(cache_data)
-            logger.info(f"Invalidated cached selector: '{original_selector}' for {page_url}")
+            logger.info(f"Invalidated cached selector: '{original_selector}' for {page_url} (context: {parent_context})")
         else:
-            logger.debug(f"No cached entry to invalidate for: '{original_selector}' on {page_url}")
+            logger.debug(f"No cached entry to invalidate for: '{original_selector}' on {page_url} (context: {parent_context})")
     
     async def reset_for_description(self, description: str) -> int:
         """Reset cache entries matching a specific description.

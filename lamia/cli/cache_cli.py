@@ -179,6 +179,36 @@ class CacheCLI:
         print(f"Cache file size:      {file_size:,} bytes ({file_size/1024:.1f} KB)")
         print(f"Cache location:       {self.cache_file}")
         print()
+    
+    def add_selector(
+        self, 
+        original_selector: str, 
+        resolved_selector: str, 
+        url: str,
+        parent_context: Optional[str] = None
+    ) -> None:
+        """Add a selector resolution to the cache.
+        
+        Args:
+            original_selector: The original selector that failed
+            resolved_selector: The working selector to use instead
+            url: URL where this resolution applies
+            parent_context: Optional parent context for scoped cache
+        """
+        cache_data = self._load_cache()
+        
+        # Create cache key (same format as AISelectorCache)
+        if parent_context:
+            cache_key = f"{original_selector}|{url}|{parent_context}"
+        else:
+            cache_key = f"{original_selector}|{url}"
+        
+        # Add to cache
+        cache_data[cache_key] = resolved_selector
+        
+        self._save_cache(cache_data)
+        
+        context_info = f" (within context: {parent_context})" if parent_context else ""
 
 
 def main():
@@ -208,6 +238,9 @@ Examples:
   
   # Show cache statistics
   lamia-cache stats
+  
+  # Add a working selector to cache
+  lamia-cache add "button[aria-label*='Easy Apply']" ".jobs-apply-button" "https://www.linkedin.com/jobs/"
         """
     )
     
@@ -230,6 +263,14 @@ Examples:
     stats_parser = subparsers.add_parser('stats', help='Show cache statistics')
     stats_parser.add_argument('--cache-dir', default='.lamia_cache', help='Cache directory (default: .lamia_cache)')
     
+    # Add command
+    add_parser = subparsers.add_parser('add', help='Add a selector resolution to cache')
+    add_parser.add_argument('original', help='Original selector that failed')
+    add_parser.add_argument('resolved', help='Working selector to use instead')
+    add_parser.add_argument('url', help='URL where this resolution applies')
+    add_parser.add_argument('--context', help='Optional parent context for scoped cache')
+    add_parser.add_argument('--cache-dir', default='.lamia_cache', help='Cache directory (default: .lamia_cache)')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -249,9 +290,18 @@ Examples:
         cli.clear_cache(description=args.description, url=args.url, all_entries=args.all)
     elif args.command == 'stats':
         cli.stats()
+    elif args.command == 'add':
+        cli.add_selector(
+            original_selector=args.original,
+            resolved_selector=args.resolved,
+            url=args.url,
+            parent_context=args.context
+        )
 
 
 if __name__ == '__main__':
     main()
+
+
 
 

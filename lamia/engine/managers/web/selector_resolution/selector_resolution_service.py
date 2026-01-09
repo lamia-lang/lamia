@@ -3,17 +3,23 @@
 import logging
 from typing import Optional, Callable, Awaitable
 from .ai_selector_cache import AISelectorCache
+from .multi_selector_cache import MultiSelectorCache
 from .selector_parser import SelectorParser, SelectorType
 from .response_parser import ResponseParser, AmbiguousFormatResponseParser
 from lamia.interpreter.commands import LLMCommand
 
 logger = logging.getLogger(__name__)
 
+# HTML size limit for direct LLM processing (32KB for conservative 1B model support)
+# Typical limits: GPT-4: ~128K tokens, Claude: ~200K tokens, 1B model: ~4K-8K tokens
+# Rough estimate: 1 token ≈ 4 characters, so 8K tokens ≈ 32KB
+MAX_HTML_SIZE_FOR_SMALL_LLM = 32 * 1024  # 32KB
+
 
 class SelectorResolutionService:
     """Orchestrates AI-powered selector resolution with caching."""
     
-    def __init__(self, llm_manager, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, get_browser_adapter_func: Optional[Callable[[], Awaitable]] = None, cache_enabled: bool = True, response_parser: Optional[ResponseParser] = None):
+    def __init__(self, llm_manager, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, get_browser_adapter_func: Optional[Callable[[], Awaitable]] = None, cache_enabled: bool = True, response_parser: Optional[ResponseParser] = None, config_provider = None):
         """Initialize the selector resolution service.
         
         Args:
@@ -22,16 +28,20 @@ class SelectorResolutionService:
             get_browser_adapter_func: Function to get browser adapter for validation (optional)
             cache_enabled: Whether to enable caching of resolved selectors
             response_parser: Custom response parser implementation (defaults to AmbiguousFormatResponseParser)
+            config_provider: Configuration provider for visual picker settings
         """
         self.parser = SelectorParser()
         self.llm_manager = llm_manager
         self.get_page_html = get_page_html_func
         self.get_browser_adapter = get_browser_adapter_func
+        self.config_provider = config_provider
         self.cache = AISelectorCache(cache_enabled=cache_enabled)
+        self.multi_cache = MultiSelectorCache()  # For conditional selectors
         self.response_parser = response_parser or AmbiguousFormatResponseParser()
         self._progressive_resolver = None  # Lazy initialized
+        self._visual_picker = None  # Lazy initialized
         
-    async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None, operation_type: Optional[str] = None) -> str:
+    async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None, operation_type: Optional[str] = None, parent_context: Optional[str] = None) -> str:
         """Resolve a selector using AI if needed, with caching.
         
         Args:
@@ -63,26 +73,100 @@ class SelectorResolutionService:
             logger.debug(f"Selector is already valid, returning as-is")
             return original_selector
         
-        # Check cache for resolved version
-        logger.debug(f"Checking cache for selector: '{original_selector}' on URL: '{page_url}'")
-        cached_result = await self.cache.get(original_selector, page_url)
+        # Check traditional cache first (with parent context)
+        context_desc = f" (within {parent_context})" if parent_context else ""
+        logger.debug(f"Checking cache for selector: '{original_selector}' on URL: '{page_url}'{context_desc}")
+        cached_result = await self.cache.get(original_selector, page_url, parent_context)
         if cached_result:
-            logger.info(f"Using cached resolution: '{original_selector}' → '{cached_result}'")
+            logger.info(f"Using cached resolution: '{original_selector}' → '{cached_result}'{context_desc}")
             return cached_result
-        else:
-            logger.debug(f"No cache hit for: '{original_selector}' on '{page_url}'")
+        
+        # For natural language selectors, also check multi-selector cache
+        if selector_type == SelectorType.NATURAL_LANGUAGE:
+            working_selectors = await self.multi_cache.get_working_selectors(original_selector, page_url)
+            if working_selectors:
+                logger.info(f"Found {len(working_selectors)} working selectors in multi-cache")
+                
+                # Try each working selector to see if any still work
+                browser_adapter = await self.get_browser_adapter() if self.get_browser_adapter else None
+                if browser_adapter:
+                    for selector in working_selectors:
+                        try:
+                            from lamia.internal_types import BrowserActionParams
+                            params = BrowserActionParams(selector=selector)
+                            elements = await browser_adapter.get_elements(params)
+                            
+                            if elements:
+                                logger.info(f"Multi-cache hit: '{original_selector}' → '{selector}'")
+                                return selector
+                            else:
+                                # This selector no longer works, downgrade it
+                                await self.multi_cache.remove_failed_selector(original_selector, selector, page_url)
+                        except Exception as e:
+                            logger.debug(f"Multi-cache selector failed: {selector} - {e}")
+                            await self.multi_cache.remove_failed_selector(original_selector, selector, page_url)
+        
+        logger.debug(f"No cache hit for: '{original_selector}' on '{page_url}'")
         
         # Use AI to resolve the selector
         try:
             logger.info(f"Sending selector '{original_selector}' to AI for resolution")
             
-            # For natural language selectors, use progressive resolution
+            # For natural language selectors, use visual picker as primary method
             if selector_type == SelectorType.NATURAL_LANGUAGE:
-                logger.info("Using progressive selector resolution (no HTML sent to LLM)")
+                logger.info(f"🎯 Natural language selector detected: '{original_selector}', operation_type: '{operation_type}'")
                 
-                # Initialize strategy-based resolver lazily
-                if self._progressive_resolver is None:
-                    from .progressive import ProgressiveSelectorResolver
+                # Check if this is an input-related selector that should always use visual picker
+                is_input_related = await self._is_input_related_selector(original_selector)
+                
+                # Check if page HTML is small enough for direct LLM processing
+                # BUT always use visual picker for input-related selectors regardless of HTML size
+                should_use_llm_directly = False
+                if not is_input_related:
+                    should_use_llm_directly = await self._should_use_llm_for_small_html(original_selector)
+                
+                if should_use_llm_directly:
+                    logger.info("📄 Page HTML is small - using direct LLM resolution instead of visual picker")
+                    # Skip visual picker and go straight to progressive resolution with page context
+                
+                else:
+                    if is_input_related:
+                        logger.info("🎯 Input-related selector detected - using visual picker for better pattern recognition")
+                    # Try visual picker first if available and enabled
+                    visual_picker_decision = await self._should_use_visual_picker(original_selector, operation_type)
+                    logger.info(f"🤔 Visual picker decision: {visual_picker_decision}")
+                    
+                    if visual_picker_decision:
+                        logger.info("🎨 Using visual picker for element selection (primary method)")
+                        
+                        try:
+                            resolved_selector = await self._resolve_with_visual_picker(
+                                original_selector,
+                                page_url,
+                                operation_type or "get_element"
+                            )
+                            
+                            logger.info(f"✅ Visual picker succeeded: '{original_selector}' → '{resolved_selector}'")
+                            
+                            # Cache visual picker result
+                            await self.cache.set(original_selector, page_url, resolved_selector, parent_context)
+                            await self.multi_cache.add_working_selector(original_selector, resolved_selector, page_url)
+                            
+                            return resolved_selector
+                            
+                        except Exception as visual_error:
+                            logger.warning(f"❌ Visual picker failed: {visual_error}")
+                            # Fall back to progressive resolution
+                            logger.info("🔄 Falling back to progressive selector resolution")
+                    else:
+                        logger.info("⚠️ Visual picker not used - requirements not met")
+                
+                # Fall back to progressive resolution (if visual picker failed or not available)
+                logger.info("📋 Using progressive selector resolution (fallback method)")
+                
+                # Initialize progressive resolver lazily
+                if not hasattr(self, '_progressive_resolver') or self._progressive_resolver is None:
+                    from .progressive.strategy_resolver import ProgressiveSelectorResolver
                     
                     if self.get_browser_adapter is None:
                         raise ValueError("Browser adapter function not provided for progressive resolution")
@@ -91,17 +175,24 @@ class SelectorResolutionService:
                     self._progressive_resolver = ProgressiveSelectorResolver(
                         browser_adapter,
                         self.llm_manager,
-                        self.cache,
-                        max_ambiguous_matches=10
+                        self.cache
                     )
                 
-                # Resolve using progressive strategies
+                # Resolve using progressive approach
                 resolved_selector, found_elements = await self._progressive_resolver.resolve(
                     original_selector,
                     page_url
                 )
                 
                 logger.info(f"Progressive resolution succeeded: '{original_selector}' → '{resolved_selector}'")
+                
+                # Cache in both traditional cache and multi-selector cache
+                logger.debug(f"Caching progressive resolution: '{original_selector}' on '{page_url}' → '{resolved_selector}'")
+                await self.cache.set(original_selector, page_url, resolved_selector, parent_context)
+                await self.multi_cache.add_working_selector(original_selector, resolved_selector, page_url)
+                logger.info(f"Progressive resolution cached: '{original_selector}' → '{resolved_selector}'")
+                
+                return resolved_selector
             
             else:
                 # For invalid CSS/XPath, use old approach (fix syntax)
@@ -164,17 +255,18 @@ class SelectorResolutionService:
             logger.error(f"AI resolution failed for '{original_selector}': {e}")
             raise ValueError(f"Failed to resolve selector '{original_selector}': {e}")
         
-        # Cache the resolution
-        logger.debug(f"Caching resolution: '{original_selector}' on '{page_url}' → '{resolved_selector}'")
-        await self.cache.set(original_selector, page_url, resolved_selector)
-        logger.info(f"Resolved and cached: '{original_selector}' → '{resolved_selector}'")
+        # Cache the legacy resolution
+        logger.debug(f"Caching legacy resolution: '{original_selector}' on '{page_url}' → '{resolved_selector}'")
+        await self.cache.set(original_selector, page_url, resolved_selector, parent_context)
+        logger.info(f"Legacy resolution cached: '{original_selector}' → '{resolved_selector}'")
         
         return resolved_selector
     
     async def clear_cache(self) -> None:
         """Clear all cached selector resolutions."""
         self.cache.clear()
-        logger.info("Cleared selector resolution cache")
+        self.multi_cache.clear()
+        logger.info("Cleared selector resolution cache and multi-selector cache")
     
     async def invalidate_cached_selector(self, original_selector: str, page_url: str) -> None:
         """Invalidate a specific cached selector when it fails.
@@ -245,7 +337,7 @@ class SelectorResolutionService:
                     logger.info(f"Exclusionary description resolved to main element: '{main_option[0]}' -> {main_option[1]}")
                     
                     # Cache and return the CSS selector
-                    await self.cache.set(original_selector, page_url, main_option[1])
+                    await self.cache.set(original_selector, page_url, main_option[1], parent_context)
                     return main_option[1]
                 else:
                     logger.info(f"Validating {len(filtered_options)} AI suggestions to ensure they're actually unique")
@@ -263,6 +355,199 @@ class SelectorResolutionService:
         
         # This line should never be reached, but satisfies type checker
         raise ValueError("Ambiguity resolution failed")
+    
+    async def _should_use_visual_picker(self, selector: str, operation_type: Optional[str]) -> bool:
+        """
+        Determine if visual picker should be used for this selector.
+        
+        Args:
+            selector: Natural language selector
+            operation_type: Browser operation type
+            
+        Returns:
+            True if visual picker should be used
+        """
+        logger.debug(f"🔍 Checking if visual picker should be used for selector='{selector}', operation_type='{operation_type}'")
+        
+        try:
+            # Check if visual picker is available
+            from .visual_picker import VisualElementPicker
+            logger.debug("✅ Visual picker module imported successfully")
+            
+            # Check if visual picker is enabled in configuration
+            web_config = getattr(self, 'config_provider', None)
+            logger.debug(f"🔧 Config provider: {web_config}")
+            
+            if web_config:
+                config = web_config.get_web_config() if hasattr(web_config, 'get_web_config') else {}
+                visual_picker_config = config.get('visual_picker', {})
+                logger.debug(f"🔧 Visual picker config: {visual_picker_config}")
+                
+                # Check if explicitly disabled
+                if not visual_picker_config.get('enabled', True):
+                    logger.debug("❌ Visual picker disabled in configuration")
+                    return False
+                
+                # Check if disabled for specific operations
+                disabled_operations = visual_picker_config.get('disabled_for_operations', [])
+                if operation_type in disabled_operations:
+                    logger.debug(f"❌ Visual picker disabled for operation: {operation_type}")
+                    return False
+            
+            # Visual picker is available and enabled
+            logger.debug("✅ Visual picker should be used - all checks passed")
+            return True
+            
+        except ImportError as e:
+            logger.debug(f"❌ Visual picker not available - import error: {e}")
+            return False
+    
+    async def _should_use_llm_for_small_html(self, selector: str) -> bool:
+        """
+        Determine if HTML is small enough to send directly to LLM instead of using visual picker.
+        
+        Args:
+            selector: Natural language selector
+            
+        Returns:
+            True if HTML is small enough for direct LLM processing
+        """
+        try:
+            # Check if HTML size checking is enabled in configuration
+            web_config = getattr(self, 'config_provider', None)
+            if web_config:
+                config = web_config.get_web_config() if hasattr(web_config, 'get_web_config') else {}
+                visual_picker_config = config.get('visual_picker', {})
+                
+                # HTML size checking is disabled by default to avoid performance issues
+                if not visual_picker_config.get('html_size_check_enabled', False):
+                    logger.debug("HTML size checking disabled - defaulting to visual picker")
+                    return False
+            else:
+                # No config - default to visual picker for performance
+                logger.debug("No config available - defaulting to visual picker")
+                return False
+            
+            # Only perform expensive HTML check if explicitly enabled
+            if self.get_page_html is None:
+                logger.debug("No HTML source available - defaulting to visual picker")
+                return False
+            
+            page_html = await self.get_page_html()
+            if not page_html:
+                logger.debug("Empty HTML - defaulting to visual picker")
+                return False
+            
+            html_size = len(page_html)
+            
+            if html_size <= MAX_HTML_SIZE_FOR_SMALL_LLM:
+                logger.info(f"📐 HTML size {html_size} bytes <= {MAX_HTML_SIZE_FOR_SMALL_LLM} bytes - suitable for direct LLM")
+                return True
+            else:
+                logger.info(f"📐 HTML size {html_size} bytes > {MAX_HTML_SIZE_FOR_SMALL_LLM} bytes - using visual picker")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"Failed to check HTML size: {e}")
+            return False  # Default to visual picker on error
+    
+    async def _resolve_with_visual_picker(
+        self,
+        original_selector: str,
+        page_url: str,
+        operation_type: str
+    ) -> str:
+        """
+        Resolve selector using visual picker.
+        
+        Args:
+            original_selector: Natural language description
+            page_url: Current page URL
+            operation_type: Browser operation type (click, get_element, etc.)
+            
+        Returns:
+            Resolved CSS/XPath selector
+        """
+        try:
+            # Initialize visual picker lazily
+            if not hasattr(self, '_visual_picker') or self._visual_picker is None:
+                from .visual_picker import VisualElementPicker
+                
+                if self.get_browser_adapter is None:
+                    raise ValueError("Browser adapter function not provided for visual picker")
+                
+                browser_adapter = await self.get_browser_adapter()
+                self._visual_picker = VisualElementPicker(
+                    browser_adapter,
+                    self.llm_manager
+                )
+            
+            # Use visual picker to resolve selector
+            resolved_selector, found_elements = await self._visual_picker.pick_element_for_method(
+                method_name=operation_type,
+                description=original_selector,
+                page_url=page_url
+            )
+            
+            if not resolved_selector:
+                raise ValueError("Visual picker returned no selector")
+            
+            return resolved_selector
+            
+        except Exception as e:
+            logger.error(f"Visual picker resolution failed: {e}")
+            raise ValueError(f"Visual picker could not resolve '{original_selector}': {e}")
+    
+    async def resolve_within_visual_context(
+        self,
+        visual_xpath: str,
+        inner_selector: str,
+        page_url: str
+    ) -> dict:
+        """
+        Two-phase resolution: First get elements using visual XPath, then resolve within each context.
+        
+        This method is used when you have a cached visual picker XPath and need to find 
+        specific elements (like "question" or "answer") within each matched element.
+        
+        Args:
+            visual_xpath: XPath from visual picker that finds the element groups
+            inner_selector: Natural language description of what to find within each element
+            page_url: Current page URL for caching
+            
+        Returns:
+            Dictionary with matches found in each context
+        """
+        logger.info(f"🔍 Two-phase resolution: visual_xpath='{visual_xpath}', inner='{inner_selector}'")
+        
+        # Initialize context extractor
+        from .visual_picker.context_extractor import ElementContextExtractor
+        
+        if self.get_browser_adapter is None:
+            raise ValueError("Browser adapter function required for context extraction")
+        
+        browser_adapter = await self.get_browser_adapter()
+        context_extractor = ElementContextExtractor(browser_adapter)
+        
+        # Phase 1: Extract HTML contexts for all elements matched by visual XPath
+        contexts = await context_extractor.extract_contexts_for_xpath(visual_xpath)
+        
+        if not contexts:
+            logger.warning(f"No contexts found for visual XPath: {visual_xpath}")
+            return {'matches': [], 'contexts_processed': 0, 'total_matches': 0}
+        
+        logger.info(f"📋 Phase 1 complete: Found {len(contexts)} element contexts")
+        
+        # Phase 2: Resolve inner selector within each context
+        resolution_result = await context_extractor.resolve_within_contexts(
+            contexts,
+            inner_selector,
+            self.llm_manager
+        )
+        
+        logger.info(f"✅ Phase 2 complete: Found {resolution_result['total_matches']} matches across {resolution_result['contexts_processed']} contexts")
+        
+        return resolution_result
     
     def _get_operation_instructions(self, operation_type: Optional[str], for_validation: bool = False) -> str:
         """Get operation-specific instructions for the AI prompt.

@@ -993,3 +993,21 @@ class SeleniumAdapter(BaseBrowserAdapter):
             return
         self._save_session_data()
 
+    async def execute_script(self, script: str) -> Any:
+        """Execute JavaScript in the browser.
+        
+        Args:
+            script: JavaScript code to execute
+            
+        Returns:
+            Result of the JavaScript execution
+        """
+        if not self.initialized:
+            raise RuntimeError("SeleniumAdapter not initialized")
+        
+        try:
+            return self.driver.execute_script(script)
+        except Exception as e:
+            logger.error(f"JavaScript execution failed: {e}")
+            raise
+

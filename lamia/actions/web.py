@@ -3,6 +3,7 @@
 from typing import Optional, Dict, Any, Union, Tuple, List
 from lamia.internal_types import BrowserAction, BrowserActionType, BrowserActionParams, SelectorType
 from lamia.interpreter.commands import WebCommand, WebActionType
+import asyncio
 
 def _detect_selector_type(selector: str) -> SelectorType:
     """Auto-detect selector type from selector string."""
@@ -28,18 +29,73 @@ class WebActions:
     Can be used globally (web.click()) or scoped to elements (field.click()).
     
     Access via: web.click(), web.type_text(), web.wait_for(), etc.
+    
+    ARCHITECTURAL NOTE: EXECUTOR PATTERN
+    ====================================
+    
+    Methods support immediate execution via an executor pattern when called from
+    scoped WebActions objects. This is a workaround for a limitation in the hybrid
+    syntax transformer.
+    
+    The transformer only transforms direct 'web.method()' calls to 'lamia.run()',
+    but cannot statically detect method calls on variables (e.g., 'field.get_text()').
+    When methods are called on scoped objects returned from get_element/get_elements,
+    they return WebCommand objects that would never be executed without the executor.
+    
+    ALL methods that can be called from scoped objects support the executor pattern:
+    - Value-returning methods: get_text, get_input_type, get_options, get_attribute,
+      is_visible, is_enabled, is_checked (need immediate execution to return values)
+    - Action methods: click, type_text, wait_for, hover, scroll_to, select_option,
+      submit_form, upload_file (should execute immediately when called on scoped objects)
+    
+    In an ideal architecture, the engine would handle WebCommand execution
+    automatically, eliminating the need for the executor workaround.
     """
     
-    def __init__(self, element_handle: Optional[Any] = None):
+    def __init__(self, element_handle: Optional[Any] = None, executor: Optional[Any] = None):
         """Initialize WebActions, optionally scoped to an element.
         
         Args:
             element_handle: Optional Selenium WebElement or Playwright ElementHandle
                           to scope all operations to. If None, operations are global.
+            executor: Optional execution manager for running commands immediately.
+                     Used as a workaround when methods are called on scoped objects
+                     (see class docstring for architectural details).
         """
         self._element_handle = element_handle
+        self._executor = executor
     
-    def get_element(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> Optional['WebActions']:
+    def _execute_if_available(self, command: WebCommand, result_processor: Optional[Any] = None):
+        """Execute command if executor is available, otherwise return command.
+        
+        This is a workaround for the transformer limitation where method calls
+        on scoped objects (e.g., 'field.get_text()') are not transformed to
+        'lamia.run()' calls. When an executor is available, we execute immediately
+        to ensure the command runs. Otherwise, we return the WebCommand for
+        normal DSL transformation flow.
+        
+        Args:
+            command: WebCommand to execute
+            result_processor: Optional callable to process result after extraction
+            
+        Returns:
+            Executed result if executor available, otherwise the command
+        """
+        if self._executor:
+            try:
+                validation_result = asyncio.run(self._executor.execute(command))
+                if hasattr(validation_result, 'result_type'):
+                    result = validation_result.result_type
+                else:
+                    result = validation_result
+                if result_processor:
+                    result = result_processor(result)
+                return result
+            except Exception:
+                pass
+        return command
+    
+    def get_element(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
         """Get a single element as a scoped WebActions instance.
         
         Returns a new WebActions object that operates only within the found element.
@@ -62,10 +118,6 @@ class WebActions:
             if field:
                 label = field.get_text("label")
         """
-        # This will be handled by the web manager:
-        # 1. Execute command to find first element
-        # 2. Adapter returns element handle or None
-        # 3. Manager wraps in new WebActions(element_handle=handle) or returns None
         command = self._create_web_command(
             WebActionType.GET_ELEMENT,  # Use GET_ELEMENT (singular)
             selector,
@@ -74,9 +126,15 @@ class WebActions:
             None,
             scope_element=self._element_handle
         )
-        return command  # type: ignore  # Manager will return WebActions or None
+        
+        def ensure_executor(result: Any) -> Any:
+            if result and hasattr(result, '_executor') and not result._executor:
+                result._executor = self._executor
+            return result
+        
+        return self._execute_if_available(command, ensure_executor)  # type: ignore
     
-    def get_elements(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> List['WebActions']:
+    def get_elements(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
         """Get multiple elements as scoped WebActions instances.
         
         Returns a list of WebActions objects, each scoped to one matched element.
@@ -88,7 +146,7 @@ class WebActions:
             timeout: Optional timeout in seconds
             
         Returns:
-            List of WebActions instances, each scoped to one element (empty list if none found)
+            List of WebActions instances if executor available, otherwise WebCommand for DSL execution
             
         Example:
             fields = web.get_elements("div.form-field")
@@ -99,10 +157,6 @@ class WebActions:
             # Natural language with cache reset
             buttons = web.get_elements("all submit buttons")
         """
-        # This will be handled by the web manager:
-        # 1. Execute command to find all elements
-        # 2. Adapter returns list of element handles
-        # 3. Manager wraps each in WebActions(element_handle=handle)
         command = self._create_web_command(
             WebActionType.GET_ELEMENTS,
             selector,
@@ -111,31 +165,143 @@ class WebActions:
             None,
             scope_element=self._element_handle
         )
-        return command  # type: ignore  # Manager will return List[WebActions]
-    
-    def click(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.CLICK, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
         
-    def type_text(self, selector: str, text: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.TYPE, selector, fallback_selectors, timeout, text, scope_element=self._element_handle)
+        def ensure_executors(result: Any) -> Any:
+            if isinstance(result, list):
+                for web_action in result:
+                    if hasattr(web_action, '_executor') and not web_action._executor:
+                        web_action._executor = self._executor
+            return result
+        
+        return self._execute_if_available(command, ensure_executors)  # type: ignore
     
-    def wait_for(self, selector: str, condition: str = "visible", *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.WAIT, selector, fallback_selectors, timeout, condition, scope_element=self._element_handle)
+    def click(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Click an element.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Executed result if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+        """
+        command = self._create_web_command(WebActionType.CLICK, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
+        
+    def type_text(self, selector: str, text: str, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Type text into an input element.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            text: Text to type
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Executed result if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+        """
+        command = self._create_web_command(WebActionType.TYPE, selector, fallback_selectors, timeout, text, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def get_text(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.GET_TEXT, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+    def wait_for(self, selector: str, condition: str = "visible", *fallback_selectors: str, timeout: Optional[float] = None):
+        """Wait for an element to meet a condition.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            condition: Condition to wait for (default: "visible")
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Executed result if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+        """
+        command = self._create_web_command(WebActionType.WAIT, selector, fallback_selectors, timeout, condition, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def hover(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.HOVER, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+    def get_text(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Get text from an element.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            String text if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+            
+        Note:
+            When called from a scoped WebActions object (e.g., 'field.get_text()'),
+            this executes immediately via the executor pattern. See class docstring
+            for architectural details.
+        """
+        command = self._create_web_command(WebActionType.GET_TEXT, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def scroll_to(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.SCROLL, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+    def hover(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Hover over an element.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Executed result if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+        """
+        command = self._create_web_command(WebActionType.HOVER, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def select_option(self, selector: str, option_value: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.SELECT, selector, fallback_selectors, timeout, option_value, scope_element=self._element_handle)
+    def scroll_to(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Scroll to an element.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Executed result if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+        """
+        command = self._create_web_command(WebActionType.SCROLL, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def submit_form(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.SUBMIT, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+    def select_option(self, selector: str, option_value: str, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Select an option in a dropdown.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            option_value: Value of the option to select
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Executed result if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+        """
+        command = self._create_web_command(WebActionType.SELECT, selector, fallback_selectors, timeout, option_value, scope_element=self._element_handle)
+        return self._execute_if_available(command)
+    
+    def submit_form(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Submit a form.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Executed result if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+        """
+        command = self._create_web_command(WebActionType.SUBMIT, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
     def screenshot(self, file_path: Optional[str] = None) -> WebCommand:
         """Take a screenshot of the current page.
@@ -154,13 +320,37 @@ class WebActions:
             value=file_path
         )
     
-    def is_visible(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.IS_VISIBLE, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+    def is_visible(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Check if an element is visible.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Boolean if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+        """
+        command = self._create_web_command(WebActionType.IS_VISIBLE, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def is_enabled(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
-        return self._create_web_command(WebActionType.IS_ENABLED, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+    def is_enabled(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Check if an element is enabled.
+        
+        Args:
+            selector: CSS selector, XPath, or natural language description
+            fallback_selectors: Alternative selectors to try
+            timeout: Optional timeout in seconds
+            
+        Returns:
+            Boolean if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
+        """
+        command = self._create_web_command(WebActionType.IS_ENABLED, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def is_checked(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+    def is_checked(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
         """Check if a checkbox or radio button is checked.
         
         Args:
@@ -169,15 +359,17 @@ class WebActions:
             timeout: Optional timeout in seconds
             
         Returns:
-            WebCommand that will return boolean
+            Boolean if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
             
         Example:
             if web.is_checked("input[type='checkbox']"):
                 print("Checkbox is checked")
         """
-        return self._create_web_command(WebActionType.IS_CHECKED, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        command = self._create_web_command(WebActionType.IS_CHECKED, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def get_input_type(self, selector: str = "input, select, textarea", *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+    def get_input_type(self, selector: str = "input, select, textarea", *fallback_selectors: str, timeout: Optional[float] = None):
         """Detect the type of an input element.
         
         Returns InputType enum value (as string): TEXT, EMAIL, TEL, NUMBER, PASSWORD, URL, 
@@ -190,7 +382,8 @@ class WebActions:
             timeout: Optional timeout in seconds
             
         Returns:
-            WebCommand that will return InputType enum value as string
+            InputType enum value as string if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
             
         Example:
             from lamia import InputType  # Or auto-injected in .hu files
@@ -206,9 +399,10 @@ class WebActions:
                 if not field.is_checked("input"):
                     field.click("input")
         """
-        return self._create_web_command(WebActionType.GET_INPUT_TYPE, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        command = self._create_web_command(WebActionType.GET_INPUT_TYPE, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def get_attribute(self, selector: str, attribute_name: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+    def get_attribute(self, selector: str, attribute_name: str, *fallback_selectors: str, timeout: Optional[float] = None):
         """Get an attribute value from an element.
         
         Args:
@@ -218,15 +412,17 @@ class WebActions:
             timeout: Optional timeout in seconds
             
         Returns:
-            WebCommand that will return attribute value string
+            Attribute value string if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
             
         Example:
             href = web.get_attribute("a.link", "href")
             data_id = web.get_attribute("div", "data-id")
         """
-        return self._create_web_command(WebActionType.GET_ATTRIBUTE, selector, fallback_selectors, timeout, attribute_name, scope_element=self._element_handle)
+        command = self._create_web_command(WebActionType.GET_ATTRIBUTE, selector, fallback_selectors, timeout, attribute_name, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def get_options(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+    def get_options(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
         """Get all selectable option texts from radio buttons, checkboxes, or dropdown.
         
         Auto-detects and returns options from within the current scope. Works universally for:
@@ -245,7 +441,8 @@ class WebActions:
             timeout: Optional timeout in seconds
             
         Returns:
-            WebCommand that will return List[str] of option texts
+            List[str] of option texts if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
         
         Raises:
             MultipleSelectableInputsError: Multiple radio/checkbox/select groups in scope
@@ -264,9 +461,10 @@ class WebActions:
             for opt in selected:
                 field.click(opt)  # AI resolves natural language selector
         """
-        return self._create_web_command(WebActionType.GET_OPTIONS, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
+        command = self._create_web_command(WebActionType.GET_OPTIONS, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
-    def upload_file(self, file_path: str, selector: str, *fallback_selectors: str, timeout: Optional[float] = None) -> WebCommand:
+    def upload_file(self, file_path: str, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
         """Upload a file to a file input element.
         
         Args:
@@ -276,13 +474,15 @@ class WebActions:
             timeout: Optional timeout in seconds
             
         Returns:
-            WebCommand configured for file upload
+            Executed result if executor is available (when called from scoped objects),
+            otherwise WebCommand for DSL execution.
             
         Example:
             web.upload_file("/Users/john/Documents/resume.pdf", "input[type='file']")
             web.upload_file("/path/to/file.pdf", "input[name='file']", "input[type='file']", ".file-input")
         """
-        return self._create_web_command(WebActionType.UPLOAD_FILE, selector, fallback_selectors, timeout, file_path, scope_element=self._element_handle)
+        command = self._create_web_command(WebActionType.UPLOAD_FILE, selector, fallback_selectors, timeout, file_path, scope_element=self._element_handle)
+        return self._execute_if_available(command)
     
     # HTTP Operations
     def get(self, url: str, headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> str:

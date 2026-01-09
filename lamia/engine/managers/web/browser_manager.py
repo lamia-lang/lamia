@@ -23,13 +23,15 @@ logger = logging.getLogger(__name__)
 class BrowserManager:
     """Manages browser automation with AI-powered selector resolution."""
     
-    def __init__(self, config_provider: ConfigProvider):
+    def __init__(self, config_provider: ConfigProvider, web_manager: Optional[Any] = None):
         """Initialize browser manager.
         
         Args:
             config_provider: Configuration provider
+            web_manager: Optional web manager reference for WebActions execution
         """
         self.config_provider = config_provider
+        self.web_manager = web_manager
         
         # Get browser configuration
         web_config = config_provider.get_web_config()
@@ -183,11 +185,28 @@ class BrowserManager:
             scope_manager = get_scope_manager()
             page_url = getattr(scope_manager, 'current_url', 'unknown')
 
-            # Resolve main selector with operation context
+            # Extract parent context from scope element handle
+            parent_context = None
+            if action.params.scope_element_handle:
+                try:
+                    # Get the tag name of the parent element for context
+                    parent_tag = action.params.scope_element_handle.tag_name
+                    if parent_tag:
+                        parent_context = parent_tag.lower()
+                        logger.info(f"DEBUG: Extracted parent context: {parent_context} for selector: {action.params.selector}")
+                    else:
+                        logger.info(f"DEBUG: Parent element has no tag name for selector: {action.params.selector}")
+                except Exception as e:
+                    logger.info(f"DEBUG: Failed to extract parent context for selector: {action.params.selector}, error: {e}")
+            else:
+                logger.info(f"DEBUG: No scope_element_handle for selector: {action.params.selector}")
+
+            # Resolve main selector with operation context and parent scope
             resolved_selector = await self._selector_resolution_service.resolve_selector(
                 selector=action.params.selector,
                 page_url=page_url,
-                operation_type=action.action
+                operation_type=action.action,
+                parent_context=parent_context
             )
             
             # Create new action with resolved selector
@@ -371,12 +390,12 @@ class BrowserManager:
             if original_action_type == WebActionType.GET_ELEMENT:
                 # Return first element or None
                 if element_handles:
-                    return WebActions(element_handle=element_handles[0])
+                    return WebActions(element_handle=element_handles[0], executor=self.web_manager)
                 else:
                     return None
             else:
                 # Return list of all elements
-                return [WebActions(element_handle=handle) for handle in element_handles]
+                return [WebActions(element_handle=handle, executor=self.web_manager) for handle in element_handles]
         else:
             raise ValueError(f"Unsupported browser action: {action.action}")
     

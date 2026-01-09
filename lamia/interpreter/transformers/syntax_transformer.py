@@ -417,11 +417,12 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         if len(args) > 1:
             if action_type_enum in {BrowserActionType.TYPE, BrowserActionType.SELECT}:
                 keywords.append(
-                    ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[1:-1], ctx=ast.Load()))
+                    ast.keyword(arg='value', value=args[1])
                 )
-                keywords.append(
-                    ast.keyword(arg='value', value=args[-1])
-                )
+                if len(args) > 2:
+                    keywords.append(
+                        ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[2:], ctx=ast.Load()))
+                    )
             elif action_type_enum in SELECTOR_BASED_ACTIONS:
                 keywords.append(
                     ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[1:], ctx=ast.Load()))

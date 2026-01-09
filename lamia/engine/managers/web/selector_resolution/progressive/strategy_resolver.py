@@ -58,73 +58,93 @@ class ProgressiveSelectorResolver:
         """
         logger.info(f"Starting progressive resolution for: '{description}'")
         
-        # Generate progressive strategies
-        strategies = await self.strategy_gen.generate_strategies(description)
+        failed_selectors = []
+        max_retries = 2
         
-        if not strategies:
-            raise ValueError(f"Failed to generate strategies for: '{description}'")
-        
-        logger.info(f"Generated {len(strategies)} strategies, trying each...")
-        
-        # Try each strategy from specific to generic
-        for i, strategy in enumerate(strategies, 1):
-            strictness = strategy.get('strictness', 'relaxed')
-            strategy_desc = strategy.get('description', 'Unknown')
+        for retry_attempt in range(max_retries):
+            if retry_attempt > 0:
+                logger.info(f"Retry attempt {retry_attempt} with {len(failed_selectors)} failed selectors to avoid")
             
-            logger.info(f"[{i}/{len(strategies)}] Trying {strictness} strategy: {strategy_desc}")
+            # Generate progressive strategies (with failed selectors if retrying)
+            strategies = await self.strategy_gen.generate_strategies(
+                description, 
+                failed_selectors if retry_attempt > 0 else None
+            )
             
-            try:
-                # Try all selectors in this strategy
-                for selector in strategy.get('selectors', []):
-                    logger.debug(f"  Trying selector: {selector}")
-                    
-                    try:
-                        # Find elements
-                        elements = await self._find_elements(selector)
+            if not strategies:
+                raise ValueError(f"Failed to generate strategies for: '{description}'")
+            
+            logger.info(f"Generated {len(strategies)} strategies, trying each...")
+            
+            # Try each strategy from specific to generic  
+            strategy_success = False
+            for i, strategy in enumerate(strategies, 1):
+                strictness = strategy.get('strictness', 'relaxed')
+                strategy_desc = strategy.get('description', 'Unknown')
+                
+                logger.info(f"[{i}/{len(strategies)}] Trying {strictness} strategy: {strategy_desc}")
+                
+                try:
+                    # Try all selectors in this strategy
+                    for selector in strategy.get('selectors', []):
+                        logger.debug(f"  Trying selector: {selector}")
                         
-                        if not elements:
-                            logger.debug(f"    No elements found")
-                            continue
-                        
-                        logger.debug(f"    Found {len(elements)} element(s)")
-                        
-                        # Validate relationship
-                        is_valid, reason = await self.relationship_validator.validate_strategy_match(
-                            elements,
-                            strategy
-                        )
-                        
-                        if not is_valid:
-                            logger.debug(f"    Validation failed: {reason}")
-                            continue
-                        
-                        # Check for ambiguity
-                        expected_count = strategy.get('validation', {}).get('count', 'at_least_1')
-                        
-                        if self._is_ambiguous(elements, expected_count):
-                            logger.info(f"    Found {len(elements)} matches (ambiguous)")
+                        try:
+                            # Find elements
+                            elements = await self._find_elements(selector)
                             
-                            # Ask user to choose
-                            selected = await self.ambiguity_resolver.resolve_ambiguous_match(
-                                description,
+                            if not elements:
+                                logger.debug(f"    No elements found")
+                                failed_selectors.append(selector)
+                                continue
+                            
+                            logger.debug(f"    Found {len(elements)} element(s)")
+                            
+                            # Validate relationship
+                            is_valid, reason = await self.relationship_validator.validate_strategy_match(
                                 elements,
-                                page_url,
-                                max_display=self.max_ambiguous_matches
+                                strategy
                             )
                             
-                            elements = [selected]
+                            if not is_valid:
+                                logger.debug(f"    Validation failed: {reason}")
+                                failed_selectors.append(selector)
+                                continue
+                            
+                            # Check for ambiguity
+                            expected_count = strategy.get('validation', {}).get('count', 'at_least_1')
+                            
+                            if self._is_ambiguous(elements, expected_count):
+                                logger.info(f"    Found {len(elements)} matches (ambiguous)")
+                                
+                                # Ask user to choose
+                                selected = await self.ambiguity_resolver.resolve_ambiguous_match(
+                                    description,
+                                    elements,
+                                    page_url,
+                                    max_display=self.max_ambiguous_matches
+                                )
+                                
+                                elements = [selected]
+                            
+                            # Success!
+                            logger.info(f"  ✓ Successfully resolved with {strictness} strategy")
+                            return selector, elements
                         
-                        # Success!
-                        logger.info(f"  ✓ Successfully resolved with {strictness} strategy")
-                        return selector, elements
-                    
-                    except Exception as e:
-                        logger.debug(f"    Selector failed: {e}")
-                        continue
+                        except Exception as e:
+                            logger.debug(f"    Selector failed: {e}")
+                            failed_selectors.append(selector)
+                            continue
+                
+                except Exception as e:
+                    logger.debug(f"  Strategy {i} failed: {e}")
+                    continue
             
-            except Exception as e:
-                logger.debug(f"  Strategy {i} failed: {e}")
-                continue
+            # If we reach here, all strategies failed this attempt
+            if not strategy_success:
+                logger.warning(f"Retry attempt {retry_attempt + 1} failed, collected {len(failed_selectors)} failed selectors")
+                if retry_attempt == max_retries - 1:
+                    break  # Last attempt, will raise error below
         
         # No strategy worked
         raise ValueError(
@@ -143,13 +163,10 @@ class ProgressiveSelectorResolver:
             List of element handles
         """
         try:
-            # Detect selector type
-            if selector.startswith('//'):
-                # XPath
-                elements = await self.browser.find_elements_by_xpath(selector)
-            else:
-                # CSS (default)
-                elements = await self.browser.find_elements(selector)
+            # Use proper browser adapter interface
+            from lamia.internal_types import BrowserActionParams
+            params = BrowserActionParams(selector=selector)
+            elements = await self.browser.get_elements(params)
             
             return elements or []
         except Exception as e:

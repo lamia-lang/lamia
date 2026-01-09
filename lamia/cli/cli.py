@@ -187,6 +187,67 @@ def main():
             lamia <subcommand> --help
             """
         )
+        
+        # Check if first arg is 'cache' subcommand
+        if len(sys.argv) > 1 and sys.argv[1] == 'cache':
+            # Handle cache subcommand
+            from .cache_cli import CacheCLI
+            import argparse as cache_argparse
+            
+            cache_parser = cache_argparse.ArgumentParser(
+                description='Manage Lamia selector resolution cache',
+                prog='lamia cache'
+            )
+            cache_subparsers = cache_parser.add_subparsers(dest='cache_command', help='Cache command to execute')
+            
+            # List command
+            list_parser = cache_subparsers.add_parser('list', help='List cached selectors')
+            list_parser.add_argument('--url', help='Filter by URL')
+            list_parser.add_argument('--description', help='Filter by description')
+            
+            # Add command  
+            add_parser = cache_subparsers.add_parser('add', help='Add a selector resolution to cache')
+            add_parser.add_argument('original', help='Original selector that failed')
+            add_parser.add_argument('resolved', help='Working selector to use instead')
+            add_parser.add_argument('url', help='URL where this resolution applies')
+            add_parser.add_argument('--context', help='Optional parent context for scoped cache')
+            
+            # Clear command
+            clear_parser = cache_subparsers.add_parser('clear', help='Clear cache entries')
+            clear_parser.add_argument('--description', help='Clear entries matching description')
+            clear_parser.add_argument('--url', help='Clear entries matching URL')
+            clear_parser.add_argument('--all', action='store_true', help='Clear entire cache')
+            
+            # Stats command
+            stats_parser = cache_subparsers.add_parser('stats', help='Show cache statistics')
+            
+            # Parse cache args (skip 'cache' in sys.argv)
+            cache_args = cache_parser.parse_args(sys.argv[2:])
+            
+            # Execute cache command
+            cli = CacheCLI()
+            if cache_args.cache_command == 'list':
+                cli.list_cache(url_filter=cache_args.url, description_filter=cache_args.description)
+            elif cache_args.cache_command == 'add':
+                cli.add_selector(
+                    original_selector=cache_args.original,
+                    resolved_selector=cache_args.resolved,
+                    url=cache_args.url,
+                    parent_context=cache_args.context
+                )
+            elif cache_args.cache_command == 'clear':
+                if not (cache_args.description or cache_args.url or cache_args.all):
+                    print("Error: Must specify --description, --url, or --all", file=sys.stderr)
+                    sys.exit(1)
+                cli.clear_cache(description=cache_args.description, url=cache_args.url, all_entries=cache_args.all)
+            elif cache_args.cache_command == 'stats':
+                cli.stats()
+            else:
+                cache_parser.print_help()
+            
+            sys.exit(0)
+        
+        # Regular CLI arguments
         parser.add_argument('filename', nargs='?', help='Prompt file to read from (if not provided, runs in interactive mode)')
         parser.add_argument('--file', '-f', type=str, help='Read prompt from a file instead of interactive mode')
         parser.add_argument('--config', '-c', type=str, help='Path to config file (optional)')

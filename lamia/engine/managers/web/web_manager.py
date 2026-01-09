@@ -29,8 +29,13 @@ class WebManager(Manager[WebCommand]):
         self.llm_manager = llm_manager
         
         # Initialize specialized managers
-        self.browser_manager = BrowserManager(config_provider)
+        self.browser_manager = BrowserManager(config_provider, web_manager=self)
         self.http_manager = HttpManager(config_provider)
+        
+        # Generic stuck detection (website-agnostic)
+        self.recent_actions = []  # Track recent actions to detect loops
+        self.max_recent_actions = 10
+        self.stuck_threshold = 3  # Same action repeated this many times = stuck
         
         # Define which actions go to which manager
         self.browser_actions = {
@@ -70,6 +75,10 @@ class WebManager(Manager[WebCommand]):
         """
         logger.debug(f"Routing web command: {command.action}")
         
+        # Generic stuck detection (works on any website)
+        action_signature = self._get_action_signature(command)
+        self._check_for_stuck_behavior(action_signature)
+        
         if command.action in self.browser_actions:
             logger.debug(f"Routing to BrowserManager: {command.action}")
             result = await self.browser_manager.execute(command, validator)
@@ -79,12 +88,19 @@ class WebManager(Manager[WebCommand]):
         else:
             raise ValueError(f"Unsupported web action: {command.action}")
         
+        # Track successful actions for stuck detection
+        self._track_action(action_signature)
+        
         # Wrap result in ValidationResult if it's not already
         if validator is not None:
-            logger.info(f"Validating result in the web_manager: {result[0:1000] + '...' if result else 'None'}")
+            # Safe string conversion for logging
+            result_str = str(result) if result is not None else 'None'
+            if len(result_str) > 1000:
+                result_str = result_str[0:1000] + '...'
+            logger.info(f"Validating result in the web_manager: {result_str}")
             validation_result = await validator.validate(result)
         else:
-            logger.info(f"Validator is None, returning result as is: {result}")
+            logger.info(f"Validator is None, returning result as is: {str(result)}")
             validation_result = ValidationResult(
                 is_valid=True,
                 result_type=result,
@@ -92,6 +108,35 @@ class WebManager(Manager[WebCommand]):
             )
 
         return validation_result
+    
+    def _get_action_signature(self, command: WebCommand) -> str:
+        """Create a unique signature for the action to detect repeats."""
+        # Generic signature that works for any website
+        if hasattr(command, 'selector') and command.selector:
+            return f"{command.action}:{command.selector}"
+        elif hasattr(command, 'text') and command.text:
+            return f"{command.action}:{command.text}"
+        else:
+            return f"{command.action}"
+    
+    def _check_for_stuck_behavior(self, action_signature: str) -> None:
+        """Check if we're stuck repeating the same action."""
+        # Count recent occurrences of this action
+        recent_count = self.recent_actions.count(action_signature)
+        
+        if recent_count >= self.stuck_threshold:
+            error_msg = f"Stuck detection: Action '{action_signature}' repeated {recent_count} times. Possible causes: required fields not filled, wrong selectors, page not changing"
+            logger.warning(error_msg)
+            # Raise exception to stop the stuck behavior
+            raise RuntimeError(f"Automation stuck in loop: {error_msg}")
+    
+    def _track_action(self, action_signature: str) -> None:
+        """Track successful action for stuck detection."""
+        self.recent_actions.append(action_signature)
+        
+        # Keep only recent actions to prevent memory bloat
+        if len(self.recent_actions) > self.max_recent_actions:
+            self.recent_actions.pop(0)
     
     async def close(self):
         """Close all sub-managers and cleanup resources."""

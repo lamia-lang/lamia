@@ -161,6 +161,12 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
             lambda: self.adapter.get_options(params)
         )
     
+    async def execute_script(self, script: str) -> Any:
+        """Execute JavaScript with retry."""
+        return await self.retry_handler.execute(
+            lambda: self.adapter.execute_script(script)
+        )
+    
     # --- Session/profile contract proxies ---
     def set_profile(self, profile_name: Optional[str]) -> None:
         # Synchronous operation, just forward

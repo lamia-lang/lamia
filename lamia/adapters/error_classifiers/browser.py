@@ -16,6 +16,7 @@ BROWSER_PERMANENT_PATTERNS = [
     "connection refused",  # Browser/driver was closed
     "session deleted",
     "chrome not reachable",
+    "element click intercepted",  # Modal overlay blocking clicks - needs different strategy, not retries
 ]
 
 # Browser transient error patterns
