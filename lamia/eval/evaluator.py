@@ -2,12 +2,12 @@ import traceback
 from typing import List, Optional, Dict, Any, Callable, Union, Type, Protocol
 from dataclasses import dataclass
 import logging
-from ..lamia import Lamia, LamiaResult
+from lamia import Lamia
 from ..types import BaseType
 from .model_pricer import ModelPricer
 from .model_cost import ModelCost
 from ..engine.managers.llm.llm_manager import LLMManager
-from ..command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
 

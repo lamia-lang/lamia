@@ -3,6 +3,7 @@ import sys
 import importlib
 import inspect
 import logging
+import asyncio
 from typing import Type, Tuple, List, Optional
 
 from lamia.validation.base import BaseValidator
@@ -48,7 +49,7 @@ class ValidatorLoader:
                         callable(getattr(cls, 'name'))
                     ):
                         # Run contract checks
-                        passed, violations = check_validator_contracts(cls)
+                        passed, violations = asyncio.run(check_validator_contracts(cls))
                         if not passed:
                             logger.error(f"Contract violations found in {cls.__name__}:")
                             for violation in violations:
@@ -92,7 +93,7 @@ class ValidatorLoader:
                     return await func(content)
                     
             # Run contract checks
-            passed, violations = check_validator_contracts(FunctionValidator)
+            passed, violations = asyncio.run(check_validator_contracts(FunctionValidator))
             if not passed:
                 logger.error(f"Contract violations found in function validator {name}:")
                 for violation in violations:

@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from .pricing_provider import PricingProvider
 from .model_cost import ModelCost
-from ..lamia import LamiaResult
+from lamia import LamiaResult
 from ..engine.managers.llm.llm_manager import LLMManager
 
 # Import all pricing providers here
