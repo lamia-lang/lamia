@@ -2,7 +2,7 @@
 
 import logging
 from typing import List, Dict, Any, Optional
-import json
+import datetime
 import hashlib
 
 logger = logging.getLogger(__name__)
@@ -79,15 +79,11 @@ class MultiSelectorCache:
         if selector not in cached_data['selectors']:
             cached_data['selectors'][selector] = {
                 'success_count': 0,
-                'pages': []
             }
         
         # Increment success count
         cached_data['selectors'][selector]['success_count'] += 1
         
-        # Track pages where it worked (for debugging)
-        if page_url not in cached_data['selectors'][selector]['pages']:
-            cached_data['selectors'][selector]['pages'].append(page_url)
         
         cached_data['last_updated'] = self._get_timestamp()
         
@@ -129,22 +125,4 @@ class MultiSelectorCache:
     
     def _get_timestamp(self) -> str:
         """Get current timestamp string."""
-        import datetime
         return datetime.datetime.now().isoformat()
-    
-    def get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache statistics for debugging."""
-        stats = {
-            'total_descriptions': len(self._cache),
-            'total_selectors': sum(len(data['selectors']) for data in self._cache.values()),
-            'descriptions': {}
-        }
-        
-        for cache_key, data in self._cache.items():
-            description = data.get('description', 'unknown')
-            stats['descriptions'][description] = {
-                'selectors_count': len(data['selectors']),
-                'selectors': list(data['selectors'].keys())
-            }
-        
-        return stats
