@@ -48,5 +48,6 @@ htmlcov/
 dist/
 build/
 *.egg-info/ 
-# Lamia debug files
+# Lamia internal state
 .lamia/
+.lamia_cache/
