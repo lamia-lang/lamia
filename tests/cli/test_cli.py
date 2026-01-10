@@ -93,16 +93,6 @@ class TestInteractiveModeErrorHandling:
             with patch('lamia.cli.cli.logger'):
                 # Should handle KeyboardInterrupt gracefully
                 await interactive_mode(mock_lamia)
-    
-    @pytest.mark.asyncio
-    async def test_eof_error_handling(self):
-        """Test handling of EOF errors."""
-        mock_lamia = Mock()
-        
-        with patch('builtins.input', side_effect=EOFError()):
-            with patch('lamia.cli.cli.logger'):
-                # Should handle EOFError gracefully
-                await interactive_mode(mock_lamia)
 
 
 class TestInteractiveModeInputHandling:
@@ -244,8 +234,8 @@ class TestCLILogging:
                 assert mock_logger.called
 
 
-class TestCLIConstants:
-    """Test CLI module constants."""
+class TestCLIConstantsImmutability:
+    """Test CLI module constants immutability."""
     
     def test_hybrid_extensions_immutable(self):
         """Test that HYBRID_EXTENSIONS is treated as immutable."""

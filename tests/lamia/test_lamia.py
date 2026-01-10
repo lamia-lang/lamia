@@ -1,7 +1,8 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
-from lamia.lamia import Lamia
+
+from lamia.facade.lamia import Lamia
 from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
 from lamia import LLMModel  # Added for model override test
 from lamia._internal_types.model_retry import ModelWithRetries  # Added for model override test

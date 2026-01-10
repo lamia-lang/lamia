@@ -5,8 +5,7 @@ from unittest.mock import Mock
 
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from lamia.adapters.filesystem.base import BaseFSAdapter
-from lamia.adapters.retry.wrappers.llm import RetryingLLMAdapter
-from lamia.adapters.retry.wrappers.fs import RetryingFSAdapter
+from lamia.adapters.retry.adapter_wrappers.retrying_fs_adapter import RetryingFSAdapter
 from lamia.errors import (
     ExternalOperationPermanentError,
     ExternalOperationRateLimitError,

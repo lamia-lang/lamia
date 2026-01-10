@@ -40,6 +40,7 @@ class TestLamiaCommandParsing:
         assert command_info['content'] == '/tmp/file.txt'
         assert command_info['kwargs']['operation'] == 'read'
     
+    @pytest.mark.integration
     def test_web_command_parsing(self, lamia):
         """Test that web commands are parsed correctly."""
         try:

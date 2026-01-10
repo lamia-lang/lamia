@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from lamia.eval.evaluator import Evaluator
+from lamia.eval.evaluator import ModelEvaluator
 from lamia.eval.model_cost import ModelCost  
 from lamia.eval.model_pricer import ModelPricer
 
@@ -12,7 +12,7 @@ class TestEvaluator:
     
     def setup_method(self):
         """Set up test fixtures."""
-        self.evaluator = Evaluator()
+        self.evaluator = ModelEvaluator()
     
     def test_initialization(self):
         """Test Evaluator initialization."""
@@ -109,7 +109,7 @@ class TestEvaluationIntegration:
     
     def test_evaluator_with_pricer(self):
         """Test evaluator integration with model pricer."""
-        evaluator = Evaluator()
+        evaluator = ModelEvaluator()
         pricer = ModelPricer()
         
         # Test that components can work together
@@ -119,7 +119,7 @@ class TestEvaluationIntegration:
     def test_cost_tracking(self):
         """Test cost tracking functionality."""
         # Test basic cost tracking workflow
-        evaluator = Evaluator()
+        evaluator = ModelEvaluator()
         
         # Should be able to track costs
         assert hasattr(evaluator, 'evaluate') or hasattr(evaluator, 'track_cost')
@@ -185,7 +185,7 @@ class TestEvaluatorConfiguration:
         custom_pricer = Mock(spec=ModelPricer)
         
         try:
-            evaluator = Evaluator(pricer=custom_pricer)
+            evaluator = ModelEvaluator(pricer=custom_pricer)
             assert evaluator is not None
         except TypeError:
             # Constructor might not accept pricer parameter
@@ -200,7 +200,7 @@ class TestEvaluatorConfiguration:
         }
         
         try:
-            evaluator = Evaluator(settings=settings)
+            evaluator = ModelEvaluator(settings=settings)
             assert evaluator is not None
         except TypeError:
             # Constructor might not accept settings parameter
@@ -263,7 +263,7 @@ class TestEvaluationMetrics:
     
     def test_basic_metrics_collection(self):
         """Test basic metrics collection."""
-        evaluator = Evaluator()
+        evaluator = ModelEvaluator()
         
         # Test that evaluator can collect basic metrics
         try:
@@ -276,7 +276,7 @@ class TestEvaluationMetrics:
     
     def test_cost_metrics(self):
         """Test cost-related metrics."""
-        evaluator = Evaluator()
+        evaluator = ModelEvaluator()
         
         # Test cost metrics functionality
         try:
@@ -288,7 +288,7 @@ class TestEvaluationMetrics:
     
     def test_token_metrics(self):
         """Test token-related metrics."""
-        evaluator = Evaluator()
+        evaluator = ModelEvaluator()
         
         # Test token metrics functionality
         try:

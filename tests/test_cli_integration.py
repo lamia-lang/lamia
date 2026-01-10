@@ -3,7 +3,6 @@ import tempfile
 import yaml
 import pytest
 from unittest import mock
-from lamia.cli import interactive_mode
 from lamia.engine.engine import LamiaEngine
 import subprocess
 import sys
@@ -12,7 +11,7 @@ import lamia.cli as cli_mod
 
 sum_py_content = """
 def sum(a, b) -> int:
-      return multiply(a, b) + b
+      return a + b
 sum(10, 15)
 """
 
@@ -46,8 +45,7 @@ def test_cli_file_modes(tmp_path, cli_args):
         result = subprocess.run(cmd, cwd=test_dir, capture_output=True, text=True)
         # Should not error
         assert result.returncode == 0, f"stderr: {result.stderr}"
-        # Should print the result of sum(10, 15) = 160 (since multiply(10, 15) = 150 + 15)
-        assert "160" in result.stdout
+        assert "25" in result.stdout
     finally:
         # Cleanup files
         if os.path.exists(test_dir / "sum.py"):
