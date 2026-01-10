@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from lamia.engine.engine import LamiaEngine
 from lamia.adapters.llm.base import LLMResponse
-from lamia.command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 from lamia._internal_types.model_retry import ModelWithRetries
 from lamia import LLMModel
 from lamia.engine.config_provider import ConfigProvider

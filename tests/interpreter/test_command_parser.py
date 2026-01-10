@@ -4,8 +4,8 @@ Tests for the command parser module.
 
 import pytest
 # Updated: CommandParser now exposes parsed data directly — helper functions removed.
-from lamia.command_parser import CommandParser
-from lamia.command_types import CommandType
+from lamia.interpreter.command_parser import CommandParser
+from lamia.interpreter.command_types import CommandType
 
 
 class TestCommandTypeDetection:

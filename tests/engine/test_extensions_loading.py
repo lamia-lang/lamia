@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import pytest
 from lamia.engine.engine import LamiaEngine
-from lamia.command_types import CommandType
+from lamia.interpreter.command_types import CommandType
 
 # --- Dummy extension adapter and validator code ---
 ADAPTER_CODE = '''
