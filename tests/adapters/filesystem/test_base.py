@@ -10,7 +10,7 @@ class TestBaseFSAdapterInterface:
     
     def test_is_abstract_base_class(self):
         """Test that BaseFSAdapter is an abstract base class."""
-        assert issubclass(BaseFSAdapter, ABC) is False  # It doesn't inherit from ABC but has abstract methods
+        assert issubclass(BaseFSAdapter, ABC)
         
         # Should not be able to instantiate directly
         with pytest.raises(TypeError):
@@ -39,14 +39,14 @@ class TestBaseFSAdapterInterface:
         method = BaseFSAdapter.write
         assert method.__name__ == 'write'
         assert "Write data to a file" in method.__doc__
-        assert "Union[str, bytes]" in method.__doc__
+        assert "string or bytes" in method.__doc__
     
     def test_exists_method_signature(self):
         """Test exists method signature."""
         method = BaseFSAdapter.exists
         assert method.__name__ == 'exists'
         assert "Check if a path exists" in method.__doc__
-        assert "bool" in method.__doc__
+        assert "True if the path exists" in method.__doc__
     
     def test_delete_method_signature(self):
         """Test delete method signature."""

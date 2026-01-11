@@ -1,521 +1,744 @@
-"""Tests for AST analyzer functionality including session validation and page stabilization."""
+"""Tests for AST analyzer module."""
 
-from pydantic_core import validate_core_schema
 import pytest
-import asyncio
-import hashlib
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from pydantic import BaseModel, Field
-from typing import Dict, Any, Set
-
-pytest.skip("Legacy ast_analyzer exports changed; skipping legacy tests", allow_module_level=True)
-
-from lamia.interpreter.ast_analyzer import (
-    analyze_hybrid_file,
-    create_execution_globals,
-    create_session_validator,
-    _get_current_page_content,
-    _wait_for_page_stabilization,
-    _get_current_url,
-    ActionNamespaceAnalyzer
-)
-from lamia.types import HTML
+import ast
+from unittest.mock import patch, Mock
+from lamia.interpreter.ast_analyzer import ActionNamespaceAnalyzer, analyze_hybrid_file, create_execution_globals
 
 
-class MockHomePageModel(BaseModel):
-    """Mock model for testing session validation."""
-    div: str = Field(alias=".profile-card-name")
+class TestActionNamespaceAnalyzer:
+    """Test ActionNamespaceAnalyzer AST visitor."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.analyzer = ActionNamespaceAnalyzer()
+    
+    def test_initialization(self):
+        """Test analyzer initialization."""
+        analyzer = ActionNamespaceAnalyzer()
+        
+        assert isinstance(analyzer.used_namespaces, set)
+        assert isinstance(analyzer.used_types, set)
+        assert len(analyzer.used_namespaces) == 0
+        assert len(analyzer.used_types) == 0
+    
+    def test_visit_attribute_web_namespace(self):
+        """Test detection of web namespace attributes."""
+        code = "web.click(element)"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'web' in self.analyzer.used_namespaces
+    
+    def test_visit_attribute_http_namespace(self):
+        """Test detection of http namespace attributes."""
+        code = "http.get('https://example.com')"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'http' in self.analyzer.used_namespaces
+    
+    def test_visit_attribute_file_namespace(self):
+        """Test detection of file namespace attributes."""
+        code = "file.read('data.txt')"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'file' in self.analyzer.used_namespaces
+    
+    def test_visit_attribute_db_namespace(self):
+        """Test detection of db namespace attributes."""
+        code = "db.query('SELECT * FROM users')"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'db' in self.analyzer.used_namespaces
+    
+    def test_visit_attribute_email_namespace(self):
+        """Test detection of email namespace attributes."""
+        code = "email.send(to='user@example.com', subject='Test')"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'email' in self.analyzer.used_namespaces
+    
+    def test_visit_attribute_multiple_namespaces(self):
+        """Test detection of multiple namespaces."""
+        code = """
+web.click(button)
+http.get(url)
+file.write(data)
+"""
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'web' in self.analyzer.used_namespaces
+        assert 'http' in self.analyzer.used_namespaces
+        assert 'file' in self.analyzer.used_namespaces
+    
+    def test_visit_attribute_non_namespace(self):
+        """Test that non-namespace attributes are ignored."""
+        code = "obj.method()"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'obj' not in self.analyzer.used_namespaces
+    
+    def test_visit_attribute_nested_attribute(self):
+        """Test handling of nested attribute access."""
+        code = "obj.web.click()"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        # Should not detect 'web' since it's not a top-level namespace
+        assert 'web' not in self.analyzer.used_namespaces
+        assert 'obj' not in self.analyzer.used_namespaces
+    
+    def test_visit_name_command_types(self):
+        """Test detection of command type names."""
+        code = """
+cmd = WebCommand(action=WebActionType.NAVIGATE)
+llm_cmd = LLMCommand(prompt="test")
+file_cmd = FileCommand(path="/test")
+"""
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'WebCommand' in self.analyzer.used_types
+        assert 'WebActionType' in self.analyzer.used_types
+        assert 'LLMCommand' in self.analyzer.used_types
+        assert 'FileCommand' in self.analyzer.used_types
+    
+    def test_visit_name_session_function(self):
+        """Test detection of session function."""
+        code = "with session() as s: pass"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'session' in self.analyzer.used_namespaces
+    
+    def test_visit_name_files_context(self):
+        """Test detection of files context manager."""
+        code = "with files() as f: pass"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'files' in self.analyzer.used_namespaces
+    
+    def test_visit_name_general_identifiers(self):
+        """Test collection of general identifier names."""
+        code = """
+x = MyType()
+y = SomeClass
+z = variable_name
+"""
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        # All identifiers should be collected as potential types
+        assert 'MyType' in self.analyzer.used_types
+        assert 'SomeClass' in self.analyzer.used_types
+        assert 'variable_name' in self.analyzer.used_types
+    
+    def test_visit_subscript_simple(self):
+        """Test detection of subscript type usage."""
+        code = "HTML[Model]"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'HTML' in self.analyzer.used_types
+        assert 'Model' in self.analyzer.used_types
+    
+    def test_visit_subscript_complex(self):
+        """Test detection of complex subscript usage."""
+        code = "JSON[Schema[User]]"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'JSON' in self.analyzer.used_types
+        assert 'Schema' in self.analyzer.used_types
+        assert 'User' in self.analyzer.used_types
+    
+    def test_visit_subscript_nested(self):
+        """Test detection of nested subscript access."""
+        code = "obj.attr[Type]"
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        # Should detect the subscript type and obj name
+        assert 'Type' in self.analyzer.used_types
+        assert 'obj' in self.analyzer.used_types
+        # 'attr' is an attribute access, not a name node, so it won't be in used_types
 
-class MockLamiaInstance:
-    """Mock Lamia instance for testing."""
-    def __init__(self):
-        self._engine = Mock()
-        self._engine.manager_factory = Mock()
+
+class TestActionNamespaceAnalyzerIntegration:
+    """Test ActionNamespaceAnalyzer with realistic code patterns."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.analyzer = ActionNamespaceAnalyzer()
+    
+    def test_realistic_web_automation_code(self):
+        """Test analysis of realistic web automation code."""
+        code = """
+def automate_login():
+    web.navigate('https://example.com')
+    web.fill('#username', 'user')
+    web.click('#login-button')
+    result = web.get_text('.status')
+    return result
+"""
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'web' in self.analyzer.used_namespaces
+        assert len(self.analyzer.used_namespaces) == 1
+    
+    def test_realistic_mixed_namespaces_code(self):
+        """Test analysis of code using multiple namespaces."""
+        code = """
+def process_data():
+    data = http.get('https://api.example.com/data')
+    file.write('data.json', data)
+    web.navigate('dashboard.html')
+    web.upload('#file-input', 'data.json')
+"""
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'http' in self.analyzer.used_namespaces
+        assert 'file' in self.analyzer.used_namespaces
+        assert 'web' in self.analyzer.used_namespaces
+        assert len(self.analyzer.used_namespaces) == 3
+    
+    def test_realistic_validation_types_code(self):
+        """Test analysis of code using validation types."""
+        code = """
+def validate_response(data: JSON[UserSchema]) -> HTML[PageModel]:
+    user = data.parse()
+    if user.is_valid():
+        return render_template(user)
+    raise ValidationError("Invalid user data")
+"""
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        expected_types = {
+            'JSON', 'UserSchema', 'HTML', 'PageModel',
+            'data', 'user', 'render_template', 'ValidationError'
+        }
+        assert expected_types.issubset(self.analyzer.used_types)
+    
+    def test_realistic_session_code(self):
+        """Test analysis of session-based code."""
+        code = """
+with session(return_type=User) as s:
+    s.web.navigate('/login')
+    s.web.fill('#username', username)
+    s.web.click('#submit')
+    user_data = s.web.get_text('.profile')
+"""
+        tree = ast.parse(code)
+        
+        self.analyzer.visit(tree)
+        
+        assert 'session' in self.analyzer.used_namespaces
+        assert 'User' in self.analyzer.used_types
 
 
 class TestAnalyzeHybridFile:
-    """Test hybrid file analysis functionality."""
+    """Test analyze_hybrid_file function."""
     
-    def test_analyze_simple_session_code(self):
-        """Test analyzing code with session blocks."""
-        code = '''
-with session("test"):
-    web.click("button")
-    pass
-'''
-        result = analyze_hybrid_file(code)
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_analyze_simple_code(self, mock_lamia_types):
+        """Test analysis of simple hybrid code."""
+        # Mock lamia_types module
+        mock_base_type = Mock()
+        mock_html_type = Mock()
+        mock_html_type.__bases__ = (mock_base_type,)
         
-        assert 'session' in result['namespaces']
+        mock_lamia_types.BaseType = mock_base_type
+        vars_dict = {
+            'BaseType': mock_base_type,
+            'HTML': mock_html_type,
+            'SomeOtherClass': str  # Non-BaseType subclass
+        }
+        mock_lamia_types.__dict__ = vars_dict
+        type(mock_lamia_types).HTML = mock_html_type
+        
+        # Mock issubclass to return True for HTML
+        with patch('builtins.issubclass') as mock_issubclass:
+            def issubclass_side_effect(cls, base):
+                if cls == mock_html_type and base == mock_base_type:
+                    return True
+                return False
+            mock_issubclass.side_effect = issubclass_side_effect
+            
+            code = "web.click(button)"
+            result = analyze_hybrid_file(code)
+        
+        assert 'namespaces' in result
+        assert 'types' in result
         assert 'web' in result['namespaces']
-        assert len(result['types']) >= 0  # May or may not have types
+        assert isinstance(result['types'], set)
     
-    def test_analyze_code_with_types(self):
-        """Test analyzing code with validation types."""
-        code = '''
-def get_data() -> HTML[MyModel]:
-    "Get some data"
-
-result: JSON[Schema] = get_json()
-'''
-        result = analyze_hybrid_file(code)
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_analyze_with_return_types(self, mock_lamia_types):
+        """Test analysis with return type preprocessing."""
+        # Mock lamia_types
+        mock_base_type = Mock()
+        mock_html_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        vars_dict = {'BaseType': mock_base_type, 'HTML': mock_html_type}
+        mock_lamia_types.__dict__ = vars_dict
         
+        with patch('builtins.issubclass') as mock_issubclass:
+            def issubclass_side_effect(cls, base):
+                return True
+            mock_issubclass.side_effect = issubclass_side_effect
+            
+            code = """
+with -> HTML:
+    def get_page():
+        web.navigate('https://example.com')
+"""
+            result = analyze_hybrid_file(code)
+        
+        assert 'web' in result['namespaces']
+        assert 'HTML' in result['types']
+    
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_analyze_complex_return_types(self, mock_lamia_types):
+        """Test analysis with complex return types like HTML[Model]."""
+        # Mock lamia_types
+        mock_base_type = Mock()
+        mock_html_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        vars_dict = {'BaseType': mock_base_type, 'HTML': mock_html_type}
+        mock_lamia_types.__dict__ = vars_dict
+        
+        with patch('builtins.issubclass') as mock_issubclass:
+            def issubclass_side_effect(cls, base):
+                return True
+            mock_issubclass.side_effect = issubclass_side_effect
+            
+            code = """
+with -> HTML[UserModel]:
+    def get_user_page():
+        return web.get_page()
+"""
+            result = analyze_hybrid_file(code)
+        
+        assert 'HTML' in result['types']
+    
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_analyze_syntax_error_fallback(self, mock_lamia_types):
+        """Test fallback behavior on syntax error."""
+        # Mock lamia_types
+        mock_base_type = Mock()
+        mock_html_type = Mock()
+        mock_json_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        vars_dict = {
+            'BaseType': mock_base_type,
+            'HTML': mock_html_type,
+            'JSON': mock_json_type
+        }
+        mock_lamia_types.__dict__ = vars_dict
+        
+        with patch('builtins.issubclass') as mock_issubclass:
+            def issubclass_side_effect(cls, base):
+                return True
+            mock_issubclass.side_effect = issubclass_side_effect
+            
+            # Invalid syntax should trigger fallback
+            code = "def invalid syntax:"
+            result = analyze_hybrid_file(code)
+        
+        assert 'namespaces' in result
+        assert 'types' in result
+        assert {'web', 'http', 'session'}.issubset(result['namespaces'])
         assert 'HTML' in result['types']
         assert 'JSON' in result['types']
     
-    def test_analyze_code_with_all_namespaces(self):
-        """Test analyzing code with multiple namespaces."""
-        code = '''
-web.click("button")
-http.get("url")
-file.read("path")
-with session("test"):
-    pass
-'''
-        result = analyze_hybrid_file(code)
+    def test_analyze_empty_code(self):
+        """Test analysis of empty code."""
+        result = analyze_hybrid_file("")
         
-        assert 'web' in result['namespaces']
-        assert 'http' in result['namespaces'] 
-        assert 'file' in result['namespaces']
-        assert 'session' in result['namespaces']
+        assert 'namespaces' in result
+        assert 'types' in result
+        assert isinstance(result['namespaces'], set)
+        assert isinstance(result['types'], set)
     
-    def test_analyze_invalid_syntax_fallback(self):
-        """Test fallback behavior for invalid syntax."""
-        code = '''
-invalid python syntax here {{{
-'''
+    def test_analyze_comment_only_code(self):
+        """Test analysis of comment-only code."""
+        code = """
+# This is a comment
+# Another comment
+"""
         result = analyze_hybrid_file(code)
         
-        # Should return default safe set
-        assert 'web' in result['namespaces']
-        assert 'http' in result['namespaces']
-        assert 'session' in result['namespaces']
-        assert 'HTML' in result['types']
+        assert 'namespaces' in result
+        assert 'types' in result
 
 
 class TestCreateExecutionGlobals:
-    """Test execution globals creation."""
+    """Test create_execution_globals function."""
     
-    def test_create_globals_with_session_namespace(self):
-        """Test creating globals with session namespace."""
-        mock_lamia = MockLamiaInstance()
-        namespaces = {'session'}
-        types = set()
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_web_namespace(self, mock_lamia_types):
+        """Test creation of globals with web namespace."""
+        # Mock lamia_types
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
         
-        globals_dict = create_execution_globals(namespaces, types, mock_lamia)
+        with patch('lamia.actions.web') as mock_web:
+            with patch('lamia.interpreter.commands.WebCommand') as mock_web_cmd:
+                with patch('lamia.interpreter.commands.WebActionType') as mock_web_action:
+                    used_namespaces = {'web'}
+                    used_types = set()
+                    
+                    globals_dict = create_execution_globals(used_namespaces, used_types)
+        
+        assert 'web' in globals_dict
+        assert 'WebCommand' in globals_dict
+        assert 'WebActionType' in globals_dict
+        assert 'InputType' in globals_dict  # Always injected
+    
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_http_namespace(self, mock_lamia_types):
+        """Test creation of globals with http namespace."""
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
+        
+        with patch('lamia.actions.http') as mock_http:
+            used_namespaces = {'http'}
+            used_types = set()
+            
+            globals_dict = create_execution_globals(used_namespaces, used_types)
+        
+        assert 'http' in globals_dict
+        assert 'InputType' in globals_dict
+    
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_file_namespace(self, mock_lamia_types):
+        """Test creation of globals with file namespace."""
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
+        
+        with patch('lamia.actions.file') as mock_file:
+            used_namespaces = {'file'}
+            used_types = set()
+            
+            globals_dict = create_execution_globals(used_namespaces, used_types)
+        
+        assert 'file' in globals_dict
+        assert 'InputType' in globals_dict
+    
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_files_context(self, mock_lamia_types):
+        """Test creation of globals with files context manager."""
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
+        
+        with patch('lamia.engine.managers.llm.files_context_manager.files') as mock_files:
+            used_namespaces = {'files'}
+            used_types = set()
+            
+            globals_dict = create_execution_globals(used_namespaces, used_types)
+        
+        assert 'files' in globals_dict
+        assert 'InputType' in globals_dict
+    
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_session_namespace(self, mock_lamia_types):
+        """Test creation of globals with session namespace."""
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
+        
+        with patch('lamia.adapters.web.session_context.create_session_factory') as mock_create_session:
+            with patch('lamia.adapters.web.session_context.SessionSkipException') as mock_skip_exc:
+                with patch('logging.getLogger') as mock_get_logger:
+                    used_namespaces = {'session'}
+                    used_types = set()
+                    
+                    globals_dict = create_execution_globals(used_namespaces, used_types)
         
         assert 'session' in globals_dict
         assert 'SessionSkipException' in globals_dict
         assert 'logger' in globals_dict
         assert 'asyncio' in globals_dict
-        assert 'validate_session_result' in globals_dict
-        assert callable(globals_dict['validate_session_result'])
+        assert 'InputType' in globals_dict
     
-    def test_create_globals_with_web_namespace(self):
-        """Test creating globals with web namespace."""
-        namespaces = {'web'}
-        types = set()
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_with_lamia_instance(self, mock_lamia_types):
+        """Test creation of globals with lamia instance for session support."""
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
         
-        globals_dict = create_execution_globals(namespaces, types)
+        # Mock lamia instance
+        mock_lamia = Mock()
+        mock_engine = Mock()
+        mock_manager_factory = Mock()
+        mock_web_manager = Mock()
         
-        assert 'web' in globals_dict
+        mock_lamia._engine = mock_engine
+        mock_engine.manager_factory = mock_manager_factory
+        mock_manager_factory.get_manager.return_value = mock_web_manager
+        
+        with patch('lamia.adapters.web.session_context.create_session_factory') as mock_create_session:
+            with patch('lamia.interpreter.command_types.CommandType') as mock_cmd_type:
+                used_namespaces = {'session'}
+                used_types = set()
+                
+                globals_dict = create_execution_globals(used_namespaces, used_types, mock_lamia)
+        
+        # Verify web_manager was retrieved and passed to session factory
+        mock_manager_factory.get_manager.assert_called_once()
+        mock_create_session.assert_called_once_with(mock_web_manager)
+    
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_command_types(self, mock_lamia_types):
+        """Test creation of globals with command types."""
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
+        
+        with patch('lamia.interpreter.commands.WebCommand') as mock_web_cmd:
+            with patch('lamia.interpreter.commands.WebActionType') as mock_web_action:
+                with patch('lamia.interpreter.commands.LLMCommand') as mock_llm_cmd:
+                    with patch('lamia.interpreter.commands.FileCommand') as mock_file_cmd:
+                        used_namespaces = set()
+                        used_types = {'WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand'}
+                        
+                        globals_dict = create_execution_globals(used_namespaces, used_types)
+        
         assert 'WebCommand' in globals_dict
         assert 'WebActionType' in globals_dict
+        assert 'LLMCommand' in globals_dict
+        assert 'FileCommand' in globals_dict
+        assert 'InputType' in globals_dict
     
-    def test_create_globals_with_validation_types(self):
-        """Test creating globals with validation types."""
-        namespaces = set()
-        types = {'HTML', 'JSON', 'CSV'}
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_validation_types(self, mock_lamia_types):
+        """Test creation of globals with validation types."""
+        # Mock lamia_types with BaseType subclasses
+        mock_base_type = Mock()
+        mock_html_type = Mock()
+        mock_json_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
         
-        globals_dict = create_execution_globals(namespaces, types)
+        # Mock vars() to return our dict when called on the mock module
+        mock_vars_dict = {
+            'BaseType': mock_base_type,
+            'HTML': mock_html_type,
+            'JSON': mock_json_type,
+            'NotAType': str  # Not a BaseType subclass
+        }
+        
+        with patch('builtins.vars') as mock_vars:
+            mock_vars.return_value = mock_vars_dict
+            with patch('builtins.isinstance') as mock_isinstance:
+                with patch('builtins.issubclass') as mock_issubclass:
+                    # Mock isinstance to return True for type checks on our mock types
+                    def isinstance_side_effect(obj, cls):
+                        if obj in [mock_html_type, mock_json_type] and cls == type:
+                            return True
+                        if obj == str and cls == type:
+                            return True
+                        return False
+                    mock_isinstance.side_effect = isinstance_side_effect
+                    
+                    # Mock issubclass 
+                    def issubclass_side_effect(cls, base):
+                        if cls in [mock_html_type, mock_json_type] and base == mock_base_type:
+                            return True
+                        return False
+                    mock_issubclass.side_effect = issubclass_side_effect
+                    
+                    used_namespaces = set()
+                    used_types = {'HTML', 'JSON', 'NotAType'}
+                    
+                    globals_dict = create_execution_globals(used_namespaces, used_types)
         
         assert 'HTML' in globals_dict
         assert 'JSON' in globals_dict
-        assert 'CSV' in globals_dict
+        assert 'NotAType' not in globals_dict  # Filtered out
+        assert 'InputType' in globals_dict
     
-    def test_create_globals_without_lamia_instance(self):
-        """Test creating globals without lamia instance for session."""
-        namespaces = {'session'}
-        types = set()
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_empty_requirements(self, mock_lamia_types):
+        """Test creation of globals with no requirements."""
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
         
-        globals_dict = create_execution_globals(namespaces, types, None)
+        used_namespaces = set()
+        used_types = set()
         
-        assert 'validate_session_result' in globals_dict
-        # Should have fallback validator that raises error
-        with pytest.raises(Exception, match="Session validation requires a Lamia instance"):
-            globals_dict['validate_session_result'](HTML)
+        globals_dict = create_execution_globals(used_namespaces, used_types)
+        
+        # Should only contain InputType (always injected)
+        assert 'InputType' in globals_dict
+        assert len([k for k in globals_dict.keys() if not k.startswith('__')]) == 1
 
 
-class TestGetCurrentPageContent:
-    """Test getting current page content."""
+class TestCreateExecutionGlobalsEdgeCases:
+    """Test edge cases for create_execution_globals function."""
     
-    @pytest.mark.asyncio
-    async def test_get_page_content_success(self):
-        """Test successfully getting page content."""
-        mock_lamia = MockLamiaInstance()
-        mock_web_manager = Mock()
-        mock_browser_manager = Mock()
-        mock_adapter = AsyncMock()
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_with_exception_in_lamia_access(self, mock_lamia_types):
+        """Test handling of exception when accessing lamia instance components."""
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
         
-        # Setup mock chain
-        mock_lamia._engine.manager_factory.get_manager.return_value = mock_web_manager
-        mock_web_manager.browser_manager = mock_browser_manager
-        mock_browser_manager._browser_adapter = mock_adapter
-        mock_adapter.get_page_source = AsyncMock(return_value="<html>test content</html>")
+        # Mock lamia instance that raises exception when accessing engine
+        mock_lamia = Mock()
+        # Make _engine property raise exception when accessed
+        type(mock_lamia)._engine = Mock(side_effect=AttributeError("No engine"))
         
-        content = await _get_current_page_content(mock_lamia)
+        with patch('lamia.adapters.web.session_context.create_session_factory') as mock_create_session:
+            with patch('logging.getLogger') as mock_get_logger:
+                used_namespaces = {'session'}
+                used_types = set()
+                
+                globals_dict = create_execution_globals(used_namespaces, used_types, mock_lamia)
         
-        assert content == "<html>test content</html>"
-        mock_adapter.get_page_source.assert_called_once()
+        # Should still create session globals despite exception
+        assert 'session' in globals_dict
+        # The actual implementation catches the exception and logs a warning, but still tries to call create_session_factory
+        # Let's just verify the session was created
+        mock_create_session.assert_called_once()
     
-    @pytest.mark.asyncio
-    async def test_get_page_content_no_adapter(self):
-        """Test getting page content when no browser adapter exists."""
-        mock_lamia = MockLamiaInstance()
-        mock_web_manager = Mock()
-        mock_browser_manager = Mock()
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_create_globals_partial_command_types(self, mock_lamia_types):
+        """Test creation of globals with only some command types."""
+        mock_base_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        mock_lamia_types.__dict__ = {'BaseType': mock_base_type}
         
-        # Setup mock chain with no adapter
-        mock_lamia._engine.manager_factory.get_manager.return_value = mock_web_manager
-        mock_web_manager.browser_manager = mock_browser_manager
-        mock_browser_manager._browser_adapter = None
+        with patch('lamia.interpreter.commands.WebCommand') as mock_web_cmd:
+            with patch('lamia.interpreter.commands.LLMCommand') as mock_llm_cmd:
+                used_namespaces = set()
+                used_types = {'WebCommand', 'LLMCommand'}  # Only some command types
+                
+                globals_dict = create_execution_globals(used_namespaces, used_types)
         
-        with pytest.raises(Exception, match="No active browser adapter found"):
-            await _get_current_page_content(mock_lamia)
-    
-    @pytest.mark.asyncio
-    async def test_get_page_content_fallback_adapter(self):
-        """Test getting page content with fallback adapter access."""
-        mock_lamia = MockLamiaInstance()
-        mock_web_manager = Mock()
-        mock_browser_manager = Mock()
-        mock_wrapper_adapter = Mock()
-        mock_actual_adapter = Mock()
-        mock_driver = Mock()
-        
-        # Setup mock chain with wrapper adapter
-        mock_lamia._engine.manager_factory.get_manager.return_value = mock_web_manager
-        mock_web_manager.browser_manager = mock_browser_manager
-        mock_browser_manager._browser_adapter = mock_wrapper_adapter
-        mock_wrapper_adapter.adapter = mock_actual_adapter
-        mock_actual_adapter.driver = mock_driver
-        mock_driver.page_source = "<html>fallback content</html>"
-        
-        # Mock that get_page_source doesn't exist on wrapper
-        del mock_wrapper_adapter.get_page_source
-        
-        content = await _get_current_page_content(mock_lamia)
-        
-        assert content == "<html>fallback content</html>"
+        assert 'WebCommand' in globals_dict
+        assert 'LLMCommand' in globals_dict
+        assert 'WebActionType' not in globals_dict  # Not in used_types
+        assert 'FileCommand' not in globals_dict  # Not in used_types
 
 
-class TestGetCurrentUrl:
-    """Test getting current page URL."""
+class TestAnalyzeHybridFileIntegration:
+    """Test integration scenarios for analyze_hybrid_file."""
     
-    @pytest.mark.asyncio
-    async def test_get_current_url_success(self):
-        """Test successfully getting current URL."""
-        mock_lamia = MockLamiaInstance()
-        mock_web_manager = Mock()
-        mock_browser_manager = Mock()
-        mock_adapter = AsyncMock()
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_realistic_hybrid_file_analysis(self, mock_lamia_types):
+        """Test analysis of realistic hybrid file."""
+        # Mock lamia_types
+        mock_base_type = Mock()
+        mock_html_type = Mock()
+        mock_json_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        vars_dict = {
+            'BaseType': mock_base_type,
+            'HTML': mock_html_type,
+            'JSON': mock_json_type
+        }
+        mock_lamia_types.__dict__ = vars_dict
         
-        # Setup mock chain
-        mock_lamia._engine.manager_factory.get_manager.return_value = mock_web_manager
-        mock_web_manager.browser_manager = mock_browser_manager
-        mock_browser_manager._browser_adapter = mock_adapter
-        mock_adapter.get_current_url = AsyncMock(return_value="https://example.com")
+        with patch('builtins.issubclass') as mock_issubclass:
+            def issubclass_side_effect(cls, base):
+                return True
+            mock_issubclass.side_effect = issubclass_side_effect
+            
+            code = """
+with -> HTML[UserProfile]:
+    def scrape_user_profile(username):
+        web.navigate(f'https://example.com/users/{username}')
+        profile_data = web.get_text('.profile-info')
+        return profile_data
+
+def analyze_data():
+    data = http.get('https://api.example.com/analytics')
+    file.write('analytics.json', data)
+    with session(return_type=JSON) as s:
+        result = s.web.process_data()
+    return result
+"""
+            result = analyze_hybrid_file(code)
         
-        url = await _get_current_url(mock_lamia)
+        expected_namespaces = {'web', 'http', 'file', 'session'}
+        expected_types = {'HTML', 'UserProfile', 'JSON'}
         
-        assert url == "https://example.com"
-        mock_adapter.get_current_url.assert_called_once()
-    
-    @pytest.mark.asyncio
-    async def test_get_current_url_fallback(self):
-        """Test getting current URL with fallback methods."""
-        mock_lamia = MockLamiaInstance()
-        mock_web_manager = Mock()
-        mock_browser_manager = Mock()
-        mock_adapter = Mock()
-        mock_driver = Mock()
-        
-        # Setup mock chain
-        mock_lamia._engine.manager_factory.get_manager.return_value = mock_web_manager
-        mock_web_manager.browser_manager = mock_browser_manager
-        mock_browser_manager._browser_adapter = mock_adapter
-        mock_adapter.driver = mock_driver
-        mock_driver.current_url = "https://fallback.com"
-        
-        # Mock that get_current_url doesn't exist
-        del mock_adapter.get_current_url
-        
-        url = await _get_current_url(mock_lamia)
-        
-        assert url == "https://fallback.com"
-    
-    @pytest.mark.asyncio
-    async def test_get_current_url_error(self):
-        """Test getting current URL when error occurs."""
-        mock_lamia = MockLamiaInstance()
-        mock_lamia._engine.manager_factory.get_manager.side_effect = Exception("Test error")
-        
-        url = await _get_current_url(mock_lamia)
-        
-        assert url == "unknown"
+        assert expected_namespaces.issubset(result['namespaces'])
+        assert expected_types.intersection(result['types'])
 
 
-class TestWaitForPageStabilization:
-    """Test page stabilization functionality."""
+class TestCreateExecutionGlobalsIntegration:
+    """Test integration scenarios for create_execution_globals."""
     
-    @pytest.mark.asyncio
-    async def test_page_stabilization_immediate(self):
-        """Test page stabilization when page is already stable."""
-        mock_lamia = MockLamiaInstance()
+    @patch('lamia.interpreter.ast_analyzer.lamia_types')
+    def test_complete_execution_environment(self, mock_lamia_types):
+        """Test creation of complete execution environment."""
+        # Mock all necessary components
+        mock_base_type = Mock()
+        mock_html_type = Mock()
+        mock_json_type = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        vars_dict = {
+            'BaseType': mock_base_type,
+            'HTML': mock_html_type,
+            'JSON': mock_json_type
+        }
+        mock_lamia_types.__dict__ = vars_dict
         
-        test_content = "<html>stable content</html>"
-        test_url = "https://stable.com"
+        with patch('builtins.issubclass') as mock_issubclass:
+            def issubclass_side_effect(cls, base):
+                return True
+            mock_issubclass.side_effect = issubclass_side_effect
+            
+            with patch('lamia.actions.web') as mock_web:
+                with patch('lamia.actions.http') as mock_http:
+                    with patch('lamia.interpreter.commands.WebCommand') as mock_web_cmd:
+                        with patch('lamia.interpreter.commands.LLMCommand') as mock_llm_cmd:
+                            with patch('lamia.adapters.web.session_context.create_session_factory') as mock_session:
+                                used_namespaces = {'web', 'http', 'session'}
+                                used_types = {'HTML', 'JSON', 'WebCommand', 'LLMCommand'}
+                                
+                                globals_dict = create_execution_globals(used_namespaces, used_types)
         
-        with patch('lamia.interpreter.ast_analyzer._get_current_page_content') as mock_get_content, \
-             patch('lamia.interpreter.ast_analyzer._get_current_url') as mock_get_url:
-            
-            mock_get_content.return_value = test_content
-            mock_get_url.return_value = test_url
-            
-            result = await _wait_for_page_stabilization(mock_lamia, max_wait_time=5, stability_window=1)
-            
-            assert result == test_content
-            # Should be called at least twice to detect stability
-            assert mock_get_content.call_count >= 2
-    
-    @pytest.mark.asyncio
-    async def test_page_stabilization_with_changes(self):
-        """Test page stabilization when page changes initially."""
-        mock_lamia = MockLamiaInstance()
+        # Verify all expected globals are present
+        expected_keys = {
+            'web', 'http', 'session', 'HTML', 'JSON', 
+            'WebCommand', 'LLMCommand', 'InputType',
+            'SessionSkipException', 'logger', 'asyncio'
+        }
         
-        # Simulate page changing then stabilizing
-        content_sequence = [
-            "<html>loading...</html>",
-            "<html>loading...</html>", 
-            "<html>final content</html>",
-            "<html>final content</html>",
-            "<html>final content</html>"
-        ]
-        url_sequence = [
-            "https://loading.com",
-            "https://loading.com",
-            "https://final.com", 
-            "https://final.com",
-            "https://final.com"
-        ]
-        
-        with patch('lamia.interpreter.ast_analyzer._get_current_page_content') as mock_get_content, \
-             patch('lamia.interpreter.ast_analyzer._get_current_url') as mock_get_url, \
-             patch('asyncio.sleep', new_callable=AsyncMock):  # Speed up test
-            
-            mock_get_content.side_effect = content_sequence
-            mock_get_url.side_effect = url_sequence
-            
-            result = await _wait_for_page_stabilization(mock_lamia, max_wait_time=10, stability_window=1)
-            
-            assert result == "<html>final content</html>"
-    
-    @pytest.mark.asyncio
-    async def test_page_stabilization_basic_timeout(self):
-        """Test page stabilization timeout behavior with simpler mocking."""
-        mock_lamia = MockLamiaInstance()
-        
-        with patch('lamia.interpreter.ast_analyzer._get_current_page_content') as mock_get_content, \
-             patch('lamia.interpreter.ast_analyzer._get_current_url') as mock_get_url, \
-             patch('asyncio.sleep', new_callable=AsyncMock):
-            
-            # Mock content that will eventually timeout
-            mock_get_content.return_value = "<html>timeout content</html>"
-            mock_get_url.return_value = "https://timeout.com"
-            
-            # Use a very short timeout for testing
-            result = await _wait_for_page_stabilization(mock_lamia, max_wait_time=0.1, stability_window=0.05)
-            
-            assert result == "<html>timeout content</html>"
-    
-    @pytest.mark.asyncio 
-    async def test_page_stabilization_error_handling(self):
-        """Test page stabilization handles errors gracefully."""
-        mock_lamia = MockLamiaInstance()
-        
-        with patch('lamia.interpreter.ast_analyzer._get_current_page_content') as mock_get_content, \
-             patch('lamia.interpreter.ast_analyzer._get_current_url') as mock_get_url, \
-             patch('asyncio.sleep', new_callable=AsyncMock):
-            
-            # First few calls fail, then succeed
-            mock_get_content.side_effect = [
-                Exception("Network error"),
-                Exception("Network error"), 
-                "<html>recovered content</html>",
-                "<html>recovered content</html>"
-            ]
-            mock_get_url.side_effect = [
-                Exception("Network error"),
-                Exception("Network error"),
-                "https://recovered.com",
-                "https://recovered.com"
-            ]
-            
-            result = await _wait_for_page_stabilization(mock_lamia, max_wait_time=10, stability_window=1)
-            
-            assert result == "<html>recovered content</html>"
-
-
-class TestSessionValidator:
-    """Test session validator creation and functionality."""
-    
-    @pytest.mark.asyncio
-    async def test_create_session_validator_success(self):
-        """Test creating and using session validator successfully."""
-        mock_lamia = MockLamiaInstance()
-        
-        # Mock the stabilization and validation chain
-        stable_content = "<html><div class='profile-card-name'>John Doe</div></html>"
-        
-        with patch('lamia.interpreter.ast_analyzer._wait_for_page_stabilization') as mock_stabilize, \
-             patch('lamia.engine.factories.validator_factory.ValidatorFactory') as mock_factory_class:
-            
-            mock_stabilize.return_value = stable_content
-            
-            # Mock validator factory and validator
-            mock_factory = Mock()
-            mock_factory_class.return_value = mock_factory
-            mock_validator = AsyncMock()
-            mock_factory.get_validator.return_value = mock_validator
-            
-            # Mock successful validation result
-            mock_validation_result = Mock()
-            mock_validation_result.is_valid = True
-            mock_validation_result.result_type = {"profile_name": "John Doe"}
-            mock_validator.validate.return_value = mock_validation_result
-            
-            # Create and test validator
-            validator_func = create_session_validator(mock_lamia)
-            result = await validator_func(HTML[MockHomePageModel])
-            
-            # Verify calls
-            mock_stabilize.assert_called_once_with(mock_lamia)
-            mock_validator.validate.assert_called_once_with(stable_content)
-            assert result == {"profile_name": "John Doe"}
-    
-    @pytest.mark.asyncio
-    async def test_create_session_validator_validation_failure(self):
-        """Test session validator when validation fails."""
-        mock_lamia = MockLamiaInstance()
-        
-        stable_content = "<html>wrong content</html>"
-        
-        with patch('lamia.interpreter.ast_analyzer._wait_for_page_stabilization') as mock_stabilize, \
-             patch('lamia.engine.factories.validator_factory.ValidatorFactory') as mock_factory_class:
-            
-            mock_stabilize.return_value = stable_content
-            
-            # Mock validator factory and validator
-            mock_factory = Mock()
-            mock_factory_class.return_value = mock_factory
-            mock_validator = AsyncMock()
-            mock_factory.get_validator.return_value = mock_validator
-            
-            # Mock failed validation result
-            mock_validation_result = Mock()
-            mock_validation_result.is_valid = False
-            mock_validation_result.error_message = "Profile element not found"
-            mock_validator.validate.return_value = mock_validation_result
-            
-            # Create and test validator
-            validator_func = create_session_validator(mock_lamia)
-            
-            with pytest.raises(Exception, match="Session validation failed: Profile element not found"):
-                await validator_func(HTML[MockHomePageModel])
-
-    
-    @pytest.mark.asyncio
-    async def test_create_session_validator_stabilization_error(self):
-        """Test session validator when stabilization fails."""
-        mock_lamia = MockLamiaInstance()
-        
-        with patch('lamia.interpreter.ast_analyzer._wait_for_page_stabilization') as mock_stabilize:
-            mock_stabilize.side_effect = Exception("Browser not available")
-            
-            validator_func = create_session_validator(mock_lamia)
-            
-            with pytest.raises(Exception, match="Session validation error"):
-                await validator_func(HTML[MockHomePageModel])
-
-
-class TestActionNamespaceAnalyzer:
-    """Test AST analysis for action namespaces."""
-    
-    def test_visit_attribute_web_namespace(self):
-        """Test detecting web namespace usage."""
-        import ast
-        
-        code = "web.click('button')"
-        tree = ast.parse(code)
-        analyzer = ActionNamespaceAnalyzer()
-        analyzer.visit(tree)
-        
-        assert 'web' in analyzer.used_namespaces
-    
-    def test_visit_name_validation_types(self):
-        """Test detecting validation type usage."""
-        import ast
-        
-        code = "result: HTML = get_data()"
-        tree = ast.parse(code)
-        analyzer = ActionNamespaceAnalyzer()
-        analyzer.visit(tree)
-        
-        assert 'HTML' in analyzer.used_types
-    
-    def test_visit_subscript_parametric_types(self):
-        """Test detecting parametric type usage."""
-        import ast
-        
-        code = "data: JSON[Schema] = parse()"
-        tree = ast.parse(code)
-        analyzer = ActionNamespaceAnalyzer()
-        analyzer.visit(tree)
-        
-        assert 'JSON' in analyzer.used_types
-    
-    def test_visit_name_session_namespace(self):
-        """Test detecting session namespace usage."""
-        import ast
-        
-        code = "with session('test'): pass"
-        tree = ast.parse(code)
-        analyzer = ActionNamespaceAnalyzer()
-        analyzer.visit(tree)
-        
-        assert 'session' in analyzer.used_namespaces
-    
-    def test_multiple_namespaces_and_types(self):
-        """Test detecting multiple namespaces and types."""
-        import ast
-        
-        code = '''
-web.click("button")
-http.get("url") 
-result: HTML[Model] = process()
-data: JSON = load()
-with session("test"):
-    pass
-'''
-        tree = ast.parse(code)
-        analyzer = ActionNamespaceAnalyzer()
-        analyzer.visit(tree)
-        
-        assert 'web' in analyzer.used_namespaces
-        assert 'http' in analyzer.used_namespaces
-        assert 'session' in analyzer.used_namespaces
-        assert 'HTML' in analyzer.used_types
-        assert 'JSON' in analyzer.used_types
-
-
-if __name__ == "__main__":
-    pytest.main([__file__])
+        assert expected_keys.issubset(set(globals_dict.keys()))

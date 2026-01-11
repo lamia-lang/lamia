@@ -1,9 +1,9 @@
 """Base interface for filesystem adapters."""
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Union
 
-class BaseFSAdapter():
+class BaseFSAdapter(ABC):
     """Base interface for filesystem adapters.
     
     This defines the core filesystem operations without retry handling.
