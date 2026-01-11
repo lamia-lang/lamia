@@ -1,7 +1,7 @@
 """Local filesystem adapter implementation."""
 
 import os
-import aiofiles
+import asyncio
 from pathlib import Path
 from typing import Union
 from .base import BaseFSAdapter
@@ -11,10 +11,10 @@ class LocalFSAdapter(BaseFSAdapter):
     """Local filesystem adapter using async file operations.
     
     This adapter provides async file operations for local filesystem access
-    using the aiofiles library for non-blocking I/O.
+    using asyncio for non-blocking I/O.
     """
     
-    def __init__(self, base_path: str = None):
+    def __init__(self, base_path: Union[str, None] = None):
         """Initialize the local filesystem adapter.
         
         Args:
@@ -75,9 +75,13 @@ class LocalFSAdapter(BaseFSAdapter):
         """
         resolved_path = self._resolve_path(path)
         
+        def _read_file():
+            with open(resolved_path, 'rb') as f:
+                return f.read()
+        
         try:
-            async with aiofiles.open(resolved_path, 'rb') as f:
-                return await f.read()
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, _read_file)
         except FileNotFoundError:
             raise FileNotFoundError(f"File not found: {path}")
         except PermissionError:
@@ -101,13 +105,17 @@ class LocalFSAdapter(BaseFSAdapter):
         # Create parent directories if they don't exist
         resolved_path.parent.mkdir(parents=True, exist_ok=True)
         
-        try:
+        def _write_file():
             if isinstance(data, str):
-                async with aiofiles.open(resolved_path, 'w', encoding='utf-8') as f:
-                    await f.write(data)
+                with open(resolved_path, 'w', encoding='utf-8') as f:
+                    f.write(data)
             else:
-                async with aiofiles.open(resolved_path, 'wb') as f:
-                    await f.write(data)
+                with open(resolved_path, 'wb') as f:
+                    f.write(data)
+        
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _write_file)
         except PermissionError:
             raise PermissionError(f"Permission denied writing to file: {path}")
         except Exception as e:

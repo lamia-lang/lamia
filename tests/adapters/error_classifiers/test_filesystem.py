@@ -536,7 +536,7 @@ class TestFilesystemErrorClassifierEdgeCases:
         try:
             raise FileNotFoundError("Original file not found")
         except FileNotFoundError as e:
-            nested_error = OSError("Failed to handle file operation") from e
+            nested_error = OSError("Failed to handle file operation")
         
         result = self.classifier.classify_error(nested_error)
         assert isinstance(result, ErrorCategory)
