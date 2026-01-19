@@ -17,7 +17,7 @@ def _detect_selector_type(selector: str) -> SelectorType:
         return SelectorType.CSS
     elif "[" in selector and "]" in selector:
         return SelectorType.CSS
-    elif " " not in selector and "." not in selector and "#" not in selector and "[" not in selector:
+    elif selector.strip() != "" and " " not in selector and "." not in selector and "#" not in selector and "[" not in selector:
         return SelectorType.TAG_NAME
     else:
         return SelectorType.CSS  # Default to CSS
@@ -82,17 +82,12 @@ class WebActions:
             Executed result if executor available, otherwise the command
         """
         if self._executor:
-            try:
-                validation_result = asyncio.run(self._executor.execute(command))
-                if hasattr(validation_result, 'result_type'):
-                    result = validation_result.result_type
-                else:
-                    result = validation_result
-                if result_processor:
-                    result = result_processor(result)
-                return result
-            except Exception:
-                pass
+            validation_result = asyncio.run(self._executor.execute(command))
+            result = validation_result.result_type or validation_result
+            
+            if result_processor:
+                result = result_processor(result)
+            return result
         return command
     
     def get_element(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):

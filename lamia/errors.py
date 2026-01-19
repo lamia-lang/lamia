@@ -79,7 +79,7 @@ class ExternalOperationError(Exception):
             print(f"Original cause: {e.original_error}")
     """
     
-    def __init__(self, message: str, retry_history: List[str], original_error: Optional[Exception] = None):
+    def __init__(self, message: str, retry_history: Optional[List[str]] = None, original_error: Optional[Exception] = None):
         super().__init__(message)
         self.retry_history = retry_history
         self.original_error = original_error

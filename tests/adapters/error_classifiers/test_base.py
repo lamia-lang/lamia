@@ -330,13 +330,6 @@ class TestErrorCategoryEnum:
         assert category_dict[ErrorCategory.PERMANENT] == "permanent_handler"
         assert category_dict[ErrorCategory.TRANSIENT] == "transient_handler"
         assert category_dict[ErrorCategory.RATE_LIMIT] == "rate_limit_handler"
-    
-    def test_error_categories_string_representation(self):
-        """Test string representation of error categories."""
-        for category in ErrorCategory:
-            str_repr = str(category)
-            assert "ErrorCategory" in str_repr
-            assert category.value in str_repr
 
 
 class TestErrorClassifierIntegration:

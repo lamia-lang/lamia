@@ -6,17 +6,35 @@ from lamia.errors import ExternalOperationPermanentError, ExternalOperationTrans
 
 # Browser permanent error patterns
 BROWSER_PERMANENT_PATTERNS = [
+    # Cast a wide net
+    "unsupported",
+    "not supported",
+    "malformed",
+    # specific paterns
     "not initialized",
     "invalid session",
     "session not created",
+    "session invalid or expired",
     "browser not supported",
     "invalid argument",
     "invalid selector syntax",
     "malformed selector",
     "connection refused",  # Browser/driver was closed
     "session deleted",
-    "chrome not reachable",
-    "element click intercepted",  # Modal overlay blocking clicks - needs different strategy, not retries
+    "could not start session",
+    "not reachable",
+    "webdriver not found",
+    "browser executable not found",
+    "no active session",
+    "invalid browser configuration",
+    "invalid xpath syntax",
+    "invalid element locator",
+    "invalid parameter value",
+    "click intercepted",  # Modal overlay blocking clicks - needs different strategy, not retries
+    "element is obscured by another element",
+    "invalid javascript syntax provided",
+    "invalid form element selector",
+    "invalid url format provided"
 ]
 
 # Browser transient error patterns
@@ -65,22 +83,22 @@ class BrowserErrorClassifier(ErrorClassifier):
         error_msg = str(error).lower()
         
         # Check for permanent errors first (rare for browsers)
-        if self._is_permanent_error(error, error_msg):
+        if self._is_permanent_error(error_msg):
             return ErrorCategory.PERMANENT
         
         # Check for transient errors (most common for browsers)
-        if self._is_transient_error(error, error_msg):
+        if self._is_transient_error(error_msg):
             return ErrorCategory.TRANSIENT
         
         # Default to transient for unknown browser errors
         # (conservative approach - most browser errors are retryable or need AI help)
         return ErrorCategory.TRANSIENT
     
-    def _is_permanent_error(self, error: Exception, error_msg: str) -> bool:
+    def _is_permanent_error(self, error_msg: str) -> bool:
         """Check if error indicates a permanent failure."""
         return any(pattern in error_msg for pattern in BROWSER_PERMANENT_PATTERNS)
     
-    def _is_transient_error(self, error: Exception, error_msg: str) -> bool:
+    def _is_transient_error(self,  error_msg: str) -> bool:
         """Check if error indicates a transient failure."""
         return any(pattern in error_msg for pattern in BROWSER_TRANSIENT_PATTERNS)
 

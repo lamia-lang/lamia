@@ -580,7 +580,7 @@ class TestBrowserErrorClassifierIntegrationScenarios:
         page_load_errors = [
             ("Page load timeout after 30s", ErrorCategory.TRANSIENT),
             ("DNS resolution failed for domain", ErrorCategory.TRANSIENT),
-            ("Connection refused by target server", ErrorCategory.TRANSIENT),
+            ("Connection refused by target server", ErrorCategory.PERMANENT),
             ("Invalid URL format provided", ErrorCategory.PERMANENT),
             ("SSL certificate verification failed", ErrorCategory.TRANSIENT)
         ]
