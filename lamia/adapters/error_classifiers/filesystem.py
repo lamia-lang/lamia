@@ -1,108 +1,117 @@
-"""Filesystem error classifier optimized for file operations."""
+"""Filesystem error classifier using OS error codes and exception types.
+
+Uses errno codes and Python's built-in exception hierarchy for reliable
+classification instead of fragile string matching. Works across platforms
+(Linux, macOS, Windows) with graceful handling of platform-specific codes.
+"""
+
+import errno
+from typing import Set
 
 from .base import ErrorClassifier
 from .categories import ErrorCategory
 
-# Filesystem permanent error patterns
-FS_PERMANENT_PATTERNS = [
-    "permission",
-    "access denied",
-    "no such file",
-    "directory not found", 
-    "invalid path",
-    "read-only",
-    "not a directory",
-    "is a directory",
-]
 
-# Filesystem transient error patterns  
-FS_TRANSIENT_PATTERNS = [
-    "disk",
-    "space",
-    "busy", 
-    "lock",
-    "temporary",
-    "resource",
-    "quota",
-]
+def _get_errno(name: str) -> int:
+    """Safely get errno code by name, returning -1 if not available on this platform."""
+    return getattr(errno, name, -1)
 
-# Permanent exception types
-FS_PERMANENT_EXCEPTIONS = (
-    PermissionError,
-    FileNotFoundError,
-    NotADirectoryError,
-    IsADirectoryError,
+
+# Permanent errno codes - these errors won't resolve by retrying
+# Uses _get_errno() for cross-platform safety (some codes don't exist on Windows)
+PERMANENT_ERRNO: Set[int] = {
+    code for code in [
+        _get_errno('ENOENT'),      # No such file or directory
+        _get_errno('EACCES'),      # Permission denied
+        _get_errno('EPERM'),       # Operation not permitted
+        _get_errno('ENOTDIR'),     # Not a directory
+        _get_errno('EISDIR'),      # Is a directory
+        _get_errno('EEXIST'),      # File exists
+        _get_errno('ENOTEMPTY'),   # Directory not empty
+        _get_errno('EROFS'),       # Read-only filesystem
+        _get_errno('ENAMETOOLONG'),# Filename too long
+        _get_errno('EINVAL'),      # Invalid argument (often invalid paths)
+        _get_errno('ELOOP'),       # Too many symbolic links (Unix only)
+        _get_errno('EXDEV'),       # Cross-device link
+        _get_errno('EMLINK'),      # Too many links
+        _get_errno('ENODEV'),      # No such device
+        _get_errno('ENXIO'),       # No such device or address
+        _get_errno('ENOEXEC'),     # Exec format error
+        _get_errno('EFAULT'),      # Bad address
+    ] if code != -1  # Filter out unavailable codes
+}
+
+# Transient errno codes - these might resolve by retrying
+TRANSIENT_ERRNO: Set[int] = {
+    code for code in [
+        _get_errno('ENOSPC'),      # No space left on device
+        _get_errno('EAGAIN'),      # Resource temporarily unavailable
+        _get_errno('EBUSY'),       # Device or resource busy
+        _get_errno('ETXTBSY'),     # Text file busy (Unix only)
+        _get_errno('ENOLCK'),      # No locks available
+        _get_errno('EINTR'),       # Interrupted system call
+        _get_errno('ENOMEM'),      # Out of memory
+        _get_errno('EMFILE'),      # Too many open files
+        _get_errno('ENFILE'),      # File table overflow
+        _get_errno('EIO'),         # I/O error (can be transient on some devices)
+        _get_errno('EDQUOT'),      # Disk quota exceeded (Unix only)
+        _get_errno('EWOULDBLOCK'), # Operation would block (alias for EAGAIN on some systems)
+    ] if code != -1  # Filter out unavailable codes
+}
+
+# Python's built-in permanent exception types (subclasses of OSError)
+PERMANENT_EXCEPTION_TYPES = (
+    FileNotFoundError,    # errno.ENOENT
+    FileExistsError,      # errno.EEXIST
+    PermissionError,      # errno.EACCES, errno.EPERM
+    NotADirectoryError,   # errno.ENOTDIR
+    IsADirectoryError,    # errno.EISDIR
 )
 
-# Transient exception types
-FS_TRANSIENT_EXCEPTIONS = (
-    OSError,
-    IOError,
-    BlockingIOError,
+# Python's built-in transient exception types
+TRANSIENT_EXCEPTION_TYPES = (
+    BlockingIOError,      # errno.EAGAIN, errno.EWOULDBLOCK
+    InterruptedError,     # errno.EINTR
+    TimeoutError,         # Timeout waiting for resource
 )
 
 
 class FilesystemErrorClassifier(ErrorClassifier):
-    """Filesystem-specific error classifier.
+    """Filesystem error classifier using errno codes and exception types.
     
-    Optimized for file operations - does not check for rate limiting
-    since filesystems typically don't implement rate limits.
-    Most filesystem errors are permanent (permissions, file not found)
-    with only a few transient cases (disk full, file locks).
+    Relies on OS-level error codes for reliable classification rather than
+    fragile string pattern matching. Filesystem errors are well-typed by
+    the OS, making this approach much more robust.
     """
     
     def classify_error(self, error: Exception) -> ErrorCategory:
-        """Classify filesystem errors.
+        """Classify filesystem errors using errno codes and exception types.
+        
+        Classification priority:
+        1. Built-in exception types (most specific)
+        2. errno codes from OSError
+        3. Default to TRANSIENT (conservative - allows retry)
         
         Args:
             error: Exception from filesystem operation
             
         Returns:
-            ErrorCategory for retry behavior (no RATE_LIMIT for FS)
+            ErrorCategory.PERMANENT or ErrorCategory.TRANSIENT
         """
-        error_msg = str(error).lower()
-        
-        # Check for permanent errors first (most common for FS)
-        if self._is_permanent_error(error, error_msg):
+        # Check built-in permanent exception types first (most reliable)
+        if isinstance(error, PERMANENT_EXCEPTION_TYPES):
             return ErrorCategory.PERMANENT
         
-        # Check for transient errors (rare for FS)
-        if self._is_transient_error(error, error_msg):
+        # Check built-in transient exception types
+        if isinstance(error, TRANSIENT_EXCEPTION_TYPES):
             return ErrorCategory.TRANSIENT
         
-        # Default to transient for unknown FS errors
-        # (conservative approach - some FS errors might be retryable)
-        return ErrorCategory.TRANSIENT
-    
-    def _is_permanent_error(self, error: Exception, error_msg: str) -> bool:
-        """Check if filesystem error is permanent.
+        # Check errno for OSError and subclasses
+        if isinstance(error, OSError) and error.errno is not None:
+            if error.errno in PERMANENT_ERRNO:
+                return ErrorCategory.PERMANENT
+            if error.errno in TRANSIENT_ERRNO:
+                return ErrorCategory.TRANSIENT
         
-        Most FS errors are permanent:
-        - File/directory not found
-        - Permission denied
-        - Invalid paths
-        - Read-only filesystem violations
-        """
-        # Check exception types
-        if isinstance(error, FS_PERMANENT_EXCEPTIONS):
-            return True
-        
-        # Check message patterns
-        return any(pattern in error_msg for pattern in FS_PERMANENT_PATTERNS)
-    
-    def _is_transient_error(self, error: Exception, error_msg: str) -> bool:
-        """Check if filesystem error is transient.
-        
-        Few FS errors are transient:
-        - Disk space issues
-        - File locking conflicts
-        - Temporary resource unavailability
-        """
-        # Check exception types
-        if isinstance(error, FS_TRANSIENT_EXCEPTIONS):
-            # OSError and IOError can be either permanent or transient
-            # Check the message to determine which
-            return any(pattern in error_msg for pattern in FS_TRANSIENT_PATTERNS)
-        
-        # Check message patterns
-        return any(pattern in error_msg for pattern in FS_TRANSIENT_PATTERNS) 
+        # Default to transient for unknown errors (conservative - allows retry)
+        return ErrorCategory.TRANSIENT 
