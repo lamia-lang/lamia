@@ -2,9 +2,32 @@
 
 import pytest
 from unittest.mock import Mock
+from aiohttp import ClientResponseError as AiohttpError, RequestInfo
+from multidict import CIMultiDict
+from requests import HTTPError as RequestsError
+from requests.models import Response
+from yarl import URL
+
 from lamia.adapters.error_classifiers.http import HttpErrorClassifier
 from lamia.adapters.error_classifiers.base import ErrorClassifier
 from lamia.adapters.error_classifiers.categories import ErrorCategory
+
+_DUMMY_URL = URL('http://example.com')
+_DUMMY_REQUEST_INFO = RequestInfo(
+    url=_DUMMY_URL, method='GET', headers=CIMultiDict(), real_url=_DUMMY_URL
+)
+
+
+def make_aiohttp_error(status: int, message: str = "") -> AiohttpError:
+    """Create an aiohttp ClientResponseError for testing."""
+    return AiohttpError(_DUMMY_REQUEST_INFO, (), status=status, message=message)
+
+
+def make_requests_error(status_code: int, message: str = "") -> RequestsError:
+    """Create a requests HTTPError for testing."""
+    resp = Response()
+    resp.status_code = status_code
+    return RequestsError(message, response=resp)
 
 
 class TestHttpErrorClassifierInterface:
@@ -36,20 +59,13 @@ class TestHttpErrorClassifierRateLimitDetection:
     
     def test_http_429_status_code(self):
         """Test detection of HTTP 429 Too Many Requests."""
-        # aiohttp style error with status attribute
-        error = Mock()
-        error.status = 429
-        
+        error = make_aiohttp_error(429)
         result = self.classifier.classify_error(error)
         assert result == ErrorCategory.RATE_LIMIT
     
     def test_requests_style_429_status(self):
         """Test detection of 429 status in requests-style error."""
-        # requests style error with response.status_code
-        error = Mock()
-        error.response = Mock()
-        error.response.status_code = 429
-        
+        error = make_requests_error(429)
         result = self.classifier.classify_error(error)
         assert result == ErrorCategory.RATE_LIMIT
     
@@ -112,15 +128,12 @@ class TestHttpErrorClassifierPermanentErrors:
         
         for status_code in permanent_status_codes:
             # aiohttp style
-            error = Mock()
-            error.status = status_code
+            error = make_aiohttp_error(status_code)
             result = self.classifier.classify_error(error)
             assert result == ErrorCategory.PERMANENT, f"Failed for status {status_code}"
             
             # requests style
-            error = Mock()
-            error.response = Mock()
-            error.response.status_code = status_code
+            error = make_requests_error(status_code)
             result = self.classifier.classify_error(error)
             assert result == ErrorCategory.PERMANENT, f"Failed for requests-style status {status_code}"
     
@@ -160,8 +173,7 @@ class TestHttpErrorClassifierPermanentErrors:
     def test_permanent_errors_exclude_429(self):
         """Test that 429 is not classified as permanent despite being 4xx."""
         # Direct 429 status
-        error = Mock()
-        error.status = 429
+        error = make_aiohttp_error(429)
         result = self.classifier.classify_error(error)
         assert result == ErrorCategory.RATE_LIMIT
         
@@ -184,15 +196,12 @@ class TestHttpErrorClassifierTransientErrors:
         
         for status_code in transient_status_codes:
             # aiohttp style
-            error = Mock()
-            error.status = status_code
+            error = make_aiohttp_error(status_code)
             result = self.classifier.classify_error(error)
             assert result == ErrorCategory.TRANSIENT, f"Failed for status {status_code}"
             
             # requests style  
-            error = Mock()
-            error.response = Mock()
-            error.response.status_code = status_code
+            error = make_requests_error(status_code)
             result = self.classifier.classify_error(error)
             assert result == ErrorCategory.TRANSIENT, f"Failed for requests-style status {status_code}"
     
@@ -334,32 +343,20 @@ class TestHttpErrorClassifierMultiLibrarySupport:
     
     def test_aiohttp_style_errors(self):
         """Test classification of aiohttp-style errors."""
-        # aiohttp ClientResponseError with status
-        error = Mock()
-        error.status = 502
-        error.__class__.__name__ = "ClientResponseError"
-        
+        error = make_aiohttp_error(502)
         result = self.classifier.classify_error(error)
         assert result == ErrorCategory.TRANSIENT
     
     def test_requests_style_errors(self):
         """Test classification of requests-style errors."""
-        # requests HTTPError with response
-        error = Mock()
-        error.response = Mock()
-        error.response.status_code = 401
-        error.__class__.__name__ = "HTTPError"
-        
+        error = make_requests_error(401)
         result = self.classifier.classify_error(error)
         assert result == ErrorCategory.PERMANENT
     
     def test_httpx_style_errors(self):
-        """Test classification of httpx-style errors (similar to aiohttp)."""
-        # httpx HTTPStatusError with status
-        error = Mock()
-        error.status = 429
-        error.__class__.__name__ = "HTTPStatusError"
-        
+        """Test classification of httpx-style errors via message pattern."""
+        # httpx not imported, so test via message pattern
+        error = Exception("HTTP 429 Too Many Requests")
         result = self.classifier.classify_error(error)
         assert result == ErrorCategory.RATE_LIMIT
     
@@ -386,9 +383,7 @@ class TestHttpErrorClassifierPriorityAndDefaults:
     def test_rate_limit_takes_priority_over_permanent(self):
         """Test that rate limit detection takes priority over permanent classification."""
         # Error that could be both permanent (4xx) and rate limit
-        error = Mock()
-        error.status = 429  # 4xx but special case for rate limiting
-        
+        error = make_aiohttp_error(429)  # 4xx but special case for rate limiting
         result = self.classifier.classify_error(error)
         assert result == ErrorCategory.RATE_LIMIT
     
