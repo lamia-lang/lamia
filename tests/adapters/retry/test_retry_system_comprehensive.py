@@ -13,11 +13,7 @@ from lamia.adapters.llm.base import BaseLLMAdapter, LLMModel, LLMResponse
 from lamia.adapters.web.browser.base import BaseBrowserAdapter
 from lamia.types import ExternalOperationRetryConfig
 from lamia.internal_types import BrowserActionParams
-
-
-# ============================================================================
-# TEST FIXTURES
-# ============================================================================
+from lamia.errors import ExternalOperationError
 
 @pytest.fixture
 def mock_fs_adapter():
@@ -33,9 +29,10 @@ def mock_llm_adapter():
     """Create a mock LLM adapter."""
     adapter = Mock(spec=BaseLLMAdapter)
     adapter.generate = AsyncMock(return_value=LLMResponse(
-        content="Generated text",
-        model_name="test-model",
-        total_tokens=100
+        text="Generated text",
+        raw_response={"content": "Generated text"},
+        usage={"total_tokens": 100},
+        model="test-model",
     ))
     adapter.has_context_memory = False
     adapter.is_remote = Mock(return_value=True)
@@ -71,10 +68,6 @@ def retry_config():
         max_total_duration=timedelta(seconds=30)
     )
 
-
-# ============================================================================
-# RETRYING FS ADAPTER TESTS
-# ============================================================================
 
 class TestRetryingFSAdapterInitialization:
     """Test RetryingFSAdapter initialization."""
@@ -226,7 +219,7 @@ class TestRetryingLLMAdapterOperations:
 
         result = await wrapper.generate("Test prompt")
 
-        assert result.content == "Generated text"
+        assert result.text == "Generated text"
         mock_llm_adapter.generate.assert_called_once()
 
     async def test_generate_with_model(self, mock_llm_adapter, retry_config):
@@ -236,20 +229,20 @@ class TestRetryingLLMAdapterOperations:
 
         result = await wrapper.generate("Test prompt", model=model)
 
-        assert result.content == "Generated text"
+        assert result.text == "Generated text"
         mock_llm_adapter.generate.assert_called_once_with("Test prompt", model)
 
     async def test_generate_with_retry(self, mock_llm_adapter, retry_config):
         """Test generation with retry on rate limit."""
         mock_llm_adapter.generate.side_effect = [
-            Exception("Rate limit exceeded"),
-            LLMResponse(content="Generated after retry", model_name="test", total_tokens=100)
+            ExternalOperationError("Rate limit exceeded"),
+            LLMResponse(text="Generated after retry", raw_response={}, usage={"total_tokens": 100}, model="test")
         ]
 
         wrapper = RetryingLLMAdapter(mock_llm_adapter, retry_config)
         result = await wrapper.generate("Test prompt")
 
-        assert result.content == "Generated after retry"
+        assert result.text == "Generated after retry"
         assert mock_llm_adapter.generate.call_count == 2
 
     async def test_close(self, mock_llm_adapter, retry_config):
@@ -268,11 +261,6 @@ class TestRetryingLLMAdapterOperations:
 
         stats = wrapper.get_stats()
         assert stats is not None
-
-
-# ============================================================================
-# RETRYING BROWSER ADAPTER TESTS
-# ============================================================================
 
 class TestRetryingBrowserAdapterInitialization:
     """Test RetryingBrowserAdapter initialization."""
@@ -666,7 +654,7 @@ class TestRetrySystemIntegration:
         mock_llm = Mock(spec=BaseLLMAdapter)
         mock_llm.generate = AsyncMock(side_effect=[
             Exception("Rate limit"),
-            LLMResponse(content="Success", model_name="test", total_tokens=50)
+            LLMResponse(text="Success", raw_response={}, usage={"total_tokens": 50}, model="test")
         ])
         mock_llm.is_remote = Mock(return_value=True)
         mock_llm.has_context_memory = False
@@ -677,7 +665,7 @@ class TestRetrySystemIntegration:
         # Execute and verify retry behavior
         result = await wrapper.generate("Test prompt")
 
-        assert result.content == "Success"
+        assert result.text == "Success"
         assert mock_llm.generate.call_count == 2
 
     async def test_end_to_end_fs_retry_flow(self):
