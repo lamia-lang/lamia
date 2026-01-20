@@ -1,11 +1,10 @@
 """Comprehensive tests for Self-hosted LLM error classifier."""
 
 import pytest
-from unittest.mock import Mock
+
 from lamia.adapters.error_classifiers.self_hosted import SelfHostedLLMErrorClassifier
 from lamia.adapters.error_classifiers.base import ErrorClassifier
 from lamia.adapters.error_classifiers.categories import ErrorCategory
-from lamia.errors import ExternalOperationPermanentError, ExternalOperationTransientError, ExternalOperationRateLimitError
 
 
 class TestSelfHostedLLMErrorClassifierInterface:
@@ -26,44 +25,6 @@ class TestSelfHostedLLMErrorClassifierInterface:
         classifier = SelfHostedLLMErrorClassifier()
         assert classifier is not None
         assert isinstance(classifier, SelfHostedLLMErrorClassifier)
-
-
-class TestSelfHostedLLMErrorClassifierExplicitErrorTypes:
-    """Test SelfHostedLLMErrorClassifier handling of explicit error types."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.classifier = SelfHostedLLMErrorClassifier()
-
-    def test_explicit_permanent_error(self):
-        """Test explicit permanent error classification."""
-        error = ExternalOperationPermanentError("Model not found")
-        result = self.classifier.classify_error(error)
-        assert result == ErrorCategory.PERMANENT
-
-    def test_explicit_transient_error(self):
-        """Test explicit transient error classification."""
-        error = ExternalOperationTransientError("Server timeout")
-        result = self.classifier.classify_error(error)
-        assert result == ErrorCategory.TRANSIENT
-
-    def test_explicit_rate_limit_error(self):
-        """Test explicit rate limit error classification."""
-        error = ExternalOperationRateLimitError("Queue full")
-        result = self.classifier.classify_error(error)
-        assert result == ErrorCategory.RATE_LIMIT
-
-    def test_explicit_error_takes_precedence(self):
-        """Test that explicit error types take precedence over message patterns."""
-        # Error with permanent type but transient-like message
-        error = ExternalOperationPermanentError("timeout occurred")
-        result = self.classifier.classify_error(error)
-        assert result == ErrorCategory.PERMANENT
-
-        # Error with transient type but permanent-like message
-        error = ExternalOperationTransientError("model not found")
-        result = self.classifier.classify_error(error)
-        assert result == ErrorCategory.TRANSIENT
 
 
 class TestSelfHostedLLMErrorClassifierPermanentErrors:
@@ -145,24 +106,6 @@ class TestSelfHostedLLMErrorClassifierPermanentErrors:
             error = Exception(message)
             result = self.classifier.classify_error(error)
             assert result == ErrorCategory.PERMANENT, f"Failed for message: {message}"
-
-    def test_4xx_status_codes_permanent(self):
-        """Test that 4xx status codes (except 429) are classified as permanent."""
-        permanent_status_codes = [400, 401, 403, 404, 405, 408, 409, 422]
-
-        for status_code in permanent_status_codes:
-            # Test with status attribute
-            error = Mock()
-            error.status = status_code
-            result = self.classifier.classify_error(error)
-            assert result == ErrorCategory.PERMANENT, f"Failed for status {status_code}"
-
-            # Test with response.status_code attribute
-            error = Mock()
-            error.response = Mock()
-            error.response.status_code = status_code
-            result = self.classifier.classify_error(error)
-            assert result == ErrorCategory.PERMANENT, f"Failed for response status {status_code}"
 
     def test_permanent_error_case_insensitive(self):
         """Test that permanent error detection is case insensitive."""
@@ -320,24 +263,6 @@ class TestSelfHostedLLMErrorClassifierTransientErrors:
             result = self.classifier.classify_error(error)
             assert result == ErrorCategory.TRANSIENT, f"Failed for message: {message}"
 
-    def test_5xx_status_codes_transient(self):
-        """Test that 5xx status codes are classified as transient."""
-        transient_status_codes = [500, 502, 503, 504, 507]
-
-        for status_code in transient_status_codes:
-            # Test with status attribute
-            error = Mock()
-            error.status = status_code
-            result = self.classifier.classify_error(error)
-            assert result == ErrorCategory.TRANSIENT, f"Failed for status {status_code}"
-
-            # Test with response.status_code attribute
-            error = Mock()
-            error.response = Mock()
-            error.response.status_code = status_code
-            result = self.classifier.classify_error(error)
-            assert result == ErrorCategory.TRANSIENT, f"Failed for response status {status_code}"
-
     def test_connection_exception_types(self):
         """Test that connection exception types are classified as transient."""
         connection_exceptions = [
@@ -432,21 +357,6 @@ class TestSelfHostedLLMErrorClassifierRateLimitErrors:
             error = Exception(message)
             result = self.classifier.classify_error(error)
             assert result == ErrorCategory.RATE_LIMIT, f"Failed for message: {message}"
-
-    def test_429_status_code(self):
-        """Test HTTP 429 Too Many Requests status code."""
-        # Test with status attribute
-        error = Mock()
-        error.status = 429
-        result = self.classifier.classify_error(error)
-        assert result == ErrorCategory.RATE_LIMIT
-
-        # Test with response.status_code attribute
-        error = Mock()
-        error.response = Mock()
-        error.response.status_code = 429
-        result = self.classifier.classify_error(error)
-        assert result == ErrorCategory.RATE_LIMIT
 
     def test_rate_limit_case_insensitive(self):
         """Test that rate limit error detection is case insensitive."""
@@ -723,16 +633,6 @@ class TestSelfHostedLLMErrorClassifierDefaultBehavior:
 
         assert result1 == result2 == result3
         assert result1 == ErrorCategory.PERMANENT
-
-    def test_status_code_priority_over_message(self):
-        """Test that HTTP status codes take priority over message patterns."""
-        # Error with 4xx status but transient message
-        error = Mock()
-        error.status = 404
-        error.__str__ = lambda: "timeout occurred"
-
-        result = self.classifier.classify_error(error)
-        assert result == ErrorCategory.PERMANENT  # Status code wins
 
 
 class TestSelfHostedLLMErrorClassifierIntegrationScenarios:

@@ -13,7 +13,7 @@ from lamia.adapters.error_classifiers.categories import ErrorCategory
 from lamia.adapters.llm.base import BaseLLMAdapter
 from lamia.adapters.filesystem.base import BaseFSAdapter
 from lamia.adapters.web.browser.base import BaseBrowserAdapter
-from lamia.adapters.error_classifiers import HttpErrorClassifier, FilesystemErrorClassifier, SelfHostedLLMErrorClassifier, BrowserErrorClassifier
+from lamia.adapters.error_classifiers import HttpErrorClassifier, FilesystemErrorClassifier, SelfHostedLLMErrorClassifier, BrowserErrorClassifier, CompositeErrorClassifier
 import logging
 
 logger = logging.getLogger(__name__)
@@ -163,15 +163,19 @@ def _get_error_classifier_for_adapter(adapter):
     
     if isinstance(adapter, BaseLLMAdapter):
         if adapter.is_remote():
-            return HttpErrorClassifier()  # Remote LLM APIs
+            return HttpErrorClassifier()  # Remote LLM APIs (OpenAI, Anthropic)
         else:
-            return SelfHostedLLMErrorClassifier()  # Self-hosted LLMs
+            # Self-hosted LLMs use HTTP, so check HTTP status codes first,
+            # then fall back to LLM-specific message patterns
+            return CompositeErrorClassifier(
+                HttpErrorClassifier(),
+                SelfHostedLLMErrorClassifier(),
+            )
     elif isinstance(adapter, BaseFSAdapter):
         return FilesystemErrorClassifier()
     elif isinstance(adapter, BaseBrowserAdapter):
         return BrowserErrorClassifier()  # Browser automation
     else:
-        # Default fallback
         return HttpErrorClassifier()
 
 
