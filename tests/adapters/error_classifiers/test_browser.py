@@ -606,3 +606,180 @@ class TestBrowserErrorClassifierIntegrationScenarios:
             error = Exception(message)
             result = self.classifier.classify_error(error)
             assert result == expected_category, f"Failed for message: {message}"
+
+
+class TestBrowserErrorClassifierTypedSeleniumExceptions:
+    """Test BrowserErrorClassifier handling of actual Selenium exception types."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.classifier = BrowserErrorClassifier()
+    
+    @pytest.fixture
+    def selenium_available(self):
+        """Check if Selenium is available."""
+        try:
+            from selenium.common.exceptions import NoSuchElementException
+            return True
+        except ImportError:
+            return False
+    
+    def test_selenium_no_such_element_exception(self):
+        """Test actual Selenium NoSuchElementException is classified as transient."""
+        try:
+            from selenium.common.exceptions import NoSuchElementException
+            error = NoSuchElementException("Element not found")
+            result = self.classifier.classify_error(error)
+            assert result == ErrorCategory.TRANSIENT
+        except ImportError:
+            pytest.skip("Selenium not installed")
+    
+    def test_selenium_stale_element_reference_exception(self):
+        """Test actual Selenium StaleElementReferenceException is classified as transient."""
+        try:
+            from selenium.common.exceptions import StaleElementReferenceException
+            error = StaleElementReferenceException("Element is stale")
+            result = self.classifier.classify_error(error)
+            assert result == ErrorCategory.TRANSIENT
+        except ImportError:
+            pytest.skip("Selenium not installed")
+    
+    def test_selenium_timeout_exception(self):
+        """Test actual Selenium TimeoutException is classified as transient."""
+        try:
+            from selenium.common.exceptions import TimeoutException
+            error = TimeoutException("Timeout waiting for element")
+            result = self.classifier.classify_error(error)
+            assert result == ErrorCategory.TRANSIENT
+        except ImportError:
+            pytest.skip("Selenium not installed")
+    
+    def test_selenium_element_not_interactable_exception(self):
+        """Test actual Selenium ElementNotInteractableException is classified as transient."""
+        try:
+            from selenium.common.exceptions import ElementNotInteractableException
+            error = ElementNotInteractableException("Element not interactable")
+            result = self.classifier.classify_error(error)
+            assert result == ErrorCategory.TRANSIENT
+        except ImportError:
+            pytest.skip("Selenium not installed")
+    
+    def test_selenium_invalid_selector_exception(self):
+        """Test actual Selenium InvalidSelectorException is classified as permanent."""
+        try:
+            from selenium.common.exceptions import InvalidSelectorException
+            error = InvalidSelectorException("Invalid selector syntax")
+            result = self.classifier.classify_error(error)
+            assert result == ErrorCategory.PERMANENT
+        except ImportError:
+            pytest.skip("Selenium not installed")
+    
+    def test_selenium_invalid_session_id_exception(self):
+        """Test actual Selenium InvalidSessionIdException is classified as permanent."""
+        try:
+            from selenium.common.exceptions import InvalidSessionIdException
+            error = InvalidSessionIdException("Session is invalid")
+            result = self.classifier.classify_error(error)
+            assert result == ErrorCategory.PERMANENT
+        except ImportError:
+            pytest.skip("Selenium not installed")
+
+
+class TestBrowserErrorClassifierTypedPlaywrightExceptions:
+    """Test BrowserErrorClassifier handling of actual Playwright exception types."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.classifier = BrowserErrorClassifier()
+    
+    def test_playwright_timeout_error(self):
+        """Test actual Playwright TimeoutError is classified as transient."""
+        try:
+            from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+            error = PlaywrightTimeoutError("Timeout waiting for element")
+            result = self.classifier.classify_error(error)
+            assert result == ErrorCategory.TRANSIENT
+        except ImportError:
+            pytest.skip("Playwright not installed")
+
+
+class TestBrowserErrorClassifierTypedPythonExceptions:
+    """Test BrowserErrorClassifier handling of Python built-in exception types."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.classifier = BrowserErrorClassifier()
+    
+    def test_python_timeout_error(self):
+        """Test Python built-in TimeoutError is classified as transient."""
+        error = TimeoutError("Connection timed out")
+        result = self.classifier.classify_error(error)
+        assert result == ErrorCategory.TRANSIENT
+    
+    def test_python_connection_error(self):
+        """Test Python built-in ConnectionError is classified as transient."""
+        error = ConnectionError("Connection failed")
+        result = self.classifier.classify_error(error)
+        assert result == ErrorCategory.TRANSIENT
+    
+    def test_python_connection_reset_error(self):
+        """Test Python built-in ConnectionResetError is classified as transient."""
+        error = ConnectionResetError("Connection reset by peer")
+        result = self.classifier.classify_error(error)
+        assert result == ErrorCategory.TRANSIENT
+    
+    def test_python_connection_refused_error(self):
+        """Test Python built-in ConnectionRefusedError is classified as transient."""
+        # Note: Python's ConnectionRefusedError is TRANSIENT (network issue)
+        # but "connection refused" in message is PERMANENT (driver closed)
+        # The typed exception takes priority
+        error = ConnectionRefusedError("Connection refused")
+        result = self.classifier.classify_error(error)
+        assert result == ErrorCategory.TRANSIENT
+    
+    def test_python_broken_pipe_error(self):
+        """Test Python built-in BrokenPipeError is classified as transient."""
+        error = BrokenPipeError("Broken pipe")
+        result = self.classifier.classify_error(error)
+        assert result == ErrorCategory.TRANSIENT
+
+
+class TestBrowserErrorClassifierTypedVsPatternPriority:
+    """Test that typed exceptions take priority over pattern matching."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.classifier = BrowserErrorClassifier()
+    
+    def test_typed_transient_beats_permanent_pattern(self):
+        """Test typed transient exception beats permanent pattern in message."""
+        # ConnectionRefusedError is typed as transient
+        # but "connection refused" pattern would be permanent
+        error = ConnectionRefusedError("connection refused - driver closed")
+        result = self.classifier.classify_error(error)
+        # Typed exception wins - ConnectionRefusedError is transient
+        assert result == ErrorCategory.TRANSIENT
+    
+    def test_lamia_error_beats_typed_exception(self):
+        """Test Lamia explicit errors beat typed exceptions."""
+        # Even if we somehow get an ExternalOperationPermanentError
+        # that looks like a transient message, Lamia type wins
+        error = ExternalOperationPermanentError("element not found - retry later")
+        result = self.classifier.classify_error(error)
+        assert result == ErrorCategory.PERMANENT
+    
+    def test_pattern_fallback_for_generic_exception(self):
+        """Test pattern matching is used for generic Exception."""
+        # Generic Exception can't be typed, so patterns are used
+        error = Exception("invalid selector syntax")
+        result = self.classifier.classify_error(error)
+        assert result == ErrorCategory.PERMANENT
+    
+    def test_pattern_fallback_for_custom_exception(self):
+        """Test pattern matching is used for custom exception classes."""
+        class CustomBrowserError(Exception):
+            pass
+        
+        error = CustomBrowserError("element not found")
+        result = self.classifier.classify_error(error)
+        assert result == ErrorCategory.TRANSIENT
