@@ -322,7 +322,6 @@ class TestWebActionsHTTP:
         assert result == expected
 
 
-@pytest.mark.asyncio
 class TestWebActionsExecutor:
     """Test WebActions with executor (scoped operations)."""
     
@@ -332,7 +331,7 @@ class TestWebActionsExecutor:
         self.element_handle = Mock()
         self.web_actions = WebActions(element_handle=self.element_handle, executor=self.mock_executor)
     
-    async def test_execute_if_available_with_executor(self):
+    def test_execute_if_available_with_executor(self):
         """Test command execution when executor is available."""
         # Mock executor returning a validation result
         mock_result = Mock()
@@ -345,7 +344,7 @@ class TestWebActionsExecutor:
         assert result == "executed result"
         self.mock_executor.execute.assert_called_once_with(command)
     
-    async def test_execute_if_available_with_result_processor(self):
+    def test_execute_if_available_with_result_processor(self):
         """Test command execution with result processor."""
         mock_result = Mock()
         mock_result.result_type = "raw result"
@@ -367,15 +366,14 @@ class TestWebActionsExecutor:
         
         assert result == command
     
-    async def test_execute_if_available_with_exception(self):
+    def test_execute_if_available_with_exception(self):
         """Test command return when execution raises exception."""
         self.mock_executor.execute.side_effect = Exception("Execution failed")
         
         command = WebCommand(action=WebActionType.CLICK, selector="#button")
-        result = self.web_actions._execute_if_available(command)
-        
-        # Should return the command when execution fails
-        assert result == command
+
+        with pytest.raises(Exception, match="Execution failed"):
+            self.web_actions._execute_if_available(command)
     
     def test_scoped_operations_use_element_handle(self):
         """Test that scoped operations include element handle."""

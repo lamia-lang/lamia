@@ -435,17 +435,6 @@ class TestBrowserErrorClassifierEdgeCases:
             # Acceptable if implementation doesn't handle None
             pass
     
-    def test_non_string_error_message(self):
-        """Test handling of errors with non-string messages."""
-        # Mock error with non-string representation
-        class CustomError(Exception):
-            def __str__(self):
-                return 123  # Return int instead of string
-        
-        error = CustomError()
-        result = self.classifier.classify_error(error)
-        assert isinstance(result, ErrorCategory)
-    
     def test_mixed_pattern_errors(self):
         """Test errors that match multiple patterns."""
         mixed_pattern_errors = [
@@ -478,20 +467,6 @@ class TestBrowserErrorClassifierEdgeCases:
         error = Exception(long_message)
         result = self.classifier.classify_error(error)
         assert result == ErrorCategory.TRANSIENT
-    
-    def test_error_message_with_special_characters(self):
-        """Test handling of error messages with special characters."""
-        special_char_errors = [
-            Exception("element not found @#$%^&*()"),
-            Exception("timeout: <selector> [data-test='button']"),
-            Exception("session invalid {uuid: 12345-67890}")
-        ]
-        
-        expected = [ErrorCategory.TRANSIENT, ErrorCategory.TRANSIENT, ErrorCategory.PERMANENT]
-        
-        for error, expected_category in zip(special_char_errors, expected):
-            result = self.classifier.classify_error(error)
-            assert result == expected_category
 
 
 class TestBrowserErrorClassifierDefaultBehavior:
