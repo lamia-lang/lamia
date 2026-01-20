@@ -118,8 +118,9 @@ class AnthropicAdapter(BaseLLMAdapter):
                 
                 return LLMResponse(
                     text=data["content"][0]["text"],
+                    raw_response=data,
+                    usage=data.get("usage", {}),
                     model=model.name,
-                    usage=data.get("usage", {})
                 )
                 
         except aiohttp.ClientError as e:

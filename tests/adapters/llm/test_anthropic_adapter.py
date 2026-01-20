@@ -215,10 +215,10 @@ class TestAnthropicAdapterGeneration:
                 }
             )
             
-            # Note: The HTTP implementation has a bug - missing raw_response parameter
-            # We expect this to fail until the bug is fixed
-            with pytest.raises(TypeError):
-                await adapter.generate("Test prompt", mock_model)
+            # Verify response
+            assert response.text == "HTTP response text"
+            assert response.model == "anthropic/claude-3-haiku"
+            assert response.raw_response is not None
     
     @pytest.mark.asyncio
     @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', False)
@@ -349,9 +349,7 @@ class TestAnthropicAdapterDefaultValues:
             mock_model.top_p = None
             mock_model.get_model_name_without_provider.return_value = "claude-3-haiku"
             
-            # This will fail due to missing raw_response in HTTP implementation
-            with pytest.raises(TypeError, match="missing 1 required positional argument: 'raw_response'"):
-                await adapter.generate("Test", mock_model)
+            response = await adapter.generate("Test", mock_model)
             
             # Verify default values were used in HTTP payload
             expected_payload = {
@@ -365,6 +363,10 @@ class TestAnthropicAdapterDefaultValues:
                 "https://api.anthropic.com/v1/messages",
                 json=expected_payload
             )
+            
+            # Verify response
+            assert response.text == "Default HTTP response"
+            assert response.raw_response is not None
 
 
 class TestAnthropicAdapterEdgeCases:
@@ -404,9 +406,10 @@ class TestAnthropicAdapterEdgeCases:
             mock_model.name = "test-model"
             mock_model.get_model_name_without_provider.return_value = "claude-3-sonnet"
             
-            # This will fail due to missing raw_response in HTTP implementation
-            with pytest.raises(TypeError, match="missing 1 required positional argument: 'raw_response'"):
-                await adapter.generate("Test", mock_model)
+            # Should work even without usage field in response
+            response = await adapter.generate("Test", mock_model)
+            assert response.text == "Response text"
+            assert response.raw_response is not None
     
     def test_api_url_constant(self):
         """Test that API URL constant is correct."""
