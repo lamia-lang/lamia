@@ -47,9 +47,7 @@ class RetryingFSAdapter(BaseFSAdapter):
         Returns:
             File contents as bytes
         """
-        return await self._retry_handler.execute(
-            lambda: self._adapter.read(path)
-        )
+        return await self._retry_handler.execute(self._adapter.read, path)
     
     async def write(self, path: str, data: bytes) -> None:
         """Write file with retry handling.
@@ -58,9 +56,15 @@ class RetryingFSAdapter(BaseFSAdapter):
             path: Path to write to
             data: Data to write
         """
-        await self._retry_handler.execute(
-            lambda: self._adapter.write(path, data)
-        )
+        await self._retry_handler.execute(self._adapter.write, path, data)
+    
+    async def exists(self, path: str) -> bool:
+        """Check if path exists with retry."""
+        return await self._retry_handler.execute(self._adapter.exists, path)
+    
+    async def delete(self, path: str) -> None:
+        """Delete file with retry."""
+        await self._retry_handler.execute(self._adapter.delete, path)
     
     def get_stats(self):
         """Get retry statistics if enabled."""

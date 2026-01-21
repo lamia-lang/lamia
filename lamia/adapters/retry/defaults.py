@@ -6,6 +6,7 @@ from typing import Dict, Any, Union
 from lamia.types import ExternalOperationRetryConfig
 from ..llm.base import BaseLLMAdapter
 from ..filesystem.base import BaseFSAdapter
+from ..web.browser.base import BaseBrowserAdapter
 
 # Industry-tested retry configurations for different adapter types
 # Based on OpenAI cookbook, AWS best practices, and production experience
@@ -40,10 +41,11 @@ RETRY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     }
 }
 
-def get_default_config_for_adapter(adapter: Union["BaseLLMAdapter", "BaseFSAdapter"]) -> ExternalOperationRetryConfig:
+def get_default_config_for_adapter(adapter: Union["BaseLLMAdapter", "BaseFSAdapter", "BaseBrowserAdapter"]) -> ExternalOperationRetryConfig:
     """Get default retry configuration based on adapter type and characteristics."""
     from ..llm.base import BaseLLMAdapter
     from ..filesystem.base import BaseFSAdapter
+    from ..web.browser.base import BaseBrowserAdapter
     
     if isinstance(adapter, BaseLLMAdapter):
         if adapter.is_remote():
@@ -52,6 +54,8 @@ def get_default_config_for_adapter(adapter: Union["BaseLLMAdapter", "BaseFSAdapt
             category = "self_hosted_llm"  # Self-hosted LLMs (Ollama, local models)
     elif isinstance(adapter, BaseFSAdapter):
         category = "filesystem"  # Filesystem operations
+    elif isinstance(adapter, BaseBrowserAdapter):
+        category = "network"  # Browser automation uses network defaults
     else:
         category = "network"  # Default fallback
     

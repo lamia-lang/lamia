@@ -54,9 +54,16 @@ class RetryHandler:
 
     async def execute(
         self,
-        operation: Callable[[], Awaitable[T]]
+        operation: Union[Callable[[], Awaitable[T]], Callable[..., Awaitable[T]]],
+        *args,
+        **kwargs
     ) -> T:
-        """Execute operation with retries and stat collection."""
+        """Execute operation with retries and stat collection.
+        
+        Can be called in two ways:
+        1. With a parameterless callable: execute(lambda: do_something())
+        2. With a callable and args: execute(do_something, arg1, arg2, key=val)
+        """
         start_time = time.time()
         attempts = 0
         retry_history = []
@@ -64,7 +71,7 @@ class RetryHandler:
         while True:
             try:
                 logger.debug(f"External operation attempt {attempts + 1} of {self.config.max_attempts}")
-                result = await operation()
+                result = await operation(*args, **kwargs) if args or kwargs else await operation()
                 
                 if self.stats:
                     operation_time = time.time() - start_time

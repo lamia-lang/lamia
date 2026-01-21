@@ -13,7 +13,7 @@ from lamia.adapters.llm.base import BaseLLMAdapter, LLMModel, LLMResponse
 from lamia.adapters.web.browser.base import BaseBrowserAdapter
 from lamia.types import ExternalOperationRetryConfig
 from lamia.internal_types import BrowserActionParams
-from lamia.errors import ExternalOperationError
+from lamia.errors import ExternalOperationError, ExternalOperationTransientError
 
 @pytest.fixture
 def mock_fs_adapter():
@@ -121,7 +121,7 @@ class TestRetryingFSAdapterOperations:
     async def test_read_with_retry(self, mock_fs_adapter, retry_config):
         """Test file read with retry on transient error."""
         mock_fs_adapter.read.side_effect = [
-            Exception("Temporary error"),
+            ExternalOperationTransientError("Temporary error"),
             b"file contents"
         ]
 
@@ -142,7 +142,7 @@ class TestRetryingFSAdapterOperations:
     async def test_write_with_retry(self, mock_fs_adapter, retry_config):
         """Test file write with retry on transient error."""
         mock_fs_adapter.write.side_effect = [
-            Exception("Disk busy"),
+            ExternalOperationTransientError("Disk busy"),
             None
         ]
 
@@ -346,7 +346,7 @@ class TestRetryingBrowserAdapterOperations:
     async def test_click_with_retry(self, mock_browser_adapter, retry_config):
         """Test click with retry on transient error."""
         mock_browser_adapter.click.side_effect = [
-            Exception("Element not found"),
+            ExternalOperationTransientError("Element not found"),
             None
         ]
 
@@ -653,7 +653,7 @@ class TestRetrySystemIntegration:
         # Create mock LLM adapter that fails then succeeds
         mock_llm = Mock(spec=BaseLLMAdapter)
         mock_llm.generate = AsyncMock(side_effect=[
-            Exception("Rate limit"),
+            ExternalOperationTransientError("Rate limit"),
             LLMResponse(text="Success", raw_response={}, usage={"total_tokens": 50}, model="test")
         ])
         mock_llm.is_remote = Mock(return_value=True)
@@ -672,7 +672,7 @@ class TestRetrySystemIntegration:
         """Test complete filesystem retry flow."""
         mock_fs = Mock(spec=BaseFSAdapter)
         mock_fs.read = AsyncMock(side_effect=[
-            Exception("Disk busy"),
+            ExternalOperationTransientError("Disk busy"),
             b"file data"
         ])
 
@@ -687,7 +687,7 @@ class TestRetrySystemIntegration:
         """Test complete browser retry flow."""
         mock_browser = Mock(spec=BaseBrowserAdapter)
         mock_browser.click = AsyncMock(side_effect=[
-            Exception("Element not found"),
+            ExternalOperationTransientError("Element not found"),
             None
         ])
 

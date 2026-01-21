@@ -73,9 +73,7 @@ class RetryingLLMAdapter(BaseLLMAdapter):
         Returns:
             LLMResponse containing the generated text and metadata
         """
-        return await self._retry_handler.execute(
-            lambda: self._adapter.generate(prompt, model)
-        )
+        return await self._retry_handler.execute(self._adapter.generate, prompt, model)
     
     def get_stats(self):
         """Get retry statistics if enabled."""
