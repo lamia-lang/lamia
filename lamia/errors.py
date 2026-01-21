@@ -54,7 +54,7 @@ class MissingAPIKeysError(Exception):
             "- As environment variables (e.g., export OPENAI_API_KEY=...)\n" +
             "- As a parameter to the Lamia() constructor like this: " + get_api_keys_constructor_string([provider for provider,_ in missing]) + "\n" +
             (f"You can also use LAMIA_API_KEY or {get_api_keys_constructor_string(['lamia'])} to proxy remote adapters ({', '.join(LamiaAdapter.get_supported_providers())}).\n" if all(provider in LamiaAdapter.get_supported_providers() for provider in missing_providers) else "") +
-            "Alternatively, remove these engines from your default or fallback_models in config."
+            "Alternatively, remove these engines from your model_chain in the config."
         )
         super().__init__(message)
 

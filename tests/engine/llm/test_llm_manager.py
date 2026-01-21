@@ -13,6 +13,8 @@ from lamia.engine.managers.llm.llm_manager import (
 )
 from lamia.engine.config_provider import ConfigProvider
 from lamia.adapters.llm.local import OllamaAdapter
+from lamia import LLMModel
+from lamia._internal_types.model_retry import ModelWithRetries
 
 
 class TestLLMManager:
@@ -20,8 +22,10 @@ class TestLLMManager:
 
     def test_check_api_keys_direct(self):
         """Test check_api_key with direct OpenAI API key"""
-        config = {"api_keys": {"openai": "test-openai-key", "anthropic": "test-anthropic-key"}}
-        cm = ConfigProvider(config)
+        cm = _create_config_provider(
+            [{"name": "openai", "max_retries": 3}, {"name": "anthropic", "max_retries": 2}],
+            api_keys={"openai": "test-openai-key", "anthropic": "test-anthropic-key"}
+        )
         
         manager = LLMManager(cm)
         assert manager._resolve_api_key("openai") == ("test-openai-key", False)
@@ -29,8 +33,10 @@ class TestLLMManager:
 
     def test_check_api_key_direct_does_not_override_lamia_proxy(self):
         """Test lamia proxy API key takes precedence over direct provider key"""
-        config = {"api_keys": {"openai": "direct-key", "lamia": "proxy-key"}}
-        cm = ConfigProvider(config)
+        cm = _create_config_provider(
+            [{"name": "openai", "max_retries": 3}],
+            api_keys={"openai": "direct-key", "lamia": "proxy-key"}
+        )
         
         manager = LLMManager(cm)
         result = manager._resolve_api_key("openai")
@@ -38,35 +44,30 @@ class TestLLMManager:
 
     def test_check_api_key_env_fallback(self):
         """Test check_api_key falls back to environment variable"""
-        config = {"api_keys": {}}
-        cm = ConfigProvider(config)
+        cm = _create_config_provider([{"name": "openai", "max_retries": 3}])
         
-        manager = LLMManager(cm)
         with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key"}):
+            manager = LLMManager(cm)
             result = manager._resolve_api_key("openai")
             assert result == ("env-key", False)
 
     def test_check_api_key_missing_raises_error(self):
         """Test check_api_key raises MissingAPIKeysError when key is missing"""
-        config = {"api_keys": {}}
-        cm = ConfigProvider(config)
+        cm = _create_config_provider([{"name": "openai", "max_retries": 3}])
         
-        manager = LLMManager(cm)
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(MissingAPIKeysError) as exc_info:
-                manager._resolve_api_key("openai")
+                manager = LLMManager(cm)
             
             assert "openai" in str(exc_info.value)
             assert "OPENAI_API_KEY" in str(exc_info.value)
 
     def test_check_api_key_unknown_provider(self):
         """Test check_api_key with unknown provider"""
-        config = {"":"", "api_keys": {}}
-        cm = ConfigProvider(config)
+        cm = _create_config_provider([{"name": "unknown", "max_retries": 3}])
         
-        manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            manager._resolve_api_key("unknown")
+            manager = LLMManager(cm)
 
         assert "unknown" in str(exc_info.value)
 
@@ -94,12 +95,10 @@ class TestCheckAllRequiredApiKeys:
 
     def test_check_all_required_api_keys_success(self):
         """Test check_all_required_api_keys with all keys present"""
-        config = {
-            "default_model": "openai",
-            "validation": {"fallback_models": ["anthropic"]},
-            "api_keys": {"openai": "key1", "anthropic": "key2"}
-        }
-        cm = ConfigProvider(config)
+        cm = _create_config_provider(
+            [{"name": "openai", "max_retries": 3}, {"name": "anthropic", "max_retries": 2}],
+            api_keys={"openai": "key1", "anthropic": "key2"}
+        )
         
         manager = LLMManager(cm)
         # Should not raise any exception
@@ -107,12 +106,10 @@ class TestCheckAllRequiredApiKeys:
 
     def test_check_all_required_api_keys_lamia_proxy(self):
         """Test check_all_required_api_keys with lamia key as proxy"""
-        config = {
-            "default_model": "openai",
-            "validation": {"fallback_models": ["anthropic"]},
-            "api_keys": {"lamia": "proxy-key"}
-        }
-        cm = ConfigProvider(config)
+        cm = _create_config_provider(
+            [{"name": "openai", "max_retries": 3}, {"name": "anthropic", "max_retries": 2}],
+            api_keys={"lamia": "proxy-key"}
+        )
         
         manager = LLMManager(cm)
         # Should not raise any exception
@@ -120,25 +117,15 @@ class TestCheckAllRequiredApiKeys:
 
     def test_check_all_required_api_keys_ollama_no_key_needed(self):
         """Test check_all_required_api_keys with ollama (no key needed)"""
-        config = {
-            "default_model": "ollama",
-            "validation": {"fallback_models": []},
-            "api_keys": {}
-        }
-        cm = ConfigProvider(config)
+        cm = _create_config_provider([{"name": "ollama", "max_retries": 3}])
         
         manager = LLMManager(cm)
         # Should not raise any exception
         manager._check_all_required_api_keys({"ollama"})
 
-    def test_check_all_required_api_keys_missing_default(self):
-        """Test check_all_required_api_keys with missing default model key"""
-        config = {
-            "default_model": "openai",
-            "validation": {"fallback_models": []},
-            "api_keys": {}
-        }
-        cm = ConfigProvider(config)
+    def test_check_all_required_api_keys_missing_primary(self):
+        """Test check_all_required_api_keys with missing primary model key"""
+        cm = _create_config_provider([{"name": "openai", "max_retries": 3}])
         
         manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
@@ -148,12 +135,10 @@ class TestCheckAllRequiredApiKeys:
 
     def test_check_all_required_api_keys_missing_fallback(self):
         """Test check_all_required_api_keys with missing fallback model key"""
-        config = {
-            "default_model": "openai",
-            "validation": {"fallback_models": ["anthropic"]},
-            "api_keys": {"openai": "key1"}
-        }
-        cm = ConfigProvider(config)
+        cm = _create_config_provider(
+            [{"name": "openai", "max_retries": 3}, {"name": "anthropic", "max_retries": 2}],
+            api_keys={"openai": "key1"}
+        )
         
         manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
@@ -161,172 +146,104 @@ class TestCheckAllRequiredApiKeys:
         
         assert "anthropic" in str(exc_info.value)
 
-    def test_check_all_required_api_keys_no_validation_config(self):
-        """Test check_all_required_api_keys with no validation config"""
-        config = {
-            "default_model": "openai",
-            "api_keys": {"openai": "key1"}
-        }
-        cm = ConfigProvider(config)
-        
-        manager = LLMManager(cm)
-        # Should not raise any exception
-        manager._check_all_required_api_keys({"openai"})
-
 
 class TestCreateAdapterFromConfig:
     """Test suite for create_adapter_from_config function"""
 
-    def test_create_adapter_from_config_openai(self):
+    @pytest.mark.asyncio
+    async def test_create_adapter_from_config_openai(self):
         """Test create_adapter_from_config with OpenAI"""
-        config = {
-            "default_model": "openai",
-            "models": {
-                "openai": {"default_model": "gpt-3.5-turbo"}
-            },
-            "api_keys": {"openai": "test-key"},
-            "validation": {"fallback_models": []}
-        }
-        cm = ConfigProvider(config)
+        cm = _create_config_provider(
+            [{"name": "openai:gpt-3.5-turbo", "max_retries": 3}],
+            api_keys={"openai": "test-key"}
+        )
         
-        with patch('lamia.engine.llm.providers.OpenAIAdapter') as MockAdapter:
+        with patch('lamia.engine.managers.llm.providers.OpenAIAdapter') as MockAdapter:
             manager = LLMManager(cm)
-            result = manager.create_adapter_from_config()
-            MockAdapter.assert_called_once_with(
-                api_key="test-key",
-                model="gpt-3.5-turbo"
-            )
+            model = LLMModel(name="openai:gpt-3.5-turbo")
+            result = await manager.create_adapter_from_config(model)
+            MockAdapter.assert_called_once_with(api_key="test-key")
 
-    def test_create_adapter_from_config_anthropic(self):
+    @pytest.mark.asyncio
+    async def test_create_adapter_from_config_anthropic(self):
         """Test create_adapter_from_config with Anthropic"""
-        config = {
-            "default_model": "anthropic",
-            "models": {
-                "anthropic": {"default_model": "claude-3-opus-20240229"}
-            },
-            "api_keys": {"anthropic": "test-key"},
-            "validation": {"fallback_models": []}
-        }
-        cm = ConfigProvider(config)
+        cm = _create_config_provider(
+            [{"name": "anthropic:claude-3-opus-20240229", "max_retries": 3}],
+            api_keys={"anthropic": "test-key"}
+        )
         
-        with patch('lamia.engine.llm.providers.AnthropicAdapter') as MockAdapter:
+        with patch('lamia.engine.managers.llm.providers.AnthropicAdapter') as MockAdapter:
             manager = LLMManager(cm)
-            result = manager.create_adapter_from_config()
-            MockAdapter.assert_called_once_with(
-                api_key="test-key",
-                model="claude-3-opus-20240229"
-            )
+            model = LLMModel(name="anthropic:claude-3-opus-20240229")
+            result = await manager.create_adapter_from_config(model)
+            MockAdapter.assert_called_once_with(api_key="test-key")
 
-    def test_create_adapter_from_config_ollama(self):
+    @pytest.mark.asyncio
+    async def test_create_adapter_from_config_ollama(self):
         """Test create_adapter_from_config with Ollama"""
-        config = {
-            "default_model": "ollama",
-            "models": {
-                "ollama": {"default_model": "llama2"}
-            },
-            "validation": {"fallback_models": []}
-        }
-        cm = ConfigProvider(config)
+        cm = _create_config_provider(
+            [{"name": "ollama:llama2", "max_retries": 3}],
+            providers={"ollama": {"default_model": "llama2"}}
+        )
         
         manager = LLMManager(cm)
-        result = manager.create_adapter_from_config()
+        model = LLMModel(name="ollama:llama2")
+        result = await manager.create_adapter_from_config(model, with_retries=False)
         assert isinstance(result, OllamaAdapter)
         assert result.model == "llama2"
 
-    def test_create_adapter_from_config_with_override(self):
-        """Test create_adapter_from_config with model override"""
-        config = {
-            "default_model": "openai",
-            "models": {
-                "openai": {"default_model": "gpt-3.5-turbo"},
-                "anthropic": {"default_model": "claude-3-opus-20240229"}
-            },
-            "api_keys": {"openai": "key1", "anthropic": "key2"},
-            "validation": {"fallback_models": []}
-        }
-        cm = ConfigProvider(config)
+    @pytest.mark.asyncio
+    async def test_create_adapter_from_config_with_different_model(self):
+        """Test create_adapter_from_config with different model in chain"""
+        cm = _create_config_provider(
+            [{"name": "openai:gpt-3.5-turbo", "max_retries": 3},
+             {"name": "anthropic:claude-3-opus-20240229", "max_retries": 2}],
+            api_keys={"openai": "key1", "anthropic": "key2"}
+        )
         
-        with patch('lamia.engine.llm.providers.AnthropicAdapter') as MockAdapter:
+        with patch('lamia.engine.managers.llm.providers.AnthropicAdapter') as MockAdapter:
             manager = LLMManager(cm)
-            result = manager.create_adapter_from_config(override_model="anthropic")
-            MockAdapter.assert_called_once_with(
-                api_key="key2",
-                model="claude-3-opus-20240229"
-            )
+            model = LLMModel(name="anthropic:claude-3-opus-20240229")
+            result = await manager.create_adapter_from_config(model)
+            MockAdapter.assert_called_once_with(api_key="key2")
 
-    def test_create_adapter_from_config_has_context_memory(self):
-        """Test create_adapter_from_config with has_context_memory setting"""
-        config = {
-            "default_model": "ollama",
-            "models": {
-                "ollama": {
-                    "default_model": "llama2",
-                    "models": [{"name": "llama2", "has_context_memory": True}]
-                }
-            },
-            "validation": {"fallback_models": []}
-        }
-        cm = ConfigProvider(config)
-        
-        manager = LLMManager(cm)
-        result = manager.create_adapter_from_config()
-        assert isinstance(result, OllamaAdapter)
-        assert result.has_context_memory is True
-
-    def test_create_adapter_from_config_unsupported_model(self):
+    @pytest.mark.asyncio
+    async def test_create_adapter_from_config_unsupported_model(self):
         """Test create_adapter_from_config with unsupported model"""
-        config = {
-            "default_model": "unsupported",
-            "models": {
-                "unsupported": {"default_model": "some-model"}
-            },
-            "validation": {"fallback_models": []}
-        }
-        cm = ConfigProvider(config)
+        cm = _create_config_provider([{"name": "unsupported:some-model", "max_retries": 3}])
         
         manager = LLMManager(cm)
-        with pytest.raises(ValueError, match="Unknown provider: unsupported"):
-            manager.create_adapter_from_config()
+        model = LLMModel(name="unsupported:some-model")
+        with pytest.raises(ValueError, match="Unknown provider"):
+            await manager.create_adapter_from_config(model)
 
-    def test_create_adapter_from_config_missing_api_key(self):
-        """Test create_adapter_from_config with missing API key"""
-        config = {
-            "default_model": "openai",
-            "models": {
-                "openai": {"default_model": "gpt-3.5-turbo"}
-            },
-            "api_keys": {},
-            "validation": {"fallback_models": []}
-        }
-        cm = ConfigProvider(config)
-        
-        manager = LLMManager(cm)
+    @pytest.mark.asyncio
+    async def test_create_adapter_from_config_missing_api_key(self):
+        """Test create_adapter_from_config with missing API key - should raise during init"""
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(MissingAPIKeysError):
-                manager.create_adapter_from_config()
+                cm = _create_config_provider([{"name": "openai:gpt-3.5-turbo", "max_retries": 3}])
+                manager = LLMManager(cm)
 
-    def test_lamia_api_key_from_env(self, monkeypatch):
-        config = {
-            "default_model": "openai",
-            "models": {
-                "openai": {"default_model": "gpt-3.5-turbo"}
-            },
-            # No api_keys provided
-            "validation": {"fallback_models": []}
-        }
+    @pytest.mark.asyncio
+    async def test_lamia_api_key_from_env(self, monkeypatch):
+        """Test that LAMIA_API_KEY from env is used as proxy"""
+        cm = _create_config_provider([{"name": "openai:gpt-3.5-turbo", "max_retries": 3}])
         monkeypatch.setenv("LAMIA_API_KEY", "env-lamia-key")
-        cm = ConfigProvider(config)
         manager = LLMManager(cm)
-        with patch("lamia.engine.llm.llm_manager.LamiaAdapter", autospec=True) as MockAdapter:
-            manager.create_adapter_from_config()
+        with patch("lamia.adapters.llm.lamia_adapter.LamiaAdapter", autospec=True) as MockAdapter:
+            model = LLMModel(name="openai:gpt-3.5-turbo")
+            await manager.create_adapter_from_config(model)
             # The adapter should have been created using the proxy key from the env variable
-            MockAdapter.assert_called()
+            MockAdapter.assert_called_once_with(api_key="env-lamia-key")
         monkeypatch.delenv("LAMIA_API_KEY", raising=False)
 
-    def test_ollama_adapter_extended_config(self):
-        config = {
-            "default_model": "ollama",
-            "models": {
+    @pytest.mark.asyncio
+    async def test_ollama_adapter_extended_config(self):
+        """Test Ollama adapter with extended configuration"""
+        cm = _create_config_provider(
+            [{"name": "ollama:llama2", "max_retries": 3}],
+            providers={
                 "ollama": {
                     "default_model": "llama2",
                     "base_url": "http://localhost:11434",
@@ -340,13 +257,33 @@ class TestCreateAdapterFromConfig:
                     "top_k": 40,
                     "top_p": 0.9
                 }
-            },
-            "validation": {"fallback_models": []}
-        }
-        cm = ConfigProvider(config)
+            }
+        )
         manager = LLMManager(cm)
-        adapter = manager.create_adapter_from_config()
+        model = LLMModel(name="ollama:llama2")
+        adapter = await manager.create_adapter_from_config(model, with_retries=False)
         assert isinstance(adapter, OllamaAdapter)
         assert adapter.base_url == "http://localhost:11434"
         assert adapter.temperature == 0.7
-        assert adapter.max_tokens == 1000 
+        assert adapter.max_tokens == 1000
+
+def _create_config_provider(model_chain_specs, api_keys=None, providers=None):
+    """Helper to create ConfigProvider with proper ModelWithRetries objects."""
+    model_chain = []
+    for spec in model_chain_specs:
+        if isinstance(spec, dict):
+            model_name = spec["name"]
+            max_retries = spec.get("max_retries", 1)
+        else:
+            model_name = spec
+            max_retries = 1
+        
+        model = LLMModel(name=model_name)
+        model_chain.append(ModelWithRetries(model, max_retries))
+    
+    config = {
+        "model_chain": model_chain,
+        "api_keys": api_keys or {},
+        "providers": providers or {}
+    }
+    return ConfigProvider(config)
