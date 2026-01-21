@@ -24,17 +24,17 @@ class TestLLMManager:
         cm = ConfigProvider(config)
         
         manager = LLMManager(cm)
-        assert manager.check_api_key("openai") == "test-openai-key"
-        assert manager.check_api_key("anthropic") == "test-anthropic-key"
+        assert manager._resolve_api_key("openai") == ("test-openai-key", False)
+        assert manager._resolve_api_key("anthropic") == ("test-anthropic-key", False)
 
-    def test_check_api_key_direct_overrides_lamia_proxy(self):
+    def test_check_api_key_direct_does_not_override_lamia_proxy(self):
         """Test lamia proxy API key takes precedence over direct provider key"""
         config = {"api_keys": {"openai": "direct-key", "lamia": "proxy-key"}}
         cm = ConfigProvider(config)
         
         manager = LLMManager(cm)
-        result = manager.check_api_key("openai")
-        assert result == "direct-key"
+        result = manager._resolve_api_key("openai")
+        assert result == ("proxy-key", True)
 
     def test_check_api_key_env_fallback(self):
         """Test check_api_key falls back to environment variable"""
@@ -43,8 +43,8 @@ class TestLLMManager:
         
         manager = LLMManager(cm)
         with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key"}):
-            result = manager.check_api_key("openai")
-            assert result == "env-key"
+            result = manager._resolve_api_key("openai")
+            assert result == ("env-key", False)
 
     def test_check_api_key_missing_raises_error(self):
         """Test check_api_key raises MissingAPIKeysError when key is missing"""
@@ -54,19 +54,19 @@ class TestLLMManager:
         manager = LLMManager(cm)
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(MissingAPIKeysError) as exc_info:
-                manager.check_api_key("openai")
+                manager._resolve_api_key("openai")
             
             assert "openai" in str(exc_info.value)
             assert "OPENAI_API_KEY" in str(exc_info.value)
 
     def test_check_api_key_unknown_provider(self):
         """Test check_api_key with unknown provider"""
-        config = {"api_keys": {}}
+        config = {"":"", "api_keys": {}}
         cm = ConfigProvider(config)
         
         manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            manager.check_api_key("unknown")
+            manager._resolve_api_key("unknown")
 
         assert "unknown" in str(exc_info.value)
 
@@ -103,7 +103,7 @@ class TestCheckAllRequiredApiKeys:
         
         manager = LLMManager(cm)
         # Should not raise any exception
-        manager.check_all_required_api_keys()
+        manager._check_all_required_api_keys({"openai", "anthropic"})
 
     def test_check_all_required_api_keys_lamia_proxy(self):
         """Test check_all_required_api_keys with lamia key as proxy"""
@@ -116,7 +116,7 @@ class TestCheckAllRequiredApiKeys:
         
         manager = LLMManager(cm)
         # Should not raise any exception
-        manager.check_all_required_api_keys()
+        manager._check_all_required_api_keys({"openai", "anthropic"})
 
     def test_check_all_required_api_keys_ollama_no_key_needed(self):
         """Test check_all_required_api_keys with ollama (no key needed)"""
@@ -129,7 +129,7 @@ class TestCheckAllRequiredApiKeys:
         
         manager = LLMManager(cm)
         # Should not raise any exception
-        manager.check_all_required_api_keys()
+        manager._check_all_required_api_keys({"ollama"})
 
     def test_check_all_required_api_keys_missing_default(self):
         """Test check_all_required_api_keys with missing default model key"""
@@ -142,7 +142,7 @@ class TestCheckAllRequiredApiKeys:
         
         manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            manager.check_all_required_api_keys()
+            manager._check_all_required_api_keys({"openai"})
         
         assert "openai" in str(exc_info.value)
 
@@ -157,7 +157,7 @@ class TestCheckAllRequiredApiKeys:
         
         manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            manager.check_all_required_api_keys()
+            manager._check_all_required_api_keys({"anthropic"})
         
         assert "anthropic" in str(exc_info.value)
 
@@ -171,7 +171,7 @@ class TestCheckAllRequiredApiKeys:
         
         manager = LLMManager(cm)
         # Should not raise any exception
-        manager.check_all_required_api_keys()
+        manager._check_all_required_api_keys({"openai"})
 
 
 class TestCreateAdapterFromConfig:

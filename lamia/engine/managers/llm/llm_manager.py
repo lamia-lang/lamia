@@ -1,6 +1,5 @@
+from typing import List, Optional, Dict, Any, Set, Tuple
 
-from typing import List, Optional, Dict, Any, Set
-import os
 from lamia.adapters.llm.lamia_adapter import LamiaAdapter
 from lamia import LLMModel
 from lamia.adapters.llm.base import BaseLLMAdapter
@@ -78,7 +77,7 @@ class LLMManager(Manager):
         
         return needed
 
-    def _resolve_api_key(self, provider_name: str) -> Optional[str]:
+    def _resolve_api_key(self, provider_name: str) -> Tuple[Optional[str], bool]:
         """
         Get and validate API key from config_provider config.
         Returns the API key if found, otherwise raises MissingAPIKeysError.
