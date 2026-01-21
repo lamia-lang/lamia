@@ -7,6 +7,18 @@ import os
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from io import StringIO
 from lamia.cli.cli import interactive_mode, HYBRID_EXTENSIONS
+from lamia.interpreter.command_types import CommandType
+
+
+def make_mock_result(text="test response", command_type=CommandType.LLM):
+    """Helper to create a mock LamiaResult."""
+    result = Mock()
+    result.result_text = text
+    result.tracking_context = Mock()
+    result.tracking_context.command_type = command_type
+    result.tracking_context.data_provider_name = "test_model"
+    result.tracking_context.metadata = {}
+    return result
 
 
 class TestCLIConstants:
@@ -102,7 +114,7 @@ class TestInteractiveModeInputHandling:
     async def test_multiline_input_handling(self):
         """Test multiline input collection."""
         mock_lamia = Mock()
-        mock_lamia.run = AsyncMock(return_value="response")
+        mock_lamia.run_async = AsyncMock(return_value=make_mock_result())
         
         # Simulate multiline input followed by SEND
         inputs = ['line 1', 'line 2', 'line 3', 'SEND', 'EXIT']
@@ -111,8 +123,12 @@ class TestInteractiveModeInputHandling:
             with patch('lamia.cli.cli.logger'):
                 await interactive_mode(mock_lamia)
                 
-                # Should have called lamia.run with multiline content
-                mock_lamia.run.assert_called()
+                # Should have called lamia.run_async with multiline content
+                mock_lamia.run_async.assert_called()
+                call_args = mock_lamia.run_async.call_args[0][0]
+                assert 'line 1' in call_args
+                assert 'line 2' in call_args
+                assert 'line 3' in call_args
     
     @pytest.mark.asyncio
     async def test_empty_input_handling(self):
@@ -178,16 +194,16 @@ class TestCLIIntegration:
     
     @pytest.mark.asyncio
     async def test_lamia_run_called(self):
-        """Test that lamia.run is called with user input."""
+        """Test that lamia.run_async is called with user input."""
         mock_lamia = Mock()
-        mock_lamia.run = AsyncMock(return_value="test response")
+        mock_lamia.run_async = AsyncMock(return_value=make_mock_result("test response"))
         
         with patch('builtins.input', side_effect=['test command', 'SEND', 'EXIT']):
             with patch('lamia.cli.cli.logger'):
                 await interactive_mode(mock_lamia)
                 
-                mock_lamia.run.assert_called_once()
-                call_args = mock_lamia.run.call_args[0][0]
+                mock_lamia.run_async.assert_called_once()
+                call_args = mock_lamia.run_async.call_args[0][0]
                 assert 'test command' in call_args
     
     @pytest.mark.asyncio 
@@ -224,14 +240,14 @@ class TestCLILogging:
     async def test_error_logging(self):
         """Test that errors are properly logged."""
         mock_lamia = Mock()
-        mock_lamia.run = AsyncMock(side_effect=Exception("Test error"))
+        mock_lamia.run_async = AsyncMock(side_effect=Exception("Test error"))
         
         with patch('builtins.input', side_effect=['test', 'SEND', 'EXIT']):
             with patch('lamia.cli.cli.logger') as mock_logger:
                 await interactive_mode(mock_lamia)
                 
                 # Should log errors
-                assert mock_logger.called
+                assert mock_logger.error.called
 
 
 class TestCLIConstantsImmutability:
