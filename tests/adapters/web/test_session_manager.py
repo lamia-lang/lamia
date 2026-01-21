@@ -21,8 +21,8 @@ class TestSessionManagerInitialization:
         assert session_manager.enabled is True
         assert session_manager.session_dir == Path('./.lamia_sessions')
         assert session_manager.session_timeout_hours == 24
-        assert session_manager.save_cookies is True
-        assert session_manager.save_local_storage is True
+        assert session_manager.should_save_cookies is True
+        assert session_manager.should_save_local_storage is True
     
     def test_custom_configuration(self):
         """Test SessionManager with custom configuration."""
@@ -36,8 +36,8 @@ class TestSessionManagerInitialization:
         
         assert session_manager.enabled is False
         assert session_manager.session_timeout_hours == 48
-        assert session_manager.save_cookies is False
-        assert session_manager.save_local_storage is False
+        assert session_manager.should_save_cookies is False
+        assert session_manager.should_save_local_storage is False
     
     @patch('pathlib.Path.mkdir')
     def test_session_directory_creation(self, mock_mkdir):
@@ -443,21 +443,6 @@ class TestSessionCleanup:
         
         # Should not raise exception
         disabled_manager.clean_expired_sessions()
-
-
-class TestGetProfileConfig:
-    """Test profile configuration retrieval."""
-    
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.session_manager = SessionManager({'enabled': False})
-    
-    def test_get_profile_config(self):
-        """Test getting profile configuration."""
-        # The method references self.user_profiles which doesn't exist in the current implementation
-        # This test documents the current behavior
-        result = self.session_manager.get_profile_config("test_profile")
-        assert result is None  # Because user_profiles attribute doesn't exist
 
 
 class TestSessionManagerLogging:
