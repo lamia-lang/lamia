@@ -25,8 +25,8 @@ class SessionManager:
         # Use script's current directory for session storage (like .lamia_cache)
         self.session_dir = Path('./.lamia_sessions')
         self.session_timeout_hours = config.get('session_timeout', 24)
-        self.save_cookies = config.get('save_cookies', True)
-        self.save_local_storage = config.get('save_local_storage', True)
+        self.should_save_cookies = config.get('save_cookies', True)
+        self.should_save_local_storage = config.get('save_local_storage', True)
         
         # Create session directory if it doesn't exist
         if self.enabled:
@@ -142,7 +142,7 @@ class SessionManager:
     
     def save_cookies(self, profile_name: str, cookies: List[Dict]):
         """Save cookies to file."""
-        if not self.enabled or not self.save_cookies:
+        if not self.enabled or not self.should_save_cookies:
             return
         
         cookies_file = self.get_cookies_file(profile_name)
@@ -158,7 +158,7 @@ class SessionManager:
     def load_cookies(self, profile_name: str) -> List[Dict]:
         """Load cookies from file."""
         print(f"TO DELETE: SessionManager.load_cookies called with profile_name: {profile_name}")
-        if not self.enabled or not self.save_cookies:
+        if not self.enabled or not self.should_save_cookies:
             print(f"TO DELETE: Not loading cookies - enabled: {self.enabled}, save_cookies: {self.save_cookies}")
             return []
         
@@ -181,7 +181,7 @@ class SessionManager:
     
     def save_local_storage(self, profile_name: str, local_storage: Dict):
         """Save local storage to file."""
-        if not self.enabled or not self.save_local_storage:
+        if not self.enabled or not self.should_save_local_storage:
             return
         
         storage_file = self.get_local_storage_file(profile_name)
@@ -196,7 +196,7 @@ class SessionManager:
     
     def load_local_storage(self, profile_name: str) -> Dict:
         """Load local storage from file."""
-        if not self.enabled or not self.save_local_storage:
+        if not self.enabled or not self.should_save_local_storage:
             return {}
         
         storage_file = self.get_local_storage_file(profile_name)
