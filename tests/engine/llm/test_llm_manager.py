@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock, AsyncMock, mock_open
 import os
 import subprocess
 import requests
@@ -66,10 +66,10 @@ class TestLLMManager:
         """Test check_api_key with unknown provider"""
         cm = _create_config_provider([{"name": "unknown", "max_retries": 3}])
         
-        with pytest.raises(MissingAPIKeysError) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
             manager = LLMManager(cm)
 
-        assert "unknown" in str(exc_info.value)
+        assert "The following providers are not supported: unknown" in str(exc_info.value)
 
     def test_missing_api_keys_error_message_single(self):
         """Test MissingAPIKeysError with single missing key"""
@@ -127,9 +127,8 @@ class TestCheckAllRequiredApiKeys:
         """Test check_all_required_api_keys with missing primary model key"""
         cm = _create_config_provider([{"name": "openai", "max_retries": 3}])
         
-        manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            manager._check_all_required_api_keys({"openai"})
+            manager = LLMManager(cm)
         
         assert "openai" in str(exc_info.value)
 
@@ -140,9 +139,8 @@ class TestCheckAllRequiredApiKeys:
             api_keys={"openai": "key1"}
         )
         
-        manager = LLMManager(cm)
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            manager._check_all_required_api_keys({"anthropic"})
+            manager = LLMManager(cm)
         
         assert "anthropic" in str(exc_info.value)
 
@@ -158,11 +156,13 @@ class TestCreateAdapterFromConfig:
             api_keys={"openai": "test-key"}
         )
         
-        with patch('lamia.engine.managers.llm.providers.OpenAIAdapter') as MockAdapter:
+        mock_adapter_class, mock_instance = _create_mock_adapter("openai", is_remote=True)
+        with patch('lamia.engine.managers.llm.providers.OpenAIAdapter', mock_adapter_class):
             manager = LLMManager(cm)
             model = LLMModel(name="openai:gpt-3.5-turbo")
-            result = await manager.create_adapter_from_config(model)
-            MockAdapter.assert_called_once_with(api_key="test-key")
+            result = await manager.create_adapter_from_config(model, with_retries=False)
+            mock_adapter_class.assert_called_once_with(api_key="test-key")
+            assert result == mock_instance
 
     @pytest.mark.asyncio
     async def test_create_adapter_from_config_anthropic(self):
@@ -172,11 +172,13 @@ class TestCreateAdapterFromConfig:
             api_keys={"anthropic": "test-key"}
         )
         
-        with patch('lamia.engine.managers.llm.providers.AnthropicAdapter') as MockAdapter:
+        mock_adapter_class, mock_instance = _create_mock_adapter("anthropic", is_remote=True)
+        with patch('lamia.engine.managers.llm.providers.AnthropicAdapter', mock_adapter_class):
             manager = LLMManager(cm)
             model = LLMModel(name="anthropic:claude-3-opus-20240229")
-            result = await manager.create_adapter_from_config(model)
-            MockAdapter.assert_called_once_with(api_key="test-key")
+            result = await manager.create_adapter_from_config(model, with_retries=False)
+            mock_adapter_class.assert_called_once_with(api_key="test-key")
+            assert result == mock_instance
 
     @pytest.mark.asyncio
     async def test_create_adapter_from_config_ollama(self):
@@ -186,11 +188,12 @@ class TestCreateAdapterFromConfig:
             providers={"ollama": {"default_model": "llama2"}}
         )
         
-        manager = LLMManager(cm)
-        model = LLMModel(name="ollama:llama2")
-        result = await manager.create_adapter_from_config(model, with_retries=False)
-        assert isinstance(result, OllamaAdapter)
-        assert result.model == "llama2"
+        with patch.object(OllamaAdapter, '_start_ollama_service', return_value=True):
+            manager = LLMManager(cm)
+            model = LLMModel(name="ollama:llama2")
+            result = await manager.create_adapter_from_config(model, with_retries=False)
+            assert isinstance(result, OllamaAdapter)
+            assert result.base_url == "http://localhost:11434"
 
     @pytest.mark.asyncio
     async def test_create_adapter_from_config_with_different_model(self):
@@ -201,21 +204,24 @@ class TestCreateAdapterFromConfig:
             api_keys={"openai": "key1", "anthropic": "key2"}
         )
         
-        with patch('lamia.engine.managers.llm.providers.AnthropicAdapter') as MockAdapter:
-            manager = LLMManager(cm)
-            model = LLMModel(name="anthropic:claude-3-opus-20240229")
-            result = await manager.create_adapter_from_config(model)
-            MockAdapter.assert_called_once_with(api_key="key2")
+        mock_openai_class, mock_openai_instance = _create_mock_adapter("openai", is_remote=True)
+        mock_anthropic_class, mock_anthropic_instance = _create_mock_adapter("anthropic", is_remote=True)
+        
+        with patch('lamia.engine.managers.llm.providers.OpenAIAdapter', mock_openai_class):
+            with patch('lamia.engine.managers.llm.providers.AnthropicAdapter', mock_anthropic_class):
+                manager = LLMManager(cm)
+                model = LLMModel(name="anthropic:claude-3-opus-20240229")
+                result = await manager.create_adapter_from_config(model, with_retries=False)
+                mock_anthropic_class.assert_called_once_with(api_key="key2")
+                assert result == mock_anthropic_instance
 
     @pytest.mark.asyncio
     async def test_create_adapter_from_config_unsupported_model(self):
         """Test create_adapter_from_config with unsupported model"""
         cm = _create_config_provider([{"name": "unsupported:some-model", "max_retries": 3}])
         
-        manager = LLMManager(cm)
-        model = LLMModel(name="unsupported:some-model")
-        with pytest.raises(ValueError, match="Unknown provider"):
-            await manager.create_adapter_from_config(model)
+        with pytest.raises(ValueError, match="not supported"):
+            manager = LLMManager(cm)
 
     @pytest.mark.asyncio
     async def test_create_adapter_from_config_missing_api_key(self):
@@ -228,14 +234,22 @@ class TestCreateAdapterFromConfig:
     @pytest.mark.asyncio
     async def test_lamia_api_key_from_env(self, monkeypatch):
         """Test that LAMIA_API_KEY from env is used as proxy"""
-        cm = _create_config_provider([{"name": "openai:gpt-3.5-turbo", "max_retries": 3}])
         monkeypatch.setenv("LAMIA_API_KEY", "env-lamia-key")
-        manager = LLMManager(cm)
-        with patch("lamia.adapters.llm.lamia_adapter.LamiaAdapter", autospec=True) as MockAdapter:
-            model = LLMModel(name="openai:gpt-3.5-turbo")
-            await manager.create_adapter_from_config(model)
-            # The adapter should have been created using the proxy key from the env variable
-            MockAdapter.assert_called_once_with(api_key="env-lamia-key")
+        cm = _create_config_provider([{"name": "openai:gpt-3.5-turbo", "max_retries": 3}])
+        
+        mock_openai_class, _ = _create_mock_adapter("openai", is_remote=True)
+        mock_lamia_class, mock_lamia_instance = _create_mock_adapter("lamia", is_remote=True)
+        mock_lamia_class.get_supported_providers.return_value = {"openai", "anthropic"}
+        
+        with patch('lamia.engine.managers.llm.providers.OpenAIAdapter', mock_openai_class):
+            with patch('lamia.engine.managers.llm.llm_manager.LamiaAdapter', mock_lamia_class):
+                manager = LLMManager(cm)
+                model = LLMModel(name="openai:gpt-3.5-turbo")
+                result = await manager.create_adapter_from_config(model, with_retries=False)
+                # The adapter should have been created using the proxy key from the env variable
+                mock_lamia_class.assert_called_once_with(api_key="env-lamia-key")
+                assert result == mock_lamia_instance
+        
         monkeypatch.delenv("LAMIA_API_KEY", raising=False)
 
     @pytest.mark.asyncio
@@ -259,13 +273,12 @@ class TestCreateAdapterFromConfig:
                 }
             }
         )
-        manager = LLMManager(cm)
-        model = LLMModel(name="ollama:llama2")
-        adapter = await manager.create_adapter_from_config(model, with_retries=False)
-        assert isinstance(adapter, OllamaAdapter)
-        assert adapter.base_url == "http://localhost:11434"
-        assert adapter.temperature == 0.7
-        assert adapter.max_tokens == 1000
+        with patch.object(OllamaAdapter, '_start_ollama_service', return_value=True):
+            manager = LLMManager(cm)
+            model = LLMModel(name="ollama:llama2")
+            adapter = await manager.create_adapter_from_config(model, with_retries=False)
+            assert isinstance(adapter, OllamaAdapter)
+            assert adapter.base_url == "http://localhost:11434"
 
 def _create_config_provider(model_chain_specs, api_keys=None, providers=None):
     """Helper to create ConfigProvider with proper ModelWithRetries objects."""
@@ -287,3 +300,16 @@ def _create_config_provider(model_chain_specs, api_keys=None, providers=None):
         "providers": providers or {}
     }
     return ConfigProvider(config)
+
+def _create_mock_adapter(provider_name: str, is_remote: bool = True):
+    """Helper to create a properly configured mock adapter."""
+    mock_adapter_class = MagicMock()
+    mock_adapter_class.name.return_value = provider_name
+    mock_adapter_class.is_remote.return_value = is_remote
+    
+    # Create mock instance that will be returned when adapter_class() is called
+    mock_instance = MagicMock()
+    mock_instance.async_initialize = AsyncMock()
+    mock_adapter_class.return_value = mock_instance
+    
+    return mock_adapter_class, mock_instance

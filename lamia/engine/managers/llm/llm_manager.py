@@ -23,10 +23,13 @@ class LLMManager(Manager):
     def __init__(self, config_provider: ConfigProvider):
         self.config_provider = config_provider
         # Determine which providers are needed based on config
-        needed_providers = self._get_needed_providers()
-        
+        needed_providers = self._get_needed_providers() 
+
         # Initialize provider registry with only needed providers
         self.provider_registry = ProviderRegistry(needed_providers)
+
+        # Check that all required providers are supported
+        self._check_all_required_providers(needed_providers)
 
         self._adapter_cache = {}
         
