@@ -1,5 +1,6 @@
 """Comprehensive tests for Web Selector Resolution: progressive and semantic strategies."""
 
+import json
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock, call
 from lamia.engine.managers.web.selector_resolution.progressive.progressive_selector_strategy import ProgressiveSelectorStrategy
@@ -22,7 +23,19 @@ from lamia.engine.managers.web.selector_resolution.semantic.semantic_strategy_re
 def mock_llm_executor():
     """Create a mock LLM executor."""
     executor = Mock()
-    executor.execute = AsyncMock(return_value=Mock(result_type="LLM response"))
+    executor.execute = AsyncMock(return_value=Mock(
+        validated_text=json.dumps({
+            "intent": {"element_count": "single", "relationship": "none"},
+            "strategies": [
+                {
+                    "selectors": ["button.login"],
+                    "strictness": "strict",
+                    "description": "Login button",
+                    "validation": {"count": "exactly_1", "relationship": "none"}
+                }
+            ]
+        })
+    ))
     return executor
 
 
@@ -62,11 +75,6 @@ def sample_strategies():
         }
     ]
 
-
-# ============================================================================
-# PROGRESSIVE SELECTOR STRATEGY TESTS
-# ============================================================================
-
 class TestProgressiveSelectorStrategyInitialization:
     """Test ProgressiveSelectorStrategy initialization."""
 
@@ -74,78 +82,84 @@ class TestProgressiveSelectorStrategyInitialization:
         """Test basic initialization."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
-        assert strategy.llm_executor == mock_llm_executor
-        assert strategy.validator is not None
+        assert strategy.llm_manager == mock_llm_executor
+        assert strategy.json_validator is not None
 
 
 class TestProgressiveSelectorStrategyIntentParsing:
-    """Test intent parsing from description."""
+    """Test intent parsing from LLM response."""
 
-    def test_parse_intent_single_element(self, mock_llm_executor):
+    async def _parse_intent(self, strategy: ProgressiveSelectorStrategy, intent: dict):
+        response = json.dumps({
+            "intent": intent,
+            "strategies": [
+                {
+                    "selectors": ["#example"],
+                    "strictness": "relaxed",
+                    "description": "Example strategy",
+                    "validation": {
+                        "count": "exactly_1",
+                        "relationship": "none"
+                    }
+                }
+            ]
+        })
+        return await strategy._parse_strategies(response, "example description")
+
+    @pytest.mark.asyncio
+    async def test_parse_intent_single_element(self, mock_llm_executor):
         """Test parsing intent for single element."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
-        intent = strategy._parse_web_command_intent("the login button")
+        intent, strategies = await self._parse_intent(
+            strategy,
+            {"element_count": "single", "relationship": "none"}
+        )
 
         assert intent["element_count"] == "single"
-        assert "button" in intent["element_types"]
         assert intent["relationship"] == "none"
+        assert strategies
 
-    def test_parse_intent_multiple_elements(self, mock_llm_executor):
+    @pytest.mark.asyncio
+    async def test_parse_intent_multiple_elements(self, mock_llm_executor):
         """Test parsing intent for multiple elements."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
-        intent = strategy._parse_web_command_intent("all the product cards")
+        intent, strategies = await self._parse_intent(
+            strategy,
+            {"element_count": "multiple", "relationship": "none"}
+        )
 
         assert intent["element_count"] == "multiple"
         assert intent["relationship"] == "none"
+        assert strategies
 
-    def test_parse_intent_grouped_elements(self, mock_llm_executor):
+    @pytest.mark.asyncio
+    async def test_parse_intent_grouped_elements(self, mock_llm_executor):
         """Test parsing intent for grouped elements."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
-        intent = strategy._parse_web_command_intent("grouped form fields for address")
+        intent, strategies = await self._parse_intent(
+            strategy,
+            {"element_count": "multiple", "relationship": "grouped"}
+        )
 
         assert intent["relationship"] == "grouped"
         assert intent["element_count"] == "multiple"
+        assert strategies
 
-    def test_parse_intent_sibling_elements(self, mock_llm_executor):
+    @pytest.mark.asyncio
+    async def test_parse_intent_sibling_elements(self, mock_llm_executor):
         """Test parsing intent for sibling elements."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
-        intent = strategy._parse_web_command_intent("adjacent navigation links")
+        intent, strategies = await self._parse_intent(
+            strategy,
+            {"element_count": "multiple", "relationship": "siblings"}
+        )
 
-        assert intent["relationship"] in ["siblings", "grouped"]
-
-    def test_parse_intent_element_types(self, mock_llm_executor):
-        """Test parsing different element types."""
-        strategy = ProgressiveSelectorStrategy(mock_llm_executor)
-
-        test_cases = [
-            ("fill in the email input", ["input"]),
-            ("click the submit button", ["button"]),
-            ("find all the links", ["link"]),
-            ("select an option from dropdown", ["select"]),
-            ("check the checkbox", ["checkbox"])
-        ]
-
-        for description, expected_types in test_cases:
-            intent = strategy._parse_web_command_intent(description)
-            assert any(et in intent["element_types"] for et in expected_types), \
-                f"Failed for: {description}"
-
-    def test_parse_intent_keywords_extraction(self, mock_llm_executor):
-        """Test keyword extraction from description."""
-        strategy = ProgressiveSelectorStrategy(mock_llm_executor)
-
-        intent = strategy._parse_web_command_intent("the blue submit button with icon")
-
-        assert "blue" in intent["keywords"]
-        assert "submit" in intent["keywords"]
-        assert "button" in intent["keywords"]
-        # Stop words should be filtered
-        assert "the" not in intent["keywords"]
-        assert "with" not in intent["keywords"]
+        assert intent["relationship"] == "siblings"
+        assert strategies
 
 
 class TestProgressiveSelectorStrategyStrictness:
@@ -219,7 +233,8 @@ class TestProgressiveSelectorStrategyEnhancement:
 class TestProgressiveSelectorStrategyParsing:
     """Test LLM response parsing."""
 
-    def test_parse_valid_json_response(self, mock_llm_executor):
+    @pytest.mark.asyncio
+    async def test_parse_valid_json_response(self, mock_llm_executor):
         """Test parsing valid JSON response."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
@@ -233,12 +248,15 @@ class TestProgressiveSelectorStrategyParsing:
         ]
         '''
 
-        strategies = strategy._parse_strategies(llm_response, "submit button")
+        intent, strategies = await strategy._parse_strategies(llm_response, "submit button")
 
+        assert intent["element_count"] == "single"
+        assert intent["relationship"] == "none"
         assert len(strategies) > 0
         assert "selectors" in strategies[0]
 
-    def test_parse_json_with_markdown(self, mock_llm_executor):
+    @pytest.mark.asyncio
+    async def test_parse_json_with_markdown(self, mock_llm_executor):
         """Test parsing JSON wrapped in markdown code blocks."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
@@ -250,19 +268,22 @@ class TestProgressiveSelectorStrategyParsing:
         ```
         '''
 
-        strategies = strategy._parse_strategies(llm_response, "button")
+        intent, strategies = await strategy._parse_strategies(llm_response, "button")
 
+        assert intent["element_count"] == "single"
         assert len(strategies) > 0
 
-    def test_parse_malformed_json_fallback(self, mock_llm_executor):
+    @pytest.mark.asyncio
+    async def test_parse_malformed_json_fallback(self, mock_llm_executor):
         """Test fallback when JSON is malformed."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
         llm_response = "Not valid JSON at all"
 
-        strategies = strategy._parse_strategies(llm_response, "button")
+        intent, strategies = await strategy._parse_strategies(llm_response, "button")
 
         # Should create fallback strategies
+        assert intent["element_count"] in ["single", "multiple"]
         assert len(strategies) > 0
         assert "selectors" in strategies[0]
 
@@ -335,6 +356,7 @@ class TestRelationshipValidatorCountValidation:
         # Should fail for exactly_1
         is_valid, reason = validator._validate_count(elements, "exactly_1")
         assert is_valid is False
+        assert reason is not None
         assert "expected exactly 1" in reason.lower()
 
     def test_validate_count_at_least(self, mock_browser_adapter):
@@ -671,7 +693,17 @@ class TestSelectorResolutionIntegration:
         """Test full progressive resolution flow."""
         # Setup mock LLM response
         mock_llm_executor.execute.return_value = Mock(
-            result_type='[{"selectors": ["button.login"], "strictness": "strict"}]'
+            validated_text=json.dumps({
+                "intent": {"element_count": "single", "relationship": "none"},
+                "strategies": [
+                    {
+                        "selectors": ["button.login"],
+                        "strictness": "strict",
+                        "description": "Login button",
+                        "validation": {"count": "exactly_1", "relationship": "none"}
+                    }
+                ]
+            })
         )
 
         # Setup mock browser to find elements

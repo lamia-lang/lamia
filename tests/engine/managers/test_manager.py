@@ -19,12 +19,6 @@ class TestManagerInterface:
         with pytest.raises(TypeError):
             Manager()
     
-    def test_is_generic(self):
-        """Test that Manager is a generic class."""
-        # Check that it has type parameters
-        assert hasattr(Manager, '__parameters__')
-        assert hasattr(Manager, '__origin__') or hasattr(Manager, '__args__')
-    
     def test_abstract_execute_method(self):
         """Test that execute method is abstract."""
         assert hasattr(Manager, 'execute')

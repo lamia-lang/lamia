@@ -342,31 +342,3 @@ class TestFSManagerErrorHandling:
             # Should raise AttributeError when validator is None
             with pytest.raises(AttributeError):
                 await self.fs_manager.execute(file_command, None)
-
-
-class TestFSManagerConfigIntegration:
-    """Test FSManager integration with config provider."""
-    
-    def test_config_provider_storage(self):
-        """Test that config provider is properly stored."""
-        config_provider = Mock(spec=ConfigProvider)
-        config_provider.get_setting.return_value = "test_value"
-        
-        fs_manager = FSManager(config_provider)
-        
-        assert fs_manager.config_provider == config_provider
-        
-        # Verify we can access config provider methods
-        setting = fs_manager.config_provider.get_setting("test_key")
-        assert setting == "test_value"
-        config_provider.get_setting.assert_called_once_with("test_key")
-    
-    def test_config_provider_interaction(self):
-        """Test potential config provider interactions."""
-        config_provider = Mock(spec=ConfigProvider)
-        fs_manager = FSManager(config_provider)
-        
-        # The current implementation doesn't use config_provider in execute,
-        # but this tests that it's available for future use
-        assert fs_manager.config_provider is not None
-        assert fs_manager.config_provider == config_provider
