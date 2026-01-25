@@ -1,4 +1,5 @@
 import pytest
+from enum import Enum
 from lamia.validation.utils.type_matcher import TypeMatcher
 import typing
 from typing import get_origin
@@ -540,3 +541,156 @@ def test_type_matcher_field_constraints(expected_type, value, is_valid, expected
         assert expected_error in result.error
     else:
         assert result.error is None
+
+# Test enums for enum validation tests
+class Color(str, Enum):
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+
+class Status(Enum):
+    PENDING = 1
+    ACTIVE = 2
+    COMPLETED = 3
+
+# Enum Type Conversion Tests
+class TestEnumTypeConversion:
+    """Test enum type conversion support in TypeMatcher."""
+
+    def test_enum_already_correct_type(self):
+        """Test that passing an enum instance of correct type is valid."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(Color.RED, Color)
+        
+        assert result.is_valid is True
+        assert result.value == Color.RED
+        assert result.error is None
+
+    def test_string_enum_value_strict(self):
+        """Test conversion from string value to string enum in strict mode."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("red", Color)
+        
+        assert result.is_valid is True
+        assert result.value == Color.RED
+        assert result.error is None
+
+    def test_string_enum_value_strict_rejects_name(self):
+        """Strict mode should not match enum names, only values."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("RED", Color)
+        
+        assert result.is_valid is False
+        assert "RED" in result.error
+
+    def test_string_enum_value_not_strict_case_insensitive(self):
+        """Non-strict mode should allow case-insensitive value matching."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert("RED", Color)
+        
+        assert result.is_valid is True
+        assert result.value == Color.RED
+        assert result.error is None
+
+    def test_int_enum_from_value(self):
+        """Test conversion from int value to int enum."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(2, Status)
+        
+        assert result.is_valid is True
+        assert result.value == Status.ACTIVE
+        assert result.error is None
+
+    def test_enum_invalid_value_strict(self):
+        """Test that invalid enum value fails in strict mode."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("purple", Color)
+        
+        assert result.is_valid is False
+        assert "purple" in result.error
+        assert "Color" in result.error
+
+    def test_enum_invalid_value_not_strict(self):
+        """Test that invalid enum value fails in non-strict mode too."""
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert("purple", Status)
+        
+        assert result.is_valid is False
+        assert "purple" in result.error
+        assert "Status" in result.error
+
+    def test_enum_wrong_type_for_int_enum(self):
+        """Test that wrong type value fails for int enum."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("not_a_number", Status)
+        
+        assert result.is_valid is False
+
+    def test_enum_wrong_type_for_int_value(self):
+        """Test that wrong type value fails for int enum."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(9000, Status)
+        
+        assert result.is_valid is False
+
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert(9000, Status)
+
+    def test_enum_list_of_enums(self):
+        """Test conversion of list of enum values."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(["red", "green", "blue"], list[Color])
+        
+        assert result.is_valid is True
+        assert result.value == [Color.RED, Color.GREEN, Color.BLUE]
+
+    def test_enum_list_with_invalid_value(self):
+        """Test that list with invalid enum value fails."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(["red", "purple", "blue"], list[Color])
+        
+        assert result.is_valid is False
+
+    def test_enum_optional(self):
+        """Test Optional enum type."""
+        matcher = TypeMatcher(strict=True)
+        
+        # None should be valid for Optional[Color]
+        result = matcher.validate_and_convert(None, typing.Optional[Color])
+        assert result.is_valid is True
+        assert result.value is None
+        
+        # Valid value should also work
+        result = matcher.validate_and_convert("red", typing.Optional[Color])
+        assert result.is_valid is True
+        assert result.value == Color.RED
+
+    def test_enum_union(self):
+        """Test Union with enum type."""
+        matcher = TypeMatcher(strict=True)
+        
+        # Color value should work
+        result = matcher.validate_and_convert("red", typing.Union[Color, str])
+        assert result.is_valid is True
+        # Should convert to Color first since it comes first in Union
+        assert result.value == Color.RED
+
+    def test_enum_wrong_enum_type(self):
+        """Test that passing wrong enum type fails."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(Status.ACTIVE, Color)
+        
+        assert result.is_valid is False
+
+    @pytest.mark.parametrize("value,expected", [
+        (1, Status.PENDING),
+        (2, Status.ACTIVE),
+        (3, Status.COMPLETED),
+    ])
+    def test_int_enum_various_values(self, value, expected):
+        """Test various int enum conversions."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(value, Status)
+        
+        assert result.is_valid is True
+        assert result.value == expected

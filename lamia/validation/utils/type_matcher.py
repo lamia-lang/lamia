@@ -1,5 +1,6 @@
 import typing
 import re
+from enum import Enum
 from pydantic import TypeAdapter, ValidationError, ConfigDict
 from .error_messages import (
     error_msg_none_not_allowed,
@@ -12,6 +13,7 @@ from .error_messages import (
     error_msg_expected_str_got,
     error_msg_cannot_strictly_convert,
     error_msg_cannot_convert,
+    error_msg_invalid_enum_value,
 )
 from dataclasses import dataclass, field
 import logging
@@ -117,6 +119,10 @@ class TypeMatcher:
                 if invalid_keys or invalid_values:
                     return TypeMatchResult(False, None, error_msg_dict_elements_invalid(invalid_keys, invalid_values))
                 return TypeMatchResult(True, coerced, info_loss=combined_info_loss)
+
+            # Handle Enum types
+            if isinstance(expected_type, type) and issubclass(expected_type, Enum):
+                return self._convert_enum(value, expected_type)
 
             # Primitive types
             if expected_type is str:
@@ -229,3 +235,33 @@ class TypeMatcher:
             if v in ("false", "0"):
                 return TypeMatchResult(True, False)
         return TypeMatchResult(False, None, error_msg_cannot_convert(value, "bool"))
+
+    def _convert_enum(self, value, enum_type: type):
+        """Convert a value to an enum type.
+        
+        Args:
+            value: The value to convert (can be string, int, or already an enum instance)
+            enum_type: The target Enum type
+            
+        Returns:
+            TypeMatchResult with the converted enum value or error
+        """
+        # Already the correct enum type
+        if isinstance(value, enum_type):
+            return TypeMatchResult(True, value)
+        
+        valid_values = [member.value for member in enum_type]
+        
+        # Try to match by value (works for both string and int enums)
+        for member in enum_type:
+            if member.value == value:
+                return TypeMatchResult(True, member)
+        
+        # For string values, try case-insensitive value matching if strict mode is off
+        if isinstance(value, str) and not self.strict:
+            value_lower = value.lower()
+            for member in enum_type:
+                if isinstance(member.value, str) and member.value.lower() == value_lower:
+                    return TypeMatchResult(True, member)
+        
+        return TypeMatchResult(False, None, error_msg_invalid_enum_value(value, enum_type, valid_values))
