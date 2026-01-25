@@ -1,5 +1,5 @@
 import pytest
-from enum import Enum
+from enum import Enum, auto
 from lamia.validation.utils.type_matcher import TypeMatcher
 import typing
 from typing import get_origin
@@ -553,6 +553,16 @@ class Status(Enum):
     ACTIVE = 2
     COMPLETED = 3
 
+class AutoStatus(Enum):
+    PENDING = auto()
+    ACTIVE = auto()
+    COMPLETED = auto()
+
+class PlainColor(Enum):
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+
 # Enum Type Conversion Tests
 class TestEnumTypeConversion:
     """Test enum type conversion support in TypeMatcher."""
@@ -635,6 +645,24 @@ class TestEnumTypeConversion:
 
         matcher = TypeMatcher(strict=False)
         result = matcher.validate_and_convert(9000, Status)
+        
+        assert result.is_valid is False
+
+    def test_auto_enum_int_values(self):
+        """Test enum with auto() implicit int values."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(2, AutoStatus)
+        
+        assert result.is_valid is True
+        assert result.value == AutoStatus.ACTIVE
+
+    def test_plain_enum_str_values(self):
+        """Test non-str Enum with string values."""
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("red", PlainColor)
+        
+        assert result.is_valid is True
+        assert result.value == PlainColor.RED
 
     def test_enum_list_of_enums(self):
         """Test conversion of list of enum values."""
