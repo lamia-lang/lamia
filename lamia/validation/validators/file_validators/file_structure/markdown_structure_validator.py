@@ -7,6 +7,7 @@ from pydantic_core import core_schema
 from .utils import import_model_from_path
 import re
 from collections import OrderedDict
+from typing import Optional, Type
 
 # Marker classes for semantic mapping
 class MarkdownStr(str):
@@ -96,7 +97,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
     """Validates if the Markdown matches a given Pydantic model structure, or just checks for well-formed Markdown if no model/schema is provided."""
     
     # Constructor
-    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
+    def __init__(self, model: Optional[Type[BaseModel]] = None, model_name: Optional[str] = None, schema: Optional[dict] = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         resolved_model = None
         if model is not None:
             resolved_model = model

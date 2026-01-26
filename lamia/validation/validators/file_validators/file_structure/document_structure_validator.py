@@ -3,7 +3,7 @@ from ....base import BaseValidator, ValidationResult
 import typing
 import re
 import logging
-from typing import get_origin, get_args, Any, Union, Optional, List, Iterator
+from typing import get_origin, get_args, Any, Union, Optional, List, Iterator, Type
 from lamia.validation.utils.type_matcher import TypeMatcher
 from lamia.validation.utils.pydantic_utils import get_pydantic_json_schema, get_ordered_dict_fields
 from pydantic import BaseModel, create_model
@@ -107,7 +107,7 @@ def is_list_of_models(field_type: Any) -> bool:
 
 
 class DocumentStructureValidator(BaseValidator, ABC):
-    def __init__(self, model: Optional[BaseModel] = None, strict: bool = True, generate_hints: bool = False) -> None:
+    def __init__(self, model: Optional[Type[BaseModel]] = None, strict: bool = True, generate_hints: bool = False) -> None:
         super().__init__(strict=strict, generate_hints=generate_hints)
         
         # FAIL FAST: OrderedDict patterns validation before anything else

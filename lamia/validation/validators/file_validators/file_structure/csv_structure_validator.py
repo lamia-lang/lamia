@@ -6,7 +6,7 @@ from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator, BaseValidationError
 from ....base import ValidationResult       
 from .utils import import_model_from_path
-from typing import Any
+from typing import Any, Optional, Type
 import re
 from typing import Callable
 from ....utils.pydantic_utils import get_ordered_dict_fields
@@ -26,7 +26,7 @@ def is_optional(field_info):
 
 class CSVStructureValidator(DocumentStructureValidator):
     """Validates if the CSV matches a given Pydantic model structure (one field per column)."""
-    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
+    def __init__(self, model: Optional[Type[BaseModel]] = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         if model is not None:
             resolved_model = model
             # Validate OrderedDict patterns early

@@ -4,8 +4,9 @@ import re
 from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from ....base import ValidationResult
 from .utils import import_model_from_path
-from typing import Any, List
+from typing import Any, Optional, Type
 from .document_structure_validator import InvalidPayloadError
+
 import json
 import typing
 
@@ -14,7 +15,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
     - Accepts a Pydantic model class or a string (model name or full dotted path).
     - Can be used from config (with model name or full path) or from Lamia(...) constructor (with model class).
     """
-    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
+    def __init__(self, model: Optional[Type[BaseModel]] = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         if model is not None:
             resolved_model = model
         elif model_name is not None:

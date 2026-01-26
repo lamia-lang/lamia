@@ -36,4 +36,7 @@ def error_msg_cannot_strictly_convert(value: Any, type_name: str) -> str:
     return f"Cannot strictly convert {value!r} to {type_name}"
 
 def error_msg_cannot_convert(value: Any, type_name: str) -> str:
-    return f"Cannot convert {value!r} to {type_name}" 
+    return f"Cannot convert {value!r} to {type_name}"
+
+def error_msg_invalid_enum_value(value: Any, enum_type: type, valid_values: List[str]) -> str:
+    return f"Invalid enum value {value!r} for {enum_type.__name__}. Valid values are: {valid_values}" 

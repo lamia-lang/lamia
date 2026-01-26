@@ -1,17 +1,17 @@
 import json
 import re
 from collections import OrderedDict
+from typing import Optional, Type
+
 from pydantic import BaseModel, create_model
+
 from .document_structure_validator import DocumentStructureValidator, DuplicateKeyError
-from ....base import ValidationResult
 from .utils import import_model_from_path
-from collections import OrderedDict
-from .document_structure_validator import DocumentStructureValidator
 
 
 class JSONStructureValidator(DocumentStructureValidator):
     """Validates if the JSON matches a given Pydantic model structure."""
-    def __init__(self, model: BaseModel = None, model_name: str = None, schema: dict = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
+    def __init__(self, model: Optional[Type[BaseModel]] = None, model_name: Optional[str] = None, schema: Optional[dict] = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
         if model is not None:
             resolved_model = model
         elif model_name is not None:

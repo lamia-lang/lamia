@@ -1,23 +1,42 @@
 """Progressive selector strategy generator for AI-powered element resolution."""
 
-import json
 import logging
-import re
-import select
-from typing import List, Dict, Any, Optional
+from enum import Enum
+from typing import List, Optional, Tuple, Type
 
-from lamia.adapters.llm.validation.validators import JSONStructureValidator
+from pydantic import BaseModel
+
+from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
 from lamia.interpreter.commands import LLMCommand
-from lamia.validation.validators.file_validators.json_validator import JSONValidator
 from lamia.engine.managers.llm.llm_manager import LLMManager
 from lamia.validation.base import ValidationResult
 
 logger = logging.getLogger(__name__)
 
+
+class ElementCount(str, Enum):
+    """Enum for element count intent."""
+    SINGLE = "single"
+    MULTIPLE = "multiple"
+
+
+class Relationship(str, Enum):
+    """Enum for element relationship type."""
+    NONE = "none"
+    GROUPED = "grouped"
+    SIBLINGS = "siblings"
+
+
+class Strictness(str, Enum):
+    """Enum for selector strictness level."""
+    STRICT = "strict"
+    RELAXED = "relaxed"
+
+
 class ProgressiveSelectorStrategyIntent(BaseModel):
-    element_count: str
-    relationship: str
-    strictness: str
+    element_count: ElementCount
+    relationship: Relationship
+    strictness: Strictness
 
 class ProgressiveSelectorStrategyModel(BaseModel):
     intent: ProgressiveSelectorStrategyIntent
@@ -45,7 +64,7 @@ class ProgressiveSelectorStrategy:
         self, 
         description: str,
         failed_selectors: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Tuple[ProgressiveSelectorStrategyIntent, List[str]]:
         """
         Generate progressive selector strategies using LLM.
         
@@ -54,11 +73,9 @@ class ProgressiveSelectorStrategy:
             failed_selectors: List of selectors that have already failed (to avoid regenerating them)
             
         Returns:
-            List of strategy dicts with:
+            Tuple of (intent, selectors) where:
+            - intent: ProgressiveSelectorStrategyIntent with element_count, relationship, strictness
             - selectors: List of CSS/XPath selectors to try
-            - strictness: "strict" | "relaxed" | "generic"
-            - description: What this strategy matches
-            - validation: Dict with validation rules
         """
         logger.info(f"Generating progressive strategies for: '{description}'")
         
@@ -67,12 +84,12 @@ class ProgressiveSelectorStrategy:
         
         # Execute LLM command
         llm_command = LLMCommand(prompt=prompt)
-        result : ValidationResult = await self.llm_manager.execute(llm_command, self.progressive_selector_json_validator)
+        result: ValidationResult = await self.llm_manager.execute(llm_command, self.progressive_selector_json_validator)
         
         if not result.is_valid:
             raise ValueError(f"Failed to generate progressive strategies for: '{description}'")
         
-        typed_result: ProgressiveSelectorStrategyModel = result.result_type
+        typed_result: ProgressiveSelectorStrategyModel = result.result_type  # type: ignore[assignment]
 
         return typed_result.intent, typed_result.selectors
     
