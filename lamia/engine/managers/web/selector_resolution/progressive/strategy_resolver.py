@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from .progressive_selector_strategy import ProgressiveSelectorStrategy
 from .relationship_validator import ElementRelationshipValidator
 from .ambiguity_resolver import AmbiguityResolver
+from .progressive_selector_strategy import ProgressiveSelectorStrategyIntent
 
 logger = logging.getLogger(__name__)
 
@@ -65,49 +66,48 @@ class ProgressiveSelectorResolver:
             if retry_attempt > 0:
                 logger.info(f"Retry attempt {retry_attempt} with {len(failed_selectors)} failed selectors to avoid")
             
-            # Generate progressive strategies (with failed selectors if retrying)
-            strategies = await self.strategy_gen.generate_strategies(
+            # Generate progressive selectors (with failed selectors if retrying)
+            intent, selectors = await self.strategy_gen.generate_strategies(
                 description, 
                 failed_selectors if retry_attempt > 0 else None
             )
             
-            if not strategies:
-                raise ValueError(f"Failed to generate strategies for: '{description}'")
+            if not selectors:
+                raise ValueError(f"Failed to get selectors for: '{description}'")
             
-            logger.info(f"Generated {len(strategies)} strategies, trying each...")
+            logger.info(f"The LLM suggested the {len(selectors)} selectors, trying each...")
             
             # Try each strategy from specific to generic  
-            strategy_success = False
-            for i, strategy in enumerate(strategies, 1):
-                strictness = strategy.get('strictness', 'relaxed')
-                strategy_desc = strategy.get('description', 'Unknown')
+            selector_success = False
+            strictness = intent.strictness
+            for i, selector in enumerate(selectors, 1):
                 
-                logger.info(f"[{i}/{len(strategies)}] Trying {strictness} strategy: {strategy_desc}")
+                logger.info(f"[{i}/{len(selectors)}] Trying {strictness} selector: {selector}")
                 
                 try:
                     # Try all selectors in this strategy
-                    for selector in strategy.get('selectors', []):
-                        logger.debug(f"  Trying selector: {selector}")
+                    for selector in selectors:
+                        logger.debug(f"Trying selector: {selector}")
                         
                         try:
                             # Find elements
                             elements = await self._find_elements(selector)
                             
                             if not elements:
-                                logger.debug(f"    No elements found")
+                                logger.debug(f"No elements found with selector: {selector}")
                                 failed_selectors.append(selector)
                                 continue
                             
-                            logger.debug(f"    Found {len(elements)} element(s)")
+                            logger.debug(f"Found {len(elements)} element(s) with selector: {selector}")
                             
                             # Validate relationship
                             is_valid, reason = await self.relationship_validator.validate_strategy_match(
                                 elements,
-                                strategy
+                                intent
                             )
                             
                             if not is_valid:
-                                logger.debug(f"    Validation failed: {reason}")
+                                logger.debug(f"Validation failed: {reason}")
                                 failed_selectors.append(selector)
                                 continue
                             

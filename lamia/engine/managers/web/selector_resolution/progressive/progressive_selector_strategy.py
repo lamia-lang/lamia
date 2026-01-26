@@ -109,7 +109,7 @@ class ProgressiveSelectorStrategy:
 IMPORTANT: The following selectors have already been tried and FAILED to find any elements:
 {failed_selectors}
 
-DO NOT include any of these failed selectors in your response. Generate completely different selectors.
+DO NOT include any of these failed selectors in your response. Generate completely different selectors. Also, think why they are failed and exlcude new selectors that are likely to fail for the same reason.
 
 """
         

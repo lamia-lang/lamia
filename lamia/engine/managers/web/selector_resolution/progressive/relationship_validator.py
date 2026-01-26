@@ -2,6 +2,12 @@
 
 import logging
 from typing import List, Dict, Any, Optional, Tuple
+from .progressive_selector_strategy import (
+  ProgressiveSelectorStrategyIntent, 
+  Relationship, 
+  Strictness, 
+  ElementCount
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +31,14 @@ class ElementRelationshipValidator:
     async def validate_strategy_match(
         self,
         found_elements: List[Any],
-        strategy: Dict[str, Any]
+        intent: ProgressiveSelectorStrategyIntent
     ) -> Tuple[bool, Optional[str]]:
         """
         Validate that found elements match strategy expectations.
         
         Args:
             found_elements: List of element handles found by selectors
-            strategy: Strategy dict with validation rules
+            selector: Selector used to find the elements
             
         Returns:
             (is_valid, reason_if_invalid)
@@ -40,21 +46,17 @@ class ElementRelationshipValidator:
         if not found_elements:
             return False, "No elements found"
         
-        validation = strategy.get('validation', {})
-        
         # 1. Validate count
         count_valid, count_reason = self._validate_count(
             found_elements,
-            validation.get('count', 'at_least_1')
+            intent.element_count
         )
         if not count_valid:
             return False, count_reason
         
-        # 2. Validate relationship
-        relationship = validation.get('relationship', 'none')
         
-        if relationship == 'common_ancestor':
-            max_levels = validation.get('max_ancestor_levels', 5)
+        if intent.relationship == Relationship.GROUPED:
+            max_levels = 5
             ancestor = await self._find_common_ancestor(found_elements, max_levels)
             
             if not ancestor:
@@ -62,13 +64,13 @@ class ElementRelationshipValidator:
             
             logger.debug(f"Found common ancestor at level <= {max_levels}")
         
-        elif relationship == 'siblings':
+        elif intent.relationship == Relationship.SIBLINGS:
             are_siblings = await self._are_siblings(found_elements)
             if not are_siblings:
                 return False, "Elements are not siblings"
         
         # 3. Validate strictness (for siblings, check adjacency)
-        if strategy.get('strictness') == 'strict' and relationship == 'siblings':
+        if intent.strictness == Strictness.STRICT and intent.relationship == Relationship.SIBLINGS:
             are_adjacent = await self._are_adjacent_siblings(found_elements)
             if not are_adjacent:
                 return False, "Elements not adjacent siblings (strict mode)"
@@ -78,7 +80,7 @@ class ElementRelationshipValidator:
     def _validate_count(
         self,
         elements: List[Any],
-        count_spec: str
+        element_count_spec: ElementCount
     ) -> Tuple[bool, Optional[str]]:
         """
         Validate element count based on specification.
@@ -92,7 +94,7 @@ class ElementRelationshipValidator:
         """
         actual_count = len(elements)
         
-        if count_spec == 'any':
+        if element_count_spec == ElementCount.ANY:
             return True, None
         
         parts = count_spec.split('_')
