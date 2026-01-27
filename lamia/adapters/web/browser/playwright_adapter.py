@@ -854,5 +854,23 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             
         except Exception as e:
             logger.warning(f"Failed to save session data for profile '{self.profile_name}': {e}")
+
+    async def execute_script(self, script: str) -> Any:
+        """Execute JavaScript in the browser.
+        
+        Args:
+            script: JavaScript code to execute
+            
+        Returns:
+            Result of the JavaScript execution
+        """
+        if not self.initialized:
+            raise RuntimeError("PlaywrightAdapter not initialized")
+        
+        try:
+            return await self.page.evaluate(script)
+        except Exception as e:
+            logger.error(f"JavaScript execution failed: {e}")
+            raise
     
 

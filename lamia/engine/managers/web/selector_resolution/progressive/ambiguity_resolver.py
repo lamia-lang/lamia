@@ -46,9 +46,7 @@ class AmbiguityResolver:
         Raises:
             ValueError: If user cancels or invalid selection
         """
-        print(f"\n{'='*70}")
-        print(f"🤔 Found {len(matched_elements)} possible matches for: \"{description}\"")
-        print(f"{'='*70}\n")
+        print(f"!!! Found {len(matched_elements)} possible matches for: \"{description}\"")
         
         # Limit display
         display_elements = matched_elements[:max_display]

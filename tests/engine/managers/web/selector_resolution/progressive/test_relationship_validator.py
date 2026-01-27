@@ -1,5 +1,6 @@
 """Tests for ElementRelationshipValidator."""
 
+from lib2to3.fixes.fix_print import parend_expr
 import pytest
 from unittest.mock import Mock, AsyncMock
 
@@ -291,107 +292,107 @@ class TestFindCommonAncestor:
     # Edge Cases - Element Count
     
     async def test_find_common_ancestor_empty_list(self, mock_browser_adapter):
-        """Test with empty list - should return None."""
+        """Test with empty list - should raise ValueError."""
         validator = ElementRelationshipValidator(mock_browser_adapter)
         
-        result = await validator._find_common_ancestor([])
-        
-        assert result is None
-        mock_browser_adapter.execute_script.assert_not_called()
-    
-    # Single Element Cases
-    
-    async def test_find_common_ancestor_single_element_has_parent(self, mock_browser_adapter):
-        """Test single element with parent - returns parent."""
-        parent = Mock()
-        mock_browser_adapter.execute_script.return_value = parent
-        
+        with pytest.raises(ValueError):
+            await validator._find_common_ancestor([])
+
+    async def test_find_common_ancestor_empty_with_one_element(self, mock_browser_adapter):
+        """Test with empty list with one element - should raise ValueError."""
         validator = ElementRelationshipValidator(mock_browser_adapter)
-        element = Mock()
         
-        result = await validator._find_common_ancestor([element])
-        
-        assert result == parent
-        assert mock_browser_adapter.execute_script.call_count == 1
-    
-    async def test_find_common_ancestor_single_element_no_parent(self, mock_browser_adapter):
-        """Test single element without parent - returns None."""
-        mock_browser_adapter.execute_script.return_value = None
-        
-        validator = ElementRelationshipValidator(mock_browser_adapter)
-        element = Mock()
-        
-        result = await validator._find_common_ancestor([element])
-        
-        assert result is None
-    
-    async def test_find_common_ancestor_single_element_exception(self, mock_browser_adapter):
-        """Test exception when getting single element's parent."""
-        mock_browser_adapter.execute_script.side_effect = Exception("JS failed")
-        
-        validator = ElementRelationshipValidator(mock_browser_adapter)
-        element = Mock()
-        
-        result = await validator._find_common_ancestor([element])
-        
-        assert result is None
+        with pytest.raises(ValueError):
+            await validator._find_common_ancestor([Mock()])
     
     # Two Elements - Common Ancestor at Level 1
     
     async def test_find_common_ancestor_two_elements_immediate_parent(self, mock_browser_adapter):
         """Test two elements with common ancestor at level 1 (immediate parent)."""
+        element1 = Mock()
+        element2 = Mock()
         parent = Mock()
         
-        mock_browser_adapter.execute_script.side_effect = [
-            parent,  # elem[0].parentElement (first ancestor)
-            True     # parent.contains(elem[1])
-        ]
+        async def execute_script_side_effect(script, *args):
+            if script.strip() == "return arguments[0].parentElement":
+                if args and args[0] is element1:
+                    return parent
+                return None
+            if script.strip() == "return arguments[0].contains(arguments[1])":
+                if args == (parent, element2):
+                    return True
+            return None
+        
+        mock_browser_adapter.execute_script.side_effect = execute_script_side_effect
         
         validator = ElementRelationshipValidator(mock_browser_adapter)
-        elements = [Mock(), Mock()]
+        elements = [element1, element2]
         
         result = await validator._find_common_ancestor(elements, max_levels=5)
         
         assert result == parent
-        assert mock_browser_adapter.execute_script.call_count == 2
+        assert mock_browser_adapter.execute_script.call_count == 3
     
     async def test_find_common_ancestor_two_elements_at_level_2(self, mock_browser_adapter):
         """Test two elements with common ancestor at level 2."""
         ancestor1 = Mock()
         ancestor2 = Mock()
+        element1 = Mock()
+        element2 = Mock()
         
-        mock_browser_adapter.execute_script.side_effect = [
-            ancestor1,  # elem[0].parentElement
-            ancestor2,  # ancestor1.parentElement
-            False,      # ancestor1.contains(elem[1]) - no
-            True        # ancestor2.contains(elem[1]) - yes!
-        ]
+        async def execute_script_side_effect(script, *args):
+            if script.strip() == "return arguments[0].parentElement":
+                if args and args[0] is element1:
+                    return ancestor1
+                if args and args[0] is ancestor1:
+                    return ancestor2
+                return None
+            if script.strip() == "return arguments[0].contains(arguments[1])":
+                if args == (ancestor1, element2):
+                    return False
+                if args == (ancestor2, element2):
+                    return True
+            return None
+        
+        mock_browser_adapter.execute_script.side_effect = execute_script_side_effect
         
         validator = ElementRelationshipValidator(mock_browser_adapter)
-        elements = [Mock(), Mock()]
+        elements = [element1, element2]
         
         result = await validator._find_common_ancestor(elements, max_levels=5)
         
         assert result == ancestor2
-        assert mock_browser_adapter.execute_script.call_count == 4
     
     async def test_find_common_ancestor_two_elements_at_level_3(self, mock_browser_adapter):
         """Test two elements with common ancestor at level 3."""
         ancestor1 = Mock()
         ancestor2 = Mock()
         ancestor3 = Mock()
+        element1 = Mock()
+        element2 = Mock()
         
-        mock_browser_adapter.execute_script.side_effect = [
-            ancestor1,  # Level 1
-            ancestor2,  # Level 2
-            ancestor3,  # Level 3
-            False,      # ancestor1.contains(elem[1]) - no
-            False,      # ancestor2.contains(elem[1]) - no
-            True        # ancestor3.contains(elem[1]) - yes!
-        ]
+        async def execute_script_side_effect(script, *args):
+            if script.strip() == "return arguments[0].parentElement":
+                if args and args[0] is element1:
+                    return ancestor1
+                if args and args[0] is ancestor1:
+                    return ancestor2
+                if args and args[0] is ancestor2:
+                    return ancestor3
+                return None
+            if script.strip() == "return arguments[0].contains(arguments[1])":
+                if args == (ancestor1, element2):
+                    return False
+                if args == (ancestor2, element2):
+                    return False
+                if args == (ancestor3, element2):
+                    return True
+            return None
+        
+        mock_browser_adapter.execute_script.side_effect = execute_script_side_effect
         
         validator = ElementRelationshipValidator(mock_browser_adapter)
-        elements = [Mock(), Mock()]
+        elements = [element1, element2]
         
         result = await validator._find_common_ancestor(elements, max_levels=5)
         
@@ -447,38 +448,63 @@ class TestFindCommonAncestor:
     
     async def test_find_common_ancestor_three_elements_at_level_1(self, mock_browser_adapter):
         """Test three elements with common ancestor at level 1."""
+        element1 = Mock()
+        element2 = Mock()
+        element3 = Mock()
         parent = Mock()
         
-        mock_browser_adapter.execute_script.side_effect = [
-            parent,  # elem[0].parentElement
-            True,    # parent.contains(elem[1])
-            True     # parent.contains(elem[2])
-        ]
+        async def execute_script_side_effect(script, *args):
+            if script.strip() == "return arguments[0].parentElement":
+                if args and args[0] is element1:
+                    return parent
+                return None
+            if script.strip() == "return arguments[0].contains(arguments[1])":
+                if args == (parent, element2):
+                    return True
+                if args == (parent, element3):
+                    return True
+            return None
+        
+        mock_browser_adapter.execute_script.side_effect = execute_script_side_effect
         
         validator = ElementRelationshipValidator(mock_browser_adapter)
-        elements = [Mock(), Mock(), Mock()]
+        elements = [element1, element2, element3]
         
         result = await validator._find_common_ancestor(elements, max_levels=5)
         
         assert result == parent
-        assert mock_browser_adapter.execute_script.call_count == 3
+        assert mock_browser_adapter.execute_script.call_count == 4
     
     async def test_find_common_ancestor_three_elements_second_not_contained(self, mock_browser_adapter):
         """Test three elements, second not in first ancestor - checks next level."""
-        ancestor1 = Mock()
-        ancestor2 = Mock()
+        ancestor1 = Mock() # Level 1
+        ancestor2 = Mock() # Level 2
+        element1 = Mock()
+        element2 = Mock()
+        element3 = Mock()
         
-        mock_browser_adapter.execute_script.side_effect = [
-            ancestor1,  # Level 1
-            ancestor2,  # Level 2
-            True,       # ancestor1.contains(elem[1]) - yes
-            False,      # ancestor1.contains(elem[2]) - no! Skip ancestor1
-            True,       # ancestor2.contains(elem[1]) - yes
-            True        # ancestor2.contains(elem[2]) - yes
-        ]
+        async def execute_script_side_effect(script, *args):
+            if script.strip() == "return arguments[0].parentElement":
+                if args and args[0] is element1:
+                    return ancestor1
+                if args and args[0] is ancestor1:
+                    return ancestor2
+                return None
+            if script.strip() == "return arguments[0].contains(arguments[1])":
+                if args == (ancestor1, element2):
+                    return False
+                if args == (ancestor1, element3):
+                    return True
+                if args == (ancestor2, element2):
+                    return True
+                if args == (ancestor2, element3):
+                    return True
+            return None
+        
+        mock_browser_adapter.execute_script.side_effect = execute_script_side_effect
         
         validator = ElementRelationshipValidator(mock_browser_adapter)
-        elements = [Mock(), Mock(), Mock()]
+        elements = [element1, element2, element3]
         
         result = await validator._find_common_ancestor(elements, max_levels=5)
         
@@ -486,21 +512,44 @@ class TestFindCommonAncestor:
     
     async def test_find_common_ancestor_five_elements_at_level_2(self, mock_browser_adapter):
         """Test five elements with common ancestor at level 2."""
-        ancestor1 = Mock()
-        ancestor2 = Mock()
+        ancestor1 = Mock() # Level 1
+        ancestor2 = Mock() # Level 2
+        element1 = Mock()
+        element2 = Mock()
+        element3 = Mock()
+        element4 = Mock()
+        element5 = Mock()
         
-        mock_browser_adapter.execute_script.side_effect = [
-            ancestor1,  # Level 1
-            ancestor2,  # Level 2
-            False,      # ancestor1.contains(elem[1]) - no, skip ancestor1
-            True,       # ancestor2.contains(elem[1]) - yes
-            True,       # ancestor2.contains(elem[2]) - yes
-            True,       # ancestor2.contains(elem[3]) - yes
-            True        # ancestor2.contains(elem[4]) - yes
-        ]
+        async def execute_script_side_effect(script, *args):
+            if script.strip() == "return arguments[0].parentElement":
+                if args and args[0] is element1:
+                    return ancestor1
+                if args and args[0] is ancestor1:
+                    return ancestor2
+                return None
+            if script.strip() == "return arguments[0].contains(arguments[1])":
+                if args == (ancestor1, element2):
+                    return False
+                if args == (ancestor1, element3):
+                    return False
+                if args == (ancestor1, element4):
+                    return False
+                if args == (ancestor1, element5):
+                    return False
+                if args == (ancestor2, element2):
+                    return True
+                if args == (ancestor2, element3):
+                    return True
+                if args == (ancestor2, element4):
+                    return True
+                if args == (ancestor2, element5):
+                    return True
+            return None
+        
+        mock_browser_adapter.execute_script.side_effect = execute_script_side_effect
         
         validator = ElementRelationshipValidator(mock_browser_adapter)
-        elements = [Mock() for _ in range(5)]
+        elements = [element1, element2, element3, element4, element5]
         
         result = await validator._find_common_ancestor(elements, max_levels=5)
         
@@ -578,45 +627,32 @@ class TestFindCommonAncestor:
     
     async def test_find_common_ancestor_exception_during_containment_check(self, mock_browser_adapter):
         """Test exception during containment check - continues to next ancestor."""
+        
         ancestor1 = Mock()
         ancestor2 = Mock()
-        
-        mock_browser_adapter.execute_script.side_effect = [
-            ancestor1,                          # Level 1
-            ancestor2,                          # Level 2
-            Exception("Contains check failed"), # ancestor1.contains() fails
-            True                                # ancestor2.contains(elem[1]) - yes!
-        ]
+        element1 = Mock()
+        element2 = Mock()
+
+        async def execute_script_side_effect(script, *args):
+            if script.strip() == "return arguments[0].parentElement":
+                if args and args[0] is element1:
+                    return ancestor1
+                if args and args[0] is ancestor1:
+                    return ancestor2
+                return None
+            if script.strip() == "return arguments[0].contains(arguments[1])":
+                if args == (ancestor1, element2):
+                    raise Exception("Contains check failed")
+            return None
+
+        mock_browser_adapter.execute_script.side_effect = execute_script_side_effect
         
         validator = ElementRelationshipValidator(mock_browser_adapter)
-        elements = [Mock(), Mock()]
+        elements = [element1, element2]
         
         result = await validator._find_common_ancestor(elements, max_levels=5)
         
-        # Should skip ancestor1 due to exception, but find ancestor2
-        assert result == ancestor2
-    
-    async def test_find_common_ancestor_exception_on_second_containment_check(self, mock_browser_adapter):
-        """Test exception during second element's containment check."""
-        ancestor1 = Mock()
-        ancestor2 = Mock()
-        
-        mock_browser_adapter.execute_script.side_effect = [
-            ancestor1,                          # Level 1
-            ancestor2,                          # Level 2
-            True,                               # ancestor1.contains(elem[1]) - yes
-            Exception("Contains check failed"), # ancestor1.contains(elem[2]) - exception!
-            True,                               # ancestor2.contains(elem[1]) - yes
-            True                                # ancestor2.contains(elem[2]) - yes
-        ]
-        
-        validator = ElementRelationshipValidator(mock_browser_adapter)
-        elements = [Mock(), Mock(), Mock()]
-        
-        result = await validator._find_common_ancestor(elements, max_levels=5)
-        
-        # Should skip ancestor1 due to exception, find ancestor2
-        assert result == ancestor2
+        assert result is None
     
     # Complex Scenarios
     

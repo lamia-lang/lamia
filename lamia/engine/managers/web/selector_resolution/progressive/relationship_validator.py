@@ -3,11 +3,12 @@
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 from .progressive_selector_strategy import (
-  ProgressiveSelectorStrategyIntent, 
-  Relationship, 
-  Strictness, 
-  ElementCount
+    ProgressiveSelectorStrategyIntent,
+    Relationship,
+    Strictness,
+    ElementCount,
 )
+from lamia.adapters.web.browser.base import BaseBrowserAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class ElementRelationshipValidator:
     this validates that found elements have expected relationships in the DOM.
     """
     
-    def __init__(self, browser_adapter):
+    def __init__(self, browser_adapter: BaseBrowserAdapter):
         """Initialize the validator.
         
         Args:
@@ -87,40 +88,23 @@ class ElementRelationshipValidator:
         
         Args:
             elements: List of found elements
-            count_spec: Count specification (e.g., "exactly_2", "at_least_1", "any")
+            element_count_spec: Count intent ("single" or "multiple")
             
         Returns:
             (is_valid, reason_if_invalid)
         """
         actual_count = len(elements)
         
-        if element_count_spec == ElementCount.ANY:
+        if element_count_spec == ElementCount.SINGLE:
+            if actual_count != 1:
+                return False, f"Expected 1 element, found {actual_count}"
             return True, None
-        
-        parts = count_spec.split('_')
-        if len(parts) < 2:
-            return True, None  # Invalid spec, allow
-        
-        operator = parts[0]
-        try:
-            expected = int(parts[1])
-        except ValueError:
-            return True, None  # Invalid spec, allow
-        
-        if operator == 'exactly':
-            if actual_count != expected:
-                return False, f"Expected exactly {expected} element(s), found {actual_count}"
-        
-        elif operator == 'at':
-            if len(parts) >= 3:
-                modifier = parts[2]
-                if modifier == 'least':
-                    if actual_count < expected:
-                        return False, f"Expected at least {expected} element(s), found {actual_count}"
-                elif modifier == 'most':
-                    if actual_count > expected:
-                        return False, f"Expected at most {expected} element(s), found {actual_count}"
-        
+
+        if element_count_spec == ElementCount.MULTIPLE:
+            if actual_count < 2:
+                return False, f"Expected multiple elements, found {actual_count}"
+            return True, None
+
         return True, None
     
     async def _find_common_ancestor(
@@ -138,20 +122,8 @@ class ElementRelationshipValidator:
         Returns:
             Common ancestor element handle or None
         """
-        if not elements:
-            return None
-        
-        if len(elements) == 1:
-            # Single element: return its parent
-            try:
-                parent = await self.browser.execute_script(
-                    "return arguments[0].parentElement",
-                    elements[0]
-                )
-                return parent
-            except Exception as e:
-                logger.debug(f"Failed to get parent of single element: {e}")
-                return None
+        if len(elements) <= 1:
+            raise ValueError("At least two elements are required for the common ancestor search")
         
         # Get ancestors of first element
         first_elem = elements[0]
@@ -168,12 +140,11 @@ class ElementRelationshipValidator:
                     break
                 ancestors.append(current)
         except Exception as e:
-            logger.debug(f"Failed to traverse ancestors: {e}")
-            return None
+            logger.warning(f"Failed to traverse all ancestors: {e}. Traversed {len(ancestors)} levels out of {max_levels}.")
         
         # Find first ancestor that contains all other elements
-        for ancestor in ancestors:
-            try:
+        try:
+            for ancestor in ancestors:
                 contains_all = True
                 for elem in elements[1:]:
                     is_contained = await self.browser.execute_script(
@@ -187,9 +158,8 @@ class ElementRelationshipValidator:
                 
                 if contains_all:
                     return ancestor
-            except Exception as e:
-                logger.debug(f"Failed to check containment: {e}")
-                continue
+        except Exception as e:
+            logger.error(f"Failed to check containment: {e}")
         
         return None
     

@@ -60,7 +60,7 @@ class ProgressiveSelectorStrategy:
         self.llm_manager = llm_manager
         self.progressive_selector_json_validator = JSONStructureValidator(model=ProgressiveSelectorStrategyModel)
     
-    async def generate_strategies(
+    async def generate(
         self, 
         description: str,
         failed_selectors: Optional[List[str]] = None
@@ -87,7 +87,7 @@ class ProgressiveSelectorStrategy:
         result: ValidationResult = await self.llm_manager.execute(llm_command, self.progressive_selector_json_validator)
         
         if not result.is_valid:
-            raise ValueError(f"Failed to generate progressive strategies for: '{description}'")
+            raise ValueError(f"Failed to generate selectors with progressive strategy for: '{description}'")
         
         typed_result: ProgressiveSelectorStrategyModel = result.result_type  # type: ignore[assignment]
 

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Any
 from lamia.internal_types import BrowserActionParams
 
 
@@ -179,4 +179,9 @@ class BaseBrowserAdapter(ABC):
     @abstractmethod
     async def save_session_state(self) -> None:
         """Save session state (cookies, localStorage) for current profile."""
+        pass
+    
+    @abstractmethod
+    async def execute_script(self, script: str) -> Any:
+        """Execute a JavaScript script. Returns the result of the script execution."""
         pass
