@@ -14,12 +14,6 @@ from lamia.engine.managers.web.selector_resolution.progressive.progressive_selec
 from lamia.engine.managers.web.selector_resolution.progressive.relationship_validator import ElementRelationshipValidator
 from lamia.engine.managers.web.selector_resolution.progressive.ambiguity_resolver import AmbiguityResolver
 from lamia.engine.managers.web.selector_resolution.progressive.strategy_resolver import ProgressiveSelectorResolver
-from lamia.engine.managers.web.selector_resolution.semantic.semantic_analyzer import (
-    SemanticAnalyzer,
-    SemanticIntent,
-    SemanticSelectorGenerator
-)
-from lamia.engine.managers.web.selector_resolution.semantic.semantic_strategy_resolver import SemanticSelectorResolver
 from lamia.validation.base import ValidationResult
 
 
@@ -93,34 +87,8 @@ class TestSelectorResolutionIntegration:
         resolver = AmbiguityResolver(mock_browser_adapter, mock_cache)
 
         # Generate strategies
-        plan = await strategy_gen.generate("login button")
+        intent, selectors = await strategy_gen.generate("login button")
 
-        assert plan.intent.element_count == ElementCount.SINGLE
-        assert len(plan.selectors) > 0
-
-    async def test_semantic_resolution_flow(self, mock_llm_executor, mock_browser_adapter):
-        """Test full semantic resolution flow."""
-        # Setup mock LLM responses
-        mock_llm_executor.execute.side_effect = [
-            Mock(result_type="A clickable button for authentication"),
-            Mock(result_type="1. button.login\n2. button[type='submit']")
-        ]
-
-        # Setup mock browser
-        mock_elements = [Mock()]
-        mock_browser_adapter.get_elements.return_value = mock_elements
-
-        analyzer = SemanticAnalyzer(mock_llm_executor)
-        generator = SemanticSelectorGenerator(mock_llm_executor)
-
-        # Analyze intent
-        intent = await analyzer.analyze_description("login button")
-
-        assert intent is not None
-        assert len(intent.element_types) > 0
-
-        # Generate selectors
-        selectors = await generator.generate_selectors(intent)
-
+        assert intent.element_count == ElementCount.SINGLE
         assert len(selectors) > 0
 

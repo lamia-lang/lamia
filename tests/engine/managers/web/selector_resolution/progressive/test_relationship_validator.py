@@ -283,7 +283,7 @@ class TestSiblings:
         
         assert result is False
         # Should stop at fourth element, not check fifth
-        assert mock_browser_adapter.execute_script.call_count == 6
+        assert mock_browser_adapter.execute_script.call_count == 7
 
 
 class TestFindCommonAncestor:

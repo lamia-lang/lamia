@@ -54,17 +54,16 @@ class TestProgressiveSelectorStrategyGeneration:
         """Test that generate returns a selector plan."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
-        model = await strategy.generate("login button")
+        intent, selectors = await strategy.generate("login button")
 
         assert "login button" in mock_llm_executor.execute.call_args[0][0].prompt
-        assert isinstance(model, ProgressiveSelectorStrategyModel)
-        assert isinstance(model.intent, ProgressiveSelectorStrategyIntent)
-        assert isinstance(model.selectors, list)
-        assert model.intent.element_count == ElementCount.SINGLE
-        assert model.intent.relationship == Relationship.NONE
-        assert model.intent.strictness == Strictness.STRICT
-        assert len(model.selectors) == 1
-        assert "button.login" in model.selectors
+        assert isinstance(intent, ProgressiveSelectorStrategyIntent)
+        assert isinstance(selectors, list)
+        assert intent.element_count == ElementCount.SINGLE
+        assert intent.relationship == Relationship.NONE
+        assert intent.strictness == Strictness.STRICT
+        assert len(selectors) == 1
+        assert "button.login" in selectors
 
     @pytest.mark.asyncio
     async def test_generate_with_failed_selectors(self, mock_llm_executor):
@@ -72,17 +71,16 @@ class TestProgressiveSelectorStrategyGeneration:
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
         failed_selectors = ["button.old", "#old-btn"]
-        model = await strategy.generate("login button", failed_selectors)
+        intent, selectors = await strategy.generate("login button", failed_selectors)
 
         prompt = mock_llm_executor.execute.call_args[0][0].prompt
         assert "login button" in prompt
         assert "button.old" in prompt
         assert "#old-btn" in prompt
-        assert isinstance(model, ProgressiveSelectorStrategyModel)
-        assert isinstance(model.intent, ProgressiveSelectorStrategyIntent)
-        assert isinstance(model.selectors, list)
-        assert len(model.selectors) == 1
-        assert "button.login" in model.selectors
+        assert isinstance(intent, ProgressiveSelectorStrategyIntent)
+        assert isinstance(selectors, list)
+        assert len(selectors) == 1
+        assert "button.login" in selectors
 
     @pytest.mark.asyncio
     async def test_generate_raises_on_invalid_response(self, mock_llm_executor):
@@ -94,6 +92,6 @@ class TestProgressiveSelectorStrategyGeneration:
 
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
-        with pytest.raises(ValueError, match="Failed to generate selectors withprogressive strategy"):
+        with pytest.raises(ValueError, match="Failed to generate selectors with progressive strategy"):
             await strategy.generate("login button")
 

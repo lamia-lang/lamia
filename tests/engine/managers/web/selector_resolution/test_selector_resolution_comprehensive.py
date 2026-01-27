@@ -14,12 +14,6 @@ from lamia.engine.managers.web.selector_resolution.progressive.progressive_selec
 from lamia.engine.managers.web.selector_resolution.progressive.relationship_validator import ElementRelationshipValidator
 from lamia.engine.managers.web.selector_resolution.progressive.ambiguity_resolver import AmbiguityResolver
 from lamia.engine.managers.web.selector_resolution.progressive.strategy_resolver import ProgressiveSelectorResolver
-from lamia.engine.managers.web.selector_resolution.semantic.semantic_analyzer import (
-    SemanticAnalyzer,
-    SemanticIntent,
-    SemanticSelectorGenerator
-)
-from lamia.engine.managers.web.selector_resolution.semantic.semantic_strategy_resolver import SemanticSelectorResolver
 from lamia.validation.base import ValidationResult
 
 
