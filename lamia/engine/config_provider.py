@@ -59,5 +59,10 @@ class ConfigProvider:
 
     def get_web_config(self) -> Dict[str, Any]:
         """Get the web adapter configuration from config."""
-        return self._config.get('web_config', {}) 
+        return self._config.get('web_config', {})
+    
+    def is_human_in_loop_enabled(self) -> bool:
+        """Check if human-in-loop mode is enabled for ambiguity resolution."""
+        web_config = self.get_web_config()
+        return web_config.get('human_in_loop', False) 
 

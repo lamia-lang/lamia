@@ -35,6 +35,9 @@ web_config:
   # Set to true to also automatically call your LLM (uses model_chain) for suggestions
   auto_suggest_selectors: false   # Default: false (manual mode - save files only)
   
+  # Human-in-loop mode when Lamia cannot decide something with the help of AI alone
+  human_in_loop: false              # Default: false (autonomous mode)
+  
   # Session persistence configuration (automatically managed)
   session_persistence:
     enabled: true                    # Enable session persistence across runs
