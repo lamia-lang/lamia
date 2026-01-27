@@ -6,6 +6,7 @@ from .ai_selector_cache import AISelectorCache
 from .multi_selector_cache import MultiSelectorCache
 from .selector_parser import SelectorParser, SelectorType
 from .response_parser import ResponseParser, AmbiguousFormatResponseParser
+from .progressive.strategy_resolver import ProgressiveSelectorResolver
 from lamia.interpreter.commands import LLMCommand
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class SelectorResolutionService:
             get_browser_adapter_func: Function to get browser adapter for validation (optional)
             cache_enabled: Whether to enable caching of resolved selectors
             response_parser: Custom response parser implementation (defaults to AmbiguousFormatResponseParser)
-            config_provider: Configuration provider for visual picker settings
+            config_provider: Configuration provider
         """
         self.parser = SelectorParser()
         self.llm_manager = llm_manager
@@ -165,9 +166,7 @@ class SelectorResolutionService:
                 logger.info("📋 Using progressive selector resolution (fallback method)")
                 
                 # Initialize progressive resolver lazily
-                if not hasattr(self, '_progressive_resolver') or self._progressive_resolver is None:
-                    from .progressive.strategy_resolver import ProgressiveSelectorResolver
-                    
+                if self._progressive_resolver is None:
                     if self.get_browser_adapter is None:
                         raise ValueError("Browser adapter function not provided for progressive resolution")
                     
@@ -175,7 +174,8 @@ class SelectorResolutionService:
                     self._progressive_resolver = ProgressiveSelectorResolver(
                         browser_adapter,
                         self.llm_manager,
-                        self.cache
+                        self.cache,
+                        self.config_provider
                     )
                 
                 # Resolve using progressive approach

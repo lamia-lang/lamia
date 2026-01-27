@@ -1,15 +1,21 @@
 """Progressive selector resolver that tries strategies from specific to generic."""
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple
-from .progressive_selector_strategy import ProgressiveSelectorStrategy
-from .relationship_validator import ElementRelationshipValidator
-from .ambiguity_resolver import AmbiguityResolver
+from typing import List, Any, Optional, Tuple
 from dataclasses import dataclass
-from pydantic import BaseModel
+
 from lamia.adapters.web.browser.base import BrowserActionParams
-from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
-from lamia.engine.managers.web.selector_resolution.progressive.progressive_selector_strategy import ProgressiveSelectorStrategyModel, ProgressiveSelectorStrategyIntent, ElementCount   
+from lamia.engine.config_provider import ConfigProvider
+from lamia.engine.managers.llm.llm_manager import LLMManager
+from .progressive_selector_strategy import (
+    ProgressiveSelectorStrategy,
+    ProgressiveSelectorStrategyIntent,
+    ElementCount,
+)
+from .relationship_validator import ElementRelationshipValidator
+from .element_ambiguity_resolver import ElementAmbiguityResolver
+from .llm_ambiguity_resolver import LLMAmbiguityResolver
+from .human_assisted_ambiguity_resolver import HumanAssistedAmbiguityResolver
 
 logger = logging.getLogger(__name__)
 
@@ -25,24 +31,20 @@ class ResolutionOutcome:
         return self.selector is not None and len(self.elements) > 0
 
 
-class AmbiguitySelectionModel(BaseModel):
-    selected_indices: List[int]
-    reason: Optional[str] = None
-
-
 class ProgressiveSelectorResolver:
     """
     Resolves natural language descriptions to elements using progressive strategies.
     
     Tries selectors from most specific to most generic, validating relationships
-    and handling ambiguity with user input when needed.
+    and handling ambiguity with LLM and optionally human input.
     """
     
     def __init__(
         self,
-        browser_adapter,
-        llm_manager,
-        cache,
+        browser_adapter: Any,
+        llm_manager: LLMManager,
+        cache: Any,
+        config_provider: Optional[ConfigProvider] = None,
         max_ambiguous_matches: int = 10
     ):
         """Initialize the progressive resolver.
@@ -51,15 +53,65 @@ class ProgressiveSelectorResolver:
             browser_adapter: Browser adapter for finding elements
             llm_manager: LLM manager for generating strategies
             cache: AISelectorCache for caching resolutions
+            config_provider: Configuration provider for reading settings
             max_ambiguous_matches: Max matches before asking user to choose
         """
         self.browser = browser_adapter
         self.llm_manager = llm_manager
+        self.config_provider = config_provider
         self.strategy_gen = ProgressiveSelectorStrategy(llm_manager)
         self.relationship_validator = ElementRelationshipValidator(browser_adapter)
-        self.ambiguity_resolver = AmbiguityResolver(browser_adapter, cache)
         self.max_ambiguous_matches = max_ambiguous_matches
-        self.ambiguity_json_validator = JSONStructureValidator(model=AmbiguitySelectionModel)
+        
+        # Initialize ambiguity resolvers
+        self._ambiguity_resolvers = self._create_ambiguity_resolvers(
+            browser_adapter, llm_manager, cache, max_ambiguous_matches
+        )
+    
+    def _create_ambiguity_resolvers(
+        self,
+        browser_adapter: Any,
+        llm_manager: LLMManager,
+        cache: Any,
+        max_ambiguous_matches: int
+    ) -> List[ElementAmbiguityResolver]:
+        """
+        Create the list of ambiguity resolvers based on configuration.
+        
+        Args:
+            browser_adapter: Browser adapter for element inspection
+            llm_manager: LLM manager for LLM-based resolution
+            cache: Cache for storing user selections
+            max_ambiguous_matches: Max elements for ambiguity resolution
+            
+        Returns:
+            List of ambiguity resolvers in order of priority
+        """
+        resolvers: List[ElementAmbiguityResolver] = []
+        
+        # LLM resolver is always first
+        resolvers.append(LLMAmbiguityResolver(
+            browser_adapter=browser_adapter,
+            llm_manager=llm_manager,
+            max_elements_to_analyze=max_ambiguous_matches
+        ))
+        
+        # Human resolver is added only if human_in_loop is enabled
+        if self._is_human_in_loop_enabled():
+            resolvers.append(HumanAssistedAmbiguityResolver(
+                browser_adapter=browser_adapter,
+                cache=cache,
+                max_display=max_ambiguous_matches
+            ))
+        
+        return resolvers
+    
+    def _is_human_in_loop_enabled(self) -> bool:
+        """Check if human-in-loop mode is enabled in config."""
+        if self.config_provider is None:
+            return False
+
+        return self.config_provider.is_human_in_loop_enabled()
     
     async def resolve(
         self,
@@ -200,91 +252,29 @@ class ProgressiveSelectorResolver:
         elements: List[Any],
         intent: ProgressiveSelectorStrategyIntent,
     ) -> Optional[List[Any]]:
-        selected = await self._resolve_ambiguity_with_llm(description, elements, intent)
-        if selected:
-            return selected
-
-        if intent.element_count == ElementCount.SINGLE and len(elements) <= self.max_ambiguous_matches:
-            selected_element = await self.ambiguity_resolver.resolve_ambiguous_match(
-                description,
-                elements,
-                page_url,
-                max_display=self.max_ambiguous_matches,
+        """
+        Try to resolve ambiguity using configured resolvers.
+        
+        Iterates through resolvers (LLM first, then human if enabled)
+        until one succeeds or all fail.
+        
+        Args:
+            description: Original natural language description
+            elements: List of matching element handles
+            intent: The parsed intent from the selector strategy
+            page_url: Current page URL for caching
+            
+        Returns:
+            List of resolved elements, or None if all resolvers failed
+        """
+        for resolver in self._ambiguity_resolvers:
+            result = await resolver.resolve(
+                description=description,
+                elements=elements,
+                intent=intent,
+                page_url=page_url,
             )
-            return [selected_element]
-
+            if result:
+                return result
+        
         return None
-
-    async def _resolve_ambiguity_with_llm(
-        self,
-        description: str,
-        elements: List[Any],
-        intent: ProgressiveSelectorStrategyIntent,
-    ) -> Optional[List[Any]]:
-        if len(elements) <= 1:
-            return elements
-
-        summarized = await self._summarize_elements(elements[: self.max_ambiguous_matches])
-        prompt_lines = []
-        for idx, summary in enumerate(summarized):
-            prompt_lines.append(
-                f"{idx}) tag={summary.get('tag')} text={summary.get('text')} "
-                f"id={summary.get('id')} class={summary.get('class_name')} "
-                f"role={summary.get('role')} name={summary.get('name')} "
-                f"aria={summary.get('aria_label')}"
-            )
-
-        count_hint = (
-            "Return exactly 1 index."
-            if intent.element_count == ElementCount.SINGLE
-            else "Return all matching indices."
-        )
-
-        prompt = (
-            "You are selecting the best matching DOM elements.\n"
-            f"Description: \"{description}\"\n"
-            f"Intent element_count: {intent.element_count.value}\n"
-            f"{count_hint}\n"
-            "Elements:\n"
-            + "\n".join(prompt_lines)
-            + "\nReturn JSON: {\"selected_indices\": [0]} (empty list if none match)."
-        )
-
-        llm_command = LLMCommand(prompt=prompt)
-        result: ValidationResult = await self.llm_manager.execute(
-            llm_command,
-            self.ambiguity_json_validator,
-        )
-
-        if not result.is_valid:
-            return None
-
-        selection: AmbiguitySelectionModel = result.result_type  # type: ignore[assignment]
-        indices = [idx for idx in selection.selected_indices if 0 <= idx < len(elements)]
-        if not indices:
-            return None
-
-        return [elements[idx] for idx in indices]
-
-    async def _summarize_elements(self, elements: List[Any]) -> List[dict]:
-        summaries = []
-        for element in elements:
-            summary = await self.browser.execute_script(
-                """
-                const el = arguments[0];
-                const text = (el.innerText || '').trim().slice(0, 120);
-                return {
-                  tag: el.tagName ? el.tagName.toLowerCase() : null,
-                  id: el.id || null,
-                  class_name: el.className || null,
-                  role: el.getAttribute('role'),
-                  name: el.getAttribute('name'),
-                  aria_label: el.getAttribute('aria-label'),
-                  text: text || null
-                };
-                """,
-                element,
-            )
-            summaries.append(summary or {})
-        return summaries
-

@@ -3,10 +3,13 @@
 import logging
 from typing import List, Any, Optional
 
+from .element_ambiguity_resolver import ElementAmbiguityResolver
+from .progressive_selector_strategy import ProgressiveSelectorStrategyIntent, ElementCount
+
 logger = logging.getLogger(__name__)
 
 
-class AmbiguityResolver:
+class HumanAssistedAmbiguityResolver(ElementAmbiguityResolver):
     """
     Handles cases where multiple elements match and user input is needed.
     
@@ -14,23 +17,61 @@ class AmbiguityResolver:
     to the user and caches their choice for future use.
     """
     
-    def __init__(self, browser_adapter, cache):
-        """Initialize the ambiguity resolver.
+    def __init__(self, browser_adapter: Any, cache: Any, max_display: int = 10):
+        """Initialize the human ambiguity resolver.
         
         Args:
             browser_adapter: Browser adapter for element inspection
             cache: AISelectorCache for storing user choices
+            max_display: Maximum number of elements to display to user
         """
         self.browser = browser_adapter
         self.cache = cache
+        self.max_display = max_display
     
-    async def resolve_ambiguous_match(
+    async def resolve(
+        self,
+        description: str,
+        elements: List[Any],
+        intent: ProgressiveSelectorStrategyIntent,
+        page_url: str,
+    ) -> Optional[List[Any]]:
+        """
+        Present matched elements to user and get their choice.
+        
+        Args:
+            description: Original element description
+            elements: List of element handles that matched
+            intent: The parsed intent from the selector strategy
+            page_url: Current page URL for caching
+            
+        Returns:
+            List containing the selected element, or None if cancelled
+        """
+        # Only handle single element selection for now
+        if intent.element_count != ElementCount.SINGLE:
+            logger.debug("Human resolver only supports single element selection")
+            return None
+        
+        if len(elements) > self.max_display:
+            logger.debug(f"Too many elements ({len(elements)}) for human selection")
+            return None
+        
+        logger.info(f"Requesting human input for {len(elements)} ambiguous elements")
+        
+        try:
+            selected = await self._prompt_user_selection(description, elements, page_url)
+            return [selected] if selected else None
+        except ValueError as e:
+            logger.debug(f"Human selection failed: {e}")
+            return None
+    
+    async def _prompt_user_selection(
         self,
         description: str,
         matched_elements: List[Any],
         page_url: str,
-        max_display: int = 10
-    ) -> Any:
+    ) -> Optional[Any]:
         """
         Present matched elements to user and get their choice.
         
@@ -38,23 +79,18 @@ class AmbiguityResolver:
             description: Original element description
             matched_elements: List of element handles that matched
             page_url: Current page URL
-            max_display: Maximum number of elements to display
             
         Returns:
-            Selected element handle
+            Selected element handle, or None if cancelled
             
         Raises:
             ValueError: If user cancels or invalid selection
         """
         print(f"!!! Found {len(matched_elements)} possible matches for: \"{description}\"")
         
-        # Limit display
-        display_elements = matched_elements[:max_display]
-        
         # Show each option
-        for i, elem in enumerate(display_elements, 1):
+        for i, elem in enumerate(matched_elements, 1):
             try:
-                # Get element details
                 html = await self._get_outer_html(elem)
                 xpath = await self._get_xpath(elem)
                 location = await self._get_visual_location(elem)
@@ -68,12 +104,8 @@ class AmbiguityResolver:
                 print(f"{i}. <element details unavailable>")
                 print()
         
-        if len(matched_elements) > max_display:
-            print(f"... and {len(matched_elements) - max_display} more")
-            print()
-        
         # Get user choice
-        print(f"Which one should I use? (1-{len(display_elements)}, or 0 to cancel)")
+        print(f"Which one should I use? (1-{len(matched_elements)}, or 0 to cancel)")
         choice_str = input("Your choice: ").strip()
         
         try:
@@ -82,8 +114,8 @@ class AmbiguityResolver:
             if choice == 0:
                 raise ValueError("User cancelled element selection")
             
-            if 1 <= choice <= len(display_elements):
-                selected = display_elements[choice - 1]
+            if 1 <= choice <= len(matched_elements):
+                selected = matched_elements[choice - 1]
                 
                 # Generate selector for the chosen element and cache it
                 try:
@@ -96,7 +128,7 @@ class AmbiguityResolver:
                 
                 return selected
             else:
-                raise ValueError(f"Invalid choice: {choice}. Must be 0-{len(display_elements)}")
+                raise ValueError(f"Invalid choice: {choice}. Must be 0-{len(matched_elements)}")
         
         except ValueError as e:
             if "invalid literal" in str(e):
@@ -104,14 +136,7 @@ class AmbiguityResolver:
             raise
     
     async def _get_outer_html(self, element: Any) -> str:
-        """Get outer HTML of element.
-        
-        Args:
-            element: Element handle
-            
-        Returns:
-            HTML string
-        """
+        """Get outer HTML of element."""
         try:
             html = await self.browser.execute_script(
                 "return arguments[0].outerHTML",
@@ -123,14 +148,7 @@ class AmbiguityResolver:
             return "<unknown>"
     
     async def _get_xpath(self, element: Any) -> str:
-        """Generate XPath for element.
-        
-        Args:
-            element: Element handle
-            
-        Returns:
-            XPath string
-        """
+        """Generate XPath for element."""
         try:
             xpath = await self.browser.execute_script("""
                 function getXPath(element) {
@@ -161,14 +179,7 @@ class AmbiguityResolver:
             return "<unknown>"
     
     async def _get_visual_location(self, element: Any) -> str:
-        """Get human-readable location description.
-        
-        Args:
-            element: Element handle
-            
-        Returns:
-            Location description (e.g., "top left", "middle center")
-        """
+        """Get human-readable location description."""
         try:
             location_info = await self.browser.execute_script("""
                 const rect = arguments[0].getBoundingClientRect();
@@ -194,16 +205,8 @@ class AmbiguityResolver:
             return "unknown"
     
     async def _generate_selector_for_element(self, element: Any) -> str:
-        """Generate a unique selector for the chosen element.
-        
-        Args:
-            element: Element handle
-            
-        Returns:
-            CSS selector string
-        """
+        """Generate a unique selector for the chosen element."""
         try:
-            # Try to generate a unique CSS selector
             selector = await self.browser.execute_script("""
                 function getUniqueSelector(element) {
                     // Try ID first
@@ -257,21 +260,11 @@ class AmbiguityResolver:
             return selector or await self._get_xpath(element)
         except Exception as e:
             logger.debug(f"Failed to generate selector: {e}")
-            # Fallback to XPath
             return await self._get_xpath(element)
     
     def _truncate_html(self, html: str, max_length: int = 100) -> str:
-        """Truncate HTML for display.
-        
-        Args:
-            html: HTML string
-            max_length: Maximum length
-            
-        Returns:
-            Truncated HTML
-        """
+        """Truncate HTML for display."""
         if len(html) <= max_length:
             return html
-        
         return html[:max_length] + "..."
 
