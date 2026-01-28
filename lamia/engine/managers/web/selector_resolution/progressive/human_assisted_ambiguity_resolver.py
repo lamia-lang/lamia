@@ -60,8 +60,8 @@ class HumanAssistedAmbiguityResolver(ElementAmbiguityResolver):
         logger.info(f"Requesting human input for {len(elements)} ambiguous elements")
         
         try:
-            selected = await self._prompt_user_selection(description, elements, page_url)
-            return [selected] if selected else None
+            selected_element = await self._prompt_user_selection(description, elements, page_url)
+            return [selected_element] if selected_element else None
         except ValueError as e:
             logger.debug(f"Human selection failed: {e}")
             return None
@@ -81,10 +81,10 @@ class HumanAssistedAmbiguityResolver(ElementAmbiguityResolver):
             page_url: Current page URL
             
         Returns:
-            Selected element handle, or None if cancelled
+            Selected element, or None if cancelled
             
         Raises:
-            ValueError: If user cancels or invalid selection
+            ValueError: On invalid input
         """
         print(f"!!! Found {len(matched_elements)} possible matches for: \"{description}\"")
         
@@ -95,45 +95,44 @@ class HumanAssistedAmbiguityResolver(ElementAmbiguityResolver):
                 xpath = await self._get_xpath(elem)
                 location = await self._get_visual_location(elem)
                 
-                print(f"{i}. {self._truncate_html(html, max_length=100)}")
-                print(f"   XPath: {xpath}")
-                print(f"   Location: {location}")
-                print()
+                print(f"Element {i}. {self._truncate_html(html, max_length=100)}")
+                print(f"XPath: {xpath}")
+                print(f"Location: {location}\n")
             except Exception as e:
-                logger.debug(f"Failed to get details for element {i}: {e}")
-                print(f"{i}. <element details unavailable>")
-                print()
+                logger.error(f"Failed to get details for element {i}: {e}")
+                print(f"Element {i}. <element details unavailable>\n")
         
         # Get user choice
-        print(f"Which one should I use? (1-{len(matched_elements)}, or 0 to cancel)")
-        choice_str = input("Your choice: ").strip()
-        
-        try:
+        while True:
+            print(f"Which one should I use? (1-{len(matched_elements)}, or 0 to cancel)")
+            choice_str = input("Your choice: ").strip()
+            if not choice_str.isdigit():
+                print("Please enter a valid number")
+                continue
+
             choice = int(choice_str)
-            
             if choice == 0:
-                raise ValueError("User cancelled element selection")
+                print("Cancelling")
+                return None
             
             if 1 <= choice <= len(matched_elements):
-                selected = matched_elements[choice - 1]
-                
+                selected_element = matched_elements[choice - 1]
+            
                 # Generate selector for the chosen element and cache it
                 try:
-                    selector = await self._generate_selector_for_element(selected)
+                    selector = await self._generate_selector_for_element(selected_element)
                     await self.cache.set(description, page_url, selector)
                     logger.info(f"Cached user's choice: '{description}' -> '{selector}'")
                     print(f"\n✓ Selection cached for future use\n")
                 except Exception as e:
-                    logger.warning(f"Failed to cache user selection: {e}")
+                    logger.error(f"Failed to cache user selection: {e}")
+                    continue
                 
-                return selected
+                return selected_element
             else:
-                raise ValueError(f"Invalid choice: {choice}. Must be 0-{len(matched_elements)}")
+                print(f"Invalid choice: {choice}. Must be 0-{len(matched_elements)}")
+                continue
         
-        except ValueError as e:
-            if "invalid literal" in str(e):
-                raise ValueError(f"Invalid input: '{choice_str}'. Please enter a number.")
-            raise
     
     async def _get_outer_html(self, element: Any) -> str:
         """Get outer HTML of element."""
