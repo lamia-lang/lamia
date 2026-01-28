@@ -69,10 +69,10 @@ class TestHumanAssistedAmbiguityResolverInit:
 
 
 @pytest.mark.asyncio
-class TestHumanAssistedAmbiguityResolverResolve:
-    """Test HumanAssistedAmbiguityResolver resolve method."""
+class TestHumanAssistedAmbiguityResolverResolveAmbiguity:
+    """Test HumanAssistedAmbiguityResolver resolve_ambiguity method."""
 
-    async def test_resolve_with_user_selection(
+    async def test_resolve_ambiguity_with_user_selection(
         self, mock_browser_adapter, mock_cache, single_element_intent
     ):
         """Test successful user selection."""
@@ -93,7 +93,7 @@ class TestHumanAssistedAmbiguityResolverResolve:
 
         with patch('builtins.input', return_value='1'):
             with patch('builtins.print'):
-                result = await resolver.resolve(
+                result = await resolver.resolve_ambiguity(
                     description="login button",
                     elements=elements,
                     intent=single_element_intent,
@@ -103,7 +103,7 @@ class TestHumanAssistedAmbiguityResolverResolve:
         assert result == [element1]
         mock_cache.set.assert_called_once()
 
-    async def test_resolve_with_user_cancellation(
+    async def test_resolve_ambiguity_with_user_cancellation(
         self, mock_browser_adapter, mock_cache, single_element_intent
     ):
         """Test user cancelling selection (choosing 0)."""
@@ -118,7 +118,7 @@ class TestHumanAssistedAmbiguityResolverResolve:
 
         with patch('builtins.input', return_value='0'):
             with patch('builtins.print'):
-                result = await resolver.resolve(
+                result = await resolver.resolve_ambiguity(
                     description="login button",
                     elements=elements,
                     intent=single_element_intent,
@@ -127,7 +127,7 @@ class TestHumanAssistedAmbiguityResolverResolve:
 
         assert result is None
 
-    async def test_resolve_with_invalid_and_then_valid_inputs(
+    async def test_resolve_ambiguity_with_invalid_and_then_valid_inputs(
         self, mock_browser_adapter, mock_cache, single_element_intent
     ):
         """Test handling of invalid (non-numeric) input."""
@@ -142,7 +142,7 @@ class TestHumanAssistedAmbiguityResolverResolve:
 
         with patch('builtins.input', side_effect=['abc', '1']):
             with patch('builtins.print'):
-                result = await resolver.resolve(
+                result = await resolver.resolve_ambiguity(
                     description="login button",
                     elements=elements,
                     intent=single_element_intent,
@@ -151,7 +151,7 @@ class TestHumanAssistedAmbiguityResolverResolve:
 
         assert result == [elements[0]]
 
-    async def test_resolve_with_out_of_range_selection_then_valid_input(
+    async def test_resolve_ambiguity_with_out_of_range_selection_then_valid_input(
         self, mock_browser_adapter, mock_cache, single_element_intent
     ):
         """Test handling of out-of-range selection."""
@@ -166,7 +166,7 @@ class TestHumanAssistedAmbiguityResolverResolve:
 
         with patch('builtins.input', side_effect=['5', '1']):
             with patch('builtins.print'):
-                result = await resolver.resolve(
+                result = await resolver.resolve_ambiguity(
                     description="login button",
                     elements=elements,
                     intent=single_element_intent,

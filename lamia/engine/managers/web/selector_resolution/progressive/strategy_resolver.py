@@ -263,7 +263,7 @@ class ProgressiveSelectorResolver:
             List of resolved elements, or None if all resolvers failed
         """
         for resolver in self._ambiguity_resolvers:
-            result = await resolver.resolve(
+            result = await resolver.resolve_ambiguity(
                 description=description,
                 elements=elements,
                 intent=intent,

@@ -29,7 +29,7 @@ class HumanAssistedAmbiguityResolver(ElementAmbiguityResolver):
         self.cache = cache
         self.max_display = max_display
     
-    async def resolve(
+    async def resolve_ambiguity(
         self,
         description: str,
         elements: List[Any],

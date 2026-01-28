@@ -15,7 +15,7 @@ class ElementAmbiguityResolver(ABC):
     """
     
     @abstractmethod
-    async def resolve(
+    async def resolve_ambiguity(
         self,
         description: str,
         elements: List[Any],
@@ -35,4 +35,3 @@ class ElementAmbiguityResolver(ABC):
             List of resolved elements, or None if resolution failed/skipped
         """
         pass
-
