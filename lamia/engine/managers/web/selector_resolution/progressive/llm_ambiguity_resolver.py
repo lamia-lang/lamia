@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 # Maximum length for attribute values and text content
 MAX_ATTRIBUTE_VALUE_LENGTH = 100
-MAX_OUTER_HTML_LENGTH = 500
 
 
 class AmbiguitySelectionModel(BaseModel):
@@ -287,7 +286,7 @@ class LLMAmbiguityResolver(ElementAmbiguityResolver):
                 f"""
                 const el = arguments[0];
                 const html = el.outerHTML || '';
-                return html.slice(0, {MAX_OUTER_HTML_LENGTH});
+                return html;
                 """,
                 element,
             )

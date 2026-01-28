@@ -7,7 +7,6 @@ from lamia.engine.managers.web.selector_resolution.progressive.llm_ambiguity_res
     LLMAmbiguityResolver,
     AmbiguitySelectionModel,
     MAX_ATTRIBUTE_VALUE_LENGTH,
-    MAX_OUTER_HTML_LENGTH,
 )
 from lamia.engine.managers.web.selector_resolution.progressive.progressive_selector_strategy import (
     ProgressiveSelectorStrategyIntent,

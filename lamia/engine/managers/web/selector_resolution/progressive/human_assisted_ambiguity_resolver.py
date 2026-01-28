@@ -50,7 +50,7 @@ class HumanAssistedAmbiguityResolver(ElementAmbiguityResolver):
         """
         # Only handle single element selection for now
         if intent.element_count != ElementCount.SINGLE:
-            logger.debug("Human resolver only supports single element selection")
+            logger.debug("Human assisted resolver only supports single element selection")
             return None
         
         if len(elements) > self.max_display:
