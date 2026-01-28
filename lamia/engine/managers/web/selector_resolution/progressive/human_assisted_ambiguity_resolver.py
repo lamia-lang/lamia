@@ -17,7 +17,7 @@ class HumanAssistedAmbiguityResolver(ElementAmbiguityResolver):
     to the user and caches their choice for future use.
     """
     
-    def __init__(self, browser_adapter: Any, cache: Any, max_display: int = 10):
+    def __init__(self, browser_adapter: Any, cache: Any, max_display: int = 100):
         """Initialize the human ambiguity resolver.
         
         Args:

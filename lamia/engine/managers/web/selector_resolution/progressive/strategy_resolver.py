@@ -44,8 +44,8 @@ class ProgressiveSelectorResolver:
         browser_adapter: Any,
         llm_manager: LLMManager,
         cache: Any,
-        config_provider: Optional[ConfigProvider] = None,
-        max_ambiguous_matches: int = 10
+        config_provider: ConfigProvider,
+        max_elements_to_analyze: int = 100
     ):
         """Initialize the progressive resolver.
         
@@ -54,18 +54,17 @@ class ProgressiveSelectorResolver:
             llm_manager: LLM manager for generating strategies
             cache: AISelectorCache for caching resolutions
             config_provider: Configuration provider for reading settings
-            max_ambiguous_matches: Max matches before asking user to choose
+            max_elements_to_analyze: Maximum elements to analyze for ambiguity resolution
         """
         self.browser = browser_adapter
         self.llm_manager = llm_manager
         self.config_provider = config_provider
         self.strategy_gen = ProgressiveSelectorStrategy(llm_manager)
         self.relationship_validator = ElementRelationshipValidator(browser_adapter)
-        self.max_ambiguous_matches = max_ambiguous_matches
         
         # Initialize ambiguity resolvers
         self._ambiguity_resolvers = self._create_ambiguity_resolvers(
-            browser_adapter, llm_manager, cache, max_ambiguous_matches
+            browser_adapter, llm_manager, cache, max_elements_to_analyze
         )
     
     def _create_ambiguity_resolvers(
@@ -73,7 +72,7 @@ class ProgressiveSelectorResolver:
         browser_adapter: Any,
         llm_manager: LLMManager,
         cache: Any,
-        max_ambiguous_matches: int
+        max_elements_to_analyze: int
     ) -> List[ElementAmbiguityResolver]:
         """
         Create the list of ambiguity resolvers based on configuration.
@@ -82,7 +81,7 @@ class ProgressiveSelectorResolver:
             browser_adapter: Browser adapter for element inspection
             llm_manager: LLM manager for LLM-based resolution
             cache: Cache for storing user selections
-            max_ambiguous_matches: Max elements for ambiguity resolution
+            max_elements_to_analyze: Max elements for ambiguity resolution
             
         Returns:
             List of ambiguity resolvers in order of priority
@@ -93,7 +92,7 @@ class ProgressiveSelectorResolver:
         resolvers.append(LLMAmbiguityResolver(
             browser_adapter=browser_adapter,
             llm_manager=llm_manager,
-            max_elements_to_analyze=max_ambiguous_matches
+            max_elements_to_analyze=max_elements_to_analyze
         ))
         
         # Human resolver is added only if human_in_loop is enabled
@@ -101,15 +100,13 @@ class ProgressiveSelectorResolver:
             resolvers.append(HumanAssistedAmbiguityResolver(
                 browser_adapter=browser_adapter,
                 cache=cache,
-                max_display=max_ambiguous_matches
+                max_display=max_elements_to_analyze
             ))
         
         return resolvers
     
     def _is_human_in_loop_enabled(self) -> bool:
         """Check if human-in-loop mode is enabled in config."""
-        if self.config_provider is None:
-            return False
 
         return self.config_provider.is_human_in_loop_enabled()
     
@@ -234,13 +231,11 @@ class ProgressiveSelectorResolver:
 
         return ResolutionOutcome(None, [], had_matches)
 
+    # TODO: Add support for multiple element intent. Currently, it is supported only for single element intent.
     def _is_ambiguous(self, elements: List[Any], intent: ProgressiveSelectorStrategyIntent) -> bool:
         actual_count = len(elements)
 
         if intent.element_count == ElementCount.SINGLE and actual_count > 1:
-            return True
-
-        if actual_count > self.max_ambiguous_matches:
             return True
 
         return False

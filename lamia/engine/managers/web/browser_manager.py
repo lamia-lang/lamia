@@ -178,7 +178,8 @@ class BrowserManager:
                     llm_manager,
                     get_page_html_func=self._get_current_page_html,
                     get_browser_adapter_func=self._get_browser_adapter,
-                    cache_enabled=cache_enabled
+                    cache_enabled=cache_enabled,
+                    config_provider=self.config_provider
                 )
             
             # Get current page URL from driver scope manager

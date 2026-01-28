@@ -59,7 +59,7 @@ class TestHumanAssistedAmbiguityResolverInit:
 
         assert resolver.browser == mock_browser_adapter
         assert resolver.cache == mock_cache
-        assert resolver.max_display == 10
+        assert resolver.max_display == 100
 
     def test_init_with_custom_max_display(self, mock_browser_adapter, mock_cache):
         """Test initialization with custom max_display."""

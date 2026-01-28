@@ -33,7 +33,7 @@ class LLMAmbiguityResolver(ElementAmbiguityResolver):
         self,
         browser_adapter: Any,
         llm_manager: LLMManager,
-        max_elements_to_analyze: int = 1000
+        max_elements_to_analyze: int = 100
     ):
         """
         Initialize the LLM ambiguity resolver.

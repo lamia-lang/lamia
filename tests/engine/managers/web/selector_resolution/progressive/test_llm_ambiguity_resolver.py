@@ -61,7 +61,7 @@ class TestLLMAmbiguityResolverInit:
 
         assert resolver.browser == mock_browser_adapter
         assert resolver.llm_manager == mock_llm_manager
-        assert resolver.max_elements_to_analyze == 10
+        assert resolver.max_elements_to_analyze == 100
 
     def test_init_with_custom_max_elements(self, mock_browser_adapter, mock_llm_manager):
         """Test initialization with custom max_elements_to_analyze."""
@@ -69,7 +69,7 @@ class TestLLMAmbiguityResolverInit:
             mock_browser_adapter, mock_llm_manager, max_elements_to_analyze=5
         )
 
-        assert resolver.max_elements_to_analyze == 1000
+        assert resolver.max_elements_to_analyze == 5
 
 
 @pytest.mark.asyncio
