@@ -11,12 +11,6 @@ from lamia.interpreter.commands import LLMCommand
 
 logger = logging.getLogger(__name__)
 
-# HTML size limit for direct LLM processing (32KB for conservative 1B model support)
-# Typical limits: GPT-4: ~128K tokens, Claude: ~200K tokens, 1B model: ~4K-8K tokens
-# Rough estimate: 1 token ≈ 4 characters, so 8K tokens ≈ 32KB
-MAX_HTML_SIZE_FOR_SMALL_LLM = 32 * 1024  # 32KB
-
-
 class SelectorResolutionService:
     """Orchestrates AI-powered selector resolution with caching."""
     
@@ -113,78 +107,64 @@ class SelectorResolutionService:
         try:
             logger.info(f"Sending selector '{original_selector}' to AI for resolution")
             
+            resolved_selector = None
+
             # For natural language selectors, use visual picker as primary method
             if selector_type == SelectorType.NATURAL_LANGUAGE:
                 logger.info(f"🎯 Natural language selector detected: '{original_selector}', operation_type: '{operation_type}'")
                 
-                # Check if this is an input-related selector that should always use visual picker
-                is_input_related = await self._is_input_related_selector(original_selector)
-                
-                # Check if page HTML is small enough for direct LLM processing
-                # BUT always use visual picker for input-related selectors regardless of HTML size
-                should_use_llm_directly = False
-                if not is_input_related:
-                    should_use_llm_directly = await self._should_use_llm_for_small_html(original_selector)
-                
-                if should_use_llm_directly:
-                    logger.info("📄 Page HTML is small - using direct LLM resolution instead of visual picker")
-                    # Skip visual picker and go straight to progressive resolution with page context
-                
-                else:
-                    if is_input_related:
-                        logger.info("🎯 Input-related selector detected - using visual picker for better pattern recognition")
-                    # Try visual picker first if available and enabled
-                    visual_picker_decision = await self._should_use_visual_picker(original_selector, operation_type)
-                    logger.info(f"🤔 Visual picker decision: {visual_picker_decision}")
+                try:
+                    logger.info("Using progressive selector resolution (fallback method)")
                     
-                    if visual_picker_decision:
-                        logger.info("🎨 Using visual picker for element selection (primary method)")
+                    # Initialize progressive resolver lazily
+                    if self._progressive_resolver is None:
+                        if self.get_browser_adapter is None:
+                            raise ValueError("Browser adapter function not provided for progressive resolution")
                         
-                        try:
-                            resolved_selector = await self._resolve_with_visual_picker(
-                                original_selector,
-                                page_url,
-                                operation_type or "get_element"
-                            )
-                            
-                            logger.info(f"✅ Visual picker succeeded: '{original_selector}' → '{resolved_selector}'")
-                            
-                            # Cache visual picker result
-                            await self.cache.set(original_selector, page_url, resolved_selector, parent_context)
-                            await self.multi_cache.add_working_selector(original_selector, resolved_selector, page_url)
-                            
-                            return resolved_selector
-                            
-                        except Exception as visual_error:
-                            logger.warning(f"❌ Visual picker failed: {visual_error}")
-                            # Fall back to progressive resolution
-                            logger.info("🔄 Falling back to progressive selector resolution")
-                    else:
-                        logger.info("⚠️ Visual picker not used - requirements not met")
-                
-                # Fall back to progressive resolution (if visual picker failed or not available)
-                logger.info("📋 Using progressive selector resolution (fallback method)")
-                
-                # Initialize progressive resolver lazily
-                if self._progressive_resolver is None:
-                    if self.get_browser_adapter is None:
-                        raise ValueError("Browser adapter function not provided for progressive resolution")
+                        if self.config_provider is None:
+                            raise ValueError("Config provider not provided for progressive resolution")
+                        
+                        browser_adapter = await self.get_browser_adapter()
+                        self._progressive_resolver = ProgressiveSelectorResolver(
+                            browser_adapter,
+                            self.llm_manager,
+                            self.cache,
+                            self.config_provider
+                        )
                     
-                    browser_adapter = await self.get_browser_adapter()
-                    self._progressive_resolver = ProgressiveSelectorResolver(
-                        browser_adapter,
-                        self.llm_manager,
-                        self.cache,
-                        self.config_provider
+                    # Resolve using progressive approach
+                    resolved_selector, found_elements = await self._progressive_resolver.resolve(
+                        original_selector,
+                        page_url
                     )
-                
-                # Resolve using progressive approach
-                resolved_selector, found_elements = await self._progressive_resolver.resolve(
-                    original_selector,
-                    page_url
-                )
-                
-                logger.info(f"Progressive resolution succeeded: '{original_selector}' → '{resolved_selector}'")
+                    
+                    logger.info(f"Progressive resolution succeeded: '{original_selector}' → '{resolved_selector}'")
+                except Exception as e:
+                    logger.error(f"Progressive resolution failed: {e}.")
+              
+                if resolved_selector is None and self.config_provider.is_human_in_loop_enabled():
+                    logger.info("Falling back to visual picker for element selection (fallback method)")
+                    
+                    try:
+                        resolved_selector = await self._resolve_with_visual_picker(
+                            original_selector,
+                            page_url,
+                            operation_type or "get_element"
+                        )
+                        
+                        logger.info(f"✅ Visual picker succeeded: '{original_selector}' → '{resolved_selector}'")
+                        
+                        # Cache visual picker result
+                        await self.cache.set(original_selector, page_url, resolved_selector, parent_context)
+                        await self.multi_cache.add_working_selector(original_selector, resolved_selector, page_url)
+                        
+                    except Exception as visual_error:
+                        logger.warning(f"Visual picker failed: {visual_error}")
+                else:
+                    logger.debug("Visual picker is not used because human-in-loop is disabled")
+
+                if resolved_selector is None:
+                    raise ValueError("Failed to resolve the selector for the natural language selector")
                 
                 # Cache in both traditional cache and multi-selector cache
                 logger.debug(f"Caching progressive resolution: '{original_selector}' on '{page_url}' → '{resolved_selector}'")
@@ -374,82 +354,13 @@ class SelectorResolutionService:
             from .visual_picker import VisualElementPicker
             logger.debug("✅ Visual picker module imported successfully")
             
-            # Check if visual picker is enabled in configuration
-            web_config = getattr(self, 'config_provider', None)
-            logger.debug(f"🔧 Config provider: {web_config}")
-            
-            if web_config:
-                config = web_config.get_web_config() if hasattr(web_config, 'get_web_config') else {}
-                visual_picker_config = config.get('visual_picker', {})
-                logger.debug(f"🔧 Visual picker config: {visual_picker_config}")
-                
-                # Check if explicitly disabled
-                if not visual_picker_config.get('enabled', True):
-                    logger.debug("❌ Visual picker disabled in configuration")
-                    return False
-                
-                # Check if disabled for specific operations
-                disabled_operations = visual_picker_config.get('disabled_for_operations', [])
-                if operation_type in disabled_operations:
-                    logger.debug(f"❌ Visual picker disabled for operation: {operation_type}")
-                    return False
-            
-            # Visual picker is available and enabled
-            logger.debug("✅ Visual picker should be used - all checks passed")
-            return True
+            if not self.config_provider.is_human_in_loop_enabled():
+                logger.debug("Human-in-loop disabled - visual picker disabled")
+                return False
             
         except ImportError as e:
             logger.debug(f"❌ Visual picker not available - import error: {e}")
             return False
-    
-    async def _should_use_llm_for_small_html(self, selector: str) -> bool:
-        """
-        Determine if HTML is small enough to send directly to LLM instead of using visual picker.
-        
-        Args:
-            selector: Natural language selector
-            
-        Returns:
-            True if HTML is small enough for direct LLM processing
-        """
-        try:
-            # Check if HTML size checking is enabled in configuration
-            web_config = getattr(self, 'config_provider', None)
-            if web_config:
-                config = web_config.get_web_config() if hasattr(web_config, 'get_web_config') else {}
-                visual_picker_config = config.get('visual_picker', {})
-                
-                # HTML size checking is disabled by default to avoid performance issues
-                if not visual_picker_config.get('html_size_check_enabled', False):
-                    logger.debug("HTML size checking disabled - defaulting to visual picker")
-                    return False
-            else:
-                # No config - default to visual picker for performance
-                logger.debug("No config available - defaulting to visual picker")
-                return False
-            
-            # Only perform expensive HTML check if explicitly enabled
-            if self.get_page_html is None:
-                logger.debug("No HTML source available - defaulting to visual picker")
-                return False
-            
-            page_html = await self.get_page_html()
-            if not page_html:
-                logger.debug("Empty HTML - defaulting to visual picker")
-                return False
-            
-            html_size = len(page_html)
-            
-            if html_size <= MAX_HTML_SIZE_FOR_SMALL_LLM:
-                logger.info(f"📐 HTML size {html_size} bytes <= {MAX_HTML_SIZE_FOR_SMALL_LLM} bytes - suitable for direct LLM")
-                return True
-            else:
-                logger.info(f"📐 HTML size {html_size} bytes > {MAX_HTML_SIZE_FOR_SMALL_LLM} bytes - using visual picker")
-                return False
-                
-        except Exception as e:
-            logger.warning(f"Failed to check HTML size: {e}")
-            return False  # Default to visual picker on error
     
     async def _resolve_with_visual_picker(
         self,
@@ -470,7 +381,7 @@ class SelectorResolutionService:
         """
         try:
             # Initialize visual picker lazily
-            if not hasattr(self, '_visual_picker') or self._visual_picker is None:
+            if self._visual_picker is None:
                 from .visual_picker import VisualElementPicker
                 
                 if self.get_browser_adapter is None:
