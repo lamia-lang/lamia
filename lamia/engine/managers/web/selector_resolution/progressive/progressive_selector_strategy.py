@@ -1,8 +1,9 @@
 """Progressive selector strategy generator for AI-powered element resolution."""
 
 import logging
+import re
 from enum import Enum
-from typing import List, Optional, Tuple, Type
+from typing import List, Optional, Tuple, Set
 
 from pydantic import BaseModel
 
@@ -12,6 +13,24 @@ from lamia.engine.managers.llm.llm_manager import LLMManager
 from lamia.validation.base import ValidationResult
 
 logger = logging.getLogger(__name__)
+
+# Common HTML tags that can serve as generic fallback selectors
+GENERIC_HTML_TAGS: Set[str] = {
+    # Interactive elements
+    "a", "button", "input", "select", "textarea", "label", "form",
+    # Container elements
+    "div", "span", "section", "article", "aside", "header", "footer", "main", "nav",
+    # List elements
+    "ul", "ol", "li", "dl", "dt", "dd",
+    # Table elements
+    "table", "thead", "tbody", "tfoot", "tr", "th", "td",
+    # Text elements
+    "p", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "code",
+    # Media elements
+    "img", "video", "audio", "canvas", "svg", "iframe",
+    # Other common elements
+    "option", "optgroup", "fieldset", "legend", "details", "summary",
+}
 
 
 class ElementCount(str, Enum):
@@ -91,7 +110,10 @@ class ProgressiveSelectorStrategy:
         
         typed_result: ProgressiveSelectorStrategyModel = result.result_type  # type: ignore[assignment]
 
-        return typed_result.intent, typed_result.selectors
+        # Validate that last selector is a generic HTML tag
+        validated_selectors = self._ensure_generic_tag_suffix(typed_result.selectors)
+
+        return typed_result.intent, validated_selectors
     
     def _create_strategy_prompt(self, description: str, failed_selectors: Optional[List[str]] = None) -> str:
         """Create LLM prompt for strategy generation.
@@ -152,3 +174,90 @@ STRATEGY RULES:
 Now analyze and generate for: "{description}"
 
 Return ONLY the JSON object, no explanation:"""
+
+    def _ensure_generic_tag_suffix(self, selectors: List[str]) -> List[str]:
+        """
+        Ensure the selector list ends with a generic HTML tag selector.
+        
+        If the last selector is not a pure HTML tag (e.g., "button", "div", "a"),
+        extract the tag from the last selector and append it.
+        
+        Args:
+            selectors: List of selectors from LLM
+            
+        Returns:
+            List of selectors guaranteed to end with a generic tag
+        """
+        if not selectors:
+            return selectors
+        
+        last_selector = selectors[-1]
+        
+        # Check if already a generic tag
+        if self._is_generic_tag_selector(last_selector):
+            logger.debug(f"Last selector '{last_selector}' is already a generic tag")
+            return selectors
+        
+        # Try to extract the tag from the last selector
+        extracted_tag = self._extract_tag_from_selector(last_selector)
+        
+        if extracted_tag and extracted_tag in GENERIC_HTML_TAGS:
+            logger.info(f"Appending generic tag '{extracted_tag}' extracted from '{last_selector}'")
+            return selectors + [extracted_tag]
+        
+        # If we couldn't extract a valid tag, log a warning
+        logger.warning(
+            f"Last selector '{last_selector}' is not generic and couldn't extract tag. "
+            "Consider improving LLM prompt."
+        )
+        return selectors
+    
+    def _is_generic_tag_selector(self, selector: str) -> bool:
+        """
+        Check if a selector is a pure generic HTML tag (no classes, IDs, attributes).
+        
+        Args:
+            selector: CSS selector or XPath
+            
+        Returns:
+            True if selector is just an HTML tag name
+        """
+        selector = selector.strip().lower()
+        
+        # For XPath like "//button" or "//div" (must be exactly //tag, nothing more)
+        if selector.startswith("//"):
+            # Must be exactly "//tag" with no attributes, predicates, or further path
+            xpath_match = re.match(r'^//([a-z][a-z0-9]*)$', selector)
+            if xpath_match:
+                return xpath_match.group(1) in GENERIC_HTML_TAGS
+            return False
+        
+        # For CSS, must be exactly a tag name (no ., #, [, :, etc.)
+        if re.match(r'^[a-z][a-z0-9]*$', selector):
+            return selector in GENERIC_HTML_TAGS
+        
+        return False
+    
+    def _extract_tag_from_selector(self, selector: str) -> Optional[str]:
+        """
+        Extract the HTML tag from a CSS selector or XPath.
+        
+        Args:
+            selector: CSS selector or XPath expression
+            
+        Returns:
+            Extracted tag name or None if not found
+        """
+        selector = selector.strip()
+        
+        # XPath: //tag, //tag[@attr], //tag[contains(...)]
+        xpath_match = re.match(r'^//([a-zA-Z][a-zA-Z0-9]*)', selector)
+        if xpath_match:
+            return xpath_match.group(1).lower()
+        
+        # CSS: tag.class, tag#id, tag[attr], tag:pseudo
+        css_match = re.match(r'^([a-zA-Z][a-zA-Z0-9]*)', selector)
+        if css_match:
+            return css_match.group(1).lower()
+        
+        return None

@@ -10,6 +10,7 @@ from lamia.engine.managers.web.selector_resolution.progressive.progressive_selec
     ElementCount,
     Relationship,
     Strictness,
+    GENERIC_HTML_TAGS,
 )
 from lamia.validation.base import ValidationResult
 
@@ -51,7 +52,7 @@ class TestProgressiveSelectorStrategyGeneration:
 
     @pytest.mark.asyncio
     async def test_generate_returns_plan(self, mock_llm_executor):
-        """Test that generate returns a selector plan."""
+        """Test that generate returns a selector plan with generic tag appended."""
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
 
         intent, selectors = await strategy.generate("login button")
@@ -62,8 +63,10 @@ class TestProgressiveSelectorStrategyGeneration:
         assert intent.element_count == ElementCount.SINGLE
         assert intent.relationship == Relationship.NONE
         assert intent.strictness == Strictness.STRICT
-        assert len(selectors) == 1
-        assert "button.login" in selectors
+        # Generic tag "button" is appended since "button.login" is not generic
+        assert len(selectors) == 2
+        assert selectors[0] == "button.login"
+        assert selectors[-1] == "button"
 
     @pytest.mark.asyncio
     async def test_generate_with_failed_selectors(self, mock_llm_executor):
@@ -79,8 +82,10 @@ class TestProgressiveSelectorStrategyGeneration:
         assert "#old-btn" in prompt
         assert isinstance(intent, ProgressiveSelectorStrategyIntent)
         assert isinstance(selectors, list)
-        assert len(selectors) == 1
-        assert "button.login" in selectors
+        # Generic tag "button" is appended since "button.login" is not generic
+        assert len(selectors) == 2
+        assert selectors[0] == "button.login"
+        assert selectors[-1] == "button"
 
     @pytest.mark.asyncio
     async def test_generate_raises_on_invalid_response(self, mock_llm_executor):
@@ -94,4 +99,194 @@ class TestProgressiveSelectorStrategyGeneration:
 
         with pytest.raises(ValueError, match="Failed to generate selectors with progressive strategy"):
             await strategy.generate("login button")
+
+    @pytest.mark.asyncio
+    async def test_generate_appends_generic_tag_if_missing(self, mock_llm_executor):
+        """Test that generate appends a generic tag if the last selector is not generic."""
+        mock_intent = ProgressiveSelectorStrategyIntent(
+            element_count=ElementCount.SINGLE,
+            relationship=Relationship.NONE,
+            strictness=Strictness.STRICT
+        )
+        mock_model = ProgressiveSelectorStrategyModel(
+            intent=mock_intent,
+            selectors=["button.login", "button[type='submit']"]
+        )
+        mock_llm_executor.execute = AsyncMock(return_value=ValidationResult(
+            is_valid=True,
+            result_type=mock_model
+        ))
+
+        strategy = ProgressiveSelectorStrategy(mock_llm_executor)
+        intent, selectors = await strategy.generate("login button")
+
+        assert selectors[-1] == "button"
+        assert len(selectors) == 3
+
+    @pytest.mark.asyncio
+    async def test_generate_does_not_duplicate_generic_tag(self, mock_llm_executor):
+        """Test that generate doesn't add tag if last selector is already generic."""
+        mock_intent = ProgressiveSelectorStrategyIntent(
+            element_count=ElementCount.SINGLE,
+            relationship=Relationship.NONE,
+            strictness=Strictness.STRICT
+        )
+        mock_model = ProgressiveSelectorStrategyModel(
+            intent=mock_intent,
+            selectors=["button.login", "button"]
+        )
+        mock_llm_executor.execute = AsyncMock(return_value=ValidationResult(
+            is_valid=True,
+            result_type=mock_model
+        ))
+
+        strategy = ProgressiveSelectorStrategy(mock_llm_executor)
+        intent, selectors = await strategy.generate("login button")
+
+        assert selectors == ["button.login", "button"]
+        assert len(selectors) == 2
+
+
+class TestGenericTagValidation:
+    """Tests for generic tag selector validation methods."""
+
+    @pytest.fixture
+    def strategy(self, mock_llm_executor):
+        return ProgressiveSelectorStrategy(mock_llm_executor)
+
+    @pytest.fixture
+    def mock_llm_executor(self):
+        return Mock()
+
+    class TestIsGenericTagSelector:
+        """Tests for _is_generic_tag_selector method."""
+
+        @pytest.fixture
+        def strategy(self):
+            return ProgressiveSelectorStrategy(Mock())
+
+        @pytest.mark.parametrize("selector", [
+            "button",
+            "div",
+            "a",
+            "input",
+            "span",
+            "table",
+            "li",
+            "h1",
+            "p",
+        ])
+        def test_css_generic_tags_are_recognized(self, strategy, selector):
+            """Test that plain CSS tag selectors are recognized as generic."""
+            assert strategy._is_generic_tag_selector(selector) is True
+
+        @pytest.mark.parametrize("selector", [
+            "//button",
+            "//div",
+            "//a",
+            "//input",
+        ])
+        def test_xpath_generic_tags_are_recognized(self, strategy, selector):
+            """Test that XPath tag selectors are recognized as generic."""
+            assert strategy._is_generic_tag_selector(selector) is True
+
+        @pytest.mark.parametrize("selector", [
+            "button.class",
+            "div#id",
+            "a[href]",
+            "input[type='text']",
+            ".class",
+            "#id",
+            "[data-test]",
+            "button:hover",
+            "div > span",
+            "//button[@class='login']",
+            "//div[contains(text(), 'hello')]",
+        ])
+        def test_non_generic_selectors_are_rejected(self, strategy, selector):
+            """Test that selectors with classes, IDs, attributes etc. are not generic."""
+            assert strategy._is_generic_tag_selector(selector) is False
+
+        @pytest.mark.parametrize("selector", [
+            "customtag",
+            "mycomponent",
+            "//unknowntag",
+        ])
+        def test_unknown_tags_are_rejected(self, strategy, selector):
+            """Test that unknown/custom tags are not considered generic."""
+            assert strategy._is_generic_tag_selector(selector) is False
+
+    class TestExtractTagFromSelector:
+        """Tests for _extract_tag_from_selector method."""
+
+        @pytest.fixture
+        def strategy(self):
+            return ProgressiveSelectorStrategy(Mock())
+
+        @pytest.mark.parametrize("selector,expected", [
+            ("button.login", "button"),
+            ("div#container", "div"),
+            ("a[href='#']", "a"),
+            ("input[type='text']", "input"),
+            ("span.highlight.bold", "span"),
+            ("table.data-table", "table"),
+        ])
+        def test_extract_from_css_selectors(self, strategy, selector, expected):
+            """Test tag extraction from CSS selectors."""
+            assert strategy._extract_tag_from_selector(selector) == expected
+
+        @pytest.mark.parametrize("selector,expected", [
+            ("//button[@class='login']", "button"),
+            ("//div[contains(text(), 'hello')]", "div"),
+            ("//a[@href]", "a"),
+            ("//input[@type='submit']", "input"),
+        ])
+        def test_extract_from_xpath_selectors(self, strategy, selector, expected):
+            """Test tag extraction from XPath selectors."""
+            assert strategy._extract_tag_from_selector(selector) == expected
+
+        @pytest.mark.parametrize("selector", [
+            ".class-only",
+            "#id-only",
+            "[data-attribute]",
+            "*",
+        ])
+        def test_returns_none_for_tagless_selectors(self, strategy, selector):
+            """Test that selectors without tags return None."""
+            assert strategy._extract_tag_from_selector(selector) is None
+
+    class TestEnsureGenericTagSuffix:
+        """Tests for _ensure_generic_tag_suffix method."""
+
+        @pytest.fixture
+        def strategy(self):
+            return ProgressiveSelectorStrategy(Mock())
+
+        def test_empty_list_returns_empty(self, strategy):
+            """Test that empty list is returned unchanged."""
+            assert strategy._ensure_generic_tag_suffix([]) == []
+
+        def test_already_generic_returns_unchanged(self, strategy):
+            """Test that list ending with generic tag is unchanged."""
+            selectors = ["button.login", "button"]
+            result = strategy._ensure_generic_tag_suffix(selectors)
+            assert result == selectors
+
+        def test_appends_extracted_tag(self, strategy):
+            """Test that tag is extracted and appended when last is not generic."""
+            selectors = ["button.login", "button[type='submit']"]
+            result = strategy._ensure_generic_tag_suffix(selectors)
+            assert result == ["button.login", "button[type='submit']", "button"]
+
+        def test_appends_tag_from_xpath(self, strategy):
+            """Test that tag is extracted from XPath and appended."""
+            selectors = ["//div[@class='container']"]
+            result = strategy._ensure_generic_tag_suffix(selectors)
+            assert result == ["//div[@class='container']", "div"]
+
+        def test_non_extractable_selector_returns_unchanged(self, strategy):
+            """Test that non-extractable selector list is returned with warning."""
+            selectors = [".some-class", "#some-id"]
+            result = strategy._ensure_generic_tag_suffix(selectors)
+            assert result == selectors
 
