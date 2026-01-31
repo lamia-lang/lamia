@@ -4,6 +4,9 @@ from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.validation.base import BaseValidator
 from lamia.types import ExternalOperationRetryConfig
 
+_DEFAULT_CACHE_DIR = ".lamia_cache"
+
+
 class ConfigProvider:
     """
     Provides read-only access to Lamia configuration values.
@@ -65,4 +68,16 @@ class ConfigProvider:
         """Check if human-in-loop mode is enabled for ambiguity resolution."""
         web_config = self.get_web_config()
         return web_config.get('human_in_loop', False) 
+
+    def is_cache_enabled(self) -> bool:
+        """Check if caching is enabled in web config."""
+        web_config = self.get_web_config()
+        cache_config = web_config.get('cache', {})
+        return cache_config.get('enabled', True)
+
+    def get_cache_dir(self) -> str:
+        """Get the base cache directory from web config."""
+        web_config = self.get_web_config()
+        cache_config = web_config.get('cache', {})
+        return cache_config.get('dir', _DEFAULT_CACHE_DIR)
 

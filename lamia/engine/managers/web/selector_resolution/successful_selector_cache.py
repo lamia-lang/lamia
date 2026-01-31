@@ -4,10 +4,15 @@ import os
 import json
 import logging
 from typing import Dict, Optional
+
+from lamia.engine.config_provider import ConfigProvider
 from urllib.parse import urlparse
 
 # Type alias for cache structure: {url: {selector_chain_key: successful_selector}}
 CacheData = Dict[str, Dict[str, str]]
+
+# Default cache directory when no ConfigProvider is available
+_FALLBACK_CACHE_DIR = ".lamia_cache"
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +32,14 @@ class SuccessfulSelectorCache:
     - Cache invalidation is automatic when selector stops working
     """
     
-    def __init__(self, cache_enabled: bool = True, cache_dir_name: str = '.lamia_cache'):
-        self.cache_enabled = cache_enabled
-        self.cache_dir_name = cache_dir_name
+    def __init__(self, config_provider: Optional[ConfigProvider] = None):
+        """Initialize the cache.
+        
+        Args:
+            config_provider: Configuration provider. If None, uses default settings.
+        """
+        self.cache_enabled = config_provider.is_cache_enabled() if config_provider else True
+        self.cache_dir_name = config_provider.get_cache_dir() if config_provider else _FALLBACK_CACHE_DIR
         self.cache_file_name = 'successful_selectors.json'
         self._cache_data: Dict[str, Dict[str, str]] = {}
         self._loaded = False

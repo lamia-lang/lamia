@@ -7,13 +7,26 @@ import shutil
 import json
 from unittest.mock import Mock, patch
 from lamia.engine.managers.web.selector_resolution.successful_selector_cache import SuccessfulSelectorCache
+from lamia.engine.config_provider import ConfigProvider
+
+
+def create_config_provider(cache_enabled: bool = True, cache_dir: str = '.lamia_cache') -> ConfigProvider:
+    """Create a ConfigProvider with the given cache settings."""
+    return ConfigProvider({
+        'web_config': {
+            'cache': {
+                'enabled': cache_enabled,
+                'dir': cache_dir
+            }
+        }
+    })
 
 
 class TestSuccessfulSelectorCacheInitialization:
     """Test SuccessfulSelectorCache initialization."""
     
     def test_default_initialization(self):
-        """Test cache initialization with default settings."""
+        """Test cache initialization with default settings (no config provider)."""
         cache = SuccessfulSelectorCache()
         
         assert cache.cache_enabled is True
@@ -22,9 +35,10 @@ class TestSuccessfulSelectorCacheInitialization:
         assert cache._cache_data == {}
         assert cache._loaded is False
     
-    def test_initialization_with_custom_settings(self):
-        """Test cache initialization with custom settings."""
-        cache = SuccessfulSelectorCache(cache_enabled=False, cache_dir_name='custom_cache')
+    def test_initialization_with_config_provider(self):
+        """Test cache initialization with custom settings via ConfigProvider."""
+        config = create_config_provider(cache_enabled=False, cache_dir='custom_cache')
+        cache = SuccessfulSelectorCache(config)
         
         assert cache.cache_enabled is False
         assert cache.cache_dir_name == 'custom_cache'
@@ -34,7 +48,8 @@ class TestSuccessfulSelectorCacheInitialization:
     
     def test_disabled_cache_initialization(self):
         """Test cache initialization when disabled."""
-        cache = SuccessfulSelectorCache(cache_enabled=False)
+        config = create_config_provider(cache_enabled=False)
+        cache = SuccessfulSelectorCache(config)
         
         assert cache.cache_enabled is False
         assert cache._cache_data == {}
@@ -47,10 +62,9 @@ class TestSuccessfulSelectorCacheBasicOperations:
         """Set up test fixtures."""
         # Create temporary directory for testing
         self.temp_dir = tempfile.mkdtemp()
-        self.cache = SuccessfulSelectorCache(
-            cache_enabled=True, 
-            cache_dir_name=os.path.join(self.temp_dir, '.lamia_cache')
-        )
+        cache_dir = os.path.join(self.temp_dir, '.lamia_cache')
+        config = create_config_provider(cache_enabled=True, cache_dir=cache_dir)
+        self.cache = SuccessfulSelectorCache(config)
     
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -64,7 +78,8 @@ class TestSuccessfulSelectorCacheBasicOperations:
     
     def test_cache_disabled_returns_none(self):
         """Test that disabled cache always returns None."""
-        disabled_cache = SuccessfulSelectorCache(cache_enabled=False)
+        config = create_config_provider(cache_enabled=False)
+        disabled_cache = SuccessfulSelectorCache(config)
         result = disabled_cache.get_cached_selector("submit_button", "https://example.com")
         assert result is None
     
@@ -132,7 +147,7 @@ class TestSuccessfulSelectorCacheUrlNormalization:
     
     def setup_method(self):
         """Set up test fixtures."""
-        self.cache = SuccessfulSelectorCache()
+        self.cache = SuccessfulSelectorCache()  # No config provider, uses defaults
     
     def test_url_normalization_removes_query_params(self):
         """Test that URL normalization removes query parameters."""
@@ -201,10 +216,9 @@ class TestSuccessfulSelectorCacheInvalidation:
     def setup_method(self):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
-        self.cache = SuccessfulSelectorCache(
-            cache_enabled=True,
-            cache_dir_name=os.path.join(self.temp_dir, '.lamia_cache')
-        )
+        cache_dir = os.path.join(self.temp_dir, '.lamia_cache')
+        config = create_config_provider(cache_enabled=True, cache_dir=cache_dir)
+        self.cache = SuccessfulSelectorCache(config)
     
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -232,7 +246,8 @@ class TestSuccessfulSelectorCacheInvalidation:
     
     def test_invalidate_with_disabled_cache(self):
         """Test invalidation with disabled cache."""
-        disabled_cache = SuccessfulSelectorCache(cache_enabled=False)
+        config = create_config_provider(cache_enabled=False)
+        disabled_cache = SuccessfulSelectorCache(config)
         # Should not raise error
         disabled_cache.invalidate("test", "https://example.com")
     
@@ -262,10 +277,9 @@ class TestSuccessfulSelectorCacheClearOperations:
     def setup_method(self):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
-        self.cache = SuccessfulSelectorCache(
-            cache_enabled=True,
-            cache_dir_name=os.path.join(self.temp_dir, '.lamia_cache')
-        )
+        cache_dir = os.path.join(self.temp_dir, '.lamia_cache')
+        config = create_config_provider(cache_enabled=True, cache_dir=cache_dir)
+        self.cache = SuccessfulSelectorCache(config)
     
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -324,7 +338,8 @@ class TestSuccessfulSelectorCacheFileOperations:
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.cache_dir = os.path.join(self.temp_dir, '.lamia_cache')
-        self.cache = SuccessfulSelectorCache(cache_enabled=True, cache_dir_name=self.cache_dir)
+        config = create_config_provider(cache_enabled=True, cache_dir=self.cache_dir)
+        self.cache = SuccessfulSelectorCache(config)
     
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -357,7 +372,8 @@ class TestSuccessfulSelectorCacheFileOperations:
         self.cache.cache_successful(selector_key, selector, url)
         
         # Create new instance with same cache directory
-        cache2 = SuccessfulSelectorCache(cache_enabled=True, cache_dir_name=self.cache_dir)
+        config2 = create_config_provider(cache_enabled=True, cache_dir=self.cache_dir)
+        cache2 = SuccessfulSelectorCache(config2)
         
         # Should retrieve the value
         result = cache2.get_cached_selector(selector_key, url)
@@ -400,7 +416,8 @@ class TestSuccessfulSelectorCacheEdgeCases:
     
     def setup_method(self):
         """Set up test fixtures."""
-        self.cache = SuccessfulSelectorCache(cache_enabled=True)
+        config = create_config_provider(cache_enabled=True)
+        self.cache = SuccessfulSelectorCache(config)
     
     def test_empty_selector_key(self):
         """Test caching with empty selector key."""
@@ -462,7 +479,8 @@ class TestSuccessfulSelectorCacheEdgeCases:
     
     def test_disabled_cache_operations(self):
         """Test all operations with disabled cache."""
-        disabled_cache = SuccessfulSelectorCache(cache_enabled=False)
+        config = create_config_provider(cache_enabled=False)
+        disabled_cache = SuccessfulSelectorCache(config)
         
         # All operations should work but not actually cache/retrieve anything
         assert disabled_cache.get_cached_selector("test", "https://example.com") is None
@@ -480,10 +498,9 @@ class TestSuccessfulSelectorCacheIntegration:
     def setup_method(self):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
-        self.cache = SuccessfulSelectorCache(
-            cache_enabled=True,
-            cache_dir_name=os.path.join(self.temp_dir, '.lamia_cache')
-        )
+        cache_dir = os.path.join(self.temp_dir, '.lamia_cache')
+        config = create_config_provider(cache_enabled=True, cache_dir=cache_dir)
+        self.cache = SuccessfulSelectorCache(config)
     
     def teardown_method(self):
         """Clean up test fixtures."""

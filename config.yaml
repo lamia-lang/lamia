@@ -37,6 +37,11 @@ web_config:
   
   # Human-in-loop mode when Lamia cannot decide something with the help of AI alone
   human_in_loop: false              # Default: false (autonomous mode)
+
+  # Cache configuration for selector resolution components
+  cache:
+    enabled: true                   # Default: true
+    dir: ".lamia_cache"             # Base cache directory (default)
   
   # Session persistence configuration (automatically managed)
   session_persistence:

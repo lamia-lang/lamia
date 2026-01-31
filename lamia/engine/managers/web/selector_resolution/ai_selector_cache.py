@@ -5,21 +5,27 @@ import json
 import logging
 from typing import Optional, Dict, Tuple
 
+from lamia.engine.config_provider import ConfigProvider
+
 logger = logging.getLogger(__name__)
 
 
 class AISelectorCache:
     """Filesystem-based cache for AI-resolved selectors to avoid repeated LLM calls."""
     
-    def __init__(self, cache_enabled: bool = True, cache_dir_name: str = '.lamia_cache'):
+    def __init__(
+        self,
+        config_provider: ConfigProvider,
+    ):
         """Initialize the cache.
         
         Args:
             cache_enabled: Whether caching is enabled
             cache_dir_name: Name of cache directory
+            config_provider: Configuration provider for cache settings
         """
-        self.cache_enabled = cache_enabled
-        self.cache_dir_name = cache_dir_name
+        self.cache_enabled = config_provider.is_cache_enabled()
+        self.cache_dir_name = config_provider.get_cache_dir()
         self.cache_file_name = 'selector_resolutions.json'
         self._cache_data = None  # Lazy loaded
     

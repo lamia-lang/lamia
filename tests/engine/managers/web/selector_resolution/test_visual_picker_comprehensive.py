@@ -36,6 +36,7 @@ from lamia.engine.managers.web.selector_resolution.visual_picker.validation impo
 from lamia.engine.managers.web.selector_resolution.visual_picker.strategies.action_strategy import ActionSelectionHandler
 from lamia.engine.managers.web.selector_resolution.visual_picker.strategies.plural_strategy import PluralSelectionStrategy
 from lamia.engine.managers.web.selector_resolution.visual_picker.strategies.singular_strategy import SingularSelectionStrategy
+from lamia.engine.config_provider import ConfigProvider, _DEFAULT_CACHE_DIR
 
 
 # ============================================================================
@@ -48,6 +49,34 @@ def temp_cache_dir(tmp_path):
     cache_dir = tmp_path / "visual_cache"
     cache_dir.mkdir()
     return str(cache_dir)
+
+
+@pytest.fixture
+def config_provider(temp_cache_dir):
+    """Create config provider with cache enabled and custom dir."""
+    return ConfigProvider({
+        "web_config": {
+            "cache": {
+                "enabled": True,
+                "dir": temp_cache_dir,
+            },
+            "human_in_loop": True,
+        }
+    })
+
+
+@pytest.fixture
+def default_config_provider():
+    """Create config provider with default cache settings."""
+    return ConfigProvider({
+        "web_config": {
+            "cache": {
+                "enabled": True,
+                "dir": DEFAULT_CACHE_DIR,
+            },
+            "human_in_loop": True,
+        }
+    })
 
 
 @pytest.fixture
@@ -1099,25 +1128,26 @@ class TestVisualElementPickerInitialization:
     """Test VisualElementPicker initialization."""
 
     @pytest.mark.asyncio
-    async def test_picker_initialization(self, mock_browser_adapter, mock_llm_executor, temp_cache_dir):
+    async def test_picker_initialization(self, mock_browser_adapter, mock_llm_executor, config_provider):
         """Test visual element picker initialization."""
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         assert picker.browser == mock_browser_adapter
-        assert picker.llm == mock_llm_executor
+        assert picker.llm_manager == mock_llm_executor
         assert picker.cache is not None
 
     @pytest.mark.asyncio
-    async def test_picker_initialization_default_cache(self, mock_browser_adapter, mock_llm_executor):
+    async def test_picker_initialization_default_cache(self, mock_browser_adapter, mock_llm_executor, default_config_provider):
         """Test picker initialization with default cache directory."""
         with patch('lamia.engine.managers.web.selector_resolution.visual_picker.cache.Path.mkdir'):
             picker = VisualElementPicker(
-                browser=mock_browser_adapter,
-                llm=mock_llm_executor
+                mock_browser_adapter,
+                mock_llm_executor,
+                default_config_provider
             )
 
             assert picker.cache is not None
@@ -1127,7 +1157,7 @@ class TestVisualElementPickerCacheWorkflow:
     """Test VisualElementPicker cache workflow."""
 
     @pytest.mark.asyncio
-    async def test_pick_element_cache_hit(self, mock_browser_adapter, mock_llm_executor, temp_cache_dir):
+    async def test_pick_element_cache_hit(self, mock_browser_adapter, mock_llm_executor, config_provider, temp_cache_dir):
         """Test picking element with cache hit."""
         # Setup cache
         cache = VisualSelectionCache(cache_dir=temp_cache_dir)
@@ -1142,9 +1172,9 @@ class TestVisualElementPickerCacheWorkflow:
         mock_browser_adapter.get_current_url.return_value = "https://example.com/page"
 
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         result = await picker.pick_element("submit_button", method="click")
@@ -1154,7 +1184,7 @@ class TestVisualElementPickerCacheWorkflow:
         mock_llm_executor.generate.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_pick_element_cache_miss(self, mock_browser_adapter, mock_llm_executor, temp_cache_dir):
+    async def test_pick_element_cache_miss(self, mock_browser_adapter, mock_llm_executor, config_provider, temp_cache_dir):
         """Test picking element with cache miss."""
         mock_browser_adapter.get_current_url.return_value = "https://example.com/page"
         mock_browser_adapter.execute_js.return_value = "<button id='submit'>Submit</button>"
@@ -1163,9 +1193,9 @@ class TestVisualElementPickerCacheWorkflow:
         )
 
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         result = await picker.pick_element("submit_button", method="click", use_cache=True)
@@ -1187,7 +1217,7 @@ class TestVisualElementPickerStrategyRouting:
 
     @pytest.mark.asyncio
     async def test_pick_single_element_uses_singular_strategy(
-        self, mock_browser_adapter, mock_llm_executor, temp_cache_dir
+        self, mock_browser_adapter, mock_llm_executor, config_provider, temp_cache_dir
     ):
         """Test picking single element uses singular strategy."""
         mock_browser_adapter.get_current_url.return_value = "https://example.com/page"
@@ -1197,9 +1227,9 @@ class TestVisualElementPickerStrategyRouting:
         )
 
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         result = await picker.pick_element("submit button", method="click")
@@ -1209,7 +1239,7 @@ class TestVisualElementPickerStrategyRouting:
 
     @pytest.mark.asyncio
     async def test_pick_multiple_elements_uses_plural_strategy(
-        self, mock_browser_adapter, mock_llm_executor, temp_cache_dir
+        self, mock_browser_adapter, mock_llm_executor, config_provider, temp_cache_dir
     ):
         """Test picking multiple elements uses plural strategy."""
         mock_browser_adapter.get_current_url.return_value = "https://example.com/page"
@@ -1219,9 +1249,9 @@ class TestVisualElementPickerStrategyRouting:
         )
 
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         result = await picker.pick_elements("all items")
@@ -1235,7 +1265,7 @@ class TestVisualElementPickerValidation:
 
     @pytest.mark.asyncio
     async def test_pick_element_validates_result(
-        self, mock_browser_adapter, mock_llm_executor, temp_cache_dir
+        self, mock_browser_adapter, mock_llm_executor, config_provider, temp_cache_dir
     ):
         """Test pick element validates the result."""
         mock_browser_adapter.get_current_url.return_value = "https://example.com/page"
@@ -1248,9 +1278,9 @@ class TestVisualElementPickerValidation:
         )
 
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         result = await picker.pick_element(
@@ -1263,7 +1293,7 @@ class TestVisualElementPickerValidation:
 
     @pytest.mark.asyncio
     async def test_pick_element_validation_fails(
-        self, mock_browser_adapter, mock_llm_executor, temp_cache_dir
+        self, mock_browser_adapter, mock_llm_executor, config_provider, temp_cache_dir
     ):
         """Test pick element when validation fails."""
         mock_browser_adapter.get_current_url.return_value = "https://example.com/page"
@@ -1276,9 +1306,9 @@ class TestVisualElementPickerValidation:
         )
 
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         result = await picker.pick_element(
@@ -1300,7 +1330,7 @@ class TestVisualPickerIntegration:
 
     @pytest.mark.asyncio
     async def test_full_visual_selection_flow(
-        self, mock_browser_adapter, mock_llm_executor, temp_cache_dir
+        self, mock_browser_adapter, mock_llm_executor, config_provider, temp_cache_dir
     ):
         """Test complete visual selection flow from cache miss to cache hit."""
         mock_browser_adapter.get_current_url.return_value = "https://example.com/page"
@@ -1310,9 +1340,9 @@ class TestVisualPickerIntegration:
         )
 
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         # First call - cache miss
@@ -1329,7 +1359,7 @@ class TestVisualPickerIntegration:
 
     @pytest.mark.asyncio
     async def test_cache_invalidation_flow(
-        self, mock_browser_adapter, mock_llm_executor, temp_cache_dir
+        self, mock_browser_adapter, mock_llm_executor, config_provider, temp_cache_dir
     ):
         """Test cache invalidation and re-selection."""
         mock_browser_adapter.get_current_url.return_value = "https://example.com/page"
@@ -1339,9 +1369,9 @@ class TestVisualPickerIntegration:
         )
 
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         # First selection
@@ -1359,7 +1389,7 @@ class TestVisualPickerIntegration:
 
     @pytest.mark.asyncio
     async def test_multiple_elements_different_methods(
-        self, mock_browser_adapter, mock_llm_executor, temp_cache_dir
+        self, mock_browser_adapter, mock_llm_executor, config_provider, temp_cache_dir
     ):
         """Test selecting multiple elements with different methods."""
         mock_browser_adapter.get_current_url.return_value = "https://example.com/page"
@@ -1385,9 +1415,9 @@ class TestVisualPickerIntegration:
         mock_llm_executor.generate.side_effect = mock_generate
 
         picker = VisualElementPicker(
-            browser=mock_browser_adapter,
-            llm=mock_llm_executor,
-            cache_dir=temp_cache_dir
+            mock_browser_adapter,
+            mock_llm_executor,
+            config_provider
         )
 
         # Select button for click

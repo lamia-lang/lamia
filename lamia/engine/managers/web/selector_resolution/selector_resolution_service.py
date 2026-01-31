@@ -8,29 +8,29 @@ from .selector_parser import SelectorParser, SelectorType
 from .response_parser import ResponseParser, AmbiguousFormatResponseParser
 from .progressive.strategy_resolver import ProgressiveSelectorResolver
 from lamia.interpreter.commands import LLMCommand
+from lamia.engine.config_provider import ConfigProvider
 
 logger = logging.getLogger(__name__)
 
 class SelectorResolutionService:
     """Orchestrates AI-powered selector resolution with caching."""
     
-    def __init__(self, llm_manager, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, get_browser_adapter_func: Optional[Callable[[], Awaitable]] = None, cache_enabled: bool = True, response_parser: Optional[ResponseParser] = None, config_provider = None):
+    def __init__(self, llm_manager, config_provider: ConfigProvider, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, get_browser_adapter_func: Optional[Callable[[], Awaitable]] = None, cache_enabled: bool = True, response_parser: Optional[ResponseParser] = None):
         """Initialize the selector resolution service.
         
         Args:
             llm_manager: LLM manager for AI-powered selector resolution
+            config_provider: Configuration provider
             get_page_html_func: Function to get current page HTML (optional)
             get_browser_adapter_func: Function to get browser adapter for validation (optional)
-            cache_enabled: Whether to enable caching of resolved selectors
             response_parser: Custom response parser implementation (defaults to AmbiguousFormatResponseParser)
-            config_provider: Configuration provider
         """
         self.parser = SelectorParser()
         self.llm_manager = llm_manager
         self.get_page_html = get_page_html_func
         self.get_browser_adapter = get_browser_adapter_func
         self.config_provider = config_provider
-        self.cache = AISelectorCache(cache_enabled=cache_enabled)
+        self.cache = AISelectorCache(config_provider)
         self.multi_cache = MultiSelectorCache()  # For conditional selectors
         self.response_parser = response_parser or AmbiguousFormatResponseParser()
         self._progressive_resolver = None  # Lazy initialized
@@ -175,7 +175,7 @@ class SelectorResolutionService:
                 return resolved_selector
             
             else:
-                # For invalid CSS/XPath, use old approach (fix syntax)
+                # For invalid CSS/XPath (fix syntax)
                 logger.info("Using legacy resolution for invalid CSS/XPath")
                 
                 # Get current page HTML if not provided
@@ -336,32 +336,6 @@ class SelectorResolutionService:
         # This line should never be reached, but satisfies type checker
         raise ValueError("Ambiguity resolution failed")
     
-    async def _should_use_visual_picker(self, selector: str, operation_type: Optional[str]) -> bool:
-        """
-        Determine if visual picker should be used for this selector.
-        
-        Args:
-            selector: Natural language selector
-            operation_type: Browser operation type
-            
-        Returns:
-            True if visual picker should be used
-        """
-        logger.debug(f"🔍 Checking if visual picker should be used for selector='{selector}', operation_type='{operation_type}'")
-        
-        try:
-            # Check if visual picker is available
-            from .visual_picker import VisualElementPicker
-            logger.debug("✅ Visual picker module imported successfully")
-            
-            if not self.config_provider.is_human_in_loop_enabled():
-                logger.debug("Human-in-loop disabled - visual picker disabled")
-                return False
-            
-        except ImportError as e:
-            logger.debug(f"❌ Visual picker not available - import error: {e}")
-            return False
-    
     async def _resolve_with_visual_picker(
         self,
         original_selector: str,
@@ -390,7 +364,8 @@ class SelectorResolutionService:
                 browser_adapter = await self.get_browser_adapter()
                 self._visual_picker = VisualElementPicker(
                     browser_adapter,
-                    self.llm_manager
+                    self.llm_manager,
+                    self.config_provider
                 )
             
             # Use visual picker to resolve selector

@@ -7,17 +7,18 @@ import sys
 from typing import Optional
 from datetime import datetime
 
+from lamia.engine.config_provider import ConfigProvider
 
 class CacheCLI:
     """Command-line interface for cache management."""
     
-    def __init__(self, cache_dir: str = '.lamia_cache'):
+    def __init__(self, cache_dir: Optional[str] = None):
         """Initialize cache CLI.
         
         Args:
             cache_dir: Directory containing cache files
         """
-        self.cache_dir = cache_dir
+        self.cache_dir = cache_dir if cache_dir else ConfigProvider({}).get_cache_dir()
         self.cache_file = os.path.join(cache_dir, 'selectors', 'selector_resolutions.json')
     
     def _load_cache(self) -> dict:
@@ -250,18 +251,18 @@ Examples:
     list_parser = subparsers.add_parser('list', help='List cached selectors')
     list_parser.add_argument('--url', help='Filter by URL')
     list_parser.add_argument('--description', help='Filter by description')
-    list_parser.add_argument('--cache-dir', default='.lamia_cache', help='Cache directory (default: .lamia_cache)')
+    list_parser.add_argument('--cache-dir', default=DEFAULT_CACHE_DIR, help='Cache directory (default: .lamia_cache)')
     
     # Clear command
     clear_parser = subparsers.add_parser('clear', help='Clear cache entries')
     clear_parser.add_argument('--description', help='Clear entries matching description')
     clear_parser.add_argument('--url', help='Clear entries matching URL')
     clear_parser.add_argument('--all', action='store_true', help='Clear entire cache')
-    clear_parser.add_argument('--cache-dir', default='.lamia_cache', help='Cache directory (default: .lamia_cache)')
+    clear_parser.add_argument('--cache-dir', default=DEFAULT_CACHE_DIR, help='Cache directory (default: .lamia_cache)')
     
     # Stats command
     stats_parser = subparsers.add_parser('stats', help='Show cache statistics')
-    stats_parser.add_argument('--cache-dir', default='.lamia_cache', help='Cache directory (default: .lamia_cache)')
+    stats_parser.add_argument('--cache-dir', default=DEFAULT_CACHE_DIR, help='Cache directory (default: .lamia_cache)')
     
     # Add command
     add_parser = subparsers.add_parser('add', help='Add a selector resolution to cache')
@@ -269,7 +270,7 @@ Examples:
     add_parser.add_argument('resolved', help='Working selector to use instead')
     add_parser.add_argument('url', help='URL where this resolution applies')
     add_parser.add_argument('--context', help='Optional parent context for scoped cache')
-    add_parser.add_argument('--cache-dir', default='.lamia_cache', help='Cache directory (default: .lamia_cache)')
+    add_parser.add_argument('--cache-dir', default=DEFAULT_CACHE_DIR, help='Cache directory (default: .lamia_cache)')
     
     args = parser.parse_args()
     

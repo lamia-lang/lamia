@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from .overlay import BrowserOverlay
 from .cache import VisualSelectionCache
 from .validation import SelectionValidator
+from lamia.engine.config_provider import ConfigProvider
 
 logger = logging.getLogger(__name__)
 
@@ -23,18 +24,23 @@ class VisualElementPicker:
     5. Cache the result
     """
     
-    def __init__(self, browser_adapter, llm_manager, cache_enabled: bool = True):
+    def __init__(
+        self,
+        browser_adapter,
+        llm_manager,
+        config_provider: ConfigProvider,
+    ):
         """Initialize the visual picker.
         
         Args:
             browser_adapter: Browser adapter for overlay injection and element finding
             llm_manager: LLM manager for generating scoped selectors
-            cache_enabled: Whether to cache visual selections
+            config_provider: Configuration provider for cache settings
         """
         self.browser = browser_adapter
         self.llm_manager = llm_manager
         self.overlay = BrowserOverlay(browser_adapter)
-        self.cache = VisualSelectionCache(cache_enabled)
+        self.cache = VisualSelectionCache(config_provider)
         self.validator = SelectionValidator()
     
     async def pick_element_for_method(

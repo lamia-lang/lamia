@@ -6,6 +6,8 @@ import os
 from typing import Dict, Any, Optional
 from pathlib import Path
 
+from lamia.engine.config_provider import ConfigProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,20 +18,14 @@ class VisualSelectionCache:
     Stores selections by (method_name, description, page_url) key.
     """
     
-    def __init__(self, enabled: bool = True, cache_dir: Optional[str] = None):
+    def __init__(self, config_provider: ConfigProvider):
         """Initialize the visual selection cache.
         
         Args:
-            enabled: Whether caching is enabled
-            cache_dir: Directory for cache files (defaults to .lamia_cache/visual_selections)
+            config_provider: Configuration provider for cache settings
         """
-        self.enabled = enabled
-        
-        if cache_dir:
-            self.cache_dir = Path(cache_dir)
-        else:
-            # Default to .lamia_cache/visual_selections in current working directory
-            self.cache_dir = Path.cwd() / ".lamia_cache" / "visual_selections"
+        self.enabled = config_provider.is_cache_enabled()
+        self.cache_dir = Path.cwd() / config_provider.get_cache_dir() / "visual_selections"
         
         if self.enabled:
             self.cache_dir.mkdir(parents=True, exist_ok=True)

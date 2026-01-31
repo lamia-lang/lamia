@@ -7,6 +7,19 @@ import shutil
 import json
 from unittest.mock import Mock, patch, mock_open
 from lamia.engine.managers.web.selector_resolution.ai_selector_cache import AISelectorCache
+from lamia.engine.config_provider import ConfigProvider
+
+
+def create_config_provider(cache_enabled: bool = True, cache_dir: str = '.lamia_cache') -> ConfigProvider:
+    """Create a ConfigProvider with the given cache settings."""
+    return ConfigProvider({
+        'web_config': {
+            'cache': {
+                'enabled': cache_enabled,
+                'dir': cache_dir
+            }
+        }
+    })
 
 
 class TestAISelectorCacheInitialization:
@@ -14,7 +27,8 @@ class TestAISelectorCacheInitialization:
     
     def test_default_initialization(self):
         """Test cache with default settings."""
-        cache = AISelectorCache()
+        config = create_config_provider()
+        cache = AISelectorCache(config)
         
         assert cache.cache_enabled is True
         assert cache.cache_dir_name == '.lamia_cache'
@@ -23,7 +37,8 @@ class TestAISelectorCacheInitialization:
     
     def test_initialization_with_custom_settings(self):
         """Test cache with custom settings."""
-        cache = AISelectorCache(cache_enabled=False, cache_dir_name='custom_cache')
+        config = create_config_provider(cache_enabled=False, cache_dir='custom_cache')
+        cache = AISelectorCache(config)
         
         assert cache.cache_enabled is False
         assert cache.cache_dir_name == 'custom_cache'
@@ -31,7 +46,8 @@ class TestAISelectorCacheInitialization:
     
     def test_disabled_cache_initialization(self):
         """Test cache initialization when disabled."""
-        cache = AISelectorCache(cache_enabled=False)
+        config = create_config_provider(cache_enabled=False)
+        cache = AISelectorCache(config)
         
         assert cache.cache_enabled is False
         assert cache._cache_data is None
@@ -44,7 +60,9 @@ class TestAISelectorCacheOperations:
         """Set up test fixtures."""
         # Create temporary directory for testing
         self.temp_dir = tempfile.mkdtemp()
-        self.cache = AISelectorCache(cache_enabled=True, cache_dir_name=os.path.join(self.temp_dir, '.lamia_cache'))
+        cache_dir = os.path.join(self.temp_dir, '.lamia_cache')
+        config = create_config_provider(cache_enabled=True, cache_dir=cache_dir)
+        self.cache = AISelectorCache(config)
     
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -61,7 +79,8 @@ class TestAISelectorCacheOperations:
     @pytest.mark.asyncio
     async def test_cache_disabled_returns_none(self):
         """Test that disabled cache always returns None."""
-        disabled_cache = AISelectorCache(cache_enabled=False)
+        config = create_config_provider(cache_enabled=False)
+        disabled_cache = AISelectorCache(config)
         result = await disabled_cache.get("submit button", "https://example.com")
         assert result is None
     
@@ -165,7 +184,8 @@ class TestAISelectorCacheFileOperations:
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.cache_dir = os.path.join(self.temp_dir, '.lamia_cache')
-        self.cache = AISelectorCache(cache_enabled=True, cache_dir_name=self.cache_dir)
+        config = create_config_provider(cache_enabled=True, cache_dir=self.cache_dir)
+        self.cache = AISelectorCache(config)
     
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -199,7 +219,8 @@ class TestAISelectorCacheFileOperations:
         await self.cache.set(selector, url, resolved)
         
         # Create new instance with same cache directory
-        cache2 = AISelectorCache(cache_enabled=True, cache_dir_name=self.cache_dir)
+        config2 = create_config_provider(cache_enabled=True, cache_dir=self.cache_dir)
+        cache2 = AISelectorCache(config2)
         
         # Should retrieve the value
         result = await cache2.get(selector, url)
@@ -236,7 +257,8 @@ class TestAISelectorCacheEdgeCases:
     
     def setup_method(self):
         """Set up test fixtures."""
-        self.cache = AISelectorCache(cache_enabled=True)
+        config = create_config_provider(cache_enabled=True)
+        self.cache = AISelectorCache(config)
     
     @pytest.mark.asyncio
     async def test_empty_selector_string(self):
@@ -250,7 +272,7 @@ class TestAISelectorCacheEdgeCases:
     async def test_none_values_handling(self):
         """Test handling of None values."""
         # None as resolved selector should be handled gracefully (not cached)
-        await self.cache.set("submit", "https://example.com", None)
+        await self.cache.set("submit", "https://example.com", None)  # type: ignore[arg-type]
         result = await self.cache.get("submit", "https://example.com")
         assert result is None  # Should not be cached
     
@@ -309,7 +331,8 @@ class TestAISelectorCacheConcurrency:
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.cache_dir = os.path.join(self.temp_dir, '.lamia_cache')
-        self.cache = AISelectorCache(cache_enabled=True, cache_dir_name=self.cache_dir)
+        config = create_config_provider(cache_enabled=True, cache_dir=self.cache_dir)
+        self.cache = AISelectorCache(config)
     
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -347,8 +370,9 @@ class TestAISelectorCacheConcurrency:
     @pytest.mark.asyncio
     async def test_multiple_cache_instances_same_directory(self):
         """Test multiple cache instances using same directory."""
-        cache1 = AISelectorCache(cache_enabled=True, cache_dir_name=self.cache_dir)
-        cache2 = AISelectorCache(cache_enabled=True, cache_dir_name=self.cache_dir)
+        config = create_config_provider(cache_enabled=True, cache_dir=self.cache_dir)
+        cache1 = AISelectorCache(config)
+        cache2 = AISelectorCache(config)
         
         # Set value with cache1
         await cache1.set("button", "https://example.com", ".btn1")
@@ -373,7 +397,8 @@ class TestAISelectorCacheIntegration:
     @pytest.mark.asyncio
     async def test_realistic_web_automation_scenario(self):
         """Test realistic web automation caching scenario."""
-        cache = AISelectorCache(cache_enabled=True)
+        config = create_config_provider(cache_enabled=True)
+        cache = AISelectorCache(config)
         
         # Simulate a web automation session with multiple pages
         pages = [
@@ -405,7 +430,8 @@ class TestAISelectorCacheIntegration:
         """Test cache performance characteristics."""
         import time
         
-        cache = AISelectorCache(cache_enabled=True)
+        config = create_config_provider(cache_enabled=True)
+        cache = AISelectorCache(config)
         
         # Measure cache miss time
         start = time.time()

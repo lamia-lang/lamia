@@ -165,21 +165,12 @@ class BrowserManager:
                 logger.info("BrowserManager: Creating LLM manager and selector resolution service for natural language selector")
                 from ..llm.llm_manager import LLMManager
                 
-                # Check if cache is enabled in config
-                web_config = self.config_provider.get_web_config()
-                selector_config = web_config.get("selector_resolution", {})
-                cache_enabled = selector_config.get("cache_enabled", True)
-                
-                if not cache_enabled:
-                    logger.info("Selector resolution cache is DISABLED")
-                
                 llm_manager = LLMManager(self.config_provider)
                 self._selector_resolution_service = SelectorResolutionService(
                     llm_manager,
+                    config_provider=self.config_provider,
                     get_page_html_func=self._get_current_page_html,
                     get_browser_adapter_func=self._get_browser_adapter,
-                    cache_enabled=cache_enabled,
-                    config_provider=self.config_provider
                 )
             
             # Get current page URL from driver scope manager
