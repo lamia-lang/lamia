@@ -142,7 +142,7 @@ class ValidatorRegistry:
                                     continue
                                     
                                 # Run contract checks
-                                passed, violations = self.validate_user_contracts(cls)
+                                passed, violations = self.check_validator(cls)
                                 if passed:
                                     self._user_validators[name] = cls
                                 else:
