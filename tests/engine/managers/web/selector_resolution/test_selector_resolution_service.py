@@ -1,16 +1,43 @@
-"""Tests for SelectorResolutionService with mocked AI calls."""
+"""Tests for SelectorResolutionService with mocked interfaces."""
 
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
+
 from lamia.engine.managers.web.selector_resolution.selector_resolution_service import SelectorResolutionService
 from lamia.engine.managers.web.selector_resolution.response_parser import AmbiguousFormatResponseParser
-from lamia.engine.managers.web.selector_resolution.selector_parser import SelectorType
+from lamia.engine.config_provider import ConfigProvider
 
 
 class MockLLMResult:
     """Mock LLM result."""
     def __init__(self, text: str):
         self.validated_text = text
+
+
+@pytest.fixture
+def config_provider():
+    """Create a config provider with human-in-loop disabled."""
+    return ConfigProvider({
+        "web_config": {
+            "cache": {
+                "enabled": True,
+            },
+            "human_in_loop": False,
+        }
+    })
+
+
+@pytest.fixture
+def human_in_loop_config_provider():
+    """Create a config provider with human-in-loop enabled."""
+    return ConfigProvider({
+        "web_config": {
+            "cache": {
+                "enabled": True,
+            },
+            "human_in_loop": True,
+        }
+    })
 
 
 @pytest.fixture
@@ -23,8 +50,7 @@ def mock_llm_manager():
 @pytest.fixture
 def mock_get_page_html():
     """Create a mock get_page_html function."""
-    async def get_html():
-        return """
+    return AsyncMock(return_value="""
         <html>
             <body>
                 <button class="btn__primary--large">Sign in</button>
@@ -32,8 +58,7 @@ def mock_get_page_html():
                 <button class="apple-signin">Sign in with Apple</button>
             </body>
         </html>
-        """
-    return get_html
+        """)
 
 
 @pytest.fixture
@@ -45,52 +70,57 @@ def mock_browser_adapter():
 @pytest.fixture
 def mock_get_browser_adapter(mock_browser_adapter):
     """Create a mock get_browser_adapter function."""
-    async def get_adapter():
-        return mock_browser_adapter
-    return get_adapter
+    return AsyncMock(return_value=mock_browser_adapter)
 
 
 @pytest.fixture
-def service(mock_llm_manager, mock_get_page_html, mock_get_browser_adapter):
+def service(mock_llm_manager, mock_get_page_html, mock_get_browser_adapter, config_provider):
     """Create a SelectorResolutionService with mocked dependencies."""
     service = SelectorResolutionService(
         llm_manager=mock_llm_manager,
         get_page_html_func=mock_get_page_html,
         get_browser_adapter_func=mock_get_browser_adapter,
-        cache_enabled=True
+        config_provider=config_provider,
     )
-    # Clear cache before each test to ensure isolation
     service.cache.clear()
+    service.multi_cache.clear()
+    return service
+
+
+@pytest.fixture
+def human_in_loop_service(mock_llm_manager, mock_get_page_html, mock_get_browser_adapter, human_in_loop_config_provider):
+    """Create a SelectorResolutionService with human-in-loop enabled."""
+    service = SelectorResolutionService(
+        llm_manager=mock_llm_manager,
+        get_page_html_func=mock_get_page_html,
+        get_browser_adapter_func=mock_get_browser_adapter,
+        config_provider=human_in_loop_config_provider,
+    )
+    service.cache.clear()
+    service.multi_cache.clear()
     return service
 
 
 @pytest.mark.asyncio
-async def test_resolve_valid_css_selector_no_ai_call(service, mock_llm_manager):
+async def test_resolve_valid_css_selector_no_ai_call(service, mock_llm_manager, mock_get_page_html, mock_get_browser_adapter):
     """Test that valid CSS selectors don't trigger AI calls."""
-    # Valid CSS selector should return as-is without AI call
     result = await service.resolve_selector(
         selector="button.btn__primary",
         page_url="https://example.com"
     )
     
     assert result == "button.btn__primary"
-    # Verify no AI calls were made
     mock_llm_manager.execute.assert_not_called()
+    mock_get_page_html.assert_not_awaited()
+    mock_get_browser_adapter.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_resolve_natural_language_single_result(service, mock_llm_manager, mock_browser_adapter):
-    """Test natural language selector with single AI result."""
-    # Mock AI response for single match
-    mock_llm_manager.execute.return_value = MockLLMResult("button.btn__primary--large")
-    
-    # Mock validation
-    mock_validation_result = Mock()
-    mock_validation_result.is_valid = True
-    
-    with patch('lamia.engine.managers.web.selector_resolution.validators.ai_resolved_selector_validator.AIResolvedSelectorValidator') as MockValidator:
-        mock_validator = MockValidator.return_value
-        mock_validator.validate_strict = AsyncMock(return_value=mock_validation_result)
+async def test_resolve_natural_language_uses_progressive_resolver_and_caches(service, mock_llm_manager, mock_browser_adapter, mock_get_browser_adapter, config_provider):
+    """Test natural language selector uses progressive resolver and caches results."""
+    with patch("lamia.engine.managers.web.selector_resolution.selector_resolution_service.ProgressiveSelectorResolver") as MockResolver:
+        mock_resolver = MockResolver.return_value
+        mock_resolver.resolve = AsyncMock(return_value=("button.btn__primary--large", ["el"]))
         
         result = await service.resolve_selector(
             selector="sign in button",
@@ -99,96 +129,92 @@ async def test_resolve_natural_language_single_result(service, mock_llm_manager,
         )
     
     assert result == "button.btn__primary--large"
-    # Verify AI was called once
-    mock_llm_manager.execute.assert_called_once()
+    mock_get_browser_adapter.assert_awaited_once()
+    MockResolver.assert_called_once_with(mock_browser_adapter, mock_llm_manager, service.cache, config_provider)
+    mock_resolver.resolve.assert_awaited_once_with("sign in button", "https://example.com")
+    
+    cached = await service.cache.get("sign in button", "https://example.com", None)
+    assert cached == "button.btn__primary--large"
+    working = await service.multi_cache.get_working_selectors("sign in button", "https://example.com")
+    assert "button.btn__primary--large" in working
 
 
 @pytest.mark.asyncio
-async def test_resolve_natural_language_ambiguous_result(service, mock_llm_manager):
-    """Test natural language selector with ambiguous AI result."""
-    # Mock AI response for ambiguous match
-    ambiguous_response = """AMBIGUOUS
-OPTION1: "Sign in main" -> button.btn__primary--large
-OPTION2: "Sign in with Google" -> button.google-signin
-OPTION3: "Sign in with Apple" -> button.apple-signin"""
-    
-    # Mock the validation responses to be unique (not ambiguous)
-    mock_llm_manager.execute.side_effect = [
-        MockLLMResult(ambiguous_response),  # Initial ambiguous response
-        MockLLMResult("button.btn__primary--large"),  # Validation for "Sign in main" - unique
-        MockLLMResult("button.google-signin"),  # Validation for "Sign in with Google" - unique
-        MockLLMResult("button.apple-signin"),  # Validation for "Sign in with Apple" - unique
-    ]
-    
-    # Should raise ValueError with ambiguity message
-    with pytest.raises(ValueError) as excinfo:
-        await service.resolve_selector(
-            selector="sign in different",  # Different from options to avoid filtering
-            page_url="https://example.com",
-            operation_type="click"
-        )
-    
-    assert "🚨 AMBIGUOUS SELECTOR:" in str(excinfo.value)
-    assert "Sign in main" in str(excinfo.value)
-    assert "Sign in with Google" in str(excinfo.value)
-    assert "Sign in with Apple" in str(excinfo.value)
-
-
-@pytest.mark.asyncio
-async def test_cache_hit_no_ai_call(service, mock_llm_manager):
-    """Test that cache hits don't trigger AI calls."""
-    # First, populate cache by mocking a successful resolution
-    mock_llm_manager.execute.return_value = MockLLMResult("button.btn__primary--large")
-    
-    with patch('lamia.engine.managers.web.selector_resolution.validators.ai_resolved_selector_validator.AIResolvedSelectorValidator') as MockValidator:
-        mock_validation_result = Mock()
-        mock_validation_result.is_valid = True
-        mock_validator = MockValidator.return_value
-        mock_validator.validate_strict = AsyncMock(return_value=mock_validation_result)
+async def test_resolve_natural_language_cache_hit_skips_progressive(service, mock_llm_manager, mock_browser_adapter, mock_get_browser_adapter, config_provider):
+    """Test that cache hits skip progressive resolution."""
+    with patch("lamia.engine.managers.web.selector_resolution.selector_resolution_service.ProgressiveSelectorResolver") as MockResolver:
+        mock_resolver = MockResolver.return_value
+        mock_resolver.resolve = AsyncMock(return_value=("button.cached", ["el"]))
         
-        # First call - should hit AI and cache result
         result1 = await service.resolve_selector(
             selector="sign in button",
-            page_url="https://example.com",
-            operation_type="click"
+            page_url="https://example.com"
         )
-        
-        # Reset mock to verify second call doesn't hit AI
-        mock_llm_manager.reset_mock()
-        
-        # Second call - should hit cache, no AI call
         result2 = await service.resolve_selector(
+            selector="sign in button",
+            page_url="https://example.com"
+        )
+    
+    assert result1 == result2 == "button.cached"
+    mock_resolver.resolve.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resolve_natural_language_fallback_to_visual_picker_when_progressive_fails_and_human_in_loop_enabled(human_in_loop_service, mock_llm_manager, mock_browser_adapter, mock_get_browser_adapter, human_in_loop_config_provider):
+    """Test visual picker fallback when progressive resolution fails."""
+    with patch("lamia.engine.managers.web.selector_resolution.selector_resolution_service.ProgressiveSelectorResolver") as MockResolver, \
+        patch("lamia.engine.managers.web.selector_resolution.visual_picker.VisualElementPicker") as MockPicker:
+        mock_resolver = MockResolver.return_value
+        mock_resolver.resolve = AsyncMock(side_effect=RuntimeError("progressive failed"))
+        
+        mock_picker = MockPicker.return_value
+        mock_picker.pick_element_for_method = AsyncMock(return_value=("button.visual", ["el"]))
+        
+        result = await human_in_loop_service.resolve_selector(
             selector="sign in button",
             page_url="https://example.com",
             operation_type="click"
         )
     
-    assert result1 == result2 == "button.btn__primary--large"
-    # Verify second call didn't trigger AI
-    mock_llm_manager.execute.assert_not_called()
+    assert result == "button.visual"
+    mock_get_browser_adapter.assert_awaited()
+    MockResolver.assert_called_once_with(mock_browser_adapter, mock_llm_manager, human_in_loop_service.cache, human_in_loop_config_provider)
+    mock_picker.pick_element_for_method.assert_awaited_once_with(method_name="click", description="sign in button", page_url="https://example.com")
+    
+    cached = await human_in_loop_service.cache.get("sign in button", "https://example.com", None)
+    assert cached == "button.visual"
+    working = await human_in_loop_service.multi_cache.get_working_selectors("sign in button", "https://example.com")
+    assert "button.visual" in working
 
 
 @pytest.mark.asyncio
-async def test_exclusionary_description_bypass_validation(service, mock_llm_manager):
-    """Test that exclusionary descriptions bypass validation and return main element."""
-    # Mock AI response for exclusionary description
-    ambiguous_response = """AMBIGUOUS
-OPTION1: "Sign in" -> button.btn__primary--large
-OPTION2: "Sign in with Google" -> button.google-signin"""
+async def test_resolve_natural_language_no_human_in_loop_raises(service, mock_llm_manager, mock_browser_adapter, mock_get_browser_adapter, config_provider):
+    """Test natural language resolution fails without human-in-loop."""
+    with patch("lamia.engine.managers.web.selector_resolution.selector_resolution_service.ProgressiveSelectorResolver") as MockResolver:
+        mock_resolver = MockResolver.return_value
+        mock_resolver.resolve = AsyncMock(side_effect=RuntimeError("progressive failed"))
+        
+        with pytest.raises(ValueError, match="Failed to resolve selector"):
+            await service.resolve_selector(
+                selector="sign in button",
+                page_url="https://example.com"
+            )
+
+
+@pytest.mark.asyncio
+async def test_multi_cache_hit_uses_existing_selector(service, mock_browser_adapter, mock_get_browser_adapter):
+    """Test that working selectors in multi-cache are reused."""
+    await service.multi_cache.add_working_selector("sign in", "button.cached", "https://example.com")
+    mock_browser_adapter.get_elements = AsyncMock(return_value=[Mock()])
     
-    mock_llm_manager.execute.return_value = MockLLMResult(ambiguous_response)
+    with patch("lamia.engine.managers.web.selector_resolution.selector_resolution_service.ProgressiveSelectorResolver") as MockResolver:
+        result = await service.resolve_selector(
+            selector="sign in",
+            page_url="https://example.com"
+        )
     
-    # Test exclusionary description
-    result = await service.resolve_selector(
-        selector="Sign in but not the with Google options",
-        page_url="https://example.com",
-        operation_type="click"
-    )
-    
-    # Should return the main element (shortest option)
-    assert result == "button.btn__primary--large"
-    # Should only call AI once (no validation calls)
-    assert mock_llm_manager.execute.call_count == 1
+    assert result == "button.cached"
+    MockResolver.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -205,54 +231,23 @@ async def test_deduction_logic_creates_exclusionary_description(service):
     assert result is not None
     exclusionary_text, css_selector = result
     
-    # Should create exclusionary description
     assert "but not the" in exclusionary_text
     assert "Google" in exclusionary_text
     assert "Apple" in exclusionary_text
-    assert css_selector == "button.btn__primary--large"  # Shortest option
-
-
-@pytest.mark.asyncio
-async def test_filter_duplicate_suggestions(service, mock_llm_manager):
-    """Test that AI suggestions identical to original selector are filtered out."""
-    # Mock AI response that includes the original failing selector
-    ambiguous_response = """AMBIGUOUS
-OPTION1: "sign in" -> button.btn__primary--large
-OPTION2: "Sign in with Google" -> button.google-signin"""
-    
-    # Mock validation responses - Google option is unique
-    mock_llm_manager.execute.side_effect = [
-        MockLLMResult(ambiguous_response),  # Initial ambiguous response
-        MockLLMResult("button.google-signin"),  # Validation for Google - unique
-    ]
-    
-    with pytest.raises(ValueError) as excinfo:
-        await service.resolve_selector(
-            selector="sign in",  # Same as OPTION1
-            page_url="https://example.com",
-            operation_type="click"
-        )
-    
-    error_message = str(excinfo.value)
-    # Should show Google option since duplicate "sign in" is filtered out
-    # but only one option remains, so should get "not enough alternatives" error
-    assert "Could not find unique alternatives" in error_message or "🚨 AMBIGUOUS SELECTOR:" in error_message
+    assert css_selector == "button.btn__primary--large"
 
 
 @pytest.mark.asyncio
 async def test_operation_specific_instructions(service):
     """Test that different operation types get appropriate instructions."""
-    # Test click operation
     click_instructions = service._get_operation_instructions("click")
     assert "CLICKABLE element" in click_instructions
     assert "button" in click_instructions.lower()
     
-    # Test type operation
     type_instructions = service._get_operation_instructions("type_text")
     assert "INPUT element" in type_instructions
     assert "input" in type_instructions.lower()
     
-    # Test validation flag
     click_validation = service._get_operation_instructions("click", for_validation=True)
     assert "VALIDATION:" in click_validation
     assert "MULTIPLE clickable elements" in click_validation
@@ -264,7 +259,6 @@ async def test_response_parser_interface(service):
     parser = service.response_parser
     assert isinstance(parser, AmbiguousFormatResponseParser)
     
-    # Test parser methods
     html = "<button>Test</button>"
     operation_instructions = "OPERATION: Find button"
     
@@ -274,7 +268,7 @@ async def test_response_parser_interface(service):
     assert "AMBIGUOUS" in full_prompt
     assert "FORMAT 1" in full_prompt
     assert "FORMAT 2" in full_prompt
-    assert full_prompt == validation_prompt  # Should be identical for this parser
+    assert full_prompt == validation_prompt
 
 
 @pytest.mark.asyncio
@@ -294,71 +288,73 @@ async def test_llm_empty_response_error(service, mock_llm_manager):
     
     with pytest.raises(ValueError, match="LLM returned empty response"):
         await service.resolve_selector(
-            selector="sign in",
+            selector="button[",
             page_url="https://example.com",
             operation_type="click"
         )
 
 
 @pytest.mark.asyncio
+async def test_legacy_resolution_uses_parser_and_validator(mock_llm_manager, mock_get_page_html, mock_get_browser_adapter, mock_browser_adapter, config_provider):
+    """Test legacy resolution path wires parser and validator."""
+    mock_parser = Mock()
+    mock_parser.get_full_prompt_template.return_value = "prompt"
+    parse_result = Mock()
+    parse_result.is_ambiguous = False
+    parse_result.selector = "button.fixed"
+    mock_parser.parse_response.return_value = parse_result
+    
+    service = SelectorResolutionService(
+        llm_manager=mock_llm_manager,
+        get_page_html_func=mock_get_page_html,
+        get_browser_adapter_func=mock_get_browser_adapter,
+        config_provider=config_provider,
+        response_parser=mock_parser,
+    )
+    service.cache.clear()
+    service.multi_cache.clear()
+    
+    mock_llm_manager.execute.return_value = MockLLMResult("resolved")
+    mock_validation_result = Mock()
+    mock_validation_result.is_valid = True
+    
+    with patch('lamia.engine.managers.web.selector_resolution.validators.ai_resolved_selector_validator.AIResolvedSelectorValidator') as MockValidator:
+        mock_validator = MockValidator.return_value
+        mock_validator.validate_strict = AsyncMock(return_value=mock_validation_result)
+        
+        result = await service.resolve_selector(
+            selector="button[",
+            page_url="https://example.com",
+            operation_type="click"
+        )
+    
+    assert result == "button.fixed"
+    mock_parser.get_full_prompt_template.assert_called_once()
+    mock_parser.parse_response.assert_called_once_with("resolved", "button[")
+    mock_validator.validate_strict.assert_awaited_once_with("button.fixed")
+
+
+@pytest.mark.asyncio
 async def test_cache_operations(service):
     """Test cache size and clear operations."""
-    # Initially empty
     assert service.get_cache_size() == 0
     
-    # Mock a resolution to populate cache
     await service.cache.set("test selector", "https://example.com", "button.test")
     assert service.get_cache_size() == 1
     
-    # Clear cache
     await service.clear_cache()
     assert service.get_cache_size() == 0
 
 
 @pytest.mark.asyncio 
-async def test_custom_response_parser_injection():
+async def test_custom_response_parser_injection(config_provider):
     """Test that custom response parsers can be injected."""
     mock_parser = Mock()
     mock_llm_manager = AsyncMock()
-    
     service = SelectorResolutionService(
         llm_manager=mock_llm_manager,
+        config_provider=config_provider,
         response_parser=mock_parser
     )
     
     assert service.response_parser is mock_parser
-
-
-# Integration test to ensure no real AI calls
-@pytest.mark.asyncio
-async def test_no_real_ai_calls_in_test_suite(service, mock_llm_manager):
-    """Integration test to ensure all AI calls are properly mocked."""
-    # Run through multiple scenarios
-    test_cases = [
-        # Valid CSS - no AI call
-        ("button.test", False),
-        # Natural language - mocked AI call  
-        ("sign in button", True),
-    ]
-    
-    for selector, should_call_ai in test_cases:
-        mock_llm_manager.reset_mock()
-        
-        if should_call_ai:
-            mock_llm_manager.execute.return_value = MockLLMResult("button.resolved")
-            
-            with patch('lamia.engine.managers.web.selector_resolution.validators.ai_resolved_selector_validator.AIResolvedSelectorValidator') as MockValidator:
-                mock_validation_result = Mock()
-                mock_validation_result.is_valid = True
-                mock_validator = MockValidator.return_value
-                mock_validator.validate_strict = AsyncMock(return_value=mock_validation_result)
-                
-                await service.resolve_selector(selector, "https://example.com", operation_type="click")
-        else:
-            await service.resolve_selector(selector, "https://example.com")
-        
-        # Verify AI call expectations
-        if should_call_ai:
-            mock_llm_manager.execute.assert_called_once()
-        else:
-            mock_llm_manager.execute.assert_not_called()

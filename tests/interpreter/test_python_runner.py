@@ -3,6 +3,7 @@
 import pytest
 import tempfile
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch, Mock
 from lamia.interpreter.python_runner import run_python_code, run_python_file
