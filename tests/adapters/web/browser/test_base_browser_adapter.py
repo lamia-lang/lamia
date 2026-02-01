@@ -9,6 +9,7 @@ from lamia.adapters.web.browser.base import (
     DOM_STABILITY_CHECK_SCRIPT
 )
 from lamia.internal_types import BrowserActionParams, SelectorType
+from typing import Any
 
 
 class ConcreteBrowserAdapter(BaseBrowserAdapter):
@@ -80,6 +81,9 @@ class ConcreteBrowserAdapter(BaseBrowserAdapter):
     
     async def save_session_state(self) -> None:
         return f"saved session for {self.profile_name}"
+    
+    async def execute_script(self, script: str) -> Any:
+        return f"executed script: {script}"
 
 
 class TestBaseBrowserAdapterConstants:
@@ -136,7 +140,8 @@ class TestBaseBrowserAdapterAbstractMethods:
             'upload_file', 'wait_for_element', 'get_text', 'get_attribute',
             'is_visible', 'is_enabled', 'hover', 'scroll', 'select_option',
             'submit_form', 'take_screenshot', 'get_current_url', 'get_page_source',
-            'set_profile', 'load_session_state', 'save_session_state'
+            'set_profile', 'load_session_state', 'save_session_state', 
+            'execute_script'
         }
         
         assert abstract_methods == expected_methods

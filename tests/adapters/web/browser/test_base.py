@@ -126,6 +126,9 @@ class MockBrowserAdapter(BaseBrowserAdapter):
     async def save_session_state(self):
         self.session_saved = True
 
+    async def execute_script(self, script: str):
+        pass
+
 
 @pytest.mark.asyncio
 class TestBaseBrowserAdapterImplementation:
