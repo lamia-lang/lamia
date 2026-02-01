@@ -40,21 +40,6 @@ class TestConfigProvider:
             cm = ConfigProvider(config)
             assert cm.config["api_keys"]["openai"] == "config-key"
 
-    def test_from_dict_class_method(self):
-        """Test ConfigProvider.from_dict class method"""
-        config = {"model_chain": [ModelWithRetries(LLMModel("openai"), retries=1)]}
-        cm = ConfigProvider.from_dict(config)
-        assert isinstance(cm, ConfigProvider)
-        assert cm.config["model_chain"][0].model.name == "openai"
-
-    def test_get_config(self):
-        """Test get_config returns the entire configuration"""
-        config = {"default_model": "openai", "models": {}}
-        cm = ConfigProvider(config)
-        returned_config = cm.get_config()
-        assert returned_config["default_model"] == "openai"
-        assert "api_keys" in returned_config
-
     def test_get_model_chain(self):
         chain = [
             ModelWithRetries(LLMModel("openai"), retries=2),

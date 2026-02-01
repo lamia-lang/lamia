@@ -40,7 +40,6 @@ class LamiaEngine:
         
         Args:
             command_type: Type of request ('llm', 'fs', 'web', etc.)
-            content: The content to process
             return_type: Optional return type for validation
             
         Returns:
