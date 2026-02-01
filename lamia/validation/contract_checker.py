@@ -301,6 +301,23 @@ class ValidatorContractChecker:
             try:
                 result = method(test_input)
                 
+                # Handle async methods by running them in a new event loop
+                if inspect.iscoroutine(result):
+                    try:
+                        # Try to use existing event loop if not running
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # Create a new event loop in a thread to avoid "already running" error
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(asyncio.run, result)
+                                result = future.result()
+                        else:
+                            result = loop.run_until_complete(result)
+                    except RuntimeError:
+                        # No event loop exists, create one
+                        result = asyncio.run(result)
+                
                 # Check return type is ValidationResult
                 if not isinstance(result, ValidationResult):
                     self.violations.append(ContractViolation(

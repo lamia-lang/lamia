@@ -27,7 +27,7 @@ from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from lamia.engine.managers.web.selector_resolution.visual_picker.cache import VisualSelectionCache
 from lamia.engine.managers.web.selector_resolution.visual_picker.context_extractor import ElementContextExtractor
 from lamia.engine.managers.web.selector_resolution.visual_picker.overlay import BrowserOverlay
-from lamia.engine.managers.web.selector_resolution.visual_picker.picker import VisualElementPicker
+from lamia.engine.managers.web.selector_resolution.visual_picker import VisualElementPicker
 from lamia.engine.managers.web.selector_resolution.visual_picker.validation import SelectionValidator
 from lamia.engine.managers.web.selector_resolution.visual_picker.strategies.action_strategy import ActionSelectionHandler
 from lamia.engine.managers.web.selector_resolution.visual_picker.strategies.plural_strategy import PluralSelectionStrategy
