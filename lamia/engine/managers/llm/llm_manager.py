@@ -28,6 +28,11 @@ class LLMManager(Manager):
         # Initialize provider registry with only needed providers
         self.provider_registry = ProviderRegistry(needed_providers)
 
+        # Load user adapters from extensions folder
+        extensions_folder = config_provider.get_extensions_folder()
+        adapters_path = f"{extensions_folder}/adapters"
+        self.provider_registry.add_user_adapters([adapters_path])
+
         # Check that all required providers are supported
         self._check_all_required_providers(needed_providers)
 
