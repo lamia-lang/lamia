@@ -15,7 +15,7 @@ import json
 # TODO: we can configure type checking to be different from the file validator strict mode with this flag
 #STRICT_TYPE_MATCH = False
 
-SHOULD_GENERATE_JSON_SCHEMA = False
+SHOULD_GENERATE_JSON_SCHEMA = True
 
 logger = logging.getLogger(__name__)
 
