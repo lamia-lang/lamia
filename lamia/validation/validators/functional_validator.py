@@ -161,6 +161,7 @@ class FunctionalValidator(BaseValidator):
                  docker_memory_limit: str = "128m",
                  max_loop_iterations: int = 10000,
                  max_recursion_depth: int = 100):
+        super().__init__(strict=strict)
         self.test_cases = test_cases
         self.strict = strict
         self.execution_timeout = execution_timeout
