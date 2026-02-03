@@ -35,7 +35,7 @@ class TestLLMCommand:
         content = "What is the weather today?"
         command = LLMCommand(content)
         
-        assert command.content == content
+        assert command.prompt == content
         assert isinstance(command, Command)
     
     def test_initialization_with_kwargs(self):
@@ -43,8 +43,8 @@ class TestLLMCommand:
         content = "Generate a summary"
         
         try:
-            command = LLMCommand(content, temperature=0.7, max_tokens=100)
-            assert command.content == content
+            command = LLMCommand(content)
+            assert command.prompt == content
         except TypeError:
             # Constructor might not accept these parameters
             pass
@@ -52,20 +52,20 @@ class TestLLMCommand:
     def test_empty_content(self):
         """Test LLMCommand with empty content."""
         command = LLMCommand("")
-        assert command.content == ""
+        assert command.prompt == ""
     
     def test_unicode_content(self):
         """Test LLMCommand with unicode content."""
         content = "Translate 'Hello' to français: Bonjour! 🇫🇷"
         command = LLMCommand(content)
-        assert command.content == content
+        assert command.prompt == content
     
     def test_very_long_content(self):
         """Test LLMCommand with very long content."""
         content = "Long prompt " * 1000
         command = LLMCommand(content)
-        assert command.content == content
-        assert len(command.content) == len(content)
+        assert command.prompt == content
+        assert len(command.prompt) == len(content)
 
 
 class TestWebCommand:

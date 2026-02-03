@@ -33,7 +33,8 @@ class Lamia:
     Args:
         *models: Model names or Model objects (e.g., 'openai:gpt-4o', 'ollama', ...)
         api_keys: Optional dict of API keys (e.g., {'openai': 'sk-...'}).
-        validators: Optional list of functions or Lamia validator instances.
+        retry_config: Optional retry configuration.
+        web_config: Optional web configuration.
     """
     
     def __init__(
