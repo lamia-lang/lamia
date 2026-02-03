@@ -8,25 +8,24 @@ import pytest
 
 from lamia import Lamia, LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
-from lamia.adapters.llm.openai_adapter import OpenAIAdapter
 from lamia.engine.config_provider import ConfigProvider
 from lamia.facade.config_builder import (
     build_config_from_dict,
     build_config_from_models,
-    construct_model,
+    _construct_model_from_config,
 )
 from lamia.types import ExternalOperationRetryConfig
 
 
-class TestConstructModel:
-    """Tests for construct_model function."""
+class TestConstructModelFromConfig:
+    """Tests for _construct_model_from_config function."""
 
     def test_construct_model_with_full_name(self):
         """Test constructing model with provider:model format."""
         config = {}
         model_chain_item = {"name": "openai:gpt-4o"}
 
-        model = construct_model(config, model_chain_item)
+        model = _construct_model_from_config(config, model_chain_item)
 
         assert model is not None
         assert model.name == "openai:gpt-4o"
@@ -43,7 +42,7 @@ class TestConstructModel:
         }
         model_chain_item = {"name": "openai"}
 
-        model = construct_model(config, model_chain_item)
+        model = _construct_model_from_config(config, model_chain_item)
 
         assert model is not None
         assert model.name == "openai:gpt-4o"
@@ -60,7 +59,7 @@ class TestConstructModel:
         }
         model_chain_item = {"name": "openai"}
 
-        model = construct_model(config, model_chain_item)
+        model = _construct_model_from_config(config, model_chain_item)
 
         assert model is None
 
@@ -70,7 +69,7 @@ class TestConstructModel:
         model_chain_item = {}
 
         with pytest.raises(ValueError, match="must have a name"):
-            construct_model(config, model_chain_item)
+            _construct_model_from_config(config, model_chain_item)
 
     def test_construct_model_missing_providers_raises(self):
         """Test that missing providers config raises ValueError."""
@@ -78,7 +77,7 @@ class TestConstructModel:
         model_chain_item = {"name": "openai"}
 
         with pytest.raises(ValueError, match="Providers are not configured"):
-            construct_model(config, model_chain_item)
+            _construct_model_from_config(config, model_chain_item)
 
     def test_construct_model_unconfigured_provider_raises(self):
         """Test that unconfigured provider raises ValueError."""
@@ -86,7 +85,7 @@ class TestConstructModel:
         model_chain_item = {"name": "openai"}
 
         with pytest.raises(ValueError, match="is not configured"):
-            construct_model(config, model_chain_item)
+            _construct_model_from_config(config, model_chain_item)
 
     def test_construct_model_missing_default_model_raises(self):
         """Test that missing default_model raises ValueError."""
@@ -94,7 +93,7 @@ class TestConstructModel:
         model_chain_item = {"name": "openai"}
 
         with pytest.raises(ValueError, match="does not have a default model"):
-            construct_model(config, model_chain_item)
+            _construct_model_from_config(config, model_chain_item)
 
     def test_construct_model_inherits_parameters(self):
         """Test that model inherits parameters from provider and model settings."""
@@ -112,8 +111,9 @@ class TestConstructModel:
         }
         model_chain_item = {"name": "openai", "top_p": 0.9}
 
-        model = construct_model(config, model_chain_item)
+        model = _construct_model_from_config(config, model_chain_item)
 
+        assert model is not None
         assert model.temperature == 0.7
         assert model.max_tokens == 4096
         assert model.top_p == 0.9
@@ -122,30 +122,42 @@ class TestConstructModel:
 class TestBuildConfigFromDict:
     """Tests for build_config_from_dict function."""
 
+    def test_build_config_returns_config_provider(self):
+        """Test that build_config_from_dict returns ConfigProvider."""
+        config = {"model_chain": [{"name": "openai:gpt-4o"}]}
+
+        result = build_config_from_dict(config)
+
+        assert isinstance(result, ConfigProvider)
+
     def test_build_config_with_model_chain(self):
         """Test building config with model chain."""
         config = {
-            "model_chain": [{"name": "openai:gpt-4o"}]
+            "model_chain": [{"name": "openai:gpt-4o", "max_retries": 2}]
         }
 
-        models, retry_config = build_config_from_dict(config)
+        result = build_config_from_dict(config)
+        chain = result.get_model_chain()
 
-        assert len(models) == 1
-        assert models[0].name == "openai:gpt-4o"
+        assert len(chain) == 1
+        assert chain[0].model.name == "openai:gpt-4o"
+        assert chain[0].retries == 2
 
     def test_build_config_empty_model_chain(self):
         """Test building config with no models."""
         config = {}
 
-        models, retry_config = build_config_from_dict(config)
+        result = build_config_from_dict(config)
+        chain = result.get_model_chain()
 
-        assert len(models) == 0
+        assert len(chain) == 0
 
     def test_build_config_retry_config_defaults(self):
         """Test retry config uses defaults."""
         config = {}
 
-        models, retry_config = build_config_from_dict(config)
+        result = build_config_from_dict(config)
+        retry_config = result.get_retry_config()
 
         assert retry_config is not None
         assert retry_config.max_attempts == 3
@@ -155,7 +167,8 @@ class TestBuildConfigFromDict:
         """Test retry config when disabled."""
         config = {"retry_config": {"enabled": False}}
 
-        models, retry_config = build_config_from_dict(config)
+        result = build_config_from_dict(config)
+        retry_config = result.get_retry_config()
 
         assert retry_config is None
 
@@ -171,8 +184,10 @@ class TestBuildConfigFromDict:
             }
         }
 
-        models, retry_config = build_config_from_dict(config)
+        result = build_config_from_dict(config)
+        retry_config = result.get_retry_config()
 
+        assert retry_config is not None
         assert retry_config.max_attempts == 5
         assert retry_config.base_delay == 2.0
         assert retry_config.max_delay == 120.0
@@ -192,10 +207,57 @@ class TestBuildConfigFromDict:
             ]
         }
 
-        models, retry_config = build_config_from_dict(config)
+        result = build_config_from_dict(config)
+        chain = result.get_model_chain()
 
-        assert len(models) == 1
-        assert models[0].name == "anthropic:claude-3"
+        assert len(chain) == 1
+        assert chain[0].model.name == "anthropic:claude-3"
+
+    def test_build_config_with_api_keys(self):
+        """Test that api_keys are propagated to ConfigProvider."""
+        config = {
+            "api_keys": {"openai": "sk-test-key", "anthropic": "sk-ant-key"},
+            "model_chain": [{"name": "openai:gpt-4o"}]
+        }
+
+        result = build_config_from_dict(config)
+
+        assert result.get_api_key("openai") == "sk-test-key"
+        assert result.get_api_key("anthropic") == "sk-ant-key"
+
+    def test_build_config_with_web_config(self):
+        """Test that web_config is propagated to ConfigProvider."""
+        config = {
+            "web_config": {
+                "human_in_loop": True,
+                "browser_options": {"headless": True}
+            }
+        }
+
+        result = build_config_from_dict(config)
+
+        assert result.is_human_in_loop_enabled() is True
+
+    def test_build_config_with_all_options(self):
+        """Test building config with all config options."""
+        config = {
+            "model_chain": [{"name": "openai:gpt-4o", "max_retries": 3}],
+            "api_keys": {"openai": "sk-test"},
+            "retry_config": {"max_attempts": 5},
+            "web_config": {"human_in_loop": True}
+        }
+
+        result = build_config_from_dict(config)
+
+        # Verify all options are propagated
+        chain = result.get_model_chain()
+        assert len(chain) == 1
+        assert chain[0].model.name == "openai:gpt-4o"
+        assert result.get_api_key("openai") == "sk-test"
+        retry_config = result.get_retry_config()
+        assert retry_config is not None
+        assert retry_config.max_attempts == 5
+        assert result.is_human_in_loop_enabled() is True
 
 
 class TestBuildConfigFromModels:
@@ -282,7 +344,9 @@ class TestBuildConfigFromModels:
             web_config=None
         )
 
-        assert result.get_retry_config().max_attempts == 5
+        result_retry_config = result.get_retry_config()
+        assert result_retry_config is not None
+        assert result_retry_config.max_attempts == 5
 
     def test_build_config_with_web_config(self):
         """Test building config with web config."""
@@ -300,7 +364,7 @@ class TestBuildConfigFromModels:
         """Test that invalid model type raises TypeError."""
         with pytest.raises(TypeError, match="Each model spec must be"):
             build_config_from_models(
-                models=(123,),
+                models=(123,),  # type: ignore[arg-type]
                 api_keys=None,
                 retry_config=None,
                 web_config=None
@@ -323,15 +387,72 @@ class TestBuildConfigFromModels:
         assert chain[1].retries == 2
 
 
+class TestLamiaFromConfig:
+    """Tests for Lamia.from_config using build_config_from_dict."""
+
+    def test_from_config_creates_lamia_with_all_options(self):
+        """Test that from_config passes all config options to engine."""
+        config = {
+            "model_chain": [{"name": "openai:gpt-4o", "max_retries": 2}],
+            "api_keys": {"openai": "sk-test"},
+            "retry_config": {"max_attempts": 5},
+            "web_config": {"human_in_loop": True}
+        }
+
+        with mock.patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = mock.MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia.from_config(config)
+
+            # Verify engine was created with ConfigProvider containing all options
+            MockEngine.assert_called_once()
+            config_provider = MockEngine.call_args[0][0]
+            assert isinstance(config_provider, ConfigProvider)
+
+            # Verify all options are in the config provider
+            chain = config_provider.get_model_chain()
+            assert len(chain) == 1
+            assert chain[0].model.name == "openai:gpt-4o"
+            assert chain[0].retries == 2
+            assert config_provider.get_api_key("openai") == "sk-test"
+            retry_config = config_provider.get_retry_config()
+            assert retry_config is not None
+            assert retry_config.max_attempts == 5
+            assert config_provider.is_human_in_loop_enabled() is True
+
+    def test_from_config_api_keys_not_lost(self):
+        """Test that api_keys from config dict are not lost (previous bug)."""
+        config = {
+            "model_chain": [{"name": "openai:gpt-4o"}],
+            "api_keys": {"openai": "sk-from-config", "anthropic": "sk-ant-key"}
+        }
+
+        with mock.patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = mock.MagicMock()
+            MockEngine.return_value = mock_engine
+
+            Lamia.from_config(config)
+
+            config_provider = MockEngine.call_args[0][0]
+            # This would have been None before the fix
+            assert config_provider.get_api_key("openai") == "sk-from-config"
+            assert config_provider.get_api_key("anthropic") == "sk-ant-key"
+
+
 class TestLamiaIntegration:
     """Tests for Lamia facade integration."""
 
     @pytest.mark.integration
-    def test_api_key_propagated_to_adapter(self):
-        """Test API key is propagated to adapter."""
+    def test_api_key_available_in_config_provider(self):
+        """Test API key is available in config provider."""
         api_keys = {"openai": "sk-test"}
-        with mock.patch.object(OpenAIAdapter, "__init__", return_value=None) as mocked_init:
-            lamia = Lamia("openai", api_keys=api_keys)
-            asyncio.run(lamia._engine.start())
+        with mock.patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = mock.MagicMock()
+            MockEngine.return_value = mock_engine
 
-            mocked_init.assert_called_once_with(api_key="sk-test", model=mock.ANY)
+            Lamia("openai", api_keys=api_keys)
+
+            # Verify the ConfigProvider was created with the API key
+            config_provider = MockEngine.call_args[0][0]
+            assert config_provider.get_api_key("openai") == "sk-test"

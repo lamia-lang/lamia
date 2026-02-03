@@ -16,9 +16,15 @@ from lamia.engine.config_provider import ConfigProvider
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_LLM_RETRIES = 1
 
-def construct_model(config: Dict[str, Any], model_chain_item: Dict[str, Any]) -> Optional[LLMModel]:
-    """Construct an LLMModel from config and model chain item."""
+
+def _construct_model_from_config(config: Dict[str, Any], model_chain_item: Dict[str, Any]) -> Optional[LLMModel]:
+    """Construct an LLMModel from full config and model chain item.
+    
+    This handles the complex case where model_chain items reference providers
+    and inherit settings from provider/model family configurations.
+    """
     if "name" not in model_chain_item:
         raise ValueError("Model chain item must have a name")
     
@@ -62,51 +68,51 @@ def construct_model(config: Dict[str, Any], model_chain_item: Dict[str, Any]) ->
     )
 
 
-def build_config_from_dict(config: Dict[str, Any]) -> Tuple[List[LLMModel], Optional[ExternalOperationRetryConfig]]:
-    """Build models and retry config from a config dictionary."""
-    models = []
-    if "model_chain" in config:
-        model_chain = config['model_chain']
-        for index, model_chain_item in enumerate(model_chain):
-            try:
-                model = construct_model(config, model_chain_item)
-                if model is not None:  # Gracefully handle disabled providers
-                    models.append(model)
-            except ValueError as e:
-                raise ValueError(f"Model chain item {index} with name '{model_chain_item.get('name', 'unknown')}' excluded. Reason: {e}")
-
-    if len(models) == 0:
-        logger.warning("No valid LLM model found in the model chain. LLM operations will not be possible.")
-        
-    # Convert the config dictionary to ExternalOperationRetryConfig
-    retry_config_settings = config.get("retry_config", {})
+def _parse_retry_config(retry_config_settings: Dict[str, Any]) -> Optional[ExternalOperationRetryConfig]:
+    """Parse retry config from settings dict."""
     if not retry_config_settings.get('enabled', True):
-        retry_config = None
-    else:
-        max_total_duration = retry_config_settings.get('max_total_duration')
-        if max_total_duration is not None:
-            max_total_duration = timedelta(seconds=max_total_duration)
-            
-        retry_config = ExternalOperationRetryConfig(
-            max_attempts=retry_config_settings.get('max_attempts', 3),
-            base_delay=retry_config_settings.get('base_delay', 1.0),
-            max_delay=retry_config_settings.get('max_delay', 60.0),
-            exponential_base=retry_config_settings.get('exponential_base', 2.0),
-            max_total_duration=max_total_duration
-        ) 
-
-    return models, retry_config
+        return None
+    
+    max_total_duration = retry_config_settings.get('max_total_duration')
+    if max_total_duration is not None:
+        max_total_duration = timedelta(seconds=max_total_duration)
+        
+    return ExternalOperationRetryConfig(
+        max_attempts=retry_config_settings.get('max_attempts', 3),
+        base_delay=retry_config_settings.get('base_delay', 1.0),
+        max_delay=retry_config_settings.get('max_delay', 60.0),
+        exponential_base=retry_config_settings.get('exponential_base', 2.0),
+        max_total_duration=max_total_duration
+    )
 
 
-def build_config_from_models(
-    models: Tuple[Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], ...],
-    api_keys: Optional[dict], 
-    retry_config: Optional[ExternalOperationRetryConfig],
-    web_config: Optional[Dict[str, Any]]
-) -> ConfigProvider:
-    """Build a ConfigProvider from model specifications."""
-    DEFAULT_LLM_RETRIES = 1
-    # Convert the *models* var-tuple into a proper list for iteration.
+def _build_model_chain_from_config(config: Dict[str, Any]) -> List[ModelWithRetries]:
+    """Build model chain from config dict with provider resolution."""
+    models_and_retries: List[ModelWithRetries] = []
+    
+    if "model_chain" not in config:
+        return models_and_retries
+    
+    model_chain = config['model_chain']
+    for index, model_chain_item in enumerate(model_chain):
+        try:
+            model = _construct_model_from_config(config, model_chain_item)
+            if model is not None:  # Gracefully handle disabled providers
+                retries = model_chain_item.get('max_retries', DEFAULT_LLM_RETRIES)
+                models_and_retries.append(ModelWithRetries(model, retries))
+        except ValueError as e:
+            raise ValueError(f"Model chain item {index} with name '{model_chain_item.get('name', 'unknown')}' excluded. Reason: {e}")
+    
+    if len(models_and_retries) == 0:
+        logger.warning("No valid LLM model found in the model chain. LLM operations will not be possible.")
+    
+    return models_and_retries
+
+
+def _build_model_chain_from_specs(
+    models: Tuple[Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], ...]
+) -> List[ModelWithRetries]:
+    """Build model chain from simple model specs (programmatic API)."""
     incoming_models = list(models) if models else []
 
     # If nothing was supplied default to a local Ollama setup.
@@ -130,13 +136,54 @@ def build_config_from_models(
             )
 
         models_and_retries.append(ModelWithRetries(item, retries))
+    
+    return models_and_retries
 
-    # Assemble the final config dict
+
+def _assemble_config_provider(
+    model_chain: List[ModelWithRetries],
+    api_keys: Optional[dict],
+    retry_config: Optional[ExternalOperationRetryConfig],
+    web_config: Optional[Dict[str, Any]]
+) -> ConfigProvider:
+    """Assemble final ConfigProvider from components.
+    
+    This is the SINGLE place where config dict is assembled, ensuring
+    all config options are always included.
+    """
     config_dict: Dict[str, Any] = {
-        "model_chain": models_and_retries,
+        "model_chain": model_chain,
         "api_keys": api_keys,
         "retry_config": retry_config,
         "web_config": web_config or {},
-    }    
-
+    }
     return ConfigProvider(config_dict)
+
+
+def build_config_from_dict(config: Dict[str, Any]) -> ConfigProvider:
+    """Build ConfigProvider from a configuration dictionary (e.g., from YAML).
+    
+    This handles the complex config format with providers, model settings inheritance,
+    and retry config parsing.
+    """
+    model_chain = _build_model_chain_from_config(config)
+    retry_config = _parse_retry_config(config.get("retry_config", {}))
+    api_keys = config.get("api_keys")
+    web_config = config.get("web_config")
+    
+    return _assemble_config_provider(model_chain, api_keys, retry_config, web_config)
+
+
+def build_config_from_models(
+    models: Tuple[Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]], ...],
+    api_keys: Optional[dict], 
+    retry_config: Optional[ExternalOperationRetryConfig],
+    web_config: Optional[Dict[str, Any]]
+) -> ConfigProvider:
+    """Build ConfigProvider from model specifications (programmatic API).
+    
+    This is the simple path for programmatic use where models are specified
+    directly as strings, LLMModel objects, or (model, retries) tuples.
+    """
+    model_chain = _build_model_chain_from_specs(models)
+    return _assemble_config_provider(model_chain, api_keys, retry_config, web_config)

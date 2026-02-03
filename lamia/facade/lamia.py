@@ -13,6 +13,7 @@ from typing import Any, Optional, List, Dict, Union, Tuple, Type
 from lamia import env_loader
 from lamia.engine.engine import LamiaEngine
 from lamia import LLMModel
+from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.types import BaseType, ExternalOperationRetryConfig
 from lamia.interpreter.commands import Command
 
@@ -50,22 +51,26 @@ class Lamia:
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "Lamia":
-        """Create Lamia instance from configuration dictionary."""
-        models, retry_config = build_config_from_dict(config)
+        """Create Lamia instance from configuration dictionary.
         
-        # Unpack the models list for the constructor and pass web_config
-        return cls(
-            *models,
-            retry_config=retry_config,
-            web_config=config.get('web_config'),
-        )
+        The config dict can include:
+        - model_chain: List of model specs with provider references
+        - api_keys: Dict of API keys per provider
+        - retry_config: Retry configuration settings
+        - web_config: Web automation configuration
+        - providers: Provider-specific model settings
+        """
+        config_provider = build_config_from_dict(config)
+        instance = cls.__new__(cls)
+        instance._engine = LamiaEngine(config_provider)
+        return instance
 
     async def run_async(
         self,
         command: Union[str, Command], 
         return_type: Optional[Type[BaseType]] = None,
         *,
-        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None, 
+        models: Optional[List[ModelWithRetries]] = None, 
     ) -> Union[Any, LamiaResult]:
         """
         Generate a response, trying Python code first, then LLM.
@@ -124,7 +129,7 @@ class Lamia:
         command: Union[str, Command], 
         return_type: Optional[Type[BaseType]] = None,
         *,
-        models: Union[Union[str, LLMModel], Tuple[Union[str, LLMModel], int]] = None,
+        models: Optional[List[ModelWithRetries]] = None,
     ) -> Union[Any, LamiaResult]:
         """
         Run a command synchronously.
