@@ -1,3 +1,44 @@
+from lamia.facade.config_builder import build_config_from_models, build_config_from_dict
+from lamia._internal_types.model_retry import ModelWithRetries
+from lamia import LLMModel
+
+
+def test_build_config_from_models_defaults_to_ollama():
+    config_provider = build_config_from_models((), None, None, None)
+    model_chain = config_provider.get_model_chain()
+
+    assert isinstance(model_chain, list)
+    assert len(model_chain) == 1
+    assert isinstance(model_chain[0], ModelWithRetries)
+    assert model_chain[0].model.name == "ollama"
+    assert model_chain[0].retries == 1
+
+
+def test_build_config_from_models_passes_web_config():
+    web_config = {"headless": True}
+    config_provider = build_config_from_models(("openai:gpt-4o",), None, None, web_config)
+
+    assert config_provider.get_web_config() == web_config
+
+
+def test_build_config_from_dict_builds_model_chain():
+    config = {
+        "providers": {
+            "openai": {
+                "enabled": True,
+                "default_model": "gpt-4o"
+            }
+        },
+        "model_chain": [
+            {"name": "openai"}
+        ]
+    }
+    config_provider = build_config_from_dict(config)
+    model_chain = config_provider.get_model_chain()
+
+    assert len(model_chain) == 1
+    assert isinstance(model_chain[0].model, LLMModel)
+    assert model_chain[0].model.name == "openai:gpt-4o"
 """Tests for config_builder module."""
 
 import asyncio
