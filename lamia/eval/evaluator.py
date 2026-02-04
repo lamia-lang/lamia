@@ -4,14 +4,22 @@ from dataclasses import dataclass
 import logging
 from lamia import Lamia
 from ..types import BaseType
-from .model_pricer import ModelPricer
 from .model_cost import ModelCost
-from ..engine.managers.llm.llm_manager import LLMManager
-from lamia.interpreter.command_types import CommandType
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ModelAttemptResult:
+    """Typed result of a model evaluation attempt."""
+    model: str
+    success: bool
+    cost: Optional[ModelCost] = None
+    result: Any = None
+    error: Optional[str] = None
+
 
 @dataclass
 class EvaluationResult:
@@ -19,14 +27,16 @@ class EvaluationResult:
     minimum_working_model: Optional[str]
     success: bool
     validation_pass_rate: float
-    attempts: List[Dict[str, Any]]
+    attempts: List[ModelAttemptResult]
     cost: Optional[ModelCost] = None
     error_message: Optional[str] = None
+
 
 class EvaluationTask(Protocol):
     """Protocol for evaluation tasks (prompt or script)."""
     async def execute(self, model: str, lamia: Lamia) -> Any:
         """Execute the task using the given model and lamia instance."""
+
 
 @dataclass
 class PromptTask:
@@ -38,6 +48,7 @@ class PromptTask:
         llm_model = LLMModel(model)
         model_with_retries = ModelWithRetries(llm_model, 1)
         return await lamia.run_async(self.prompt, self.return_type, models=[model_with_retries])
+
 
 @dataclass
 class ScriptTask:
@@ -58,6 +69,7 @@ class ScriptTask:
             # Restore original models
             lamia._models = original_models
 
+
 class ModelEvaluator:
     """
     Main entry point for model evaluation and optimization.
@@ -65,77 +77,32 @@ class ModelEvaluator:
     Finds the most cost-effective model that can successfully complete a task
     by testing models from most expensive to least expensive using various
     search strategies.
+    
+    Models should be provided as a list ordered from most expensive/capable
+    to least expensive/capable.
     """
     
     def __init__(self, lamia_instance: Optional[Lamia] = None):
         # If no lamia instance provided, create a default one
         self.lamia = lamia_instance or Lamia()
-        self.pricer = ModelPricer(llm_manager=self.lamia._engine.manager_factory.get_manager(CommandType.LLM))
         self._own_lamia = lamia_instance is None  # Track if we created our own instance
     
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Clean up resources."""
         if self._own_lamia and self.lamia:
             await self.lamia._engine.cleanup()
     
-    async def __aenter__(self):
+    async def __aenter__(self) -> "ModelEvaluator":
         return self
     
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         await self.cleanup()
-    
-    async def _resolve_models(self, models_input: Union[str, List[str]]) -> List[str]:
-        """Resolve models from different input formats.
-        
-        Args:
-            models_input: Can be:
-                - A single max_model string (e.g., "openai:gpt-4")
-                - A list of specific models with provider prefixes (e.g., ["openai:gpt-4", "openai:gpt-3.5-turbo", "anthropic:claude-3-sonnet"])
-                - A list of provider names (e.g., ["openai", "anthropic"])
-        
-        Returns:
-            List of model names to evaluate
-        """
-        if isinstance(models_input, str):
-            # Single max_model string - use existing logic
-            return await self.pricer.get_ordered_models(models_input)
-        
-        elif isinstance(models_input, list):
-            if not models_input:
-                raise ValueError("Models list cannot be empty")
-            
-            # Check if it's a list of provider names by checking against available providers
-            available_providers = self.pricer.get_available_providers()
-            
-            if all(item in available_providers for item in models_input):
-                # It's a list of provider names - get all models from these providers
-                all_models = []
-                for provider_name in models_input:
-                    provider = self.pricer._get_provider(provider_name)
-                    if provider:
-                        try:
-                            provider_models = await provider.get_ordered_models()
-                            if isinstance(provider_models, list):
-                                all_models.extend(provider_models)
-                        except Exception as e:
-                            logger.warning(f"Failed to get models from provider {provider_name}: {e}")
-                
-                if not all_models:
-                    raise ValueError(f"No models found for providers: {models_input}")
-                
-                return all_models
-            else:
-                # It's a list of specific model names
-                return models_input
-        
-        else:
-            raise ValueError(f"Invalid models_input type: {type(models_input)}. Expected str or List[str]")
     
     async def evaluate_prompt(
         self,
         prompt: str,
         return_type: Optional[Type[BaseType]],
-        models: Union[str, List[str]],
+        models: List[str],
         strategy: str = "binary_search",
     ) -> EvaluationResult:
         """
@@ -144,19 +111,20 @@ class ModelEvaluator:
         Args:
             prompt: The prompt to evaluate
             return_type: Expected return type for validation
-            models: Can be:
-                - A single max_model string (e.g., "openai:gpt-4")
-                - A list of specific models with provider prefixes (e.g., ["openai:gpt-4", "openai:gpt-3.5-turbo", "anthropic:claude-3-sonnet"])
-                - A list of provider names (e.g., ["openai", "anthropic"])
+            models: List of model names ordered from most to least expensive/capable
+                   (e.g., ["openai:gpt-4", "openai:gpt-3.5-turbo"])
             strategy: Search strategy ("binary_search" or "step_back")
         """
+        if not models:
+            raise ValueError("Models list cannot be empty")
+        
         task = PromptTask(prompt, return_type)
         return await self._evaluate_task(task, models, strategy)
     
     async def evaluate_script(
         self,
         script_func: Callable[[Lamia], Any],
-        models: Union[str, List[str]],
+        models: List[str],
         strategy: str = "binary_search"
     ) -> EvaluationResult:
         """
@@ -164,24 +132,23 @@ class ModelEvaluator:
         
         Args:
             script_func: Function that takes a Lamia instance and executes the script
-            models: Can be:
-                - A single max_model string (e.g., "openai:gpt-4")
-                - A list of specific models with provider prefixes (e.g., ["openai:gpt-4", "openai:gpt-3.5-turbo", "anthropic:claude-3-sonnet"])
-                - A list of provider names (e.g., ["openai", "anthropic"])
+            models: List of model names ordered from most to least expensive/capable
             strategy: Search strategy
         """
+        if not models:
+            raise ValueError("Models list cannot be empty")
+        
         task = ScriptTask(script_func)
         return await self._evaluate_task(task, models, strategy)
     
     async def _evaluate_task(
         self,
         task: EvaluationTask,
-        models_input: Union[str, List[str]],
+        models: List[str],
         strategy: str = "binary_search"
     ) -> EvaluationResult:
         """Evaluate a task using the specified strategy."""
-        models = await self._resolve_models(models_input)
-        attempts = []
+        attempts: List[ModelAttemptResult] = []
 
         logger.info(f"Evaluating models: {models}")
         
@@ -194,7 +161,7 @@ class ModelEvaluator:
         self, 
         task: EvaluationTask,
         models: List[str], 
-        attempts: List[Dict[str, Any]]
+        attempts: List[ModelAttemptResult]
     ) -> EvaluationResult:
         """Binary search through models to find the cheapest working one."""
         best_model = None
@@ -208,9 +175,9 @@ class ModelEvaluator:
             attempt = await self._evaluate_model(model, task)
             attempts.append(attempt)
             
-            if attempt["success"]:
+            if attempt.success:
                 best_model = model
-                best_cost = attempt["cost"]
+                best_cost = attempt.cost
                 right = mid - 1  # Try cheaper models
             else:
                 left = mid + 1  # Try more expensive models
@@ -228,7 +195,7 @@ class ModelEvaluator:
         self, 
         task: EvaluationTask,
         models: List[str], 
-        attempts: List[Dict[str, Any]]
+        attempts: List[ModelAttemptResult]
     ) -> EvaluationResult:
         """Two-step-back, one-step-forward evaluation strategy."""
         current_idx = len(models) - 1
@@ -239,12 +206,12 @@ class ModelEvaluator:
             attempt = await self._evaluate_model(model, task)
             attempts.append(attempt)
             
-            if attempt["success"]:
+            if attempt.success:
                 return EvaluationResult(
                     minimum_working_model=model,
                     success=True,
                     validation_pass_rate=100.0,
-                    cost=attempt["cost"],
+                    cost=attempt.cost,
                     attempts=attempts
                 )
             
@@ -259,27 +226,71 @@ class ModelEvaluator:
             error_message="No model succeeded"
         )
     
-    async def _evaluate_model(self, model: str, task: EvaluationTask) -> Dict[str, Any]:
-        """Atomic evaluation function for a single model and task."""
+    async def _evaluate_model(self, model: str, task: EvaluationTask) -> ModelAttemptResult:
+        """Atomic evaluation function for a single model and task.
+        
+        Returns success only if:
+        1. The task executes without exceptions
+        2. The result passes validation (lamia.run_async raises on validation failure)
+        3. The result is not None
+        
+        Any validation failure in lamia.run_async will raise an exception,
+        which is caught and returned as success=False.
+        """
         try:
             result = await task.execute(model, self.lamia)
             
+            # Check if result is None - this indicates the model didn't produce valid output
+            if result is None:
+                logger.debug(f"Model {model} returned None result")
+                return ModelAttemptResult(
+                    model=model,
+                    success=False,
+                    error="Model returned None result"
+                )
+            
             logger.debug(f"Model {model} generated response: {getattr(result, 'result_text', str(result))}")
             
-            cost = await self.pricer.calculate_cost(model, result)
-            return {
-                "model": model,
-                "success": True,
-                "cost": cost,
-                "result": result
-            }
+            # TODO: Implement cost calculation when pricing is added
+            # For now, extract token usage if available and create a basic ModelCost
+            cost = self._extract_cost(result)
+            
+            return ModelAttemptResult(
+                model=model,
+                success=True,
+                cost=cost,
+                result=result
+            )
             
         except Exception as e:
             traceback.print_exc()
             logger.debug(f"Model {model} failed with error: {e}")
-            return {
-                "model": model,
-                "success": False,
-                "error": str(e)
-            }
-
+            return ModelAttemptResult(
+                model=model,
+                success=False,
+                error=str(e)
+            )
+    
+    def _extract_cost(self, result: Any) -> Optional[ModelCost]:
+        """Extract cost information from result if available.
+        
+        TODO: Implement actual cost calculation when pricing is added.
+        For now, just extracts token counts without monetary cost.
+        """
+        try:
+            # Try to get usage from tracking context
+            if hasattr(result, 'tracking_context'):
+                metadata = result.tracking_context.metadata
+                if metadata and isinstance(metadata, dict):
+                    usage = metadata.get("usage", {})
+                    if usage and isinstance(usage, dict):
+                        input_tokens = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
+                        output_tokens = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
+                        return ModelCost(
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens
+                        )
+        except Exception as e:
+            logger.debug(f"Could not extract cost: {e}")
+        
+        return None

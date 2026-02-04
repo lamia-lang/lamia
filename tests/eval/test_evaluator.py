@@ -1,28 +1,9 @@
 """Tests for evaluation module."""
 
 import pytest
-from unittest.mock import Mock, patch
-from lamia.eval.evaluator import ModelEvaluator
-from lamia.eval.model_cost import ModelCost  
-from lamia.eval.model_pricer import ModelPricer
-
-
-class TestEvaluator:
-    """Test Evaluator class."""
-    
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.evaluator = ModelEvaluator()
-    
-    def test_initialization(self):
-        """Test Evaluator initialization."""
-        assert self.evaluator is not None
-        assert hasattr(self.evaluator, 'evaluate')
-    
-    def test_evaluate_method_exists(self):
-        """Test that evaluate method exists."""
-        assert hasattr(self.evaluator, 'evaluate')
-        assert callable(self.evaluator.evaluate)
+from unittest.mock import Mock, AsyncMock, patch
+from lamia.eval.evaluator import ModelEvaluator, EvaluationResult, PromptTask, ScriptTask
+from lamia.eval.model_cost import ModelCost
 
 
 class TestModelCost:
@@ -32,268 +13,184 @@ class TestModelCost:
         """Test ModelCost initialization."""
         cost = ModelCost(
             input_tokens=100,
-            output_tokens=50,
-            input_cost=0.001,
-            output_cost=0.002,
-            total_cost=0.002
+            output_tokens=50
         )
         
         assert cost.input_tokens == 100
         assert cost.output_tokens == 50
-        assert cost.input_cost == 0.001
-        assert cost.output_cost == 0.002
-        assert cost.total_cost == 0.002
+        assert cost.total_cost_usd == 0.0
     
-    def test_cost_calculation(self):
-        """Test cost calculation logic."""
+    def test_initialization_with_cost(self):
+        """Test ModelCost initialization with monetary cost."""
         cost = ModelCost(
-            input_tokens=1000,
-            output_tokens=500,
-            input_cost=0.01,
-            output_cost=0.02,
-            total_cost=0.03
+            input_tokens=100,
+            output_tokens=50,
+            total_cost_usd=0.003
         )
         
-        assert cost.total_cost == 0.03
-        assert cost.input_cost + cost.output_cost == cost.total_cost
+        assert cost.input_tokens == 100
+        assert cost.output_tokens == 50
+        assert cost.total_cost_usd == 0.003
     
-    def test_zero_tokens(self):
-        """Test handling of zero tokens."""
-        cost = ModelCost(
-            input_tokens=0,
-            output_tokens=0,
-            input_cost=0.0,
-            output_cost=0.0,
-            total_cost=0.0
-        )
+    def test_total_tokens(self):
+        """Test total_tokens property."""
+        cost = ModelCost(input_tokens=100, output_tokens=50)
+        assert cost.total_tokens == 150
+    
+    def test_zero_factory(self):
+        """Test ModelCost.zero() factory."""
+        cost = ModelCost.zero()
         
-        assert cost.total_cost == 0.0
         assert cost.input_tokens == 0
         assert cost.output_tokens == 0
-
-
-class TestModelPricer:
-    """Test ModelPricer class."""
+        assert cost.total_cost_usd == 0.0
     
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.pricer = ModelPricer()
-    
-    def test_initialization(self):
-        """Test ModelPricer initialization."""
-        assert self.pricer is not None
-        assert hasattr(self.pricer, 'calculate_cost')
-    
-    def test_calculate_cost_method_exists(self):
-        """Test that calculate_cost method exists."""
-        assert hasattr(self.pricer, 'calculate_cost')
-        assert callable(self.pricer.calculate_cost)
-    
-    def test_calculate_cost_basic(self):
-        """Test basic cost calculation."""
-        # This test assumes a basic interface - adjust based on actual implementation
-        try:
-            cost = self.pricer.calculate_cost(
-                model="gpt-3.5-turbo",
-                input_tokens=1000,
-                output_tokens=500
-            )
-            assert isinstance(cost, (int, float, ModelCost))
-        except (TypeError, AttributeError):
-            # Method signature might be different
-            pass
-
-
-class TestEvaluationIntegration:
-    """Test integration between evaluation components."""
-    
-    def test_evaluator_with_pricer(self):
-        """Test evaluator integration with model pricer."""
-        evaluator = ModelEvaluator()
-        pricer = ModelPricer()
+    def test_addition(self):
+        """Test adding two ModelCost objects."""
+        cost1 = ModelCost(input_tokens=100, output_tokens=50, total_cost_usd=0.01)
+        cost2 = ModelCost(input_tokens=200, output_tokens=100, total_cost_usd=0.02)
         
-        # Test that components can work together
-        assert evaluator is not None
-        assert pricer is not None
-    
-    def test_cost_tracking(self):
-        """Test cost tracking functionality."""
-        # Test basic cost tracking workflow
-        evaluator = ModelEvaluator()
+        total = cost1 + cost2
         
-        # Should be able to track costs
-        assert hasattr(evaluator, 'evaluate') or hasattr(evaluator, 'track_cost')
+        assert total.input_tokens == 300
+        assert total.output_tokens == 150
+        assert total.total_cost_usd == 0.03
+    
+    def test_addition_with_none(self):
+        """Test adding ModelCost with None."""
+        cost = ModelCost(input_tokens=100, output_tokens=50, total_cost_usd=0.01)
+        
+        result = cost + None
+        
+        assert result.input_tokens == 100
+        assert result.output_tokens == 50
+        assert result.total_cost_usd == 0.01
+    
+    def test_str_with_cost(self):
+        """Test string representation with cost."""
+        cost = ModelCost(input_tokens=100, output_tokens=50, total_cost_usd=0.003)
+        result = str(cost)
+        assert "$0.003" in result
+        assert "100 input" in result
+        assert "50 output" in result
+    
+    def test_str_without_cost(self):
+        """Test string representation without cost."""
+        cost = ModelCost(input_tokens=100, output_tokens=50)
+        result = str(cost)
+        assert "$" not in result
+        assert "100 input" in result
+        assert "50 output" in result
 
 
-class TestModelCostEdgeCases:
-    """Test ModelCost edge cases."""
+class TestEvaluationResult:
+    """Test EvaluationResult dataclass."""
     
-    def test_negative_tokens(self):
-        """Test handling of negative token counts."""
-        try:
-            cost = ModelCost(
-                input_tokens=-10,
-                output_tokens=50,
-                input_cost=0.0,
-                output_cost=0.002,
-                total_cost=0.002
-            )
-            # If it allows negative values, test they're preserved
-            assert cost.input_tokens == -10
-        except (ValueError, TypeError):
-            # If it validates against negative values, that's also valid
-            pass
-    
-    def test_large_token_counts(self):
-        """Test handling of large token counts."""
-        large_tokens = 1_000_000
-        cost = ModelCost(
-            input_tokens=large_tokens,
-            output_tokens=large_tokens,
-            input_cost=100.0,
-            output_cost=200.0,
-            total_cost=300.0
+    def test_success_result(self):
+        """Test successful evaluation result."""
+        result = EvaluationResult(
+            minimum_working_model="openai:gpt-3.5-turbo",
+            success=True,
+            validation_pass_rate=100.0,
+            attempts=[{"model": "openai:gpt-3.5-turbo", "success": True}]
         )
         
-        assert cost.input_tokens == large_tokens
-        assert cost.output_tokens == large_tokens
-        assert cost.total_cost == 300.0
+        assert result.success
+        assert result.minimum_working_model == "openai:gpt-3.5-turbo"
+        assert result.validation_pass_rate == 100.0
     
-    def test_float_token_counts(self):
-        """Test handling of float token counts."""
-        try:
-            cost = ModelCost(
-                input_tokens=100.5,
-                output_tokens=50.7,
-                input_cost=0.001,
-                output_cost=0.002,
-                total_cost=0.003
+    def test_failure_result(self):
+        """Test failed evaluation result."""
+        result = EvaluationResult(
+            minimum_working_model=None,
+            success=False,
+            validation_pass_rate=0.0,
+            attempts=[],
+            error_message="No model succeeded"
+        )
+        
+        assert not result.success
+        assert result.minimum_working_model is None
+        assert result.error_message == "No model succeeded"
+
+
+class TestModelEvaluator:
+    """Test ModelEvaluator class."""
+    
+    def test_initialization_with_lamia(self):
+        """Test evaluator initialization with provided lamia instance."""
+        mock_lamia = Mock()
+        mock_lamia._engine = Mock()
+        
+        evaluator = ModelEvaluator(lamia_instance=mock_lamia)
+        
+        assert evaluator.lamia == mock_lamia
+        assert not evaluator._own_lamia
+    
+    @pytest.mark.asyncio
+    async def test_evaluate_prompt_empty_models(self):
+        """Test that empty models list raises error."""
+        mock_lamia = Mock()
+        mock_lamia._engine = Mock()
+        
+        evaluator = ModelEvaluator(lamia_instance=mock_lamia)
+        
+        with pytest.raises(ValueError, match="Models list cannot be empty"):
+            await evaluator.evaluate_prompt(
+                prompt="test prompt",
+                return_type=None,
+                models=[]
             )
-            # If it allows floats, test they're preserved
-            assert cost.input_tokens == 100.5
-            assert cost.output_tokens == 50.7
-        except (ValueError, TypeError):
-            # If it requires integers, that's also valid
-            pass
+    
+    @pytest.mark.asyncio
+    async def test_evaluate_script_empty_models(self):
+        """Test that empty models list raises error for script."""
+        mock_lamia = Mock()
+        mock_lamia._engine = Mock()
+        
+        evaluator = ModelEvaluator(lamia_instance=mock_lamia)
+        
+        async def dummy_script(lamia):
+            return "result"
+        
+        with pytest.raises(ValueError, match="Models list cannot be empty"):
+            await evaluator.evaluate_script(
+                script_func=dummy_script,
+                models=[]
+            )
 
 
-class TestEvaluatorConfiguration:
-    """Test Evaluator configuration options."""
+class TestPromptTask:
+    """Test PromptTask class."""
     
-    def test_evaluator_with_custom_pricer(self):
-        """Test evaluator with custom pricer configuration."""
-        custom_pricer = Mock(spec=ModelPricer)
+    @pytest.mark.asyncio
+    async def test_execute(self):
+        """Test prompt task execution."""
+        mock_lamia = Mock()
+        mock_lamia.run_async = AsyncMock(return_value="test result")
         
-        try:
-            evaluator = ModelEvaluator(pricer=custom_pricer)
-            assert evaluator is not None
-        except TypeError:
-            # Constructor might not accept pricer parameter
-            pass
-    
-    def test_evaluator_with_settings(self):
-        """Test evaluator with custom settings."""
-        settings = {
-            "track_costs": True,
-            "detailed_metrics": True,
-            "export_format": "json"
-        }
+        task = PromptTask(prompt="test prompt", return_type=None)
+        result = await task.execute("openai:gpt-4", mock_lamia)
         
-        try:
-            evaluator = ModelEvaluator(settings=settings)
-            assert evaluator is not None
-        except TypeError:
-            # Constructor might not accept settings parameter
-            pass
+        assert result == "test result"
+        mock_lamia.run_async.assert_called_once()
 
 
-class TestModelPricerProviders:
-    """Test ModelPricer with different providers."""
+class TestScriptTask:
+    """Test ScriptTask class."""
     
-    def test_openai_pricing(self):
-        """Test OpenAI model pricing."""
-        pricer = ModelPricer()
+    @pytest.mark.asyncio
+    async def test_execute(self):
+        """Test script task execution."""
+        mock_lamia = Mock()
+        mock_lamia._models = []
         
-        openai_models = [
-            "gpt-3.5-turbo",
-            "gpt-4",
-            "text-davinci-003"
-        ]
+        async def test_script(lamia):
+            return "script result"
         
-        for model in openai_models:
-            try:
-                cost = pricer.calculate_cost(model, 1000, 500)
-                assert cost is not None
-            except (AttributeError, ValueError, KeyError):
-                # Method signature or model support might differ
-                pass
-    
-    def test_anthropic_pricing(self):
-        """Test Anthropic model pricing."""
-        pricer = ModelPricer()
+        task = ScriptTask(script_func=test_script)
+        result = await task.execute("openai:gpt-4", mock_lamia)
         
-        anthropic_models = [
-            "claude-v1",
-            "claude-instant-v1"
-        ]
-        
-        for model in anthropic_models:
-            try:
-                cost = pricer.calculate_cost(model, 1000, 500)
-                assert cost is not None
-            except (AttributeError, ValueError, KeyError):
-                # Method signature or model support might differ
-                pass
-    
-    def test_unknown_model(self):
-        """Test pricing for unknown model."""
-        pricer = ModelPricer()
-        
-        try:
-            cost = pricer.calculate_cost("unknown-model", 1000, 500)
-            # Might return None or raise exception
-            assert cost is not None or cost is None
-        except (ValueError, KeyError):
-            # Expected for unknown models
-            pass
-
-
-class TestEvaluationMetrics:
-    """Test evaluation metrics functionality."""
-    
-    def test_basic_metrics_collection(self):
-        """Test basic metrics collection."""
-        evaluator = ModelEvaluator()
-        
-        # Test that evaluator can collect basic metrics
-        try:
-            # These method names are hypothetical - adjust based on actual API
-            metrics = evaluator.get_metrics() if hasattr(evaluator, 'get_metrics') else {}
-            assert isinstance(metrics, dict) or metrics is None
-        except AttributeError:
-            # Method might not exist yet
-            pass
-    
-    def test_cost_metrics(self):
-        """Test cost-related metrics."""
-        evaluator = ModelEvaluator()
-        
-        # Test cost metrics functionality
-        try:
-            if hasattr(evaluator, 'total_cost'):
-                assert evaluator.total_cost >= 0
-        except AttributeError:
-            # Cost tracking might not be implemented yet
-            pass
-    
-    def test_token_metrics(self):
-        """Test token-related metrics."""
-        evaluator = ModelEvaluator()
-        
-        # Test token metrics functionality
-        try:
-            if hasattr(evaluator, 'total_tokens'):
-                assert evaluator.total_tokens >= 0
-        except AttributeError:
-            # Token tracking might not be implemented yet
-            pass
+        assert result == "script result"
+        # Verify models were restored
+        assert mock_lamia._models == []
