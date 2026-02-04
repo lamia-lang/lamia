@@ -12,7 +12,7 @@ import logging
 from typing import Optional, Dict, Any
 from .hybrid_syntax_parser import HybridSyntaxParser
 from .hybrid_file_cache import HybridFileCache
-from .ast_analyzer import analyze_hybrid_file, create_execution_globals
+from .ast_analyzer import extract_code_dependencies, create_execution_globals
 from lamia.adapters.web.session_context import SessionSkipException
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ class HybridExecutor:
         transformed_code = self.transform(source_code)
         
         # Analyze source code to determine what needs to be injected
-        analysis = analyze_hybrid_file(source_code)
+        analysis = extract_code_dependencies(source_code)
         
         # Prepare execution environment
         if globals_dict is None:
@@ -163,7 +163,7 @@ class HybridExecutor:
             source_code = f.read()
         
         # Analyze source code to determine what needs to be injected
-        analysis = analyze_hybrid_file(source_code)
+        analysis = extract_code_dependencies(source_code)
         
         # Transform the code
         transformed_code = self.transform(source_code)

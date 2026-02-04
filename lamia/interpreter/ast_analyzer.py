@@ -58,8 +58,8 @@ class ActionNamespaceAnalyzer(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def analyze_hybrid_file(code: str) -> Dict[str, Any]:
-    """Analyze .hu file code and return needed imports.
+def extract_code_dependencies(code: str) -> Dict[str, Any]:
+    """Extract namespaces and types used in .hu file code.
 
     Args:
         code: The .hu file source code
@@ -72,43 +72,31 @@ def analyze_hybrid_file(code: str) -> Dict[str, Any]:
     preprocessor = WithReturnTypePreprocessor()
     processed_code, return_types = preprocessor.preprocess(code)
 
-    try:
-        tree = ast.parse(processed_code)
-        analyzer = ActionNamespaceAnalyzer()
-        analyzer.visit(tree)
+    tree = ast.parse(processed_code)
+    analyzer = ActionNamespaceAnalyzer()
+    analyzer.visit(tree)
 
-        # Also analyze return types extracted by preprocessor (collect base type names)
-        for return_type in return_types.values():
-            if '[' in return_type and return_type.endswith(']'):
-                base_type = return_type.split('[', 1)[0].strip()
-                analyzer.used_types.add(base_type)
-            else:
-                analyzer.used_types.add(return_type.strip())
+    # Also analyze return types extracted by preprocessor (collect base type names)
+    for return_type in return_types.values():
+        if '[' in return_type and return_type.endswith(']'):
+            base_type = return_type.split('[', 1)[0].strip()
+            analyzer.used_types.add(base_type)
+        else:
+            analyzer.used_types.add(return_type.strip())
 
-        # Build dynamic mapping of available validation types from lamia.types
-        dynamic_type_mapping: Dict[str, type] = {}
-        for name, attr in vars(lamia_types).items():
-            if isinstance(attr, type) and attr is not BaseType and issubclass(attr, BaseType):
-                dynamic_type_mapping[name] = attr
+    # Build dynamic mapping of available validation types from lamia.types
+    dynamic_type_mapping: Dict[str, type] = {}
+    for name, attr in vars(lamia_types).items():
+        if isinstance(attr, type) and attr is not BaseType and issubclass(attr, BaseType):
+            dynamic_type_mapping[name] = attr
 
-        # Filter used_types to only those that are valid dynamic types
-        filtered_used_types = {t for t in analyzer.used_types if t in dynamic_type_mapping or t in ['WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand']}
+    # Filter used_types to only those that are valid dynamic types
+    filtered_used_types = {t for t in analyzer.used_types if t in dynamic_type_mapping or t in ['WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand']}
 
-        return {
-            'namespaces': analyzer.used_namespaces,
-            'types': filtered_used_types
-        }
-    except SyntaxError as e:
-        # If AST parsing fails, inject everything as fallback
-        # Provide all dynamically discovered types as a safe fallback
-        dynamic_types = set()
-        for name, attr in vars(lamia_types).items():
-            if isinstance(attr, type) and attr is not BaseType and issubclass(attr, BaseType):
-                dynamic_types.add(name)
-        return {
-            'namespaces': {'web', 'http', 'session'},  # Default safe set
-            'types': dynamic_types
-        }
+    return {
+        'namespaces': analyzer.used_namespaces,
+        'types': filtered_used_types
+    }
 
 
 def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], lamia_instance=None) -> Dict[str, Any]:

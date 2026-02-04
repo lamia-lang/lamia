@@ -3,7 +3,7 @@
 import pytest
 import ast
 from unittest.mock import patch, Mock
-from lamia.interpreter.ast_analyzer import ActionNamespaceAnalyzer, analyze_hybrid_file, create_execution_globals
+from lamia.interpreter.ast_analyzer import ActionNamespaceAnalyzer, extract_code_dependencies, create_execution_globals
 
 
 class TestActionNamespaceAnalyzer:
@@ -265,7 +265,7 @@ with session(return_type=User) as s:
 
 
 class TestAnalyzeHybridFile:
-    """Test analyze_hybrid_file function."""
+    """Test extract_code_dependencies function."""
     
     def test_analyze_simple_code(self):
         """Test analysis of simple hybrid code."""
@@ -285,7 +285,7 @@ class TestAnalyzeHybridFile:
         with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
              patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             code = "web.click(button)"
-            result = analyze_hybrid_file(code)
+            result = extract_code_dependencies(code)
         
         assert 'namespaces' in result
         assert 'types' in result
@@ -310,7 +310,7 @@ with -> HTML:
     def get_page():
         web.navigate('https://example.com')
 """
-            result = analyze_hybrid_file(code)
+            result = extract_code_dependencies(code)
         
         assert 'web' in result['namespaces']
         assert 'HTML' in result['types']
@@ -333,7 +333,7 @@ with -> HTML[UserModel]:
     def get_user_page():
         return web.get_page()
 """
-            result = analyze_hybrid_file(code)
+            result = extract_code_dependencies(code)
         
         assert 'HTML' in result['types']
     
@@ -357,7 +357,7 @@ with -> HTML[UserModel]:
              patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             # Invalid syntax should trigger fallback
             code = "def invalid syntax:"
-            result = analyze_hybrid_file(code)
+            result = extract_code_dependencies(code)
         
         assert 'namespaces' in result
         assert 'types' in result
@@ -367,7 +367,7 @@ with -> HTML[UserModel]:
     
     def test_analyze_empty_code(self):
         """Test analysis of empty code."""
-        result = analyze_hybrid_file("")
+        result = extract_code_dependencies("")
         
         assert 'namespaces' in result
         assert 'types' in result
@@ -380,7 +380,7 @@ with -> HTML[UserModel]:
 # This is a comment
 # Another comment
 """
-        result = analyze_hybrid_file(code)
+        result = extract_code_dependencies(code)
         
         assert 'namespaces' in result
         assert 'types' in result
@@ -624,7 +624,7 @@ class TestCreateExecutionGlobalsEdgeCases:
 
 
 class TestAnalyzeHybridFileIntegration:
-    """Test integration scenarios for analyze_hybrid_file."""
+    """Test integration scenarios for extract_code_dependencies."""
     
     def test_realistic_hybrid_file_analysis(self):
         """Test analysis of realistic hybrid file."""
@@ -658,7 +658,7 @@ def analyze_data():
         result = s.web.process_data()
     return result
 """
-            result = analyze_hybrid_file(code)
+            result = extract_code_dependencies(code)
         
         expected_namespaces = {'web', 'http', 'file', 'session'}
         expected_types = {'HTML', 'UserProfile', 'JSON'}
