@@ -267,14 +267,13 @@ with session(return_type=User) as s:
 class TestAnalyzeHybridFile:
     """Test analyze_hybrid_file function."""
     
-    @patch('lamia.interpreter.ast_analyzer.lamia_types')
-    def test_analyze_simple_code(self, mock_lamia_types):
+    def test_analyze_simple_code(self):
         """Test analysis of simple hybrid code."""
-        # Mock lamia_types module
-        mock_base_type = Mock()
-        mock_html_type = Mock()
-        mock_html_type.__bases__ = (mock_base_type,)
+        # Create actual types (not Mocks) so isinstance() and issubclass() work
+        mock_base_type = type('BaseType', (), {})
+        mock_html_type = type('HTML', (mock_base_type,), {})
         
+        mock_lamia_types = Mock()
         mock_lamia_types.BaseType = mock_base_type
         vars_dict = {
             'BaseType': mock_base_type,
@@ -282,16 +281,9 @@ class TestAnalyzeHybridFile:
             'SomeOtherClass': str  # Non-BaseType subclass
         }
         mock_lamia_types.__dict__ = vars_dict
-        type(mock_lamia_types).HTML = mock_html_type
         
-        # Mock issubclass to return True for HTML
-        with patch('builtins.issubclass') as mock_issubclass:
-            def issubclass_side_effect(cls, base):
-                if cls == mock_html_type and base == mock_base_type:
-                    return True
-                return False
-            mock_issubclass.side_effect = issubclass_side_effect
-            
+        with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
+             patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             code = "web.click(button)"
             result = analyze_hybrid_file(code)
         
@@ -300,21 +292,19 @@ class TestAnalyzeHybridFile:
         assert 'web' in result['namespaces']
         assert isinstance(result['types'], set)
     
-    @patch('lamia.interpreter.ast_analyzer.lamia_types')
-    def test_analyze_with_return_types(self, mock_lamia_types):
+    def test_analyze_with_return_types(self):
         """Test analysis with return type preprocessing."""
-        # Mock lamia_types
-        mock_base_type = Mock()
-        mock_html_type = Mock()
+        # Create actual types (not Mocks) so isinstance() and issubclass() work
+        mock_base_type = type('BaseType', (), {})
+        mock_html_type = type('HTML', (mock_base_type,), {})
+        
+        mock_lamia_types = Mock()
         mock_lamia_types.BaseType = mock_base_type
         vars_dict = {'BaseType': mock_base_type, 'HTML': mock_html_type}
         mock_lamia_types.__dict__ = vars_dict
         
-        with patch('builtins.issubclass') as mock_issubclass:
-            def issubclass_side_effect(cls, base):
-                return True
-            mock_issubclass.side_effect = issubclass_side_effect
-            
+        with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
+             patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             code = """
 with -> HTML:
     def get_page():
@@ -325,21 +315,19 @@ with -> HTML:
         assert 'web' in result['namespaces']
         assert 'HTML' in result['types']
     
-    @patch('lamia.interpreter.ast_analyzer.lamia_types')
-    def test_analyze_complex_return_types(self, mock_lamia_types):
+    def test_analyze_complex_return_types(self):
         """Test analysis with complex return types like HTML[Model]."""
-        # Mock lamia_types
-        mock_base_type = Mock()
-        mock_html_type = Mock()
+        # Create actual types (not Mocks) so isinstance() and issubclass() work
+        mock_base_type = type('BaseType', (), {})
+        mock_html_type = type('HTML', (mock_base_type,), {})
+        
+        mock_lamia_types = Mock()
         mock_lamia_types.BaseType = mock_base_type
         vars_dict = {'BaseType': mock_base_type, 'HTML': mock_html_type}
         mock_lamia_types.__dict__ = vars_dict
         
-        with patch('builtins.issubclass') as mock_issubclass:
-            def issubclass_side_effect(cls, base):
-                return True
-            mock_issubclass.side_effect = issubclass_side_effect
-            
+        with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
+             patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             code = """
 with -> HTML[UserModel]:
     def get_user_page():
@@ -349,13 +337,14 @@ with -> HTML[UserModel]:
         
         assert 'HTML' in result['types']
     
-    @patch('lamia.interpreter.ast_analyzer.lamia_types')
-    def test_analyze_syntax_error_fallback(self, mock_lamia_types):
+    def test_analyze_syntax_error_fallback(self):
         """Test fallback behavior on syntax error."""
-        # Mock lamia_types
-        mock_base_type = Mock()
-        mock_html_type = Mock()
-        mock_json_type = Mock()
+        # Create actual types (not Mocks) so isinstance() and issubclass() work
+        mock_base_type = type('BaseType', (), {})
+        mock_html_type = type('HTML', (mock_base_type,), {})
+        mock_json_type = type('JSON', (mock_base_type,), {})
+        
+        mock_lamia_types = Mock()
         mock_lamia_types.BaseType = mock_base_type
         vars_dict = {
             'BaseType': mock_base_type,
@@ -364,11 +353,8 @@ with -> HTML[UserModel]:
         }
         mock_lamia_types.__dict__ = vars_dict
         
-        with patch('builtins.issubclass') as mock_issubclass:
-            def issubclass_side_effect(cls, base):
-                return True
-            mock_issubclass.side_effect = issubclass_side_effect
-            
+        with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
+             patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             # Invalid syntax should trigger fallback
             code = "def invalid syntax:"
             result = analyze_hybrid_file(code)
@@ -543,47 +529,29 @@ class TestCreateExecutionGlobals:
         assert 'FileCommand' in globals_dict
         assert 'InputType' in globals_dict
     
-    @patch('lamia.interpreter.ast_analyzer.lamia_types')
-    def test_create_globals_validation_types(self, mock_lamia_types):
+    def test_create_globals_validation_types(self):
         """Test creation of globals with validation types."""
-        # Mock lamia_types with BaseType subclasses
-        mock_base_type = Mock()
-        mock_html_type = Mock()
-        mock_json_type = Mock()
-        mock_lamia_types.BaseType = mock_base_type
+        # Create actual types (not Mocks) so isinstance() and issubclass() work
+        mock_base_type = type('BaseType', (), {})
+        mock_html_type = type('HTML', (mock_base_type,), {})
+        mock_json_type = type('JSON', (mock_base_type,), {})
         
-        # Mock vars() to return our dict when called on the mock module
-        mock_vars_dict = {
+        mock_lamia_types = Mock()
+        mock_lamia_types.BaseType = mock_base_type
+        vars_dict = {
             'BaseType': mock_base_type,
             'HTML': mock_html_type,
             'JSON': mock_json_type,
             'NotAType': str  # Not a BaseType subclass
         }
+        mock_lamia_types.__dict__ = vars_dict
         
-        with patch('builtins.vars') as mock_vars:
-            mock_vars.return_value = mock_vars_dict
-            with patch('builtins.isinstance') as mock_isinstance:
-                with patch('builtins.issubclass') as mock_issubclass:
-                    # Mock isinstance to return True for type checks on our mock types
-                    def isinstance_side_effect(obj, cls):
-                        if obj in [mock_html_type, mock_json_type] and cls == type:
-                            return True
-                        if obj == str and cls == type:
-                            return True
-                        return False
-                    mock_isinstance.side_effect = isinstance_side_effect
-                    
-                    # Mock issubclass 
-                    def issubclass_side_effect(cls, base):
-                        if cls in [mock_html_type, mock_json_type] and base == mock_base_type:
-                            return True
-                        return False
-                    mock_issubclass.side_effect = issubclass_side_effect
-                    
-                    used_namespaces = set()
-                    used_types = {'HTML', 'JSON', 'NotAType'}
-                    
-                    globals_dict = create_execution_globals(used_namespaces, used_types)
+        with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
+             patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
+            used_namespaces = set()
+            used_types = {'HTML', 'JSON', 'NotAType'}
+            
+            globals_dict = create_execution_globals(used_namespaces, used_types)
         
         assert 'HTML' in globals_dict
         assert 'JSON' in globals_dict
@@ -658,13 +626,14 @@ class TestCreateExecutionGlobalsEdgeCases:
 class TestAnalyzeHybridFileIntegration:
     """Test integration scenarios for analyze_hybrid_file."""
     
-    @patch('lamia.interpreter.ast_analyzer.lamia_types')
-    def test_realistic_hybrid_file_analysis(self, mock_lamia_types):
+    def test_realistic_hybrid_file_analysis(self):
         """Test analysis of realistic hybrid file."""
-        # Mock lamia_types
-        mock_base_type = Mock()
-        mock_html_type = Mock()
-        mock_json_type = Mock()
+        # Create actual types (not Mocks) so isinstance() and issubclass() work
+        mock_base_type = type('BaseType', (), {})
+        mock_html_type = type('HTML', (mock_base_type,), {})
+        mock_json_type = type('JSON', (mock_base_type,), {})
+        
+        mock_lamia_types = Mock()
         mock_lamia_types.BaseType = mock_base_type
         vars_dict = {
             'BaseType': mock_base_type,
@@ -673,11 +642,8 @@ class TestAnalyzeHybridFileIntegration:
         }
         mock_lamia_types.__dict__ = vars_dict
         
-        with patch('builtins.issubclass') as mock_issubclass:
-            def issubclass_side_effect(cls, base):
-                return True
-            mock_issubclass.side_effect = issubclass_side_effect
-            
+        with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
+             patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             code = """
 with -> HTML[UserProfile]:
     def scrape_user_profile(username):
@@ -704,13 +670,14 @@ def analyze_data():
 class TestCreateExecutionGlobalsIntegration:
     """Test integration scenarios for create_execution_globals."""
     
-    @patch('lamia.interpreter.ast_analyzer.lamia_types')
-    def test_complete_execution_environment(self, mock_lamia_types):
+    def test_complete_execution_environment(self):
         """Test creation of complete execution environment."""
-        # Mock all necessary components
-        mock_base_type = Mock()
-        mock_html_type = Mock()
-        mock_json_type = Mock()
+        # Create actual types (not Mocks) so isinstance() and issubclass() work
+        mock_base_type = type('BaseType', (), {})
+        mock_html_type = type('HTML', (mock_base_type,), {})
+        mock_json_type = type('JSON', (mock_base_type,), {})
+        
+        mock_lamia_types = Mock()
         mock_lamia_types.BaseType = mock_base_type
         vars_dict = {
             'BaseType': mock_base_type,
@@ -719,20 +686,17 @@ class TestCreateExecutionGlobalsIntegration:
         }
         mock_lamia_types.__dict__ = vars_dict
         
-        with patch('builtins.issubclass') as mock_issubclass:
-            def issubclass_side_effect(cls, base):
-                return True
-            mock_issubclass.side_effect = issubclass_side_effect
+        with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
+             patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type), \
+             patch('lamia.actions.web'), \
+             patch('lamia.actions.http'), \
+             patch('lamia.interpreter.commands.WebCommand'), \
+             patch('lamia.interpreter.commands.LLMCommand'), \
+             patch('lamia.adapters.web.session_context.create_session_factory'):
+            used_namespaces = {'web', 'http', 'session'}
+            used_types = {'HTML', 'JSON', 'WebCommand', 'LLMCommand'}
             
-            with patch('lamia.actions.web') as mock_web:
-                with patch('lamia.actions.http') as mock_http:
-                    with patch('lamia.interpreter.commands.WebCommand') as mock_web_cmd:
-                        with patch('lamia.interpreter.commands.LLMCommand') as mock_llm_cmd:
-                            with patch('lamia.adapters.web.session_context.create_session_factory') as mock_session:
-                                used_namespaces = {'web', 'http', 'session'}
-                                used_types = {'HTML', 'JSON', 'WebCommand', 'LLMCommand'}
-                                
-                                globals_dict = create_execution_globals(used_namespaces, used_types)
+            globals_dict = create_execution_globals(used_namespaces, used_types)
         
         # Verify all expected globals are present
         expected_keys = {
