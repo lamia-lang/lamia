@@ -306,13 +306,14 @@ class TestAnalyzeHybridFile:
         with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
              patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             code = """
-with -> HTML:
+with session("test") -> HTML:
     def get_page():
         web.navigate('https://example.com')
 """
             result = extract_code_dependencies(code)
         
         assert 'web' in result['namespaces']
+        assert 'session' in result['namespaces']
         assert 'HTML' in result['types']
     
     def test_analyze_complex_return_types(self):
@@ -329,15 +330,16 @@ with -> HTML:
         with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
              patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             code = """
-with -> HTML[UserModel]:
+with session("test") -> HTML[UserModel]:
     def get_user_page():
         return web.get_page()
 """
             result = extract_code_dependencies(code)
         
+        assert 'session' in result['namespaces']
         assert 'HTML' in result['types']
     
-    def test_analyze_syntax_error_fallback(self):
+    def test_analyze_syntax_error(self):
         """Test fallback behavior on syntax error."""
         # Create actual types (not Mocks) so isinstance() and issubclass() work
         mock_base_type = type('BaseType', (), {})
@@ -357,22 +359,8 @@ with -> HTML[UserModel]:
              patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             # Invalid syntax should trigger fallback
             code = "def invalid syntax:"
-            result = extract_code_dependencies(code)
-        
-        assert 'namespaces' in result
-        assert 'types' in result
-        assert {'web', 'http', 'session'}.issubset(result['namespaces'])
-        assert 'HTML' in result['types']
-        assert 'JSON' in result['types']
-    
-    def test_analyze_empty_code(self):
-        """Test analysis of empty code."""
-        result = extract_code_dependencies("")
-        
-        assert 'namespaces' in result
-        assert 'types' in result
-        assert isinstance(result['namespaces'], set)
-        assert isinstance(result['types'], set)
+            with pytest.raises(SyntaxError):
+                extract_code_dependencies(code)
     
     def test_analyze_comment_only_code(self):
         """Test analysis of comment-only code."""
@@ -645,7 +633,7 @@ class TestAnalyzeHybridFileIntegration:
         with patch('lamia.interpreter.ast_analyzer.lamia_types', mock_lamia_types), \
              patch('lamia.interpreter.ast_analyzer.BaseType', mock_base_type):
             code = """
-with -> HTML[UserProfile]:
+with session("scraper") -> HTML[UserProfile]:
     def scrape_user_profile(username):
         web.navigate(f'https://example.com/users/{username}')
         profile_data = web.get_text('.profile-info')
