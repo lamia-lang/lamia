@@ -1,4 +1,3 @@
-import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,8 +8,9 @@ from lamia._internal_types.model_retry import ModelWithRetries
 from lamia import LLMModel
 from lamia.engine.config_provider import ConfigProvider
 
+
 class DummyLLMResponse(LLMResponse):
-    """Lightweight LLMResponse that keeps the original constructor contract so **dict unpacking works."""
+    """Lightweight LLMResponse that keeps the original constructor contract so dict unpacking works."""
 
     def __init__(
         self,
@@ -24,8 +24,6 @@ class DummyLLMResponse(LLMResponse):
         **extra,
     ):
         super().__init__(text=text, raw_response=raw_response, usage=usage or {}, model=model)
-        # allow extra fields like validation_result without breaking constructor signature
-        # retain if provided by caller
         self.validation_result = extra.get(
             "validation_result",
             {
@@ -42,7 +40,7 @@ def make_stub_adapter(model_name: str, reply_text: str, *, is_valid: bool = True
     adapter.initialize = AsyncMock()
     adapter.close = AsyncMock()
     adapter.model = model_name
-    adapter.name = model_name            # used by LLMManager logging
+    adapter.name = model_name
     adapter.generate = AsyncMock(return_value=DummyLLMResponse(reply_text, model_name, is_valid, error_message))
     return adapter
 
@@ -52,11 +50,12 @@ def _dummy_api_key(monkeypatch):
     """Ensure a fake OPENAI_API_KEY is always present to bypass key checks."""
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
 
+
 @pytest.mark.asyncio
 async def test_single_model():
-    config = {                                             # new model-chain config
+    config = {
         "model_chain": [
-            ModelWithRetries(LLMModel("openai"), retries=1)
+            ModelWithRetries(LLMModel("openai"), retries=1),
         ],
         "validators": [{"type": "html"}],
         "api_keys": {"openai": "dummy"},
@@ -75,6 +74,7 @@ async def test_single_model():
 
         assert result.is_valid is True
 
+
 @pytest.mark.asyncio
 async def test_fallback_adapter_is_used_on_failure():
     """If the primary adapter errors, engine should switch to the fallback model."""
@@ -89,9 +89,7 @@ async def test_fallback_adapter_is_used_on_failure():
     }
     cfg_provider = ConfigProvider(config)
 
-    # Primary adapter returns invalid HTML (fails validation), fallback returns valid HTML
     openai_adapter = make_stub_adapter("openai", "not html", is_valid=False, error_message="Invalid HTML")
-
     ollama_adapter = make_stub_adapter("ollama", "<html><body>fallback</body></html>")
 
     async def adapter_factory(self, model):
@@ -109,6 +107,7 @@ async def test_fallback_adapter_is_used_on_failure():
         openai_adapter.generate.assert_awaited_once()
         ollama_adapter.generate.assert_awaited_once()
 
+
 @pytest.mark.asyncio
 async def test_custom_validator_success():
     """Simulate a python-code validator that passes."""
@@ -120,7 +119,7 @@ async def test_custom_validator_success():
             "max_retries": 1,
             "fallback_models": [],
             "validators": [
-                {"type": "code_python", "language": "python", "strict": True}
+                {"type": "code_python", "language": "python", "strict": True},
             ],
         },
     }
@@ -154,7 +153,7 @@ async def test_validator_failure_raises():
 
     adapter = make_stub_adapter(
         "openai",
-        "not html",  # Intentionally invalid HTML
+        "not html",
         is_valid=False,
         error_message="Invalid HTML",
     )

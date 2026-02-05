@@ -88,3 +88,82 @@ def test_preserves_unicode_and_emojis():
     for command in unicode_commands:
         parser = CommandParser(command)
         assert parser.command == command
+
+
+# =============================================================================
+# INTEGRATION TESTS: Lamia class integration with CommandParser
+# =============================================================================
+
+import pytest
+from lamia import Lamia
+
+
+class TestLamiaCommandParsingIntegration:
+    """Test Lamia's integration with CommandParser."""
+
+    @pytest.fixture
+    def lamia(self):
+        """Create a Lamia instance for testing."""
+        return Lamia("ollama")
+
+    def test_fs_command_parsing(self, lamia):
+        """Test that filesystem commands are parsed correctly."""
+        from unittest.mock import patch
+
+        with patch.object(lamia._engine, "execute") as mock_execute:
+            mock_execute.return_value.text = "test response"
+
+            lamia.run("read /tmp/file.txt")
+
+            mock_execute.assert_called_once()
+            call_args = mock_execute.call_args
+            assert call_args[0][0] == "fs"
+            assert call_args[0][1] == "/tmp/file.txt"
+            assert call_args[1]["operation"] == "read"
+
+        command_info = lamia.get_last_command_info()
+        assert command_info is not None
+        assert command_info["type"] == "fs"
+        assert command_info["content"] == "/tmp/file.txt"
+        assert command_info["kwargs"]["operation"] == "read"
+
+    @pytest.mark.integration
+    def test_web_command_parsing(self, lamia):
+        """Test that web commands are parsed correctly."""
+        try:
+            lamia.run("https://example.com")
+        except Exception:
+            pass
+
+        command_info = lamia.get_last_command_info()
+        assert command_info is not None
+        assert command_info["type"] == "web"
+        assert command_info["content"] == "https://example.com"
+        assert command_info["kwargs"]["operation"] == "get"
+
+    def test_llm_command_parsing(self, lamia):
+        """Test that LLM commands are parsed correctly."""
+        try:
+            lamia.run("What is the weather today?")
+        except Exception:
+            pass
+
+        command_info = lamia.get_last_command_info()
+        assert command_info is not None
+        assert command_info["type"] == "llm"
+        assert command_info["content"] == "What is the weather today?"
+        assert command_info["kwargs"] == {}
+
+    def test_python_code_bypasses_parser(self, lamia):
+        """Test that Python code bypasses the command parser."""
+        result = lamia.run("print('Hello World')")
+        assert result == ""
+
+        lamia.get_last_command_info()
+        result = lamia.run("2 + 2")
+        assert result == "4"
+
+    def test_no_command_parsed_yet(self, lamia):
+        """Test that get_last_command_info returns None when no command parsed."""
+        command_info = lamia.get_last_command_info()
+        assert command_info is None
