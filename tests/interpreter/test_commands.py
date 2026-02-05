@@ -383,7 +383,7 @@ class TestCommandValidation:
         """Test commands with None parameters."""
         try:
             llm_cmd = LLMCommand(None)
-            assert llm_cmd.content is None
+            assert llm_cmd.prompt is None
         except TypeError:
             # None content might not be allowed
             pass
