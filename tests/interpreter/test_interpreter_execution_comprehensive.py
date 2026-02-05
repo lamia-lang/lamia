@@ -314,7 +314,7 @@ class TestLazyLoaderDirectoryScanning:
 
         assert "helper_function" in loader.function_registry
         assert "another_helper" in loader.function_registry
-        assert loader.function_registry["helper_function"] == str(sample_python_file)
+        assert loader.function_registry["helper_function"] == str(sample_python_file.resolve())
 
     def test_scan_directory_recursive(self, temp_dir):
         """Test recursive directory scanning."""
@@ -412,8 +412,8 @@ class MyClass:
         loader._catalog_python_file(py_file1, Path(temp_dir))
         loader._catalog_python_file(py_file2, Path(temp_dir))
 
-        # First occurrence wins
-        assert loader.function_registry["duplicate"] == str(py_file1)
+        # First occurrence wins (paths are resolved internally for consistency)
+        assert loader.function_registry["duplicate"] == str(py_file1.resolve())
 
 
 class TestLazyLoaderFunctionLoading:
@@ -451,8 +451,8 @@ class TestLazyLoaderFunctionLoading:
 
         assert success1 is True
         assert success2 is True
-        # File should only be in loaded_modules once
-        assert str(sample_python_file) in loader.loaded_modules
+        # File should only be in loaded_modules once (paths are resolved internally)
+        assert str(sample_python_file.resolve()) in loader.loaded_modules
 
 
 class TestLazyLoaderLazyScanning:
@@ -477,14 +477,16 @@ class TestLazyLoaderLazyScanning:
 
         # First scan
         loader._scan_for_function("helper_function")
-        assert temp_dir in loader.scanned_directories
+        # Paths are resolved internally for consistency across platforms (e.g., /var -> /private/var on macOS)
+        resolved_temp_dir = str(Path(temp_dir).resolve())
+        assert resolved_temp_dir in loader.scanned_directories
 
         # Second scan should use cache
         initial_count = len(loader.function_registry)
         loader._scan_for_function("another_function")
 
         # Should not rescan - registry size same
-        assert temp_dir in loader.scanned_directories
+        assert resolved_temp_dir in loader.scanned_directories
 
 
 # ============================================================================
@@ -633,7 +635,7 @@ class TestInterpreterExecutionIntegration:
         # Create lazy loading globals
         globals_dict = create_lazy_loading_globals(
             mock_lamia_instance,
-            file_path=str(temp_dir / "main.hu")
+            file_path=str(Path(temp_dir) / "main.hu")
         )
 
         # Access helper function (should lazy load)

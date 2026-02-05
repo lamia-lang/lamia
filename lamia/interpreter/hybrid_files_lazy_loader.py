@@ -57,6 +57,9 @@ class LazyLoader:
     def _catalog_python_file(self, py_file: Path, base_path: Path) -> None:
         """Catalog functions in a Python file."""
         try:
+            # Always resolve paths to handle symlinks consistently (e.g., /var -> /private/var on macOS)
+            resolved_path = py_file.resolve()
+            
             with open(py_file, 'r') as file:
                 node = ast.parse(file.read(), filename=str(py_file))
                 
@@ -64,9 +67,9 @@ class LazyLoader:
                 if isinstance(n, ast.FunctionDef):
                     func_name = n.name
                     if func_name in self.function_registry:
-                        logger.warning(f"Function name conflict: '{func_name}' found in both '{self.function_registry[func_name]}' and '{py_file}'. Using first occurrence.")
+                        logger.warning(f"Function name conflict: '{func_name}' found in both '{self.function_registry[func_name]}' and '{resolved_path}'. Using first occurrence.")
                     else:
-                        self.function_registry[func_name] = str(py_file)
+                        self.function_registry[func_name] = str(resolved_path)
                         
         except Exception as e:
             logger.warning(f"Could not parse Python file {py_file}: {e}")
@@ -74,6 +77,9 @@ class LazyLoader:
     def _catalog_hu_file(self, hu_file: Path) -> None:
         """Catalog functions in a .hu file."""
         try:
+            # Always resolve paths to handle symlinks consistently (e.g., /var -> /private/var on macOS)
+            resolved_path = hu_file.resolve()
+            
             with open(hu_file, 'r') as file:
                 content = file.read()
                 
@@ -82,9 +88,9 @@ class LazyLoader:
                 parsed_info = self._parser.parse(content)
                 for func_name in parsed_info.get('llm_functions', {}):
                     if func_name in self.function_registry:
-                        logger.warning(f"Function name conflict: '{func_name}' found in both '{self.function_registry[func_name]}' and '{hu_file}'. Using first occurrence.")
+                        logger.warning(f"Function name conflict: '{func_name}' found in both '{self.function_registry[func_name]}' and '{resolved_path}'. Using first occurrence.")
                     else:
-                        self.function_registry[func_name] = str(hu_file)
+                        self.function_registry[func_name] = str(resolved_path)
                         
         except Exception as e:
             logger.warning(f"Could not parse .hu file {hu_file}: {e}")
@@ -99,10 +105,11 @@ class LazyLoader:
             True if function was found and cataloged, False otherwise
         """
         # Only scan if we haven't already scanned this directory
-        if self.search_directory not in self.scanned_directories:
+        resolved_search_dir = str(Path(self.search_directory).expanduser().resolve())
+        if resolved_search_dir not in self.scanned_directories:
             logger.info(f"Lazy loading: scanning directory '{self.search_directory}' for function '{function_name}'")
             self.scan_directory_for_functions(self.search_directory, recursive=True)
-            self.scanned_directories.add(self.search_directory)
+            self.scanned_directories.add(resolved_search_dir)
             logger.info(f"Lazy loading: found {len(self.function_registry)} functions: {list(self.function_registry.keys())}")
         
         return function_name in self.function_registry
@@ -138,7 +145,8 @@ class LazyLoader:
     
     def _load_python_file(self, py_file: Path, execution_globals: Dict[str, Any]) -> bool:
         """Load a Python file into the execution globals."""
-        if str(py_file) in self.loaded_modules:
+        resolved_path = py_file.resolve()
+        if str(resolved_path) in self.loaded_modules:
             return True  # Already loaded
             
         try:
@@ -164,8 +172,8 @@ class LazyLoader:
                     if callable(obj) and not name.startswith('_'):
                         execution_globals[name] = obj
                         
-                self.loaded_modules.add(str(py_file))
-                logger.info(f"Loaded Python file: {py_file}")
+                self.loaded_modules.add(str(resolved_path))
+                logger.info(f"Loaded Python file: {resolved_path}")
                 return True
                 
         except Exception as e:
@@ -175,7 +183,8 @@ class LazyLoader:
     
     def _load_hu_file(self, hu_file: Path, execution_globals: Dict[str, Any]) -> bool:
         """Load a .hu file into the execution globals."""
-        if str(hu_file) in self.loaded_hu_files:
+        resolved_path = hu_file.resolve()
+        if str(resolved_path) in self.loaded_hu_files:
             return True  # Already loaded
             
         if not self.lamia:
@@ -202,8 +211,8 @@ class LazyLoader:
                 if callable(obj) and not name.startswith('_'):
                     execution_globals[name] = obj
                     
-            self.loaded_hu_files.add(str(hu_file))
-            logger.info(f"Loaded .hu file: {hu_file}")
+            self.loaded_hu_files.add(str(resolved_path))
+            logger.info(f"Loaded .hu file: {resolved_path}")
             return True
             
         except Exception as e:
