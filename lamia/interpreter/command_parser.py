@@ -60,11 +60,11 @@ class CommandParser:
             return CommandType.LLM
 
     def _split_command_and_return_type(self) -> Tuple[str, Any]:
-        command_parts = self.command.split("->")
+        command_parts = self.command.rsplit("->", 1)
         if len(command_parts) == 2:
-            return command_parts[0], command_parts[1]
+            return command_parts[0].strip(), command_parts[1].strip()
         else:
-            return self.command, None
+            return self.command.strip(), None
 
     def _parse_file_command(self, command) -> FileCommand:
         """Parse filesystem command into FileCommand object."""

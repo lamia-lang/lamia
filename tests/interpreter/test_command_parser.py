@@ -23,7 +23,7 @@ class TestCommandParserInitialization:
         
         assert parser.command == "test command -> string"
         assert parser._parsed_command is not None
-        assert parser._return_type == " string"
+        assert parser._return_type == "string"
     
     def test_initialization_triggers_parsing(self):
         """Test that initialization triggers command parsing."""
@@ -51,21 +51,21 @@ class TestCommandParserReturnTypeHandling:
         """Test splitting command with arrow return type."""
         parser = CommandParser("get data -> list")
         
-        assert parser.return_type == " list"
+        assert parser.return_type == "list"
         # Check that command content is correctly extracted
         content, return_type = parser._split_command_and_return_type()
-        assert content == "get data "
-        assert return_type == " list"
+        assert content == "get data"
+        assert return_type == "list"
     
     def test_split_command_and_return_type_multiple_arrows(self):
         """Test splitting command with multiple arrows (only first split used)."""
         parser = CommandParser("step1 -> step2 -> final")
         
         # Only first arrow is used for return type
-        assert parser.return_type == " step2 -> final"
+        assert parser.return_type == "final"
         content, return_type = parser._split_command_and_return_type()
-        assert content == "step1 "
-        assert return_type == " step2 -> final"
+        assert content == "step1 -> step2"
+        assert return_type == "final"
     
     def test_return_type_property(self):
         """Test return_type property access."""
@@ -73,7 +73,7 @@ class TestCommandParserReturnTypeHandling:
         parser2 = CommandParser("command -> int")
         
         assert parser1.return_type is None
-        assert parser2.return_type == " int"
+        assert parser2.return_type == "int"
 
 
 class TestCommandParserCommandTypeDetection:
@@ -168,8 +168,8 @@ class TestCommandParserWebCommandParsing:
         
         assert isinstance(parser.parsed_command, WebCommand)
         assert parser.parsed_command.action == WebActionType.NAVIGATE
-        assert parser.parsed_command.url == "https://api.example.com "  # Note: includes space from split
-        assert parser.return_type == " json"
+        assert parser.parsed_command.url == "https://api.example.com"  # Note: includes space from split
+        assert parser.return_type == "json"
     
     def test_parse_web_command_complex_url(self):
         """Test parsing complex URL as web command."""
@@ -214,8 +214,8 @@ class TestCommandParserFileCommandParsing:
         
         assert isinstance(parser.parsed_command, FileCommand)
         assert parser.parsed_command.action == FileActionType.READ
-        assert parser.parsed_command.path == "/data/config.json "  # Note: includes space from split
-        assert parser.return_type == " dict"
+        assert parser.parsed_command.path == "/data/config.json"  # Note: includes space from split
+        assert parser.return_type == "dict"
 
 
 class TestCommandParserLLMCommandParsing:
@@ -240,8 +240,8 @@ class TestCommandParserLLMCommandParsing:
         parser = CommandParser("Summarize the main points -> list")
         
         assert isinstance(parser.parsed_command, LLMCommand)
-        assert parser.parsed_command.prompt == "Summarize the main points "  # Note: includes space from split
-        assert parser.return_type == " list"
+        assert parser.parsed_command.prompt == "Summarize the main points"  # Note: includes space from split
+        assert parser.return_type == "list"
     
     def test_parse_llm_command_complex_instruction(self):
         """Test parsing complex instruction as LLM command."""
@@ -316,14 +316,14 @@ class TestCommandParserEdgeCases:
         parser = CommandParser("   ")
         
         assert isinstance(parser.parsed_command, LLMCommand)
-        assert parser.parsed_command.prompt == "   "
+        assert parser.parsed_command.prompt == ""
     
     def test_command_with_only_return_type_arrow(self):
         """Test parsing command with only return type arrow."""
         parser = CommandParser(" -> string")
         
-        assert parser.parsed_command.prompt == " "  # prompt before arrow
-        assert parser.return_type == " string"
+        assert parser.parsed_command.prompt == ""  # prompt before arrow
+        assert parser.return_type == "string"
     
     def test_url_like_but_not_url(self):
         """Test parsing URL-like text that's not actually a URL."""
@@ -381,7 +381,7 @@ class TestCommandParserPropertyAccess:
         """Test return_type property when return type specified."""
         parser = CommandParser("command -> list")
         
-        assert parser.return_type == " list"
+        assert parser.return_type == "list"
 
 
 class TestCommandParserIntegration:
@@ -394,10 +394,10 @@ class TestCommandParserIntegration:
         
         # Verify complete parsing workflow
         assert parser.command == f"{url} -> json"
-        assert parser.return_type == " json"
+        assert parser.return_type == "json"
         assert isinstance(parser.parsed_command, WebCommand)
         assert parser.parsed_command.action == WebActionType.NAVIGATE
-        assert parser.parsed_command.url == f"{url} "
+        assert parser.parsed_command.url == f"{url}"
         
         # Verify command type detection worked correctly
         parser_for_type_check = CommandParser("dummy")
@@ -411,10 +411,10 @@ class TestCommandParserIntegration:
         
         # Verify complete parsing workflow
         assert parser.command == f"{path} -> dict"
-        assert parser.return_type == " dict"
+        assert parser.return_type == "dict"
         assert isinstance(parser.parsed_command, FileCommand)
         assert parser.parsed_command.action == FileActionType.READ
-        assert parser.parsed_command.path == f"{path} "
+        assert parser.parsed_command.path == f"{path}"
         
         # Verify command type detection worked correctly
         parser_for_type_check = CommandParser("dummy")
@@ -428,9 +428,9 @@ class TestCommandParserIntegration:
         
         # Verify complete parsing workflow
         assert parser.command == f"{instruction} -> report"
-        assert parser.return_type == " report"
+        assert parser.return_type == "report"
         assert isinstance(parser.parsed_command, LLMCommand)
-        assert parser.parsed_command.prompt == f"{instruction} "
+        assert parser.parsed_command.prompt == f"{instruction}"
         
         # Verify command type detection worked correctly
         parser_for_type_check = CommandParser("dummy")
