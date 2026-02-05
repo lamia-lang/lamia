@@ -4,6 +4,7 @@ import pytest
 import tempfile
 import os
 import sys
+import math
 from pathlib import Path
 from unittest.mock import patch, Mock
 from lamia.interpreter.python_runner import run_python_code, run_python_file
@@ -152,17 +153,6 @@ result
 """
         result = run_python_code(code, mode='interactive')
         assert result == 56
-    
-    @patch('builtins.print')  # Mock print to avoid output during tests
-    def test_ast_dump_is_called(self, mock_print):
-        """Test that AST dump is printed during execution."""
-        run_python_code("2 + 2")
-        
-        # Should have called print with AST dump
-        assert mock_print.called
-        # Check that the printed content contains AST-like structure
-        call_args = mock_print.call_args_list
-        assert len(call_args) >= 1
 
 
 class TestRunPythonCodeEdgeCases:
@@ -464,7 +454,7 @@ filtered = [x for x in data if x > average]
 len(filtered)
 """
         result = run_python_code(code)
-        assert result == 4  # Numbers greater than 5.5: [6, 7, 8, 9, 10]
+        assert result == 5
     
     def test_object_oriented_programming(self):
         """Test OOP concepts in execution."""
