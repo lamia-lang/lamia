@@ -9,7 +9,7 @@ from lamia.adapters.web.browser.base import (
     DOM_STABILITY_TRACKER_BOOTSTRAP,
     DOM_STABILITY_CHECK_SCRIPT
 )
-from lamia.internal_types import BrowserActionParams
+from lamia.internal_types import BrowserActionParams, SelectorType
 
 
 class TestBaseBrowserAdapterInterface:
@@ -69,8 +69,8 @@ class MockBrowserAdapter(BaseBrowserAdapter):
         self.closed = True
     
     async def navigate(self, params: BrowserActionParams):
-        if params.url:
-            self.current_url = params.url
+        if params.value:
+            self.current_url = params.value
     
     async def click(self, params: BrowserActionParams):
         pass
@@ -153,7 +153,7 @@ class TestBaseBrowserAdapterImplementation:
     async def test_navigation(self):
         """Test navigation functionality."""
         params = Mock(spec=BrowserActionParams)
-        params.url = "https://example.com"
+        params.value = "https://example.com"
         
         await self.adapter.navigate(params)
         current_url = await self.adapter.get_current_url()
@@ -238,7 +238,7 @@ class TestBrowserActionParams:
         
         # Test with mock params
         params = Mock(spec=BrowserActionParams)
-        params.url = "https://test.com"
+        params.value = "https://test.com"
         params.selector = "#test"
         params.text = "test text"
         params.timeout = 5.0
@@ -351,3 +351,194 @@ class TestBaseBrowserAdapterDocumentation:
             method = getattr(BaseBrowserAdapter, method_name)
             # Just verify method exists and has documentation
             assert method.__doc__ is not None, f"Method {method_name} should have documentation"
+
+
+class TestBaseBrowserAdapterProtocol:
+    """Test BaseBrowserAdapter follows expected protocol patterns."""
+    
+    def test_adapter_is_abstract_base_class(self):
+        """Test that BaseBrowserAdapter is properly configured as ABC."""
+        assert hasattr(BaseBrowserAdapter, '__abstractmethods__')
+        assert len(BaseBrowserAdapter.__abstractmethods__) > 0
+    
+    def test_browser_action_methods_defined(self):
+        """Test that all browser action methods are defined as abstract."""
+        abstract_methods = BaseBrowserAdapter.__abstractmethods__
+        action_methods = {
+            'click', 'type_text', 'upload_file', 'hover', 'scroll',
+            'select_option', 'submit_form', 'navigate'
+        }
+        
+        assert action_methods.issubset(abstract_methods)
+    
+    def test_element_query_methods_defined(self):
+        """Test that element query methods are defined as abstract."""
+        abstract_methods = BaseBrowserAdapter.__abstractmethods__
+        query_methods = {
+            'get_text', 'get_attribute', 'is_visible', 'is_enabled',
+            'wait_for_element'
+        }
+        
+        assert query_methods.issubset(abstract_methods)
+    
+    def test_page_methods_defined(self):
+        """Test that page methods are defined as abstract."""
+        abstract_methods = BaseBrowserAdapter.__abstractmethods__
+        page_methods = {
+            'get_current_url', 'get_page_source', 'take_screenshot'
+        }
+        
+        assert page_methods.issubset(abstract_methods)
+    
+    def test_session_methods_defined(self):
+        """Test that session management methods are defined as abstract."""
+        abstract_methods = BaseBrowserAdapter.__abstractmethods__
+        session_methods = {
+            'set_profile', 'load_session_state', 'save_session_state'
+        }
+        
+        assert session_methods.issubset(abstract_methods)
+    
+    def test_lifecycle_methods_defined(self):
+        """Test that lifecycle methods are defined as abstract."""
+        abstract_methods = BaseBrowserAdapter.__abstractmethods__
+        lifecycle_methods = {'initialize', 'close'}
+        
+        assert lifecycle_methods.issubset(abstract_methods)
+    
+    def test_adapter_inheritance_hierarchy(self):
+        """Test BaseBrowserAdapter inheritance and type checking."""
+        # Should inherit from ABC
+        assert issubclass(BaseBrowserAdapter, ABC)
+        
+        # Concrete implementation should inherit from BaseBrowserAdapter
+        adapter = MockBrowserAdapter()
+        assert isinstance(adapter, BaseBrowserAdapter)
+        assert isinstance(adapter, ABC)
+
+
+class TestBrowserActionParamsUsage:
+    """Test BrowserActionParams usage with adapter interface."""
+    
+    @pytest.fixture
+    def adapter(self):
+        """Create mock adapter for testing."""
+        return MockBrowserAdapter()
+    
+    def test_browser_params_with_minimal_data(self):
+        """Test BrowserActionParams with minimal required data."""
+        params = BrowserActionParams(selector="#element")
+        
+        assert params.selector == "#element"
+        assert params.selector_type == SelectorType.CSS  # default
+        assert params.value is None
+        assert params.timeout is None
+    
+    def test_browser_params_with_complete_data(self):
+        """Test BrowserActionParams with all fields."""
+        params = BrowserActionParams(
+            selector="//div[@id='test']",
+            selector_type=SelectorType.XPATH,
+            value="test input",
+            timeout=15.0,
+            wait_condition="clickable",
+            fallback_selectors=["#backup", ".alternative"]
+        )
+        
+        assert params.selector == "//div[@id='test']"
+        assert params.selector_type == SelectorType.XPATH
+        assert params.value == "test input"
+        assert params.timeout == 15.0
+        assert params.wait_condition == "clickable"
+        assert params.fallback_selectors == ["#backup", ".alternative"]
+    
+    def test_selector_types_enum(self):
+        """Test SelectorType enum values."""
+        css_params = BrowserActionParams(selector="#test", selector_type=SelectorType.CSS)
+        xpath_params = BrowserActionParams(selector="//div", selector_type=SelectorType.XPATH)
+        id_params = BrowserActionParams(selector="test", selector_type=SelectorType.ID)
+        
+        assert css_params.selector_type == SelectorType.CSS
+        assert xpath_params.selector_type == SelectorType.XPATH
+        assert id_params.selector_type == SelectorType.ID
+
+
+class TestBrowserActionParamsIntegration:
+    """Test integration between BrowserActionParams and adapter interface."""
+    
+    @pytest.fixture
+    def adapter(self):
+        return MockBrowserAdapter()
+    
+    @pytest.mark.asyncio
+    async def test_multiple_browser_action_calls(self, adapter):
+        """Test calling multiple browser actions with same adapter instance."""
+        params = BrowserActionParams(
+            selector="#form-input",
+            selector_type=SelectorType.CSS,
+            value="test data",
+            timeout=5.0
+        )
+        
+        # Multiple calls should work without errors
+        await adapter.click(params)
+        await adapter.type_text(params)
+        await adapter.hover(params)
+    
+    def test_params_type_checking(self):
+        """Test BrowserActionParams type checking behavior."""
+        # Should be able to create with required fields
+        params = BrowserActionParams(selector="#element")
+        assert isinstance(params, BrowserActionParams)
+        
+        # Should have all expected attributes
+        assert hasattr(params, 'selector')
+        assert hasattr(params, 'selector_type')
+        assert hasattr(params, 'value')
+        assert hasattr(params, 'timeout')
+        assert hasattr(params, 'wait_condition')
+    
+    @pytest.mark.asyncio
+    async def test_complex_browser_scenario(self, adapter):
+        """Test complex browser automation scenario."""
+        # Navigation
+        nav_params = BrowserActionParams(value="https://example.com/form")
+        await adapter.navigate(nav_params)
+        
+        # Form filling
+        input_params = BrowserActionParams(
+            selector="#username",
+            selector_type=SelectorType.ID,
+            value="testuser"
+        )
+        await adapter.type_text(input_params)
+        
+        # Element interaction
+        button_params = BrowserActionParams(
+            selector="button[type='submit']",
+            selector_type=SelectorType.CSS,
+            timeout=10.0
+        )
+        await adapter.click(button_params)
+        
+        # Verification
+        url = await adapter.get_current_url()
+        assert isinstance(url, str)
+    
+    @pytest.mark.asyncio
+    async def test_session_management_workflow(self, adapter):
+        """Test session management workflow."""
+        # Set profile
+        adapter.set_profile("automation-profile")
+        
+        # Load existing session
+        await adapter.load_session_state()
+        
+        # Perform actions
+        params = BrowserActionParams(selector="#content")
+        await adapter.click(params)
+        
+        # Save session
+        await adapter.save_session_state()
+        
+        assert adapter.profile_name == "automation-profile"
