@@ -96,7 +96,7 @@ def test_function():
     def test_parse_function_with_return_type_syntax(self):
         """Test parsing function with return type syntax."""
         source_code = '''
-with -> str:
+with session("test") -> str:
     def get_weather():
         "What is the weather today?"
 '''
@@ -326,12 +326,12 @@ class TestHybridSyntaxParserErrorHandling:
                 self.parser.transform("invalid syntax")
     
     def test_transform_handles_error_in_transformation(self):
-        """Test that transform handles errors in syntax transformation."""
+        """Test that transform propagates errors from syntax transformation."""
         with patch.object(self.parser._syntax_transformer, 'transform_code') as mock_transform:
             mock_transform.side_effect = RuntimeError("Transformation failed")
             
-            with pytest.raises(RuntimeError):
-                self.parser.transform("test code")
+            with pytest.raises(RuntimeError, match="Transformation failed"):
+                self.parser.transform("x = 1")
 
 
 class TestHybridSyntaxParserIntegration:
@@ -359,11 +359,11 @@ def test_function():
     def test_realistic_hybrid_syntax_code(self):
         """Test parsing and transforming realistic hybrid syntax code."""
         source_code = '''
-with -> str:
+with session("test") -> str:
     def get_weather(city):
         f"What is the weather like in {city}?"
 
-with -> list:
+with session("test") -> list:
     def analyze_data():
         "Analyze the sales data and provide key insights"
 
@@ -415,7 +415,7 @@ class DataProcessor:
         with open(self.data_path) as f:
             return f.read()
 
-with -> dict:
+with session("test") -> dict:
     def analyze_sentiment():
         "Analyze the sentiment of the loaded text data"
 
@@ -642,7 +642,7 @@ def generate_html() -> HTML:
         transformed = transformer.transform_code(code)
         
         assert 'def generate_html' in transformed
-        assert "return_type='HTML'" in transformed
+        assert "return_type=HTML" in transformed
         assert 'lamia.run(' in transformed
     
     def test_transform_multiline_string(self):
@@ -795,7 +795,7 @@ def complex_function() -> HTML[MyModel]:
         transformed = parser.transform(code)
         
         assert 'def complex_function' in transformed
-        assert "return_type='HTML[MyModel]'" in transformed
+        assert "return_type=HTML[MyModel]" in transformed
     
     @pytest.mark.asyncio
     async def test_function_with_parameters(self, parser, mock_lamia):
