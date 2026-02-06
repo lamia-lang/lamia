@@ -37,13 +37,6 @@ class FileActionType(Enum):
     READ = "read"
     WRITE = "write"
     APPEND = "append"
-    DELETE = "delete"
-    COPY = "copy"
-    MOVE = "move"
-    EXISTS = "exists"
-    SIZE = "size"
-    MKDIR = "mkdir"
-    LIST_DIR = "list_dir"
 
 class Command(ABC):
     """Base class for all command objects."""

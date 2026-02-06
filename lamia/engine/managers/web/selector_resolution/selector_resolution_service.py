@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class SelectorResolutionService:
     """Orchestrates AI-powered selector resolution with caching."""
     
-    def __init__(self, llm_manager, config_provider: ConfigProvider, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, get_browser_adapter_func: Optional[Callable[[], Awaitable]] = None, cache_enabled: bool = True, response_parser: Optional[ResponseParser] = None):
+    def __init__(self, llm_manager, config_provider: ConfigProvider, get_page_html_func: Optional[Callable[[], Awaitable[str]]] = None, get_browser_adapter_func: Optional[Callable[[], Awaitable]] = None, response_parser: Optional[ResponseParser] = None):
         """Initialize the selector resolution service.
         
         Args:
