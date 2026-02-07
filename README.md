@@ -6,7 +6,7 @@
 
 ---
 
-**[Documentation](https://your-username.github.io/lamia/)** · **[Contributing](CONTRIBUTING.md)** · **[DeepWiki](https://deepwiki.com/your-username/lamia)**
+**[Documentation](https://lamia-lang.github.io/lamia/)** · **[Contributing](CONTRIBUTING.md)** · **[DeepWiki](https://deepwiki.com/lamia-lang/lamia)**
 
 ---
 

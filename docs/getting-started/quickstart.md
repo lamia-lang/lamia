@@ -258,5 +258,5 @@ Now that you've seen the basics, explore these areas:
 
 - Check the [API Reference](../reference/) for detailed documentation
 - Browse [Examples](../examples/basic.md) for more use cases
-- Visit our [GitHub Issues](https://github.com/your-username/lamia/issues) for support
+- Visit our [GitHub Issues](https://github.com/lamia-lang/lamia/issues) for support
 - Read the [User Guide](../user-guide/cli.md) for in-depth tutorials

@@ -22,7 +22,7 @@ pip install lamia
 For development or to get the latest features, install from source:
 
 ```bash
-git clone https://github.com/your-username/lamia.git
+git clone https://github.com/lamia-lang/lamia.git
 cd lamia
 pip install -e .
 ```
@@ -140,4 +140,4 @@ source fresh-env/bin/activate
 pip install lamia
 ```
 
-For more help, check our [GitHub Issues](https://github.com/your-username/lamia/issues) or create a new issue.
+For more help, check our [GitHub Issues](https://github.com/lamia-lang/lamia/issues) or create a new issue.

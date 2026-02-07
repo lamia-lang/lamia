@@ -85,8 +85,8 @@ Lamia is built with a modular architecture:
 
 ## Community and Support
 
-- **GitHub**: [Repository](https://github.com/your-username/lamia)
-- **Issues**: [Bug Reports & Feature Requests](https://github.com/your-username/lamia/issues)
+- **GitHub**: [Repository](https://github.com/lamia-lang/lamia)
+- **Issues**: [Bug Reports & Feature Requests](https://github.com/lamia-lang/lamia/issues)
 - **Documentation**: This site contains comprehensive guides and API reference
 
 ---

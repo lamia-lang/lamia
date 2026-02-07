@@ -440,7 +440,7 @@ with files("~/Documents/"):
             "Fill the form using {@resume.pdf}"
 ```
 
-For full details on search strategies, error handling, and configuration see [File Context Documentation](../../docs/files-context.md).
+For full details on search strategies, error handling, and configuration see [File Context Documentation](../../docs/user-guide/files-context.md).
 
 ## Session Management
 

@@ -1,9 +1,9 @@
 site_name: Lamia Documentation
 site_description: A comprehensive automation and validation framework for Python
-site_url: https://your-username.github.io/lamia/
+site_url: https://lamia-lang.github.io/lamia/
 
-repo_url: https://github.com/your-username/lamia
-repo_name: your-username/lamia
+repo_url: https://github.com/lamia-lang/lamia
+repo_name: lamia-lang/lamia
 
 theme:
   name: material
@@ -90,15 +90,17 @@ nav:
     - Quick Start: getting-started/quickstart.md
     - Configuration: getting-started/configuration.md
   - User Guide:
-    - CLI Usage: user-guide/cli.md
+    - .hu File Syntax: user-guide/hu-syntax.md
+    - File Context: user-guide/files-context.md
+    - Web Automation: user-guide/web-automation.md
     - Validation: user-guide/validation.md
-    - Actions: user-guide/actions.md
-    - Adapters: user-guide/adapters.md
-  - API Reference: reference/
+    - Model Evaluation: user-guide/evaluation.md
+    - CLI Usage: user-guide/cli.md
+  - Reference:
+    - Selector Usage Guide: validation/selector-usage-guide.md
+    - API Reference: reference/
   - Examples:
     - Basic Usage: examples/basic.md
-    - Custom Validators: examples/custom-validators.md
-  - Development: development/
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -121,5 +123,5 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/your-username/lamia
+      link: https://github.com/lamia-lang/lamia
   generator: false

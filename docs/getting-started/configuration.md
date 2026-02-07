@@ -330,4 +330,4 @@ lamia validate-config config.yaml
 env | grep -E "(OPENAI|ANTHROPIC|AWS)"
 ```
 
-For more help with configuration, see the [API Reference](../reference/) or check our [GitHub Issues](https://github.com/your-username/lamia/issues).
+For more help with configuration, see the [API Reference](../reference/) or check our [GitHub Issues](https://github.com/lamia-lang/lamia/issues).
