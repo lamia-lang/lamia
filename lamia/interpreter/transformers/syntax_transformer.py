@@ -10,9 +10,17 @@ Handles transformation of:
 
 import ast
 import re
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, Union
 
-from ..detectors.llm_command_detector import LLMCommandDetector
+from ..detectors.llm_command_detector import (
+    LLMCommandDetector,
+    LLMFunctionInfo,
+    FunctionParameter,
+    ReturnType,
+    SimpleReturnType,
+    ParametricReturnType,
+    FileWriteReturnType,
+)
 from lamia.internal_types import (
     WEB_METHOD_TO_ACTION,
     SELECTOR_BASED_ACTIONS,
@@ -113,6 +121,10 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         if self._is_web_return_type_expression(node):
             return self._transform_web_return_type_expression(node)
 
+        # Support preprocessed "prompt" -> File(...) notation: __LAMIA_FILE_WRITE__(prompt, File(...))
+        if self._is_file_write_expression(node):
+            return self._transform_file_write_expression(node)
+
         # Check if this expression is a web.method() call
         if self._is_web_method_call(node):
             return self._transform_web_expression(node)
@@ -153,15 +165,16 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     def _transform_llm_function(self, node, is_async: bool):
         """Transform function with LLM string command."""
         func_info = self.detector.llm_functions[node.name]
-        command = func_info['command']
-        return_type = func_info['return_type']
-        parameters = func_info['parameters']
-        
+
         # Process command for parameter substitution
-        processed_command = self._create_parameter_substitution_logic(command, parameters)
+        processed_command = self._create_parameter_substitution_logic(
+            func_info.command, func_info.parameters,
+        )
         
         # Generate lamia.run() call (works for both LLM and web commands)
-        return self._create_lamia_call_function(node, processed_command, return_type, is_async)
+        return self._create_lamia_call_function(
+            node, processed_command, func_info.return_type, is_async,
+        )
     
     def _is_web_return_type_expression(self, node) -> bool:
         """Check if expression is preprocessed web return type expression."""
@@ -173,11 +186,24 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         )
     
     def _transform_web_return_type_expression(self, node):
-        """Transform preprocessed web return type expression."""
+        """Transform preprocessed web return type expression.
+
+        Handles both simple types (-> HTML) and File write targets (-> File(HTML, "path")).
+        For File targets, returns a list of statements (assign + write) that gets spliced
+        in place of the original Expr node.
+        """
         return_type_node = node.value.args[0]
         web_call = node.value.args[1]
-        # Transform the web call into WebCommand
         web_command = self._transform_web_call(web_call)
+
+        # Check for -> File(...) target
+        if self._is_file_call(return_type_node):
+            inner_rt_node, path, append, encoding = self._extract_file_info_from_ast(return_type_node)
+            return self._build_file_write_statements(
+                web_command, inner_rt_node, path, append, encoding,
+            )
+
+        # Original behaviour – simple/parametric return type
         lamia_call = ast.Call(
             func=ast.Attribute(
                 value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
@@ -189,6 +215,35 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         )
         return ast.Expr(value=lamia_call)
     
+    def _is_file_write_expression(self, node) -> bool:
+        """Check if expression is a preprocessed __LAMIA_FILE_WRITE__(prompt, File(...))."""
+        return (
+            isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == '__LAMIA_FILE_WRITE__'
+            and len(node.value.args) == 2
+        )
+
+    def _transform_file_write_expression(self, node):
+        """Transform preprocessed __LAMIA_FILE_WRITE__(prompt, File(...)) expression.
+
+        The prompt is an LLM string command. The File(...) describes the target.
+        Generated code:
+            __lamia_file_result__ = lamia.run(prompt [, return_type=Type])
+            lamia.run(FileCommand(action=FileActionType.WRITE, path=..., content=...))
+        """
+        prompt_node = node.value.args[0]  # string literal
+        file_node = node.value.args[1]    # File(...)
+
+        inner_rt_node, path, append, encoding = self._extract_file_info_from_ast(file_node)
+
+        # The command is the string literal itself
+        command_ast = prompt_node
+
+        return self._build_file_write_statements(
+            command_ast, inner_rt_node, path, append, encoding,
+        )
+
     def _is_web_method_call(self, node) -> bool:
         """Check if expression is a web method call."""
         return (isinstance(node.value, ast.Call) and
@@ -247,16 +302,45 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         """Transform function that returns web commands to execute via lamia.run()."""
         # Find the web command call - could be in body[0] or body[1] (after docstring)
         web_command_call = self._extract_web_command_call(node)
-        
+
         # Transform web.method() to WebCommand AST
         web_command_ast = self._transform_web_call(web_command_call)
-        
+
+        # Check for -> File(...) return annotation
+        if getattr(node, 'returns', None) is not None and self._is_file_call(node.returns):
+            inner_rt_node, path, append, encoding = self._extract_file_info_from_ast(node.returns)
+            # Build keywords for the main command call
+            main_kw: List[ast.keyword] = []
+            if inner_rt_node is not None:
+                main_kw.append(ast.keyword(arg='return_type', value=inner_rt_node))
+            body = self._build_file_write_body(
+                [web_command_ast], main_kw,
+                has_inner_type=inner_rt_node is not None,
+                path=path, append=append, encoding=encoding,
+                is_async=is_async,
+            )
+            if is_async:
+                return ast.AsyncFunctionDef(
+                    name=node.name, args=node.args, body=body,
+                    decorator_list=node.decorator_list, returns=None,
+                    type_comment=getattr(node, 'type_comment', None),
+                    lineno=getattr(node, 'lineno', 1),
+                    col_offset=getattr(node, 'col_offset', 0),
+                )
+            return ast.FunctionDef(
+                name=node.name, args=node.args, body=body,
+                decorator_list=node.decorator_list, returns=None,
+                type_comment=getattr(node, 'type_comment', None),
+                lineno=getattr(node, 'lineno', 1),
+                col_offset=getattr(node, 'col_offset', 0),
+            )
+
         # Build optional return_type argument from function annotation for engine validation
         return_type_kw = self._build_return_type_keyword(node)
 
         # Create lamia.run() call with the web command
         lamia_call = self._build_lamia_call(web_command_ast, return_type_kw, is_async)
-        
+
         # Wrap in await if async
         if is_async:
             lamia_call = ast.Await(value=lamia_call)
@@ -273,9 +357,17 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         return None
     
     def _build_return_type_keyword(self, node) -> Optional[ast.keyword]:
-        """Build return type keyword argument from function annotation."""
+        """Build return type keyword argument from function annotation.
+
+        Note: File(...) return annotations are NOT handled here. They are
+        intercepted earlier in the pipeline by _create_lamia_call_function
+        (for LLM functions) or _transform_web_command_function.
+        """
         if getattr(node, 'returns', None) is not None:
             rt = node.returns
+            # File(...) targets are handled separately by the file write path
+            if self._is_file_call(rt):
+                return None
             if isinstance(rt, ast.Subscript):
                 # Parametric type like HTML[Model]
                 return_type_node = ast.Subscript(
@@ -434,22 +526,27 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             keywords=keywords
         )
     
-    def _create_lamia_call_function(self, node, processed_command: ast.AST, return_type: Optional[Dict], is_async: bool):
+    def _create_lamia_call_function(
+        self, node, processed_command: ast.AST, return_type: Optional[ReturnType], is_async: bool,
+    ):
         """Create a function node that calls lamia.run() or lamia.run_async()."""
         func_info = self.detector.llm_functions[node.name]
-        parameters = func_info['parameters']
-        
+
         # Build lamia call arguments
         args = [processed_command]
-        keywords = []
-        
+        keywords: List[ast.keyword] = []
+
         # Add models parameter from function signature if present
-        models_keyword = self._build_models_keyword(parameters)
+        models_keyword = self._build_models_keyword(func_info.parameters)
         if models_keyword:
             keywords.append(models_keyword)
-        
+
+        # Check for File write return type -> File(Type, "path")
+        if isinstance(return_type, FileWriteReturnType):
+            return self._build_file_write_function(node, args, keywords, return_type, is_async)
+
         # Add return type parameter
-        return_type_keyword = self._build_return_type_keyword_from_dict(return_type)
+        return_type_keyword = self._build_return_type_keyword(return_type)
         if return_type_keyword:
             keywords.append(return_type_keyword)
         
@@ -459,38 +556,39 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         else:
             return self._build_sync_lamia_function(node, args, keywords)
     
-    def _build_models_keyword(self, parameters: List[Dict]) -> Optional[ast.keyword]:
+    def _build_models_keyword(self, parameters: List[FunctionParameter]) -> Optional[ast.keyword]:
         """Build models keyword argument from function parameters."""
         for param in parameters:
-            if param['name'] == 'models' and param.get('default') is not None:
+            if param.name == 'models' and param.default is not None:
                 # Create models keyword argument with the actual default value
-                default_value = param['default']
-                if isinstance(default_value, list):
+                if isinstance(param.default, list):
                     # Create list literal for multiple models
-                    list_elements = [ast.Constant(value=model) for model in default_value]
+                    list_elements = [ast.Constant(value=model) for model in param.default]
                     value_node = ast.List(elts=list_elements, ctx=ast.Load())
                 else:
                     # Single model string
-                    value_node = ast.Constant(value=default_value)
+                    value_node = ast.Constant(value=param.default)
                 
                 return ast.keyword(arg='models', value=value_node)
         return None
-    
-    def _build_return_type_keyword_from_dict(self, return_type: Optional[Dict]) -> Optional[ast.keyword]:
-        """Build return type keyword from return type dictionary."""
-        if return_type:
-            # Add return_type parameter as actual type object
-            if return_type['type'] == 'simple':
-                return_type_node = ast.Name(id=return_type['base_type'], ctx=ast.Load())
-            else:  # parametric
-                return_type_node = ast.Subscript(
-                    value=ast.Name(id=return_type['base_type'], ctx=ast.Load()),
-                    slice=ast.Name(id=return_type['inner_type'], ctx=ast.Load()),
-                    ctx=ast.Load()
-                )
-            
-            return ast.keyword(arg='return_type', value=return_type_node)
-        return None
+
+    def _build_return_type_keyword(
+        self, return_type: Optional[Union[SimpleReturnType, ParametricReturnType]],
+    ) -> Optional[ast.keyword]:
+        """Build return type keyword from typed return type descriptor."""
+        if return_type is None:
+            return None
+        if isinstance(return_type, SimpleReturnType):
+            return_type_node = ast.Name(id=return_type.base_type, ctx=ast.Load())
+        elif isinstance(return_type, ParametricReturnType):
+            return_type_node = ast.Subscript(
+                value=ast.Name(id=return_type.base_type, ctx=ast.Load()),
+                slice=ast.Name(id=return_type.inner_type, ctx=ast.Load()),
+                ctx=ast.Load(),
+            )
+        else:
+            return None
+        return ast.keyword(arg='return_type', value=return_type_node)
     
     def _build_async_lamia_function(self, node, args, keywords) -> ast.AsyncFunctionDef:
         """Build async function with lamia.run_async() call."""
@@ -538,7 +636,277 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             col_offset=getattr(node, 'col_offset', 0)
         )
     
-    def _create_parameter_substitution_logic(self, command: str, parameters: list) -> ast.AST:
+    # ── File write helpers (-> File(...) syntax) ──────────────────────────
+
+    def _is_file_call(self, node) -> bool:
+        """Check if AST node is a File(...) call."""
+        return (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == 'File')
+
+    def _extract_file_info_from_ast(self, file_node) -> tuple:
+        """Extract inner type node, path, append flag, and encoding from File(...) AST.
+
+        Returns:
+            (inner_rt_node, path, append, encoding) where inner_rt_node is None
+            for untyped writes.
+        """
+        args = file_node.args
+        kwargs = {kw.arg: kw.value for kw in file_node.keywords}
+
+        if len(args) == 1:
+            inner_rt_node = None
+            path_node = args[0]
+        elif len(args) >= 2:
+            inner_rt_node = args[0]
+            path_node = args[1]
+        else:
+            return None, None, False, "utf-8"
+
+        path = path_node.value if isinstance(path_node, ast.Constant) else None
+
+        append = False
+        if 'append' in kwargs and isinstance(kwargs['append'], ast.Constant):
+            append = bool(kwargs['append'].value)
+        encoding = "utf-8"
+        if 'encoding' in kwargs and isinstance(kwargs['encoding'], ast.Constant):
+            encoding = str(kwargs['encoding'].value)
+
+        return inner_rt_node, path, append, encoding
+
+    def _build_file_write_function(
+        self, node, args: list, keywords: list, file_return_type: FileWriteReturnType, is_async: bool,
+    ):
+        """Build a function that executes a command, writes to file, and returns.
+
+        Generated code pattern (sync, typed):
+            def func():
+                __lamia_file_result__ = lamia.run(cmd, return_type=Type)
+                lamia.run(FileCommand(action=FileActionType.WRITE, path="...", content=__lamia_file_result__.result_text))
+                return __lamia_file_result__
+        """
+        # Add inner return type keyword if present
+        if file_return_type.inner_return_type is not None:
+            rt_keyword = self._build_return_type_keyword(file_return_type.inner_return_type)
+            if rt_keyword:
+                keywords.append(rt_keyword)
+
+        body = self._build_file_write_body(
+            args, keywords,
+            has_inner_type=file_return_type.inner_return_type is not None,
+            path=file_return_type.path,
+            append=file_return_type.append,
+            encoding=file_return_type.encoding,
+            is_async=is_async,
+        )
+
+        if is_async:
+            return ast.AsyncFunctionDef(
+                name=node.name,
+                args=node.args,
+                body=body,
+                decorator_list=node.decorator_list,
+                returns=None,
+                type_comment=getattr(node, 'type_comment', None),
+                lineno=getattr(node, 'lineno', 1),
+                col_offset=getattr(node, 'col_offset', 0),
+            )
+        return ast.FunctionDef(
+            name=node.name,
+            args=node.args,
+            body=body,
+            decorator_list=node.decorator_list,
+            returns=None,
+            type_comment=getattr(node, 'type_comment', None),
+            lineno=getattr(node, 'lineno', 1),
+            col_offset=getattr(node, 'col_offset', 0),
+        )
+
+    def _build_file_write_body(
+        self,
+        args: list,
+        keywords: list,
+        has_inner_type: bool,
+        path: str,
+        append: bool,
+        encoding: str,
+        is_async: bool,
+    ) -> List[ast.stmt]:
+        """Build the multi-step body for a file write function.
+
+        Steps:
+            1. __lamia_file_result__ = lamia.run(command [, return_type=Type])
+            2. lamia.run(FileCommand(action=WRITE|APPEND, path=..., content=...))
+            3. return __lamia_file_result__
+        """
+        tmp_var = '__lamia_file_result__'
+        method = 'run_async' if is_async else 'run'
+
+        # Step 1 – execute the command
+        lamia_call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                attr=method,
+                ctx=ast.Load(),
+            ),
+            args=args,
+            keywords=keywords,
+        )
+        if is_async:
+            lamia_call = ast.Await(value=lamia_call)
+
+        assign_stmt = ast.Assign(
+            targets=[ast.Name(id=tmp_var, ctx=ast.Store())],
+            value=lamia_call,
+            lineno=1, col_offset=0,
+        )
+
+        # Step 2 – determine content expression
+        if has_inner_type:
+            # Typed: __lamia_file_result__.result_text
+            content_expr = ast.Attribute(
+                value=ast.Name(id=tmp_var, ctx=ast.Load()),
+                attr='result_text',
+                ctx=ast.Load(),
+            )
+        else:
+            # Untyped: str(__lamia_file_result__)
+            content_expr = ast.Call(
+                func=ast.Name(id='str', ctx=ast.Load()),
+                args=[ast.Name(id=tmp_var, ctx=ast.Load())],
+                keywords=[],
+            )
+
+        # Step 3 – build FileCommand AST
+        action_name = 'APPEND' if append else 'WRITE'
+        file_command_ast = ast.Call(
+            func=ast.Name(id='FileCommand', ctx=ast.Load()),
+            args=[],
+            keywords=[
+                ast.keyword(
+                    arg='action',
+                    value=ast.Attribute(
+                        value=ast.Name(id='FileActionType', ctx=ast.Load()),
+                        attr=action_name,
+                        ctx=ast.Load(),
+                    ),
+                ),
+                ast.keyword(arg='path', value=ast.Constant(value=path)),
+                ast.keyword(arg='content', value=content_expr),
+                ast.keyword(arg='encoding', value=ast.Constant(value=encoding)),
+            ],
+        )
+
+        # Step 4 – lamia.run(FileCommand(...))
+        file_write_call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                attr=method,
+                ctx=ast.Load(),
+            ),
+            args=[file_command_ast],
+            keywords=[],
+        )
+        if is_async:
+            file_write_call = ast.Await(value=file_write_call)
+
+        write_stmt = ast.Expr(value=file_write_call)
+
+        # Step 5 – return
+        return_stmt = ast.Return(value=ast.Name(id=tmp_var, ctx=ast.Load()))
+
+        return [assign_stmt, write_stmt, return_stmt]
+
+    def _build_file_write_statements(
+        self,
+        command_ast,
+        inner_rt_node,
+        path: str,
+        append: bool,
+        encoding: str,
+    ) -> List[ast.stmt]:
+        """Build multi-step statements for expression-level -> File(...) (sync only).
+
+        Used by visit_Expr for web.method() -> File(...) expressions.
+        Returns a list of statement nodes to splice in place of the original Expr.
+        """
+        tmp_var = '__lamia_file_result__'
+        method = 'run'
+
+        # Keywords for the main command call
+        keywords: List[ast.keyword] = []
+        if inner_rt_node is not None:
+            keywords.append(ast.keyword(arg='return_type', value=inner_rt_node))
+
+        # Step 1 – __lamia_file_result__ = lamia.run(command, return_type=...)
+        lamia_call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                attr=method,
+                ctx=ast.Load(),
+            ),
+            args=[command_ast],
+            keywords=keywords,
+        )
+        assign_stmt = ast.Assign(
+            targets=[ast.Name(id=tmp_var, ctx=ast.Store())],
+            value=lamia_call,
+            lineno=1, col_offset=0,
+        )
+
+        # Step 2 – content expression
+        if inner_rt_node is not None:
+            content_expr = ast.Attribute(
+                value=ast.Name(id=tmp_var, ctx=ast.Load()),
+                attr='result_text',
+                ctx=ast.Load(),
+            )
+        else:
+            content_expr = ast.Call(
+                func=ast.Name(id='str', ctx=ast.Load()),
+                args=[ast.Name(id=tmp_var, ctx=ast.Load())],
+                keywords=[],
+            )
+
+        # Step 3 – FileCommand
+        action_name = 'APPEND' if append else 'WRITE'
+        file_command_ast = ast.Call(
+            func=ast.Name(id='FileCommand', ctx=ast.Load()),
+            args=[],
+            keywords=[
+                ast.keyword(
+                    arg='action',
+                    value=ast.Attribute(
+                        value=ast.Name(id='FileActionType', ctx=ast.Load()),
+                        attr=action_name,
+                        ctx=ast.Load(),
+                    ),
+                ),
+                ast.keyword(arg='path', value=ast.Constant(value=path)),
+                ast.keyword(arg='content', value=content_expr),
+                ast.keyword(arg='encoding', value=ast.Constant(value=encoding)),
+            ],
+        )
+
+        # Step 4 – lamia.run(FileCommand(...))
+        file_write_call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                attr=method,
+                ctx=ast.Load(),
+            ),
+            args=[file_command_ast],
+            keywords=[],
+        )
+        write_stmt = ast.Expr(value=file_write_call)
+
+        return [assign_stmt, write_stmt]
+
+    # ── Parameter substitution ──────────────────────────────────────────
+
+    def _create_parameter_substitution_logic(
+        self, command: str, parameters: List[FunctionParameter],
+    ) -> ast.AST:
         """Create AST logic for parameter substitution in the command string."""
         if not parameters:
             # No parameters, return command as is
@@ -553,13 +921,13 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         # Create format call for parameter substitution
         format_kwargs = []
         for param in parameters:
-            if param['name'] in param_placeholders:
+            if param.name in param_placeholders:
                 # Create serialization logic for this parameter
                 serialized_param = self._create_param_serialization(param)
                 format_kwargs.append(
                     ast.keyword(
-                        arg=param['name'],
-                        value=serialized_param
+                        arg=param.name,
+                        value=serialized_param,
                     )
                 )
         
@@ -568,23 +936,20 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             func=ast.Attribute(
                 value=ast.Constant(value=command),
                 attr='format',
-                ctx=ast.Load()
+                ctx=ast.Load(),
             ),
             args=[],
-            keywords=format_kwargs
+            keywords=format_kwargs,
         )
     
-    def _create_param_serialization(self, param: dict) -> ast.AST:
+    def _create_param_serialization(self, param: FunctionParameter) -> ast.AST:
         """Create AST for serializing a parameter based on its type."""
-        param_name = param['name']
-        param_type = param.get('type')
-        
-        if not param_type or param_type in ['str', 'int', 'float', 'bool']:
+        if not param.type_annotation or param.type_annotation in ['str', 'int', 'float', 'bool']:
             # Simple types, use string representation
             return ast.Call(
                 func=ast.Name(id='str', ctx=ast.Load()),
-                args=[ast.Name(id=param_name, ctx=ast.Load())],
-                keywords=[]
+                args=[ast.Name(id=param.name, ctx=ast.Load())],
+                keywords=[],
             )
         else:
             # Complex types - use SmartTypeResolver to handle LamiaResult -> Model conversion
@@ -592,24 +957,24 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 func=ast.Attribute(
                     value=ast.Name(id='SmartTypeResolver', ctx=ast.Load()),
                     attr='resolve_for_parameter',
-                    ctx=ast.Load()
+                    ctx=ast.Load(),
                 ),
                 args=[
-                    ast.Name(id=param_name, ctx=ast.Load()),
-                    ast.Constant(value=param_type)
+                    ast.Name(id=param.name, ctx=ast.Load()),
+                    ast.Constant(value=param.type_annotation),
                 ],
-                keywords=[]
+                keywords=[],
             )
             
             # Then serialize the resolved object
             return ast.Call(
                 func=ast.Attribute(
                     value=resolved_param,
-                    attr='model_dump_json' if 'Model' in param_type else 'json',
-                    ctx=ast.Load()
+                    attr='model_dump_json' if 'Model' in param.type_annotation else 'json',
+                    ctx=ast.Load(),
                 ),
                 args=[],
-                keywords=[]
+                keywords=[],
             )
     
     def _ast_to_source(self, tree: ast.AST) -> str:

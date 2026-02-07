@@ -13,6 +13,12 @@ from typing import Optional, Dict, Any
 from .hybrid_syntax_parser import HybridSyntaxParser
 from .hybrid_file_cache import HybridFileCache
 from .ast_analyzer import extract_code_dependencies, create_execution_globals
+from .detectors.llm_command_detector import (
+    LLMFunctionInfo,
+    SimpleReturnType,
+    ParametricReturnType,
+    FileWriteReturnType,
+)
 from lamia.adapters.web.session_context import SessionSkipException
 
 logger = logging.getLogger(__name__)
@@ -47,14 +53,7 @@ class HybridExecutor:
         parsed_info = self.parse(source_code)
         
         # Collect all unique types used
-        types_to_import = set()
-        for func_info in parsed_info.get('llm_functions', {}).values():
-            if func_info['return_type']:
-                if func_info['return_type']['type'] == 'parametric':
-                    types_to_import.add(func_info['return_type']['base_type'])
-                    types_to_import.add(func_info['return_type']['inner_type'])
-                else:
-                    types_to_import.add(func_info['return_type']['base_type'])
+        types_to_import = self._collect_types_from_parsed(parsed_info)
         
         # Generate import statements
         imports = []
@@ -63,7 +62,8 @@ class HybridExecutor:
         for type_name in types_to_import:
             try:
                 from lamia import types as lamia_types_module
-                if hasattr(lamia_types_module, type_name):
+                lamia_type = getattr(lamia_types_module, type_name, None)
+                if lamia_type is not None:
                     lamia_types.append(type_name)
             except (ImportError, AttributeError):
                 # Type might be user-defined or from another module
@@ -131,30 +131,45 @@ class HybridExecutor:
         """Extract types from return annotations and import them dynamically."""
         # Parse to get LLM function info
         parsed_info = self.parse(source_code)
-        
+
         # Collect all unique types used
-        types_to_import = set()
-        for func_info in parsed_info.get('llm_functions', {}).values():
-            if func_info['return_type']:
-                if func_info['return_type']['type'] == 'parametric':
-                    types_to_import.add(func_info['return_type']['base_type'])
-                    types_to_import.add(func_info['return_type']['inner_type'])
-                else:
-                    types_to_import.add(func_info['return_type']['base_type'])
-        
+        types_to_import = self._collect_types_from_parsed(parsed_info)
+
         # Import only the types that are actually used
         for type_name in types_to_import:
             if type_name not in globals_dict:  # Don't override existing globals
                 try:
                     # Try importing from lamia.types first
                     from lamia import types as lamia_types
-                    if hasattr(lamia_types, type_name):
-                        globals_dict[type_name] = getattr(lamia_types, type_name)
+                    lamia_type = getattr(lamia_types, type_name, None)
+                    if lamia_type is not None:
+                        globals_dict[type_name] = lamia_type
                         logger.info(f"Imported type: {type_name}")
                 except (ImportError, AttributeError) as e:
                     # Type might be user-defined or from another module
                     logger.warning(f"Could not import type {type_name}: {e}")
-                    pass
+
+    @staticmethod
+    def _collect_types_from_parsed(parsed_info: dict) -> set:
+        """Collect all type names referenced in parsed LLM function return types."""
+        types_to_import: set = set()
+        for func_info in parsed_info.get('llm_functions', {}).values():
+            rt = func_info.return_type if isinstance(func_info, LLMFunctionInfo) else None
+            if rt is None:
+                continue
+            if isinstance(rt, ParametricReturnType):
+                types_to_import.add(rt.base_type)
+                types_to_import.add(rt.inner_type)
+            elif isinstance(rt, SimpleReturnType):
+                types_to_import.add(rt.base_type)
+            elif isinstance(rt, FileWriteReturnType) and rt.inner_return_type is not None:
+                inner = rt.inner_return_type
+                if isinstance(inner, ParametricReturnType):
+                    types_to_import.add(inner.base_type)
+                    types_to_import.add(inner.inner_type)
+                elif isinstance(inner, SimpleReturnType):
+                    types_to_import.add(inner.base_type)
+        return types_to_import
     
     def execute_file(self, file_path: str, globals_dict: Optional[Dict] = None, enable_lazy_dependency_loading: bool = False):
         """Execute a hybrid syntax file directly with AST-based selective injection."""

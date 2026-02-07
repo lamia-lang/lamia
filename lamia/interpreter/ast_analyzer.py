@@ -91,7 +91,13 @@ def extract_code_dependencies(code: str) -> Dict[str, Any]:
             dynamic_type_mapping[name] = attr
 
     # Filter used_types to only those that are valid dynamic types
-    filtered_used_types = {t for t in analyzer.used_types if t in dynamic_type_mapping or t in ['WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand']}
+    command_types = {'WebCommand', 'WebActionType', 'LLMCommand', 'FileCommand', 'FileActionType'}
+    filtered_used_types = {t for t in analyzer.used_types if t in dynamic_type_mapping or t in command_types}
+
+    # File(...) in return annotations means the generated code needs FileCommand + FileActionType
+    if 'File' in analyzer.used_types:
+        filtered_used_types.add('FileCommand')
+        filtered_used_types.add('FileActionType')
 
     return {
         'namespaces': analyzer.used_namespaces,
@@ -119,11 +125,12 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
             dynamic_type_mapping[name] = attr
     
     # Add command types for transformed code
-    command_mapping = {
+    command_mapping: Dict[str, Any] = {
         'WebCommand': None,
         'WebActionType': None,
         'LLMCommand': None,
-        'FileCommand': None
+        'FileCommand': None,
+        'FileActionType': None,
     }
     
     # Import command types only if needed
@@ -141,6 +148,9 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
             elif cmd_type == 'FileCommand':
                 from lamia.interpreter.commands import FileCommand
                 command_mapping['FileCommand'] = FileCommand
+            elif cmd_type == 'FileActionType':
+                from lamia.interpreter.commands import FileActionType
+                command_mapping['FileActionType'] = FileActionType
     
     for type_name in used_types:
         if type_name in dynamic_type_mapping:

@@ -15,7 +15,7 @@ from lamia.validation.base import BaseValidator
 class CommandParser:
     def __init__(self, command: str):
         self.command = command
-        self._parsed_command = None
+        self._parsed_command: Optional[Command] = None
         self._return_type = None
         
         # Parse the command
@@ -23,6 +23,8 @@ class CommandParser:
 
     @property
     def parsed_command(self) -> Command:
+        if self._parsed_command is None:
+            raise RuntimeError("CommandParser._parse() did not set parsed_command")
         return self._parsed_command
 
     @property
@@ -66,13 +68,13 @@ class CommandParser:
         else:
             return self.command, None
 
-    def _parse_file_command(self, command) -> FileCommand:
-        """Parse filesystem command into FileCommand object."""
-        # For now, default to READ action for file paths
-        return FileCommand(
-            action=FileActionType.READ,
-            path=command,
-        )
+    def _parse_file_command(self, command: str) -> FileCommand:
+        """Parse filesystem command into FileCommand object.
+
+        Plain paths default to READ. File writes are driven by the
+        hybrid syntax `-> File(...)` (not by protocol strings).
+        """
+        return FileCommand(action=FileActionType.READ, path=command)
     
     def _parse_web_command(self, command) -> WebCommand:
         """Parse web command into WebCommand object."""

@@ -81,16 +81,13 @@ class WebCommand(Command):
             return f"{self.action.value}"
 
 
-@dataclass  
+@dataclass
 class FileCommand(Command):
     """Command for file system operations."""
     action: FileActionType
     path: str
     content: Optional[str] = None
-    destination: Optional[str] = None  # For copy/move operations
     encoding: str = "utf-8"
-    create_dirs: bool = True
-    pattern: Optional[str] = None  # For list operations
-    
+
     def __post_init__(self):
         super().__init__(CommandType.FILESYSTEM)

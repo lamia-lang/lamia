@@ -4,6 +4,7 @@ Return type preprocessor for handling -> Type syntax in with statements and expr
 Handles preprocessing of:
 - with session("name") -> Type: syntax
 - web.method(args) -> Type expressions
+- "prompt" -> File(...) expressions
 """
 
 import re
@@ -34,6 +35,9 @@ class WithReturnTypePreprocessor:
         
         # Process web.method() -> Type expressions
         processed_code = self._process_web_expressions(processed_code)
+        
+        # Process "prompt" -> File(...) expressions
+        processed_code = self._process_file_write_expressions(processed_code)
         
         return processed_code, return_types
     
@@ -71,6 +75,38 @@ class WithReturnTypePreprocessor:
         
         return re.sub(web_expr_pattern, replace_web_expr, source_code)
     
+    def _process_file_write_expressions(self, source_code: str) -> str:
+        """Process standalone expression -> File(...) patterns.
+
+        Matches patterns like:
+            "Generate HTML about cats" -> File(HTML, "output.html")
+            "Generate text" -> File("output.txt")
+
+        Rewrites to:
+            __LAMIA_FILE_WRITE__("Generate HTML about cats", File(HTML, "output.html"))
+
+        The syntax transformer then handles __LAMIA_FILE_WRITE__ markers.
+        """
+        # Match: string_literal -> File(...)
+        # The string can use single or double quotes, possibly triple-quoted.
+        file_write_pattern = (
+            r'(\s*)'                            # indent
+            r'(\"\"\"[^\"]*\"\"\"|'             # triple-double-quoted string
+            r"'''[^']*'''|"                     # triple-single-quoted string
+            r'"[^"\n]*"|'                       # double-quoted string
+            r"'[^'\n]*')"                       # single-quoted string
+            r'\s*->\s*'                         # arrow
+            r'(File\([^\n]+\))'                 # File(...) to end of meaningful parens
+        )
+
+        def replace_file_write(match: re.Match) -> str:
+            indent = match.group(1)
+            string_lit = match.group(2)
+            file_call = match.group(3)
+            return f"{indent}__LAMIA_FILE_WRITE__({string_lit}, {file_call})"
+
+        return re.sub(file_write_pattern, replace_file_write, source_code)
+
     def _generate_unique_key(self, content: str) -> str:
         """Generate a unique key for content."""
         return hashlib.md5(content.encode()).hexdigest()[:8]
