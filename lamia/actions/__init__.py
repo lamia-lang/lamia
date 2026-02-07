@@ -1,4 +1,4 @@
-"""Action namespace objects for .hu scripts with excellent IntelliSense support."""
+"""Action namespace objects for .hu scripts"""
 
 from .web import WebActions
 from .http import HttpActions

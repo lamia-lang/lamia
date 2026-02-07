@@ -33,7 +33,10 @@ def generate_code():
 ```
 
 ### File Operations
-Use relative paths (starting with `./` or `../`) or absolute paths:
+
+#### Reading Files
+
+Use relative paths (starting with `./` or `../`) or absolute paths to read files:
 
 ```python
 # Relative paths
@@ -50,6 +53,82 @@ def read_logs():
 def load_database() -> JSON:
     "C:\\Users\\Data\\database.json"
 ```
+
+You can also use the `file` action API for programmatic file reads:
+
+```python
+content = file.read("/path/to/file.txt")
+content = file.read("config.json", encoding="latin-1")
+```
+
+#### Writing to Files
+
+Use the `-> File(...)` return type syntax to generate content and write it to a file:
+
+```python
+# Write with type validation — content must be valid HTML
+def generate_page() -> File(HTML, "output.html"):
+    "Generate an HTML page about cats"
+
+# Write without type validation — content saved as plain text
+def generate_text() -> File("output.txt"):
+    "Generate some text about neural networks"
+
+# Async file write
+async def generate_async() -> File(HTML, "output.html"):
+    "Generate HTML content asynchronously"
+```
+
+The function executes the command, validates the result against the type (if provided), writes it to the file, and returns the result.
+
+**Appending** instead of overwriting:
+
+```python
+def add_rows() -> File(CSV, "data.csv", append=True):
+    "Generate additional CSV rows for the dataset"
+```
+
+**Custom encoding:**
+
+```python
+def generate_latin() -> File("output.txt", encoding="latin-1"):
+    "Generate text with special characters"
+```
+
+**Expression-level file write** (without wrapping in a function):
+
+```python
+# LLM prompt to file
+"Generate HTML about cats" -> File(HTML, "output.html")
+
+# Web scraping to file
+web.get_text(".content") -> File(HTML, "scraped.html")
+```
+
+**Web function with file output:**
+
+```python
+def scrape_to_file() -> File(HTML, "scraped.html"):
+    return web.get_text(".content")
+```
+
+You can also use the `file` action API for programmatic writes:
+
+```python
+file.write("/path/to/file.txt", "Hello, World!")
+file.write("output.json", json.dumps(data))
+file.append("/var/log/app.log", "New log entry\n")
+```
+
+#### File Write Syntax Reference
+
+| Syntax | Description |
+|--------|-------------|
+| `-> File("path")` | Write untyped content to file |
+| `-> File(Type, "path")` | Write type-validated content to file |
+| `-> File(Type, "path", append=True)` | Append instead of overwrite |
+| `-> File("path", encoding="latin-1")` | Write with custom encoding |
+| `-> File(Type[Model], "path")` | Write with parametric type validation |
 
 ### Web Requests
 URLs automatically trigger web requests:
@@ -325,3 +404,61 @@ async def generate_admin_content():
 ```
 
 This hybrid syntax makes it easy to combine file operations, web requests, and AI-generated content in a single, readable workflow.
+
+## File Context (`with files()`)
+
+Use `with files()` to index local directories so you can reference files in LLM prompts using `{@filename}` syntax:
+
+```python
+with files("~/Documents/", "~/projects/"):
+    def answer_question(question: str, models="openai:gpt-4"):
+        """
+        Answer: {question}
+        
+        Use information from {@resume.pdf} and {@cover_letter.txt}
+        """
+```
+
+Files are resolved using smart search: exact filename match, content grep, fuzzy matching, and path component matching. PDF and DOCX files are automatically extracted to text.
+
+```python
+# Exact path
+{@resume.pdf}                     # Searches indexed directories
+{@/Users/me/Documents/resume.pdf} # Absolute path always works
+
+# Fuzzy matching
+{@resum.pdf}    # Finds resume.pdf
+{@config}       # Finds config.yaml, config.json, etc.
+```
+
+Nest with sessions for full workflows:
+
+```python
+with files("~/Documents/"):
+    with session("job_application"):
+        def fill_form(models="openai:gpt-4"):
+            "Fill the form using {@resume.pdf}"
+```
+
+For full details on search strategies, error handling, and configuration see [File Context Documentation](../../docs/files-context.md).
+
+## Session Management
+
+Use `with session()` for multi-step workflows that should persist across runs (login sequences, form filling, etc.). On subsequent runs, completed sessions are skipped automatically.
+
+```python
+def login_to_site():
+    with session("login"):
+        web.navigate("https://example.com/login")
+        web.type_text("#username", "your_username")
+        web.type_text("#password", "your_password")
+        web.click("#login-button")
+    
+    # After session block — always runs
+    web.navigate("https://example.com/dashboard")
+```
+
+**First run**: executes the block, saves the session on success.
+**Subsequent runs**: detects valid session, skips the block entirely.
+
+Sessions are stored in `.lamia_sessions/` and automatically invalidated on failure. Clear with `rm -rf .lamia_sessions/`.
