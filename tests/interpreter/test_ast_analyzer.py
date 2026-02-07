@@ -694,3 +694,28 @@ class TestCreateExecutionGlobalsIntegration:
         }
         
         assert expected_keys.issubset(set(globals_dict.keys()))
+
+
+class TestFileWriteASTAnalysis:
+    """Test that File(...) triggers FileCommand + FileActionType injection."""
+
+    def test_file_name_triggers_command_type_injection(self):
+        """When 'File' appears as a Name node, FileCommand and FileActionType are added."""
+        code = '''
+def generate() -> File(HTML, "output.html"):
+    "Generate HTML"
+'''
+        result = extract_code_dependencies(code)
+
+        assert 'FileCommand' in result['types']
+        assert 'FileActionType' in result['types']
+
+    def test_create_execution_globals_injects_file_types(self):
+        """FileCommand and FileActionType are available in execution globals."""
+        from lamia.interpreter.commands import FileCommand, FileActionType
+
+        used_types = {'FileCommand', 'FileActionType'}
+        globals_dict = create_execution_globals(set(), used_types)
+
+        assert globals_dict['FileCommand'] is FileCommand
+        assert globals_dict['FileActionType'] is FileActionType

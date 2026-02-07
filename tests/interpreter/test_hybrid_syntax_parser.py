@@ -516,9 +516,8 @@ def my_function():
         detector.visit(tree)
         
         assert 'my_function' in detector.llm_functions
-        assert detector.llm_functions['my_function']['command'] == "Tell me a joke"
-        assert detector.llm_functions['my_function']['type'] == 'function_with_string_command'
-        assert detector.llm_functions['my_function']['return_type'] is None
+        assert detector.llm_functions['my_function'].command == "Tell me a joke"
+        assert detector.llm_functions['my_function'].return_type is None
     
     def test_detect_multiline_string_function(self):
         """Test detection of function with multiline string command."""
@@ -536,7 +535,7 @@ def generate_story():
         detector.visit(tree)
         
         assert 'generate_story' in detector.llm_functions
-        command = detector.llm_functions['generate_story']['command']
+        command = detector.llm_functions['generate_story'].command
         assert "Write a short story about a robot" in command
         assert "Make it heartwarming and include dialogue." in command
     
@@ -552,11 +551,12 @@ def generate_html() -> HTML[MyModel]:
         detector.visit(tree)
         
         assert 'generate_html' in detector.llm_functions
-        return_type = detector.llm_functions['generate_html']['return_type']
-        assert return_type['type'] == 'parametric'
-        assert return_type['base_type'] == 'HTML'
-        assert return_type['inner_type'] == 'MyModel'
-        assert detector.llm_functions['generate_html']['command'] == "Generate HTML for a login form"
+        from lamia.interpreter.detectors.llm_command_detector import ParametricReturnType
+        return_type = detector.llm_functions['generate_html'].return_type
+        assert isinstance(return_type, ParametricReturnType)
+        assert return_type.base_type == 'HTML'
+        assert return_type.inner_type == 'MyModel'
+        assert detector.llm_functions['generate_html'].command == "Generate HTML for a login form"
     
     def test_ignore_function_with_multiple_statements(self):
         """Test that functions with multiple statements are ignored."""
@@ -610,8 +610,8 @@ def complex_type() -> Dict[str, HTML[MyModel]]:
         detector.visit(tree)
         
         assert 'complex_type' in detector.llm_functions
-        return_type = detector.llm_functions['complex_type']['return_type']
-        assert 'Dict' in return_type['full_type']
+        return_type = detector.llm_functions['complex_type'].return_type
+        assert 'Dict' in return_type.full_type
 
 
 class TestHybridSyntaxTransformer:
@@ -844,12 +844,12 @@ def generate_report(weather_data: WeatherModel, location: str):
         result = parser.parse(code)
         
         assert 'generate_report' in result['llm_functions']
-        params = result['llm_functions']['generate_report']['parameters']
+        params = result['llm_functions']['generate_report'].parameters
         assert len(params) == 2
-        assert params[0]['name'] == 'weather_data'
-        assert params[0]['type'] == 'WeatherModel'
-        assert params[1]['name'] == 'location'
-        assert params[1]['type'] == 'str'
+        assert params[0].name == 'weather_data'
+        assert params[0].type_annotation == 'WeatherModel'
+        assert params[1].name == 'location'
+        assert params[1].type_annotation == 'str'
     
     def test_parameter_substitution_transformation(self, parser):
         """Test that parameter substitution is handled in transformation."""
@@ -904,12 +904,13 @@ def get_weather() -> HTML[WeatherModel]:
 '''
         result = parser.parse(code)
         
+        from lamia.interpreter.detectors.llm_command_detector import ParametricReturnType
         func_info = result['llm_functions']['get_weather']
-        return_type = func_info['return_type']
-        
-        assert return_type['type'] == 'parametric'
-        assert return_type['base_type'] == 'HTML'
-        assert return_type['inner_type'] == 'WeatherModel'
+        return_type = func_info.return_type
+
+        assert isinstance(return_type, ParametricReturnType)
+        assert return_type.base_type == 'HTML'
+        assert return_type.inner_type == 'WeatherModel'
     
     def test_simple_return_type_detection(self, parser):
         """Test detection of simple return types."""
@@ -919,11 +920,12 @@ def get_data() -> JSON:
 '''
         result = parser.parse(code)
         
+        from lamia.interpreter.detectors.llm_command_detector import SimpleReturnType
         func_info = result['llm_functions']['get_data']
-        return_type = func_info['return_type']
-        
-        assert return_type['type'] == 'simple'
-        assert return_type['base_type'] == 'JSON'
+        return_type = func_info.return_type
+
+        assert isinstance(return_type, SimpleReturnType)
+        assert return_type.base_type == 'JSON'
     
     def test_no_return_type(self, parser):
         """Test functions without return types."""
@@ -934,4 +936,4 @@ def simple_text():
         result = parser.parse(code)
         
         func_info = result['llm_functions']['simple_text']
-        assert func_info['return_type'] is None
+        assert func_info.return_type is None

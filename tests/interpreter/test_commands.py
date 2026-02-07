@@ -189,19 +189,14 @@ class TestFileCommand:
             FileActionType.READ,
             FileActionType.WRITE,
             FileActionType.APPEND,
-            FileActionType.DELETE
         ]
-        
+
         path = "/test/file.txt"
-        
+
         for action in actions:
-            try:
-                command = FileCommand(action=action, path=path)
-                assert command.action == action
-                assert command.path == path
-            except (TypeError, AttributeError):
-                # Some actions might not exist or require different parameters
-                pass
+            command = FileCommand(action=action, path=path)
+            assert command.action == action
+            assert command.path == path
     
     def test_with_content(self):
         """Test FileCommand with content."""
@@ -269,18 +264,11 @@ class TestActionTypes:
     
     def test_file_action_types_exist(self):
         """Test that FileActionType enum values exist."""
-        expected_actions = [
-            'READ', 'WRITE', 'APPEND', 'DELETE', 'COPY', 'MOVE', 'EXISTS'
-        ]
-        
+        expected_actions = ["READ", "WRITE", "APPEND"]
+
         for action_name in expected_actions:
-            action_name_upper = action_name.upper()
-            try:
-                action = getattr(FileActionType, action_name_upper)
-                assert action is not None
-            except AttributeError:
-                # Action might not be implemented yet or have different name
-                pass
+            action = FileActionType[action_name]
+            assert action is not None
     
     def test_action_types_are_comparable(self):
         """Test that action types can be compared."""

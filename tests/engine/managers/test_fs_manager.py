@@ -69,12 +69,6 @@ class TestFSManagerInitialization:
         assert isinstance(fs_manager, Manager)
         assert callable(fs_manager.execute)
 
-
-# ---------------------------------------------------------------------------
-# Action dispatch
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 class TestFSManagerActionDispatch:
     """Test that execute routes each FileActionType correctly."""
