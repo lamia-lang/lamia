@@ -1,344 +1,440 @@
 """Tests for filesystem manager."""
 
-import pytest
-import tempfile
 import os
-from unittest.mock import Mock, AsyncMock, mock_open, patch
+import tempfile
+from typing import List, Optional
+from unittest.mock import Mock, mock_open, patch
+
+import pytest
+
+from lamia.engine.config_provider import ConfigProvider
 from lamia.engine.managers.fs_manager import FSManager
 from lamia.engine.managers.manager import Manager
-from lamia.engine.config_provider import ConfigProvider
-from lamia.interpreter.commands import FileCommand
+from lamia.interpreter.commands import FileActionType, FileCommand
 from lamia.validation.base import BaseValidator, ValidationResult
-
-
-class TestFSManagerInitialization:
-    """Test FSManager initialization."""
-    
-    def test_initialization(self):
-        """Test FSManager initialization."""
-        config_provider = Mock(spec=ConfigProvider)
-        fs_manager = FSManager(config_provider)
-        
-        assert fs_manager.config_provider == config_provider
-        assert isinstance(fs_manager, Manager)
-    
-    def test_inheritance(self):
-        """Test that FSManager inherits from Manager with FileCommand type."""
-        config_provider = Mock(spec=ConfigProvider)
-        fs_manager = FSManager(config_provider)
-        
-        assert isinstance(fs_manager, Manager)
-        # Verify it's specialized for FileCommand
-        assert hasattr(fs_manager, 'execute')
 
 
 class MockValidator(BaseValidator):
     """Mock validator for testing."""
-    
+
     def __init__(self, validation_result: ValidationResult):
         self._validation_result = validation_result
-        self.validated_content = []
-    
+        self.validated_content: List[str] = []
+        super().__init__()
+
     @property
-    def name(self):
+    def name(self) -> str:
         return "mock_validator"
-    
+
     @property
-    def initial_hint(self):
+    def initial_hint(self) -> str:
         return "Mock validation hint"
-    
-    async def validate(self, response, **kwargs):
+
+    async def validate(self, response: str, **kwargs) -> ValidationResult:
         self.validated_content.append(response)
         return self._validation_result
 
 
-@pytest.mark.asyncio
-class TestFSManagerExecution:
-    """Test FSManager execution."""
-    
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.config_provider = Mock(spec=ConfigProvider)
-        self.fs_manager = FSManager(self.config_provider)
-    
-    async def test_execute_with_real_file(self):
-        """Test executing with a real temporary file."""
-        # Create temporary file
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-            temp_file.write("Test file content\nLine 2\nLine 3")
-            temp_file_path = temp_file.name
-        
-        try:
-            # Create file command
-            file_command = Mock(spec=FileCommand)
-            file_command.path = temp_file_path
-            
-            # Create validator
-            expected_result = ValidationResult(is_valid=True)
-            validator = MockValidator(expected_result)
-            
-            # Execute
-            result = await self.fs_manager.execute(file_command, validator)
-            
-            # Verify result
-            assert result == expected_result
-            assert len(validator.validated_content) == 1
-            assert validator.validated_content[0] == "Test file content\nLine 2\nLine 3"
-            
-        finally:
-            # Clean up
-            os.unlink(temp_file_path)
-    
-    @patch('builtins.open', new_callable=mock_open, read_data="Mocked file content")
-    async def test_execute_with_mocked_file(self, mock_file):
-        """Test executing with mocked file operations."""
-        # Create file command
-        file_command = Mock(spec=FileCommand)
-        file_command.path = "/mocked/path/file.txt"
-        
-        # Create validator
-        expected_result = ValidationResult(is_valid=True, error_message="")
-        validator = MockValidator(expected_result)
-        
-        # Execute
-        result = await self.fs_manager.execute(file_command, validator)
-        
-        # Verify file was opened correctly
-        mock_file.assert_called_once_with("/mocked/path/file.txt", 'r')
-        
-        # Verify result
-        assert result == expected_result
-        assert len(validator.validated_content) == 1
-        assert validator.validated_content[0] == "Mocked file content"
-    
-    @patch('builtins.open', new_callable=mock_open, read_data="")
-    async def test_execute_with_empty_file(self, mock_file):
-        """Test executing with empty file."""
-        file_command = Mock(spec=FileCommand)
-        file_command.path = "/path/to/empty.txt"
-        
-        expected_result = ValidationResult(is_valid=False, error_message="Empty file")
-        validator = MockValidator(expected_result)
-        
-        result = await self.fs_manager.execute(file_command, validator)
-        
-        assert result == expected_result
-        assert len(validator.validated_content) == 1
-        assert validator.validated_content[0] == ""
-    
-    async def test_execute_file_not_found(self):
-        """Test executing with non-existent file."""
-        file_command = Mock(spec=FileCommand)
-        file_command.path = "/nonexistent/file.txt"
-        
-        validator = Mock(spec=BaseValidator)
-        
-        # Should raise FileNotFoundError
-        with pytest.raises(FileNotFoundError):
-            await self.fs_manager.execute(file_command, validator)
-        
-        # Validator should not be called
-        validator.validate.assert_not_called()
-    
-    async def test_execute_permission_error(self):
-        """Test executing with permission denied."""
-        # Mock open to raise PermissionError
-        with patch('builtins.open', side_effect=PermissionError("Permission denied")):
-            file_command = Mock(spec=FileCommand)
-            file_command.path = "/restricted/file.txt"
-            
-            validator = Mock(spec=BaseValidator)
-            
-            # Should raise PermissionError
-            with pytest.raises(PermissionError):
-                await self.fs_manager.execute(file_command, validator)
-            
-            # Validator should not be called
-            validator.validate.assert_not_called()
-    
-    async def test_execute_with_validator_failure(self):
-        """Test execution when validator fails."""
-        with patch('builtins.open', mock_open(read_data="Invalid content")):
-            file_command = Mock(spec=FileCommand)
-            file_command.path = "/path/to/file.txt"
-            
-            # Create failing validator
-            expected_result = ValidationResult(is_valid=False, error_message="Validation failed")
-            validator = MockValidator(expected_result)
-            
-            result = await self.fs_manager.execute(file_command, validator)
-            
-            assert result == expected_result
-            assert not result.is_valid
-            assert result.error_message == "Validation failed"
-            assert len(validator.validated_content) == 1
-            assert validator.validated_content[0] == "Invalid content"
-    
-    async def test_execute_multiple_files(self):
-        """Test executing multiple file commands."""
-        file_contents = ["Content 1", "Content 2", "Content 3"]
-        
-        for i, content in enumerate(file_contents):
-            with patch('builtins.open', mock_open(read_data=content)):
-                file_command = Mock(spec=FileCommand)
-                file_command.path = f"/path/to/file{i}.txt"
-                
-                expected_result = ValidationResult(is_valid=True)
-                validator = MockValidator(expected_result)
-                
-                result = await self.fs_manager.execute(file_command, validator)
-                
-                assert result == expected_result
-                assert len(validator.validated_content) == 1
-                assert validator.validated_content[0] == content
+def _make_command(
+    action: FileActionType,
+    path: str,
+    content: Optional[str] = None,
+    encoding: str = "utf-8",
+) -> FileCommand:
+    return FileCommand(
+        action=action,
+        path=path,
+        content=content,
+        encoding=encoding,
+    )
 
 
-@pytest.mark.asyncio
-class TestFSManagerFileHandling:
-    """Test FSManager file handling specifics."""
-    
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.config_provider = Mock(spec=ConfigProvider)
-        self.fs_manager = FSManager(self.config_provider)
-    
-    async def test_file_encoding_handling(self):
-        """Test that files are read with correct encoding."""
-        # Test with UTF-8 content
-        utf8_content = "UTF-8 content with émojis 🚀"
-        
-        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False) as temp_file:
-            temp_file.write(utf8_content)
-            temp_file_path = temp_file.name
-        
-        try:
-            file_command = Mock(spec=FileCommand)
-            file_command.path = temp_file_path
-            
-            expected_result = ValidationResult(is_valid=True)
-            validator = MockValidator(expected_result)
-            
-            result = await self.fs_manager.execute(file_command, validator)
-            
-            assert result == expected_result
-            assert len(validator.validated_content) == 1
-            assert validator.validated_content[0] == utf8_content
-            
-        finally:
-            os.unlink(temp_file_path)
-    
-    async def test_large_file_handling(self):
-        """Test handling of larger files."""
-        # Create content with multiple lines
-        large_content = "\n".join([f"Line {i}: {'x' * 100}" for i in range(1000)])
-        
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-            temp_file.write(large_content)
-            temp_file_path = temp_file.name
-        
-        try:
-            file_command = Mock(spec=FileCommand)
-            file_command.path = temp_file_path
-            
-            expected_result = ValidationResult(is_valid=True)
-            validator = MockValidator(expected_result)
-            
-            result = await self.fs_manager.execute(file_command, validator)
-            
-            assert result == expected_result
-            assert len(validator.validated_content) == 1
-            assert len(validator.validated_content[0]) == len(large_content)
-            assert validator.validated_content[0] == large_content
-            
-        finally:
-            os.unlink(temp_file_path)
-    
-    async def test_binary_file_handling(self):
-        """Test handling of binary files (should fail gracefully)."""
-        # Create a binary file
-        binary_content = b'\x00\x01\x02\x03\xFF\xFE\xFD'
-        
-        with tempfile.NamedTemporaryFile(mode='wb', delete=False) as temp_file:
-            temp_file.write(binary_content)
-            temp_file_path = temp_file.name
-        
-        try:
-            file_command = Mock(spec=FileCommand)
-            file_command.path = temp_file_path
-            
-            validator = Mock(spec=BaseValidator)
-            
-            # Should raise UnicodeDecodeError when trying to read binary file as text
-            with pytest.raises(UnicodeDecodeError):
-                await self.fs_manager.execute(file_command, validator)
-            
-        finally:
-            os.unlink(temp_file_path)
+# ---------------------------------------------------------------------------
+# Initialization
+# ---------------------------------------------------------------------------
 
 
-class TestFSManagerTypeSystem:
-    """Test FSManager type system compliance."""
-    
-    def test_manager_specialization(self):
-        """Test that FSManager is properly specialized for FileCommand."""
+class TestFSManagerInitialization:
+    """Test FSManager initialization."""
+
+    def test_initialization(self) -> None:
         config_provider = Mock(spec=ConfigProvider)
         fs_manager = FSManager(config_provider)
-        
-        # Should be instance of Manager
+        assert fs_manager.config_provider == config_provider
         assert isinstance(fs_manager, Manager)
-        
-        # Should have execute method with correct signature
-        assert hasattr(fs_manager, 'execute')
-        assert callable(fs_manager.execute)
-    
-    @pytest.mark.asyncio
-    async def test_type_enforcement_file_command(self):
-        """Test that FSManager works with FileCommand objects."""
+
+    def test_inheritance(self) -> None:
         config_provider = Mock(spec=ConfigProvider)
         fs_manager = FSManager(config_provider)
-        
-        with patch('builtins.open', mock_open(read_data="test content")):
-            file_command = Mock(spec=FileCommand)
-            file_command.path = "/test/path.txt"
-            
-            validator = MockValidator(ValidationResult(is_valid=True))
-            
-            result = await fs_manager.execute(file_command, validator)
-            
+        assert isinstance(fs_manager, Manager)
+        assert callable(fs_manager.execute)
+
+
+# ---------------------------------------------------------------------------
+# Action dispatch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestFSManagerActionDispatch:
+    """Test that execute routes each FileActionType correctly."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_unsupported_action_raises(self) -> None:
+        cmd = _make_command(FileActionType.READ, "/tmp/x")
+        cmd.action = "NOT_A_REAL_ACTION"  # type: ignore[assignment]
+        with pytest.raises(ValueError, match="Unsupported file action"):
+            await self.fs_manager.execute(cmd)
+
+
+# ---------------------------------------------------------------------------
+# READ
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestFSManagerRead:
+    """Test READ operation."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_read_real_file(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+            f.write("Test file content\nLine 2\nLine 3")
+            path = f.name
+        try:
+            cmd = _make_command(FileActionType.READ, path)
+            result = await self.fs_manager.execute(cmd)
             assert isinstance(result, ValidationResult)
             assert result.is_valid
+            assert result.result_type == "Test file content\nLine 2\nLine 3"
+        finally:
+            os.unlink(path)
+
+    async def test_read_with_validator(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+            f.write("content")
+            path = f.name
+        try:
+            cmd = _make_command(FileActionType.READ, path)
+            expected = ValidationResult(is_valid=True)
+            validator = MockValidator(expected)
+            result = await self.fs_manager.execute(cmd, validator)
+            assert result is expected
+            assert validator.validated_content == ["content"]
+        finally:
+            os.unlink(path)
+
+    async def test_read_with_validator_failure(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+            f.write("bad")
+            path = f.name
+        try:
+            cmd = _make_command(FileActionType.READ, path)
+            expected = ValidationResult(is_valid=False, error_message="fail")
+            validator = MockValidator(expected)
+            result = await self.fs_manager.execute(cmd, validator)
+            assert isinstance(result, ValidationResult)
+            assert not result.is_valid
+            assert result.error_message == "fail"
+        finally:
+            os.unlink(path)
+
+    @patch("builtins.open", new_callable=mock_open, read_data="Mocked content")
+    async def test_read_mocked(self, mocked_file) -> None:  # type: ignore[no-untyped-def]
+        cmd = _make_command(FileActionType.READ, "/mocked/path.txt")
+        result = await self.fs_manager.execute(cmd)
+        assert isinstance(result, ValidationResult)
+        assert result.is_valid
+        assert result.result_type == "Mocked content"
+        mocked_file.assert_called_once_with("/mocked/path.txt", "r", encoding="utf-8")
+
+    @patch("builtins.open", new_callable=mock_open, read_data="")
+    async def test_read_empty_file(self, _mocked_file) -> None:  # type: ignore[no-untyped-def]
+        cmd = _make_command(FileActionType.READ, "/empty.txt")
+        result = await self.fs_manager.execute(cmd)
+        assert isinstance(result, ValidationResult)
+        assert result.is_valid
+        assert result.result_type == ""
+
+    async def test_read_file_not_found(self) -> None:
+        cmd = _make_command(FileActionType.READ, "/nonexistent/file.txt")
+        with pytest.raises(FileNotFoundError):
+            await self.fs_manager.execute(cmd)
+
+    async def test_read_permission_error(self) -> None:
+        with patch("builtins.open", side_effect=PermissionError("denied")):
+            cmd = _make_command(FileActionType.READ, "/restricted.txt")
+            with pytest.raises(PermissionError):
+                await self.fs_manager.execute(cmd)
 
 
+# ---------------------------------------------------------------------------
+# WRITE
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestFSManagerWrite:
+    """Test WRITE operation."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_write_new_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(FileActionType.WRITE, path, content="hello world")
+            result = await self.fs_manager.execute(cmd)
+            assert isinstance(result, ValidationResult)
+            assert result.is_valid
+            assert result.result_type == "hello world"
+            with open(path, "r") as f:
+                assert f.read() == "hello world"
+
+    async def test_write_overwrites_existing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            with open(path, "w") as f:
+                f.write("old")
+            cmd = _make_command(FileActionType.WRITE, path, content="new")
+            await self.fs_manager.execute(cmd)
+            with open(path, "r") as f:
+                assert f.read() == "new"
+
+    async def test_write_creates_parent_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "sub", "deep", "out.txt")
+            cmd = _make_command(FileActionType.WRITE, path, content="deep")
+            await self.fs_manager.execute(cmd)
+            assert os.path.isfile(path)
+            with open(path, "r") as f:
+                assert f.read() == "deep"
+
+    async def test_write_content_none_raises(self) -> None:
+        cmd = _make_command(FileActionType.WRITE, "/tmp/dummy.txt")
+        with pytest.raises(ValueError, match="content is required for WRITE"):
+            await self.fs_manager.execute(cmd)
+
+    async def test_write_with_validator_valid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(FileActionType.WRITE, path, content="validated")
+            expected = ValidationResult(is_valid=True)
+            validator = MockValidator(expected)
+            result = await self.fs_manager.execute(cmd, validator)
+            assert result is expected
+            assert validator.validated_content == ["validated"]
+            # File should be written since validation passed
+            with open(path, "r") as f:
+                assert f.read() == "validated"
+
+    async def test_write_validates_before_writing(self) -> None:
+        """Invalid content should NOT be written to disk."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(FileActionType.WRITE, path, content="invalid data")
+            expected = ValidationResult(is_valid=False, error_message="bad content")
+            validator = MockValidator(expected)
+            result = await self.fs_manager.execute(cmd, validator)
+            assert isinstance(result, ValidationResult)
+            assert not result.is_valid
+            # File should NOT have been created
+            assert not os.path.exists(path)
+
+
+# ---------------------------------------------------------------------------
+# APPEND
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestFSManagerAppend:
+    """Test APPEND operation."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_append_to_existing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            with open(path, "w") as f:
+                f.write("start")
+            cmd = _make_command(FileActionType.APPEND, path, content="-end")
+            result = await self.fs_manager.execute(cmd)
+            assert isinstance(result, ValidationResult)
+            assert result.is_valid
+            assert result.result_type == "-end"
+            with open(path, "r") as f:
+                assert f.read() == "start-end"
+
+    async def test_append_creates_file_if_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "new.txt")
+            cmd = _make_command(FileActionType.APPEND, path, content="first")
+            await self.fs_manager.execute(cmd)
+            with open(path, "r") as f:
+                assert f.read() == "first"
+
+    async def test_append_creates_parent_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "a", "b", "c.txt")
+            cmd = _make_command(FileActionType.APPEND, path, content="nested")
+            await self.fs_manager.execute(cmd)
+            assert os.path.isfile(path)
+
+    async def test_append_content_none_raises(self) -> None:
+        cmd = _make_command(FileActionType.APPEND, "/tmp/dummy.txt")
+        with pytest.raises(ValueError, match="content is required for APPEND"):
+            await self.fs_manager.execute(cmd)
+
+    async def test_append_with_validator_reads_full_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            with open(path, "w") as f:
+                f.write("base")
+            cmd = _make_command(FileActionType.APPEND, path, content="+extra")
+            expected = ValidationResult(is_valid=True)
+            validator = MockValidator(expected)
+            result = await self.fs_manager.execute(cmd, validator)
+            assert result is expected
+            assert validator.validated_content == ["base+extra"]
+
+
+# ---------------------------------------------------------------------------
+# Common: encoding for READ and WRITE
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestFSManagerEncoding:
+    """Common encoding tests for operations that handle text."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_read_utf8_special_chars(self) -> None:
+        text = "Héllo wörld — ñ ü ä ö"
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", delete=False, suffix=".txt"
+        ) as f:
+            f.write(text)
+            path = f.name
+        try:
+            cmd = _make_command(FileActionType.READ, path)
+            result = await self.fs_manager.execute(cmd)
+            assert isinstance(result, ValidationResult)
+            assert result.is_valid
+            assert result.result_type == text
+        finally:
+            os.unlink(path)
+
+    async def test_write_utf8_special_chars(self) -> None:
+        text = "Héllo wörld — ñ ü ä ö"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "utf8.txt")
+            cmd = _make_command(FileActionType.WRITE, path, content=text)
+            await self.fs_manager.execute(cmd)
+            with open(path, "r", encoding="utf-8") as f:
+                assert f.read() == text
+
+    async def test_write_then_read_roundtrip(self) -> None:
+        text = "Round-trip test: 日本語 中文 한국어"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "roundtrip.txt")
+            write_cmd = _make_command(FileActionType.WRITE, path, content=text)
+            await self.fs_manager.execute(write_cmd)
+            read_cmd = _make_command(FileActionType.READ, path)
+            result = await self.fs_manager.execute(read_cmd)
+            assert isinstance(result, ValidationResult)
+            assert result.is_valid
+            assert result.result_type == text
+
+    async def test_append_preserves_encoding(self) -> None:
+        original = "café"
+        appended = " résumé"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "enc.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(original)
+            cmd = _make_command(FileActionType.APPEND, path, content=appended)
+            await self.fs_manager.execute(cmd)
+            with open(path, "r", encoding="utf-8") as f:
+                assert f.read() == "café résumé"
+
+    async def test_read_binary_file_raises(self) -> None:
+        binary = b"\x00\x01\x02\x03\xff\xfe\xfd"
+        with tempfile.NamedTemporaryFile(mode="wb", delete=False) as f:
+            f.write(binary)
+            path = f.name
+        try:
+            cmd = _make_command(FileActionType.READ, path)
+            with pytest.raises(UnicodeDecodeError):
+                await self.fs_manager.execute(cmd)
+        finally:
+            os.unlink(path)
+
+    async def test_custom_encoding(self) -> None:
+        text = "Latin-1: ñ é ü"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "latin1.txt")
+            write_cmd = _make_command(
+                FileActionType.WRITE, path, content=text, encoding="latin-1"
+            )
+            await self.fs_manager.execute(write_cmd)
+            read_cmd = _make_command(FileActionType.READ, path, encoding="latin-1")
+            result = await self.fs_manager.execute(read_cmd)
+            assert isinstance(result, ValidationResult)
+            assert result.is_valid
+            assert result.result_type == text
+
+
+# ---------------------------------------------------------------------------
+# Common error handling
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
 class TestFSManagerErrorHandling:
-    """Test FSManager error handling."""
-    
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.config_provider = Mock(spec=ConfigProvider)
-        self.fs_manager = FSManager(self.config_provider)
-    
-    @pytest.mark.asyncio
-    async def test_validator_exception_handling(self):
-        """Test handling of validator exceptions."""
-        with patch('builtins.open', mock_open(read_data="test content")):
-            file_command = Mock(spec=FileCommand)
-            file_command.path = "/test/path.txt"
-            
-            # Create validator that raises exception
+    """Test common error handling patterns."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_validator_exception_propagates(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+            f.write("content")
+            path = f.name
+        try:
+            cmd = _make_command(FileActionType.READ, path)
             validator = Mock(spec=BaseValidator)
-            validator.validate.side_effect = Exception("Validator error")
-            
-            # Should propagate validator exception
-            with pytest.raises(Exception, match="Validator error"):
-                await self.fs_manager.execute(file_command, validator)
-    
-    @pytest.mark.asyncio
-    async def test_none_validator_handling(self):
-        """Test handling of None validator."""
-        with patch('builtins.open', mock_open(read_data="test content")):
-            file_command = Mock(spec=FileCommand)
-            file_command.path = "/test/path.txt"
-            
-            # Should raise AttributeError when validator is None
-            with pytest.raises(AttributeError):
-                await self.fs_manager.execute(file_command, None)
+            validator.validate.side_effect = RuntimeError("validator exploded")
+            with pytest.raises(RuntimeError, match="validator exploded"):
+                await self.fs_manager.execute(cmd, validator)
+        finally:
+            os.unlink(path)
+
+    async def test_read_none_validator_returns_operation_result(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
+            f.write("text")
+            path = f.name
+        try:
+            cmd = _make_command(FileActionType.READ, path)
+            result = await self.fs_manager.execute(cmd, None)
+            assert isinstance(result, ValidationResult)
+            assert result.is_valid
+            assert result.result_type == "text"
+        finally:
+            os.unlink(path)
+
+    async def test_write_none_validator_returns_operation_result(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(FileActionType.WRITE, path, content="hi")
+            result = await self.fs_manager.execute(cmd, None)
+            assert isinstance(result, ValidationResult)
+            assert result.is_valid
+            assert result.result_type == "hi"
