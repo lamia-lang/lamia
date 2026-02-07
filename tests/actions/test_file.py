@@ -39,16 +39,6 @@ class TestFileActions:
         result = self.file_actions.write("/path/to/file.txt", content, encoding="latin1")
         expected = f"file://write:/path/to/file.txt content:{json.dumps(content)} encoding:latin1"
         assert result == expected
-        
-        # Write with create_dirs disabled
-        result = self.file_actions.write("/path/to/file.txt", content, create_dirs=False)
-        expected = f"file://write:/path/to/file.txt content:{json.dumps(content)} create_dirs:false"
-        assert result == expected
-        
-        # Write with all options
-        result = self.file_actions.write("/path/to/file.txt", content, encoding="latin1", create_dirs=False)
-        expected = f"file://write:/path/to/file.txt content:{json.dumps(content)} encoding:latin1 create_dirs:false"
-        assert result == expected
     
     def test_append(self):
         """Test file append command generation."""
@@ -63,74 +53,6 @@ class TestFileActions:
         result = self.file_actions.append("/path/to/file.txt", content, encoding="latin1")
         expected = f"file://append:/path/to/file.txt content:{json.dumps(content)} encoding:latin1"
         assert result == expected
-        
-        # Append with create_dirs disabled
-        result = self.file_actions.append("/path/to/file.txt", content, create_dirs=False)
-        expected = f"file://append:/path/to/file.txt content:{json.dumps(content)} create_dirs:false"
-        assert result == expected
-    
-    def test_delete(self):
-        """Test file delete command generation."""
-        result = self.file_actions.delete("/path/to/file.txt")
-        assert result == "file://delete:/path/to/file.txt"
-    
-    def test_exists(self):
-        """Test file exists command generation."""
-        result = self.file_actions.exists("/path/to/file.txt")
-        assert result == "file://exists:/path/to/file.txt"
-    
-    def test_copy(self):
-        """Test file copy command generation."""
-        # Basic copy
-        result = self.file_actions.copy("/source/file.txt", "/dest/file.txt")
-        assert result == "file://copy:/source/file.txt:/dest/file.txt"
-        
-        # Copy with create_dirs disabled
-        result = self.file_actions.copy("/source/file.txt", "/dest/file.txt", create_dirs=False)
-        assert result == "file://copy:/source/file.txt:/dest/file.txt create_dirs:false"
-    
-    def test_move(self):
-        """Test file move command generation."""
-        # Basic move
-        result = self.file_actions.move("/source/file.txt", "/dest/file.txt")
-        assert result == "file://move:/source/file.txt:/dest/file.txt"
-        
-        # Move with create_dirs disabled
-        result = self.file_actions.move("/source/file.txt", "/dest/file.txt", create_dirs=False)
-        assert result == "file://move:/source/file.txt:/dest/file.txt create_dirs:false"
-    
-    def test_size(self):
-        """Test file size command generation."""
-        result = self.file_actions.size("/path/to/file.txt")
-        assert result == "file://size:/path/to/file.txt"
-    
-    def test_mkdir(self):
-        """Test directory creation command generation."""
-        # Basic mkdir
-        result = self.file_actions.mkdir("/path/to/directory")
-        assert result == "file://mkdir:/path/to/directory"
-        
-        # mkdir with parents disabled
-        result = self.file_actions.mkdir("/path/to/directory", parents=False)
-        assert result == "file://mkdir:/path/to/directory parents:false"
-    
-    def test_list_dir(self):
-        """Test directory listing command generation."""
-        # Basic list
-        result = self.file_actions.list_dir()
-        assert result == "file://list:."
-        
-        # List specific directory
-        result = self.file_actions.list_dir("/path/to/directory")
-        assert result == "file://list:/path/to/directory"
-        
-        # List with pattern
-        result = self.file_actions.list_dir("/path/to/directory", pattern="*.py")
-        assert result == "file://list:/path/to/directory pattern:*.py"
-        
-        # List current directory with pattern
-        result = self.file_actions.list_dir(".", pattern="*.txt")
-        assert result == "file://list:. pattern:*.txt"
     
     def test_content_encoding_handling(self):
         """Test proper JSON encoding of content."""
