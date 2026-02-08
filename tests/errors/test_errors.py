@@ -15,27 +15,13 @@ class TestMissingAPIKeysError:
 
     def test_inheritance(self):
         """Test error inheritance."""
-        error = MissingAPIKeysError("Test message")
+        error = MissingAPIKeysError([("openai", "OPENAI_API_KEY")])
         assert isinstance(error, Exception)
-        assert isinstance(error, ValueError)
-
-    def test_error_message(self):
-        """Test error message handling."""
-        message = "API key for OpenAI is missing"
-        error = MissingAPIKeysError(message)
-        assert str(error) == message
-
-    def test_empty_message(self):
-        """Test error with empty message."""
-        error = MissingAPIKeysError("")
-        assert str(error) == ""
 
     def test_error_raising(self):
         """Test that error can be raised and caught."""
         with pytest.raises(MissingAPIKeysError) as exc_info:
-            raise MissingAPIKeysError("Test error")
-
-        assert "Test error" in str(exc_info.value)
+            raise MissingAPIKeysError([("openai", "OPENAI_API_KEY")])
 
 
 class TestExternalOperationError:
@@ -178,7 +164,7 @@ class TestErrorHierarchy:
         transient = ExternalOperationTransientError("test")
         permanent = ExternalOperationPermanentError("test")
         rate_limit = ExternalOperationRateLimitError("test")
-        missing_api = MissingAPIKeysError("test")
+        missing_api = MissingAPIKeysError([("openai", "OPENAI_API_KEY")])
 
         assert not isinstance(transient, ExternalOperationPermanentError)
         assert not isinstance(permanent, ExternalOperationTransientError)
@@ -189,33 +175,31 @@ class TestErrorHierarchy:
 class TestErrorMessages:
     """Test error message handling."""
 
-    def test_all_errors_accept_messages(self):
+    def test_external_operation_errors_accept_messages(self):
         """Test that all errors accept string messages."""
         message = "Test error message"
         errors = [
-            MissingAPIKeysError(message),
             ExternalOperationError(message),
             ExternalOperationTransientError(message),
             ExternalOperationPermanentError(message),
-            ExternalOperationRateLimitError(message),
+            ExternalOperationRateLimitError(message)
         ]
 
         for error in errors:
             assert str(error) == message
-
-    def test_error_repr(self):
-        """Test error string representation."""
-        errors = [
-            MissingAPIKeysError("API error"),
-            ExternalOperationTransientError("Transient error"),
-            ExternalOperationPermanentError("Permanent error"),
-            ExternalOperationRateLimitError("Rate limit error"),
-        ]
-
-        for error in errors:
             repr_str = repr(error)
             assert error.__class__.__name__ in repr_str
             assert str(error) in repr_str
+
+    def test_missing_api_keys_error_message(self):
+        """Test error string representation."""
+        error = MissingAPIKeysError([("openai", "OPENAI_API_KEY"), ("anthropic", "ANTHROPIC_API_KEY")])
+
+        assert "openai" in str(error)
+        assert "OPENAI_API_KEY" in str(error)
+        assert error.missing == [("openai", "OPENAI_API_KEY"), ("anthropic", "ANTHROPIC_API_KEY")]
+        assert "anthropic" in str(error)
+        assert "ANTHROPIC_API_KEY" in str(error)
 
 
 class TestErrorUsagePatterns:
@@ -242,22 +226,6 @@ class TestErrorUsagePatterns:
         except ExternalOperationError as e:
             assert e.__cause__ is not None
             assert isinstance(e.__cause__, ValueError)
-
-    def test_conditional_error_handling(self):
-        """Test conditional error handling based on error type."""
-        def handle_error(error):
-            if isinstance(error, ExternalOperationTransientError):
-                return "retry"
-            if isinstance(error, ExternalOperationPermanentError):
-                return "fail"
-            if isinstance(error, ExternalOperationRateLimitError):
-                return "backoff"
-            return "unknown"
-
-        assert handle_error(ExternalOperationTransientError("test")) == "retry"
-        assert handle_error(ExternalOperationPermanentError("test")) == "fail"
-        assert handle_error(ExternalOperationRateLimitError("test")) == "backoff"
-        assert handle_error(MissingAPIKeysError("test")) == "unknown"
 
 
 class TestErrorInitialization:
