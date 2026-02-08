@@ -195,11 +195,12 @@ class TestLLMManagerAPIKeyResolution:
     
     def test_resolve_api_key_missing_required(self):
         """Test resolving API key when required key is missing."""
-        with patch.object(self.manager.provider_registry, 'get_env_var_names') as mock_env_vars:
-            mock_env_vars.return_value = ["OPENAI_API_KEY"]
-            
-            with pytest.raises(MissingAPIKeysError):
-                self.manager._resolve_api_key("openai")
+        with patch.object(self.manager.provider_registry, 'get_api_key_from_env', return_value=None):
+            with patch.object(self.manager.provider_registry, 'get_env_var_names') as mock_env_vars:
+                mock_env_vars.return_value = ["OPENAI_API_KEY"]
+                
+                with pytest.raises(MissingAPIKeysError):
+                    self.manager._resolve_api_key("openai")
 
 
 class TestLLMManagerAPIKeyChecking:
@@ -970,6 +971,7 @@ class TestLLMManagerEndToEnd:
         # Should not raise any exception
         manager._check_all_required_api_keys({"ollama"})
 
+    @patch.dict(os.environ, {}, clear=True)
     def test_check_all_required_api_keys_missing_primary(self):
         """Test check_all_required_api_keys with missing primary model key"""
         cm = _create_config_provider([{"name": "openai", "max_retries": 3}])
@@ -979,6 +981,7 @@ class TestLLMManagerEndToEnd:
         
         assert "openai" in str(exc_info.value)
 
+    @patch.dict(os.environ, {}, clear=True)
     def test_check_all_required_api_keys_missing_fallback(self):
         """Test check_all_required_api_keys with missing fallback model key"""
         cm = _create_config_provider(

@@ -294,7 +294,7 @@ async def test_invalid_extract_payload_detected():
 async def test_contract_checker_direct_usage():
     """Test using the ValidatorContractChecker directly."""
     checker = ValidatorContractChecker(ValidCodeValidator)
-    passed, violations = await checker.check_contracts()
+    passed, violations = checker.check_contracts()
     
     assert passed is True
     assert len(violations) == 0

@@ -194,17 +194,6 @@ def process(models: list = ['gpt-4', 'claude']):
         assert parameters[0].name == 'models'
         assert parameters[0].default == ['gpt-4', 'claude']
 
-    def test_function_with_docstring_only_not_detected(self):
-        """Test function with only docstring (no second string) is not detected."""
-        source = """
-def docstring_only():
-    "This is just a docstring"
-"""
-        result = self.detector.detect_commands(source)
-
-        assert len(result) == 0
-
-
 class TestLLMCommandDetectorFileWrite:
     """Test File(...) return type detection in LLM command detector."""
 

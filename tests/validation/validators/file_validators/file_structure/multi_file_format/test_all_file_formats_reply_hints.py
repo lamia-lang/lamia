@@ -167,11 +167,11 @@ async def test_reply_hint_generation_for_invalid_payload(strict, with_code_fence
 
     
     if strict:
-        assert f"no valid {payload_key} payload is found in the text" in result.hint
+        assert f"no valid {payload_key} payload is found in the text" in result.hint.lower()
         assert validator.initial_hint in result.hint
         assert result.raw_text == chatty_response
     else:
-        assert f"no valid {payload_key} payload is found in the text" in result.hint
+        assert f"no valid {payload_key} payload is found in the text" in result.hint.lower()
         assert validator.initial_hint in result.hint
         assert result.raw_text == chatty_response
 

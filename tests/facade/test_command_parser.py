@@ -1,4 +1,10 @@
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from lamia import Lamia
 from lamia.facade.command_parser import CommandParser
+from lamia.facade.result_types import LamiaResult
 from lamia.interpreter.commands import LLMCommand, WebCommand, FileCommand, WebActionType, FileActionType
 
 
@@ -94,9 +100,6 @@ def test_preserves_unicode_and_emojis():
 # INTEGRATION TESTS: Lamia class integration with CommandParser
 # =============================================================================
 
-import pytest
-from lamia import Lamia
-
 
 class TestLamiaCommandParsingIntegration:
     """Test Lamia's integration with CommandParser."""
@@ -107,63 +110,56 @@ class TestLamiaCommandParsingIntegration:
         return Lamia("ollama")
 
     def test_fs_command_parsing(self, lamia):
-        """Test that filesystem commands are parsed correctly."""
-        from unittest.mock import patch
+        """Test that filesystem commands are parsed and dispatched correctly."""
+        mock_result = MagicMock()
+        mock_result.result_type = "file content"
+        lamia._engine.execute = AsyncMock(return_value=mock_result)
 
-        with patch.object(lamia._engine, "execute") as mock_execute:
-            mock_execute.return_value.text = "test response"
+        lamia.run("/tmp/file.txt")
 
-            lamia.run("read /tmp/file.txt")
+        lamia._engine.execute.assert_called_once()
+        command = lamia._engine.execute.call_args[0][0]
+        assert isinstance(command, FileCommand)
+        assert command.action == FileActionType.READ
+        assert command.path == "/tmp/file.txt"
 
-            mock_execute.assert_called_once()
-            call_args = mock_execute.call_args
-            assert call_args[0][0] == "fs"
-            assert call_args[0][1] == "/tmp/file.txt"
-            assert call_args[1]["operation"] == "read"
-
-        command_info = lamia.get_last_command_info()
-        assert command_info is not None
-        assert command_info["type"] == "fs"
-        assert command_info["content"] == "/tmp/file.txt"
-        assert command_info["kwargs"]["operation"] == "read"
-
-    @pytest.mark.integration
     def test_web_command_parsing(self, lamia):
-        """Test that web commands are parsed correctly."""
-        try:
-            lamia.run("https://example.com")
-        except Exception:
-            pass
+        """Test that web commands are parsed and dispatched correctly."""
+        mock_result = MagicMock()
+        mock_result.result_type = "page content"
+        lamia._engine.execute = AsyncMock(return_value=mock_result)
 
-        command_info = lamia.get_last_command_info()
-        assert command_info is not None
-        assert command_info["type"] == "web"
-        assert command_info["content"] == "https://example.com"
-        assert command_info["kwargs"]["operation"] == "get"
+        lamia.run("https://example.com")
+
+        lamia._engine.execute.assert_called_once()
+        command = lamia._engine.execute.call_args[0][0]
+        assert isinstance(command, WebCommand)
+        assert command.action == WebActionType.NAVIGATE
+        assert command.url == "https://example.com"
 
     def test_llm_command_parsing(self, lamia):
-        """Test that LLM commands are parsed correctly."""
-        try:
-            lamia.run("What is the weather today?")
-        except Exception:
-            pass
+        """Test that LLM commands are parsed and dispatched correctly."""
+        mock_result = MagicMock()
+        mock_result.result_type = "weather info"
+        lamia._engine.execute = AsyncMock(return_value=mock_result)
 
-        command_info = lamia.get_last_command_info()
-        assert command_info is not None
-        assert command_info["type"] == "llm"
-        assert command_info["content"] == "What is the weather today?"
-        assert command_info["kwargs"] == {}
+        lamia.run("What is the weather today?")
+
+        lamia._engine.execute.assert_called_once()
+        command = lamia._engine.execute.call_args[0][0]
+        assert isinstance(command, LLMCommand)
+        assert command.prompt == "What is the weather today?"
 
     def test_python_code_bypasses_parser(self, lamia):
-        """Test that Python code bypasses the command parser."""
+        """Test that Python code bypasses the command parser and engine."""
+        lamia._engine.execute = AsyncMock()
+
         result = lamia.run("print('Hello World')")
-        assert result == ""
+        assert isinstance(result, LamiaResult)
+        assert result.result_text == ""
 
-        lamia.get_last_command_info()
         result = lamia.run("2 + 2")
-        assert result == "4"
+        assert isinstance(result, LamiaResult)
+        assert result.result_text == "4"
 
-    def test_no_command_parsed_yet(self, lamia):
-        """Test that get_last_command_info returns None when no command parsed."""
-        command_info = lamia.get_last_command_info()
-        assert command_info is None
+        lamia._engine.execute.assert_not_called()

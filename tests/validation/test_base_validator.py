@@ -99,11 +99,11 @@ class TestTrackingContext:
         """Test creating a minimal TrackingContext."""
         context = TrackingContext(
             data_provider_name="test:provider",
-            command_type=CommandType.WEB_BROWSE
+            command_type=CommandType.WEB
         )
 
         assert context.data_provider_name == "test:provider"
-        assert context.command_type == CommandType.WEB_BROWSE
+        assert context.command_type == CommandType.WEB
         assert context.metadata is None
 
     def test_tracking_context_metadata_types(self):
@@ -172,69 +172,77 @@ class TestBaseValidatorConstructorValidation:
     def test_validator_with_both_patterns_raises_error(self):
         """Test that implementing both patterns raises TypeError."""
 
+        class BothPatternsValidator(BaseValidator):
+            @property
+            def name(self) -> str:
+                return "both"
+
+            @property
+            def initial_hint(self) -> str:
+                return "Invalid"
+
+            async def validate(self, response: str, execution_context=None, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
+            async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
+            async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
         with pytest.raises(TypeError, match="Implement either validate\\(\\) OR validate_strict/validate_permissive"):
-            class BothPatternsValidator(BaseValidator):
-                @property
-                def name(self) -> str:
-                    return "both"
-
-                @property
-                def initial_hint(self) -> str:
-                    return "Invalid"
-
-                async def validate(self, response: str, execution_context=None, **kwargs) -> ValidationResult:
-                    return ValidationResult(is_valid=True)
-
-                async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-                    return ValidationResult(is_valid=True)
-
-                async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
-                    return ValidationResult(is_valid=True)
+            BothPatternsValidator()
 
     def test_validator_with_no_implementation_raises_error(self):
         """Test that not implementing any pattern raises TypeError."""
 
-        with pytest.raises(TypeError, match="Must implement either validate\\(\\) or both validate_strict and validate_permissive"):
-            class NoImplementationValidator(BaseValidator):
-                @property
-                def name(self) -> str:
-                    return "no_impl"
+        class NoImplementationValidator(BaseValidator):
+            @property
+            def name(self) -> str:
+                return "no_impl"
 
-                @property
-                def initial_hint(self) -> str:
-                    return "Invalid"
+            @property
+            def initial_hint(self) -> str:
+                return "Invalid"
+
+        with pytest.raises(TypeError, match="Must implement either validate\\(\\) or both validate_strict and validate_permissive"):
+            NoImplementationValidator()
 
     def test_validator_with_only_strict_raises_error(self):
         """Test that implementing only validate_strict raises TypeError."""
 
+        class OnlyStrictValidator(BaseValidator):
+            @property
+            def name(self) -> str:
+                return "only_strict"
+
+            @property
+            def initial_hint(self) -> str:
+                return "Invalid"
+
+            async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
         with pytest.raises(TypeError, match="Must implement either validate\\(\\) or both validate_strict and validate_permissive"):
-            class OnlyStrictValidator(BaseValidator):
-                @property
-                def name(self) -> str:
-                    return "only_strict"
-
-                @property
-                def initial_hint(self) -> str:
-                    return "Invalid"
-
-                async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
-                    return ValidationResult(is_valid=True)
+            OnlyStrictValidator()
 
     def test_validator_with_only_permissive_raises_error(self):
         """Test that implementing only validate_permissive raises TypeError."""
 
+        class OnlyPermissiveValidator(BaseValidator):
+            @property
+            def name(self) -> str:
+                return "only_permissive"
+
+            @property
+            def initial_hint(self) -> str:
+                return "Invalid"
+
+            async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
         with pytest.raises(TypeError, match="Must implement either validate\\(\\) or both validate_strict and validate_permissive"):
-            class OnlyPermissiveValidator(BaseValidator):
-                @property
-                def name(self) -> str:
-                    return "only_permissive"
-
-                @property
-                def initial_hint(self) -> str:
-                    return "Invalid"
-
-                async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
-                    return ValidationResult(is_valid=True)
+            OnlyPermissiveValidator()
 
 
 class TestBaseValidatorInitialization:
