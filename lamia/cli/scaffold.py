@@ -5,7 +5,17 @@ def create_minimal_config(config_path: str, with_extensions: bool = False, exten
     """Create a minimal config.yaml if it does not exist."""
     if os.path.exists(config_path):
         return False  # Already exists
-    config = {}
+    config: dict = {
+        "model_chain": [
+            {"name": "ollama", "max_retries": 3},
+        ],
+        "providers": {
+            "ollama": {
+                "enabled": True,
+                "default_model": "llama3.2:1b",
+            },
+        },
+    }
     if with_extensions:
         config["extensions_folder"] = extensions_folder_name
     with open(config_path, "w") as f:
@@ -46,84 +56,85 @@ def create_env_file(env_path: str) -> bool:
 
 def create_full_default_config(config_path: str) -> bool:
     """Create a full default config.yaml with all settings, overwriting if it exists."""
-    config_content = '''# Default model to use (options: openai, openai:gpt-4-32k anthropic, ollama)
-default_model: ollama
+    config_content = '''# Model chain: models are tried in order; if one fails, the next is used.
+# Use "provider:model" syntax or just "provider" to use its default_model.
+model_chain:
+  - name: "ollama"
+    max_retries: 3
+  - name: "anthropic:claude-haiku-4-5-20251001"
+    max_retries: 2
+  - name: "openai:gpt-4.1-nano"
+    max_retries: 1
 
-# Model configurations
-models:
-  # OpenAI Configuration
+# Provider configurations
+# Advanced parameters (temperature, max_tokens, etc.) use sensible defaults.
+# Uncomment and override only if needed.
+providers:
+  # OpenAI — models ordered cheapest to most expensive (standard input $/MTok)
   openai:
     enabled: false
-    default_model: gpt-3.5-turbo
+    default_model: gpt-4.1-nano
     models:
-      - gpt-4-turbo-preview        # Latest GPT-4, fastest, most capable, cheaper than GPT-4
-      - gpt-4-0125-preview         # Similar to turbo but fixed version
-      - gpt-4                      # Original GPT-4, high capability
-      - gpt-4-32k                  # Original GPT-4 with 32k context
-      - gpt-3.5-turbo              # Fast, good value for most tasks
-      - gpt-3.5-turbo-16k          # Same as 3.5 but with 16k context
-      - gpt-3.5-turbo-0125         # Latest fixed version, most reliable
-    temperature: 0.7      # Higher = more creative, Lower = more focused
-    max_tokens: 1000     # Maximum length of response
-    top_p: 1.0          # Alternative to temperature for sampling
-    frequency_penalty: 0.0  # Reduce repetition of token sequences
-    presence_penalty: 0.0   # Reduce repetition of topics
+      - gpt-4.1-nano               # $0.10 in — fastest, most cost-efficient
+      - gpt-4o-mini                 # $0.15 in — fast, affordable small model
+      - gpt-5-nano                  # $0.05 in — fastest GPT-5 variant
+      - gpt-5-mini                  # $0.25 in — cost-efficient GPT-5
+      - gpt-4.1-mini               # $0.40 in — smaller, faster GPT-4.1
+      - o4-mini                     # $1.10 in — fast reasoning model
+      - o3-mini                     # $1.10 in — small reasoning model
+      - gpt-5                       # $1.25 in — intelligent reasoning model
+      - gpt-5.1                     # $1.25 in — improved GPT-5
+      - gpt-5.2                     # $1.75 in — best for coding and agentic tasks
+      - o3                          # $2.00 in — reasoning model for complex tasks
+      - gpt-4.1                     # $2.00 in — smartest non-reasoning model
+      - gpt-4o                      # $2.50 in — fast, intelligent, flexible
+      - gpt-5.2-codex               # $1.75 in — optimized for agentic coding
+      - gpt-5.1-codex               # $1.25 in — optimized for agentic coding
+      - gpt-5.3-codex               # latest codex model
+      - o1                          # $15.00 in — previous full reasoning model
+      - gpt-5.2-pro                 # $21.00 in — smartest, most precise
+    # temperature: 0.7
+    # max_tokens: 1000
 
-  # Anthropic Configuration
+  # Anthropic — models ordered cheapest to most expensive (input $/MTok)
   anthropic:
     enabled: false
-    default_model: claude-3-opus-20240229
+    default_model: claude-haiku-4-5-20251001
     models:
-      - claude-3-opus-20240229     # Most powerful, best for complex tasks
-      - claude-3-sonnet-20240229   # Great balance of speed and capability
-      - claude-3-haiku-20240307    # Fastest, most cost-effective
-      - claude-2.1                 # Previous generation, still capable
-      - claude-2.0                 # Older but stable version
-    temperature: 0.7     # Higher = more creative, Lower = more focused
-    max_tokens: 1000    # Maximum length of response
-    top_k: 50          # Limit vocabulary for sampling
-    top_p: 1.0         # Alternative to temperature for sampling
+      - claude-haiku-3-5-20241022   # $0.80 in — previous fast model
+      - claude-haiku-4-5-20251001   # $1.00 in — fastest, near-frontier
+      - claude-sonnet-4-5-20250929  # $3.00 in — best speed/intelligence balance
+      - claude-opus-4-6             # $5.00 in — most intelligent, best for agents
+      - claude-opus-4-5             # $5.00 in — previous top-tier opus
+      - claude-opus-4-1             # $15.00 in — legacy opus
+    # temperature: 0.7
+    # max_tokens: 1000
 
-  # Ollama Configuration
+  # Ollama — local models, no API costs
   ollama:
     enabled: true
     default_model: llama3.2:1b
     models:
-      - llama3.2:1b                # Llama 3.2 1B, default model
-      - llama2                     # Meta's Llama 2, good all-rounder
-      - mixtral                    # Mixture of experts, very capable
-      - neural-chat                # Optimized for chat, good performance
-      - codellama                  # Optimized for code generation
-      - dolphin-phi                # Improved Phi model with chat
-      - starling-lm                # High quality small model
-      - phi                        # Microsoft's small but capable model
-      - gemma                      # Google's efficient model
-      - mistral                    # Mistral AI's base model
-      - tinyllama                  # Tiny but fast model
-    temperature: 0.7       # Higher = more creative, Lower = more focused
-    context_size: 4096     # Maximum context size
-    num_ctx: 4096         # Context window size
-    num_gpu: 1           # Number of GPUs to use
-    num_thread: 4        # Number of CPU threads
-    repeat_penalty: 1.1  # Penalty for repeated tokens
-    top_k: 40           # Top-k sampling
-    top_p: 0.9          # Top-p sampling
+      - llama3.2:1b
+      - llama2
+      - mixtral
+      - codellama
+      - gemma
+      - mistral
+      - phi
 
 # Validation settings
 validation:
   enabled: true
   max_retries: 1
-  #fallback_models: ["anthropic", "openai"]  # Models to try if primary fails
   validators:
     - type: "html"
-      strict: false      # HTML validation
-    # - type: "json"    # JSON validation
-    # - type: "regex"   # Regex validation
-    - type: "length"  # Length validation
+      strict: false
+    - type: "length"
       min_length: 100
-    - type: "html_structure"  # HTML structure validation
+    - type: "html_structure"
       model: HtmlStructure
 '''
     with open(config_path, "w") as f:
         f.write(config_content)
-    return True 
+    return True

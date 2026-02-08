@@ -13,6 +13,10 @@ def test_create_minimal_config(tmp_path):
     assert created is True
     config = yaml.safe_load(config_path.read_text())
     assert config["extensions_folder"] == "exts"
+    assert "model_chain" in config
+    assert config["model_chain"][0]["name"] == "ollama"
+    assert "providers" in config
+    assert config["providers"]["ollama"]["enabled"] is True
 
 
 def test_create_minimal_config_skips_existing(tmp_path):
@@ -70,4 +74,12 @@ def test_create_full_default_config(tmp_path):
 
     assert created is True
     content = config_path.read_text()
-    assert "default_model:" in content
+    assert "model_chain:" in content
+    assert "providers:" in content
+    assert "openai:" in content
+    assert "anthropic:" in content
+    assert "ollama:" in content
+    assert "gpt-4.1-nano" in content
+    assert "claude-haiku-4-5-20251001" in content
+    # Advanced params should be commented out, not active
+    assert "temperature: 0.7" not in content or "# temperature: 0.7" in content
