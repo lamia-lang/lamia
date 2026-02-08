@@ -126,19 +126,26 @@ models:
         finally:
             os.unlink(config_file)
 
-    @patch("lamia.cli.cli.create_env_file")
-    @patch("lamia.cli.cli.create_minimal_config")
-    def test_cli_init_command(self, mock_create_config, mock_create_env):
-        """Test CLI init command."""
+    @patch("lamia.cli.cli.create_config_from_wizard_result")
+    @patch("lamia.cli.cli.run_init_wizard")
+    @patch("os.path.exists", return_value=False)
+    def test_cli_init_command(self, mock_exists, mock_wizard, mock_create_config):
+        """Test CLI init command runs the wizard and creates config."""
+        from lamia.cli.init_wizard import WizardResult, ModelChainEntry
+        mock_wizard.return_value = WizardResult(
+            model_chain=[ModelChainEntry(name="ollama:llama3.2:1b", max_retries=3)],
+        )
         mock_create_config.return_value = True
-        mock_create_env.return_value = True
 
         sys.argv = ["lamia", "init"]
 
         main()
 
+        mock_wizard.assert_called_once()
+        # Verify project_dir is passed
+        call_kwargs = mock_wizard.call_args
+        assert "project_dir" in call_kwargs.kwargs or len(call_kwargs.args) > 0
         mock_create_config.assert_called_once()
-        mock_create_env.assert_called_once()
 
 
 class TestInteractiveModeSetup:

@@ -19,7 +19,8 @@ from lamia.errors import (
     ExternalOperationRateLimitError,
     ExternalOperationError,
 )
-from .scaffold import create_minimal_config, ensure_extensions_folder, update_config_with_extensions, create_env_file
+from .scaffold import create_minimal_config, ensure_extensions_folder, update_config_with_extensions, create_env_file, create_config_from_wizard_result
+from .init_wizard import run_init_wizard
 from .cli_styling import setup_cli_logging
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.hybrid_executor import HybridExecutor
@@ -160,23 +161,34 @@ def main():
         args = parser.parse_args()
         if args.command == "init":
             config_path = os.path.join(os.getcwd(), "config.yaml")
-            created = create_minimal_config(config_path, with_extensions=args.with_extensions)
-            if created:
-                logger.info("✅ Created config.yaml")
-            else:
-                logger.warning("config.yaml already exists")
+
+            # Check for existing config (re-init support)
+            if os.path.exists(config_path):
+                print("config.yaml already exists in this directory.")
+                raw = input("Overwrite with a new configuration? [y/N]: ").strip().lower()
+                if raw not in ("y", "yes"):
+                    print("Init cancelled.")
+                    return
+
+            project_dir = os.getcwd()
+
+            # Run the interactive wizard (handles API key saving internally)
+            wizard_result = run_init_wizard(project_dir=project_dir, with_extensions=args.with_extensions)
+
+            # Generate config.yaml from wizard result
+            create_config_from_wizard_result(config_path, wizard_result)
+            print("Created config.yaml")
+
+            # Handle extensions folder
             if args.with_extensions:
-                ext_path = ensure_extensions_folder(os.getcwd())
-                updated = update_config_with_extensions(config_path)
-                logger.info(f"✅ Extensions folder scaffolded at: {ext_path}")
-                if updated:
-                    logger.info("✅ config.yaml updated with extensions_folder key.")
-            env_path = os.path.join(os.getcwd(), ".env")
-            env_created = create_env_file(env_path)
-            if env_created:
-                logger.info("✅ Created .env file with dummy API keys.")
-            else:
-                logger.warning(".env file already exists.")
+                ext_path = ensure_extensions_folder(project_dir)
+                update_config_with_extensions(config_path)
+                print(f"Extensions folder scaffolded at: {ext_path}")
+
+            # TODO: create_minimal_config is kept for programmatic/test use;
+            #       the wizard path above is the primary init flow.
+
+            print("\nDone! Run 'lamia <file.hu>' or 'lamia' for interactive mode.")
             return
         return
     else:
@@ -271,7 +283,7 @@ def main():
         with open("config.yaml", 'r') as f:
             config_dict = yaml.safe_load(f)
     else:
-        logger.error("❌ Error: --config is required for CLI operation.")
+        logger.error("Error: --config or a config.yaml file is required for CLI operation. Run 'lamia init' to create a config.yaml.")
         sys.exit(1)
 
     # Note: Lazy loading is now handled by HybridExecutor for .hu files

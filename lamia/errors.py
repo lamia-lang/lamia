@@ -180,6 +180,31 @@ class ExternalOperationPermanentError(ExternalOperationError):
     pass
 
 
+class OllamaNotInstalledError(ExternalOperationPermanentError):
+    """Raised when the Ollama binary is not found on the system.
+    
+    Lamia requires Ollama to be installed separately for local model support.
+    Ollama is a free, open-source tool for running LLMs locally.
+    
+    What to do:
+    - Install Ollama from https://ollama.ai/download
+    - After installation, restart your terminal or shell
+    - Then re-run your Lamia command
+    
+    Example:
+        try:
+            result = await lamia.run_async("Hello")
+        except OllamaNotInstalledError:
+            print("Please install Ollama: https://ollama.ai/download")
+    """
+    
+    def __init__(self):
+        super().__init__(
+            "Ollama is not installed. Install it from https://ollama.ai/download\n"
+            "After installation, restart your terminal and try again."
+        )
+
+
 class AmbiguousFileError(Exception):
     """Raised when multiple files match a file reference with similar scores.
     

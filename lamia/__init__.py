@@ -64,6 +64,7 @@ from .errors import (
     ExternalOperationTransientError,
     ExternalOperationRateLimitError,
     ExternalOperationPermanentError,
+    OllamaNotInstalledError,
     AmbiguousFileError,
     FileReferenceError,
     MultipleSelectableInputsError,
@@ -80,8 +81,9 @@ __all__ = [
     "ExternalOperationTransientError", 
     "ExternalOperationRateLimitError",
     "ExternalOperationPermanentError",
+    "OllamaNotInstalledError",
     "AmbiguousFileError",
     "FileReferenceError",
     "MultipleSelectableInputsError",
     "NoSelectableInputError",
-] 
+]

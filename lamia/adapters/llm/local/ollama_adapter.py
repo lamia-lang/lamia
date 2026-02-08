@@ -9,6 +9,7 @@ import sys
 import weakref
 import atexit
 from ..base import BaseLLMAdapter, LLMResponse, LLMModel
+from lamia.errors import OllamaNotInstalledError
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,8 @@ class OllamaAdapter(BaseLLMAdapter):
         self.base_url = base_url.rstrip('/')
         self.ollama_process = None  # Track the process we start
 
-        # Start Ollama service if not running
-        if not self._start_ollama_service():
-            raise RuntimeError("Failed to start Ollama service")
+        # Start Ollama service if not running (raises OllamaNotInstalledError if binary missing)
+        self._start_ollama_service()
         
         # Register this instance for cleanup
         _active_instances.add(self)
@@ -133,26 +133,33 @@ class OllamaAdapter(BaseLLMAdapter):
         except requests.exceptions.RequestException:
             return False
 
-    def _start_ollama_service(self) -> bool:
+    def _start_ollama_service(self) -> None:
+        """Start the Ollama service if not already running.
+        
+        Raises:
+            OllamaNotInstalledError: If the ollama binary is not found on PATH.
+            RuntimeError: If the service fails to start for other reasons.
+        """
         if self._is_ollama_running():
-            logger.info("✓ Ollama service is running")
-            return True
+            logger.info("Ollama service is running")
+            return
         logger.info("Starting Ollama service...")
         try:
             self.ollama_process = subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             for i in range(30):
                 if self._is_ollama_running():
-                    logger.info("✓ Ollama service started successfully")
-                    return True
+                    logger.info("Ollama service started successfully")
+                    return
                 time.sleep(1)
-            logger.error("Timeout waiting for Ollama service to start")
-            return False
+            raise RuntimeError("Timeout waiting for Ollama service to start")
         except FileNotFoundError:
-            logger.error("Ollama is not installed. Please install it first: https://ollama.ai/download")
-            return False
+            raise OllamaNotInstalledError()
+        except OllamaNotInstalledError:
+            raise
+        except RuntimeError:
+            raise
         except Exception as e:
-            logger.error(f"Failed to start Ollama service: {str(e)}")
-            return False
+            raise RuntimeError(f"Failed to start Ollama service: {str(e)}") from e
 
     def _ensure_ollama_model_pulled(self, model_name: str) -> bool:
         try:

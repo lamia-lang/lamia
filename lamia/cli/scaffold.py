@@ -1,5 +1,7 @@
 import os
 import yaml
+from lamia.cli.init_wizard import WizardResult
+    
 
 def create_minimal_config(config_path: str, with_extensions: bool = False, extensions_folder_name: str = "extensions") -> bool:
     """Create a minimal config.yaml if it does not exist."""
@@ -54,19 +56,34 @@ def create_env_file(env_path: str) -> bool:
         f.write(env_content)
     return True
 
-def create_full_default_config(config_path: str) -> bool:
-    """Create a full default config.yaml with all settings, overwriting if it exists."""
-    config_content = '''# Model chain: models are tried in order; if one fails, the next is used.
-# Use "provider:model" syntax or just "provider" to use its default_model.
-model_chain:
-  - name: "ollama"
-    max_retries: 3
-  - name: "anthropic:claude-haiku-4-5-20251001"
-    max_retries: 2
-  - name: "openai:gpt-4.1-nano"
-    max_retries: 1
+def create_config_from_wizard_result(config_path: str, wizard_result: "WizardResult") -> bool:
+    """Create config.yaml from an interactive wizard result.
+    
+    The model_chain comes from user selections. The providers section is
+    always the same hardcoded block so users can easily activate any
+    provider later without becoming config experts.
+    """
+    # Build model_chain YAML lines
+    chain_lines = ["model_chain:"]
+    for entry in wizard_result.model_chain:
+        chain_lines.append(f'  - name: "{entry.name}"')
+        chain_lines.append(f"    max_retries: {entry.max_retries}")
+    chain_yaml = "\n".join(chain_lines)
 
-# Provider configurations
+    config_content = f"""# Lamia project configuration
+# Model chain: models are tried in order; if one fails, the next is used.
+# Use "provider:model" syntax or just "provider" to use its default_model.
+{chain_yaml}
+{_HARDCODED_PROVIDERS_SECTION}
+"""
+    with open(config_path, "w") as f:
+        f.write(config_content)
+    return True
+
+
+# ── Hardcoded providers section (same for every project) ──────────────
+
+_HARDCODED_PROVIDERS_SECTION = """# Provider configurations
 # Advanced parameters (temperature, max_tokens, etc.) use sensible defaults.
 # Uncomment and override only if needed.
 providers:
@@ -75,9 +92,9 @@ providers:
     enabled: false
     default_model: gpt-4.1-nano
     models:
+      - gpt-5-nano                  # $0.05 in — fastest GPT-5 variant
       - gpt-4.1-nano               # $0.10 in — fastest, most cost-efficient
       - gpt-4o-mini                 # $0.15 in — fast, affordable small model
-      - gpt-5-nano                  # $0.05 in — fastest GPT-5 variant
       - gpt-5-mini                  # $0.25 in — cost-efficient GPT-5
       - gpt-4.1-mini               # $0.40 in — smaller, faster GPT-4.1
       - o4-mini                     # $1.10 in — fast reasoning model
@@ -133,8 +150,4 @@ validation:
     - type: "length"
       min_length: 100
     - type: "html_structure"
-      model: HtmlStructure
-'''
-    with open(config_path, "w") as f:
-        f.write(config_content)
-    return True
+      model: HtmlStructure""".lstrip()
