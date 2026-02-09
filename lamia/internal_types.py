@@ -112,13 +112,16 @@ SELECTOR_BASED_ACTIONS: Set[BrowserActionType] = {
 
 # Map method names to action types
 WEB_METHOD_TO_ACTION = {
+    'navigate': BrowserActionType.NAVIGATE,
     'click': BrowserActionType.CLICK,
     'type_text': BrowserActionType.TYPE,
     'wait_for': BrowserActionType.WAIT,
     'get_text': BrowserActionType.GET_TEXT,
+    'get_page_source': BrowserActionType.GET_PAGE_SOURCE,
     'get_elements': BrowserActionType.GET_ELEMENTS,
     'get_input_type': BrowserActionType.GET_INPUT_TYPE,
     'get_options': BrowserActionType.GET_OPTIONS,
+    'get_attribute': BrowserActionType.GET_ATTRIBUTE,
     'is_checked': BrowserActionType.IS_CHECKED,
     'hover': BrowserActionType.HOVER,
     'scroll_to': BrowserActionType.SCROLL,
@@ -128,5 +131,13 @@ WEB_METHOD_TO_ACTION = {
     'is_visible': BrowserActionType.IS_VISIBLE,
     'is_enabled': BrowserActionType.IS_ENABLED,
     'upload_file': BrowserActionType.UPLOAD_FILE
+}
+
+# Actions where the second argument is a value (not a fallback selector)
+VALUE_SECOND_ARG_ACTIONS: Set[BrowserActionType] = {
+    BrowserActionType.TYPE,
+    BrowserActionType.SELECT,
+    BrowserActionType.GET_ATTRIBUTE,
+    BrowserActionType.UPLOAD_FILE,
 }
 

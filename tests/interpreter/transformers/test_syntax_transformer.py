@@ -3,6 +3,7 @@
 import pytest
 import ast
 from lamia.interpreter.transformers.syntax_transformer import HybridSyntaxTransformer
+from lamia.internal_types import WEB_METHOD_TO_ACTION, BrowserActionType
 
 
 class TestHybridSyntaxTransformer:
@@ -304,3 +305,89 @@ def scrape_to_file() -> File(HTML, "scraped.html"):
         assert "FileActionType.WRITE" in result
         assert "scraped.html" in result
         assert "WebCommand" in result
+
+
+# =============================================================================
+# WEB METHOD MAPPING COMPLETENESS AND TRANSFORMATION TESTS
+# =============================================================================
+
+# Each entry: (method_name, source_expression, expected_action, expected_keywords)
+# expected_keywords is a dict of keyword arg names to expected string values in the output
+WEB_METHOD_TRANSFORM_CASES = [
+    ("navigate", 'web.navigate("https://example.com")', "NAVIGATE", {"url": "https://example.com"}),
+    ("click", 'web.click("#btn")', "CLICK", {"selector": "#btn"}),
+    ("type_text", 'web.type_text("#input", "hello")', "TYPE", {"selector": "#input", "value": "hello"}),
+    ("wait_for", 'web.wait_for("#el")', "WAIT", {"selector": "#el"}),
+    ("get_text", 'web.get_text("#el")', "GET_TEXT", {"selector": "#el"}),
+    ("get_page_source", 'web.get_page_source()', "GET_PAGE_SOURCE", {}),
+    ("get_elements", 'web.get_elements(".items")', "GET_ELEMENTS", {"selector": ".items"}),
+    ("get_input_type", 'web.get_input_type("#field")', "GET_INPUT_TYPE", {"selector": "#field"}),
+    ("get_options", 'web.get_options("#select")', "GET_OPTIONS", {"selector": "#select"}),
+    ("get_attribute", 'web.get_attribute("#link", "href")', "GET_ATTRIBUTE", {"selector": "#link", "value": "href"}),
+    ("is_checked", 'web.is_checked("#cb")', "IS_CHECKED", {"selector": "#cb"}),
+    ("hover", 'web.hover("#menu")', "HOVER", {"selector": "#menu"}),
+    ("scroll_to", 'web.scroll_to("#section")', "SCROLL", {"selector": "#section"}),
+    ("select_option", 'web.select_option("#dd", "opt1")', "SELECT", {"selector": "#dd", "value": "opt1"}),
+    ("submit_form", 'web.submit_form("#form")', "SUBMIT", {"selector": "#form"}),
+    ("screenshot", 'web.screenshot()', "SCREENSHOT", {}),
+    ("is_visible", 'web.is_visible("#el")', "IS_VISIBLE", {"selector": "#el"}),
+    ("is_enabled", 'web.is_enabled("#el")', "IS_ENABLED", {"selector": "#el"}),
+    ("upload_file", 'web.upload_file("#file", "/path/to/file.txt")', "UPLOAD_FILE", {"selector": "#file", "value": "/path/to/file.txt"}),
+]
+
+
+class TestWebMethodMappingCompleteness:
+    """Ensure every BrowserActionType has a corresponding WEB_METHOD_TO_ACTION entry."""
+
+    def test_all_browser_action_types_have_mapping(self):
+        """Every BrowserActionType must be reachable via WEB_METHOD_TO_ACTION."""
+        mapped_actions = set(WEB_METHOD_TO_ACTION.values())
+        unmapped = [
+            action.name for action in BrowserActionType
+            if action not in mapped_actions
+        ]
+        assert unmapped == [], (
+            f"BrowserActionType values missing from WEB_METHOD_TO_ACTION: {unmapped}. "
+            "Add the corresponding web.method_name → BrowserActionType mapping."
+        )
+
+    def test_all_mapped_methods_have_transform_test_case(self):
+        """Every method in WEB_METHOD_TO_ACTION has a transform test case above."""
+        tested_methods = {case[0] for case in WEB_METHOD_TRANSFORM_CASES}
+        untested = [
+            method for method in WEB_METHOD_TO_ACTION
+            if method not in tested_methods
+        ]
+        assert untested == [], (
+            f"WEB_METHOD_TO_ACTION methods missing from WEB_METHOD_TRANSFORM_CASES: {untested}. "
+            "Add a test case for each new method."
+        )
+
+
+class TestWebMethodTransformation:
+    """Verify each web.method() call transforms to the correct WebCommand."""
+
+    def setup_method(self):
+        self.transformer = HybridSyntaxTransformer()
+
+    @pytest.mark.parametrize(
+        "method_name, source_expr, expected_action, expected_kw",
+        WEB_METHOD_TRANSFORM_CASES,
+        ids=[case[0] for case in WEB_METHOD_TRANSFORM_CASES],
+    )
+    def test_web_method_transforms_to_web_command(self, method_name, source_expr, expected_action, expected_kw):
+        """web.method() must produce lamia.run(WebCommand(action=WebActionType.ACTION, ...))."""
+        result = self.transformer.transform_code(source_expr)
+
+        assert "lamia.run" in result, f"web.{method_name}() was not wrapped in lamia.run()"
+        assert "WebCommand" in result, f"web.{method_name}() was not converted to WebCommand"
+        assert f"WebActionType.{expected_action}" in result, (
+            f"web.{method_name}() should produce WebActionType.{expected_action}, got: {result}"
+        )
+        for kw_name, kw_value in expected_kw.items():
+            assert f"{kw_name}=" in result, (
+                f"web.{method_name}() missing keyword '{kw_name}' in output: {result}"
+            )
+            assert kw_value in result, (
+                f"web.{method_name}() missing value '{kw_value}' for keyword '{kw_name}' in output: {result}"
+            )

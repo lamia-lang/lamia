@@ -24,6 +24,7 @@ from ..detectors.llm_command_detector import (
 from lamia.internal_types import (
     WEB_METHOD_TO_ACTION,
     SELECTOR_BASED_ACTIONS,
+    VALUE_SECOND_ARG_ACTIONS,
     BrowserActionType,
 )
 
@@ -499,15 +500,21 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             )
         ]
         
-        # Add selector from first argument if present
+        # Add first argument: url for navigation, selector for everything else
         if len(args) > 0:
-            keywords.append(
-                ast.keyword(arg='selector', value=args[0])
-            )
+            if action_type_enum == BrowserActionType.NAVIGATE:
+                keywords.append(
+                    ast.keyword(arg='url', value=args[0])
+                )
+            else:
+                keywords.append(
+                    ast.keyword(arg='selector', value=args[0])
+                )
         
-        # Add value from second argument if present (for type_text, select_option)
+        # Add second+ arguments based on action type
         if len(args) > 1:
-            if action_type_enum in {BrowserActionType.TYPE, BrowserActionType.SELECT}:
+            if action_type_enum in VALUE_SECOND_ARG_ACTIONS:
+                # Second arg is a value (text to type, option to select, attribute name, file path)
                 keywords.append(
                     ast.keyword(arg='value', value=args[1])
                 )
@@ -516,6 +523,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                         ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[2:], ctx=ast.Load()))
                     )
             elif action_type_enum in SELECTOR_BASED_ACTIONS:
+                # Remaining args are fallback selectors
                 keywords.append(
                     ast.keyword(arg='fallback_selectors', value=ast.List(elts=args[1:], ctx=ast.Load()))
                 )
