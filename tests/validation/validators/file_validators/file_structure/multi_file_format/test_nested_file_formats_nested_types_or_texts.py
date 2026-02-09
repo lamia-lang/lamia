@@ -37,7 +37,8 @@ async def test_file_structure_validator_deep_nesting(strict, file_content, valid
         assert result.result_type.p == "This is a paragraph."
         assert result.result_type.title == "Test"
     if strict:
-        assert result.error_message == "Missing <title>; Missing <p>"
+        assert "Field 'title': Element found but filtered out due to type constraint" in result.error_message
+        assert "Field 'p': Element found but filtered out due to type constraint" in result.error_message
 
 
 

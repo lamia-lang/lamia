@@ -24,11 +24,11 @@ def mock_llm_manager():
 
 
 @pytest.fixture
-def config_provider():
-    """Create config provider."""
+def config_provider(tmp_path):
+    """Create config provider with isolated cache directory per test."""
     config = MagicMock(spec=ConfigProvider)
     config.is_cache_enabled = Mock(return_value=True)
-    config.get_cache_dir = Mock(return_value=".lamia_cache")
+    config.get_cache_dir = Mock(return_value=str(tmp_path))
     return config
 
 
