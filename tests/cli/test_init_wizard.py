@@ -1,8 +1,4 @@
-"""Tests for the init wizard detection and utility functions.
-
-These tests cover the non-interactive helper functions (detection, key storage, etc.)
-without testing the interactive prompts themselves.
-"""
+"""Tests for the init wizard detection and utility functions."""
 
 import os
 import stat
@@ -13,10 +9,11 @@ import pytest
 import requests as requests_lib
 
 from lamia.cli.init_wizard import (
-    is_ollama_installed,
-    is_ollama_running,
-    list_ollama_models,
+    _build_provider_list,
     detect_api_key,
+    _input_number,
+    _input_yes_no,
+    _primary_env_var_for_provider,
     save_global_key,
     _save_local_key,
     ModelChainEntry,
@@ -25,26 +22,34 @@ from lamia.cli.init_wizard import (
 
 
 class TestOllamaDetection:
+    """Ollama utilities now live in ollama_adapter; test via the re-exports."""
 
     def test_ollama_installed_when_on_path(self):
-        with patch("lamia.cli.init_wizard.shutil.which", return_value="/usr/local/bin/ollama"):
+        from lamia.adapters.llm.local.ollama_adapter import is_ollama_installed
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        with patch("lamia.adapters.llm.local.ollama_adapter.subprocess.run", return_value=mock_result):
             assert is_ollama_installed() is True
 
     def test_ollama_not_installed_when_missing(self):
-        with patch("lamia.cli.init_wizard.shutil.which", return_value=None):
+        from lamia.adapters.llm.local.ollama_adapter import is_ollama_installed
+        with patch("lamia.adapters.llm.local.ollama_adapter.subprocess.run", side_effect=OSError("missing")):
             assert is_ollama_installed() is False
 
     def test_ollama_running_when_service_responds(self):
+        from lamia.adapters.llm.local.ollama_adapter import is_ollama_running
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        with patch("lamia.cli.init_wizard.requests.get", return_value=mock_resp):
+        with patch("lamia.adapters.llm.local.ollama_adapter.requests.get", return_value=mock_resp):
             assert is_ollama_running() is True
 
     def test_ollama_not_running_on_connection_error(self):
-        with patch("lamia.cli.init_wizard.requests.get", side_effect=requests_lib.ConnectionError("refused")):
+        from lamia.adapters.llm.local.ollama_adapter import is_ollama_running
+        with patch("lamia.adapters.llm.local.ollama_adapter.requests.get", side_effect=requests_lib.ConnectionError("refused")):
             assert is_ollama_running() is False
 
     def test_list_ollama_models_returns_names(self):
+        from lamia.adapters.llm.local.ollama_adapter import list_ollama_models_sync
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -53,13 +58,26 @@ class TestOllamaDetection:
                 {"name": "mistral"},
             ]
         }
-        with patch("lamia.cli.init_wizard.requests.get", return_value=mock_resp):
-            models = list_ollama_models()
+        with patch("lamia.adapters.llm.local.ollama_adapter.requests.get", return_value=mock_resp):
+            models = list_ollama_models_sync()
             assert models == ["llama3.2:1b", "mistral"]
 
     def test_list_ollama_models_empty_on_failure(self):
-        with patch("lamia.cli.init_wizard.requests.get", side_effect=requests_lib.ConnectionError("refused")):
-            assert list_ollama_models() == []
+        from lamia.adapters.llm.local.ollama_adapter import list_ollama_models_sync
+        with patch("lamia.adapters.llm.local.ollama_adapter.requests.get", side_effect=requests_lib.ConnectionError("refused")):
+            assert list_ollama_models_sync() == []
+
+
+class TestEnvVarConvention:
+
+    def test_openai(self):
+        assert _primary_env_var_for_provider("openai") == "OPENAI_API_KEY"
+
+    def test_anthropic(self):
+        assert _primary_env_var_for_provider("anthropic") == "ANTHROPIC_API_KEY"
+
+    def test_unknown(self):
+        assert _primary_env_var_for_provider("acme") == "ACME_API_KEY"
 
 
 class TestApiKeyDetection:
@@ -72,11 +90,16 @@ class TestApiKeyDetection:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-your-openai-key-here")
         assert detect_api_key("openai") is None
 
+    def test_detect_key_ignores_anthropic_placeholder(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-your-anthropic-key-here")
+        assert detect_api_key("anthropic") is None
+
     def test_detect_key_missing(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         assert detect_api_key("anthropic") is None
 
-    def test_detect_key_unknown_provider(self):
+    def test_detect_key_unknown_provider(self, monkeypatch):
+        monkeypatch.delenv("UNKNOWN_PROVIDER_API_KEY", raising=False)
         assert detect_api_key("unknown_provider") is None
 
 
@@ -104,11 +127,10 @@ class TestGlobalKeyStorage:
             save_global_key("openai", "sk-test-key")
 
         file_mode = env_file.stat().st_mode
-        # Check owner read/write only (0600)
-        assert file_mode & stat.S_IRUSR  # owner can read
-        assert file_mode & stat.S_IWUSR  # owner can write
-        assert not (file_mode & stat.S_IRGRP)  # group cannot read
-        assert not (file_mode & stat.S_IROTH)  # others cannot read
+        assert file_mode & stat.S_IRUSR
+        assert file_mode & stat.S_IWUSR
+        assert not (file_mode & stat.S_IRGRP)
+        assert not (file_mode & stat.S_IROTH)
 
     def test_save_global_key_updates_existing_key(self, tmp_path):
         lamia_dir = tmp_path / ".lamia"
@@ -190,3 +212,32 @@ class TestWizardResult:
         result = WizardResult()
         assert result.model_chain == []
         assert result.with_extensions is False
+
+
+class TestWizardInputs:
+
+    def test_yes_no_reprompts_on_invalid(self, monkeypatch, capsys):
+        responses = iter(["wat", "y"])
+        monkeypatch.setattr("builtins.input", lambda *_: next(responses))
+        assert _input_yes_no("Continue?", default=False) is True
+        output = capsys.readouterr().out
+        assert "Please answer yes or no" in output
+
+    def test_number_reprompts_on_invalid_and_out_of_range(self, monkeypatch, capsys):
+        responses = iter(["nan", "0", "5", "2"])
+        monkeypatch.setattr("builtins.input", lambda *_: next(responses))
+        assert _input_number("Pick: ", max_val=3, default=1) == 2
+        output = capsys.readouterr().out
+        assert output.count("Please enter a number between 1 and 3.") == 3
+
+
+class TestProviderList:
+
+    def test_provider_list_uses_config_order(self):
+        providers = _build_provider_list(
+            ollama_available=True,
+            ollama_model_count=2,
+            openai_key="sk-openai-real",
+            anthropic_key=None,
+        )
+        assert [name for name, _ in providers] == ["openai", "anthropic", "ollama"]

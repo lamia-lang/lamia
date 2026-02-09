@@ -1,7 +1,65 @@
 import os
+from typing import TYPE_CHECKING
+
 import yaml
-from lamia.cli.init_wizard import WizardResult
-    
+
+if TYPE_CHECKING:
+    from lamia.cli.init_wizard import WizardResult
+
+
+OPENAI_MODELS: list[tuple[str, str]] = [
+    ("gpt-5-nano", "fastest GPT-5 variant"),
+    ("gpt-4.1-nano", "fastest, most cost-efficient"),
+    ("gpt-4o-mini", "fast, affordable small model"),
+    ("gpt-5-mini", "cost-efficient GPT-5"),
+    ("gpt-4.1-mini", "smaller, faster GPT-4.1"),
+    ("o4-mini", "fast reasoning model"),
+    ("o3-mini", "small reasoning model"),
+    ("gpt-5", "intelligent reasoning model"),
+    ("gpt-5.1", "improved GPT-5"),
+    ("gpt-5.2", "best for coding and agentic tasks"),
+    ("o3", "reasoning model for complex tasks"),
+    ("gpt-4.1", "smartest non-reasoning model"),
+    ("gpt-4o", "fast, intelligent, flexible"),
+    ("gpt-5.2-codex", "optimized for agentic coding"),
+    ("gpt-5.1-codex", "optimized for agentic coding"),
+    ("gpt-5.3-codex", "latest codex model"),
+    ("o1", "previous full reasoning model"),
+    ("gpt-5.2-pro", "smartest, most precise"),
+]
+
+ANTHROPIC_MODELS: list[tuple[str, str]] = [
+    ("claude-haiku-3-5-20241022", "previous fast model"),
+    ("claude-haiku-4-5-20251001", "fastest, near-frontier"),
+    ("claude-sonnet-4-5-20250929", "best speed/intelligence balance"),
+    ("claude-opus-4-6", "most intelligent, best for agents"),
+    ("claude-opus-4-5", "previous top-tier opus"),
+    ("claude-opus-4-1", "legacy opus"),
+]
+
+OLLAMA_MODELS: list[tuple[str, str]] = [
+    ("llama3.2:1b", "Small and fast (1B params)"),
+    ("llama2", "Good all-rounder"),
+    ("mixtral", "Mixture of experts, very capable — will be slow on most hardware"),
+    ("codellama", "Optimized for code"),
+    ("gemma", "Google's efficient model"),
+    ("mistral", "Mistral AI base model"),
+    ("phi", "Microsoft's small but capable model"),
+]
+
+DEFAULT_MODELS: dict[str, str] = {
+    "openai": "gpt-4.1-nano",
+    "anthropic": "claude-haiku-4-5-20251001",
+    "ollama": "llama3.2:1b",
+}
+
+REMOTE_PROVIDER_MODELS: dict[str, list[tuple[str, str]]] = {
+    "openai": OPENAI_MODELS,
+    "anthropic": ANTHROPIC_MODELS,
+}
+
+PROVIDER_ORDER: tuple[str, ...] = tuple(DEFAULT_MODELS.keys())
+
 
 def create_minimal_config(config_path: str, with_extensions: bool = False, extensions_folder_name: str = "extensions") -> bool:
     """Create a minimal config.yaml if it does not exist."""
@@ -81,63 +139,33 @@ def create_config_from_wizard_result(config_path: str, wizard_result: "WizardRes
     return True
 
 
-# ── Hardcoded providers section (same for every project) ──────────────
+def _render_models(models: list[tuple[str, str]]) -> str:
+    return "\n".join(f"      - {name:<28} # {description}" for name, description in models)
 
-_HARDCODED_PROVIDERS_SECTION = """# Provider configurations
+
+_HARDCODED_PROVIDERS_SECTION = f"""# Provider configurations
 # Advanced parameters (temperature, max_tokens, etc.) use sensible defaults.
 # Uncomment and override only if needed.
 providers:
-  # OpenAI — models ordered cheapest to most expensive (standard input $/MTok)
+  # OpenAI — models ordered by capability
   openai:
     enabled: false
-    default_model: gpt-4.1-nano
+    default_model: {DEFAULT_MODELS["openai"]}
     models:
-      - gpt-5-nano                  # $0.05 in — fastest GPT-5 variant
-      - gpt-4.1-nano               # $0.10 in — fastest, most cost-efficient
-      - gpt-4o-mini                 # $0.15 in — fast, affordable small model
-      - gpt-5-mini                  # $0.25 in — cost-efficient GPT-5
-      - gpt-4.1-mini               # $0.40 in — smaller, faster GPT-4.1
-      - o4-mini                     # $1.10 in — fast reasoning model
-      - o3-mini                     # $1.10 in — small reasoning model
-      - gpt-5                       # $1.25 in — intelligent reasoning model
-      - gpt-5.1                     # $1.25 in — improved GPT-5
-      - gpt-5.2                     # $1.75 in — best for coding and agentic tasks
-      - o3                          # $2.00 in — reasoning model for complex tasks
-      - gpt-4.1                     # $2.00 in — smartest non-reasoning model
-      - gpt-4o                      # $2.50 in — fast, intelligent, flexible
-      - gpt-5.2-codex               # $1.75 in — optimized for agentic coding
-      - gpt-5.1-codex               # $1.25 in — optimized for agentic coding
-      - gpt-5.3-codex               # latest codex model
-      - o1                          # $15.00 in — previous full reasoning model
-      - gpt-5.2-pro                 # $21.00 in — smartest, most precise
-    # temperature: 0.7
-    # max_tokens: 1000
+{_render_models(OPENAI_MODELS)}
 
-  # Anthropic — models ordered cheapest to most expensive (input $/MTok)
+  # Anthropic — models ordered by capability
   anthropic:
     enabled: false
-    default_model: claude-haiku-4-5-20251001
+    default_model: {DEFAULT_MODELS["anthropic"]}
     models:
-      - claude-haiku-3-5-20241022   # $0.80 in — previous fast model
-      - claude-haiku-4-5-20251001   # $1.00 in — fastest, near-frontier
-      - claude-sonnet-4-5-20250929  # $3.00 in — best speed/intelligence balance
-      - claude-opus-4-6             # $5.00 in — most intelligent, best for agents
-      - claude-opus-4-5             # $5.00 in — previous top-tier opus
-      - claude-opus-4-1             # $15.00 in — legacy opus
-    # temperature: 0.7
-    # max_tokens: 1000
+{_render_models(ANTHROPIC_MODELS)}
 
   # Ollama — local models, no API costs
   ollama:
     enabled: true
-    default_model: llama3.2:1b
+    default_model: {DEFAULT_MODELS["ollama"]}
     models:
-      - llama3.2:1b
-      - llama2
-      - mixtral
-      - codellama
-      - gemma
-      - mistral
-      - phi
+{_render_models(OLLAMA_MODELS)}
 
 """.lstrip()

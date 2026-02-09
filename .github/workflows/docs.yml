@@ -2,14 +2,18 @@ name: Deploy Documentation
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main]
     paths:
       - 'docs/**'
       - 'lamia/**'
       - 'mkdocs.yml'
+      - 'gen_ref_pages.py'
       - '.github/workflows/docs.yml'
-  
+
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   deploy:
@@ -19,22 +23,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
-      - name: Install documentation dependencies
+
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements-docs.txt
-      
+          pip install ".[docs]"
+
       - name: Configure Git
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-      
+
       - name: Deploy to GitHub Pages
         run: mkdocs gh-deploy --force

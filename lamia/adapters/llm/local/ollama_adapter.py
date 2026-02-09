@@ -13,6 +13,31 @@ from lamia.errors import OllamaNotInstalledError
 
 logger = logging.getLogger(__name__)
 
+
+# ── Module-level Ollama utilities (shared with CLI wizard) ───────────────
+
+def is_ollama_installed() -> bool:
+    """Check if the Ollama CLI is available."""
+    return OllamaAdapter.is_ollama_installed()
+
+
+def is_ollama_running(base_url: str = "http://localhost:11434") -> bool:
+    """Check if the Ollama service is currently responding."""
+    return OllamaAdapter.is_ollama_running(base_url=base_url)
+
+
+def start_ollama_service(base_url: str = "http://localhost:11434") -> bool:
+    """Best-effort start of ``ollama serve``.  Returns True if running afterwards."""
+    return OllamaAdapter.start_ollama_service(base_url=base_url)
+
+
+def list_ollama_models_sync(base_url: str = "http://localhost:11434") -> list[str]:
+    """Synchronously query Ollama for installed model names."""
+    return OllamaAdapter.list_models_sync(base_url=base_url)
+
+
+# ── Adapter class ────────────────────────────────────────────────────────
+
 # Global registry to track instances for cleanup
 _active_instances = weakref.WeakSet()
 
@@ -20,7 +45,7 @@ def _cleanup_all_instances():
     """Cleanup function called at exit."""
     for instance in list(_active_instances):
         try:
-            if hasattr(instance, 'ollama_process') and instance.ollama_process:
+            if instance.ollama_process:
                 instance.ollama_process.terminate()
         except Exception:
             pass
@@ -43,6 +68,58 @@ class OllamaAdapter(BaseLLMAdapter):
     @classmethod
     def is_remote(cls) -> bool:
         return False  # Local model
+
+    @classmethod
+    def is_ollama_running(cls, base_url: str = "http://localhost:11434") -> bool:
+        """Check if the Ollama service is currently responding."""
+        try:
+            response = requests.get(f"{base_url.rstrip('/')}/api/version", timeout=2)
+            return response.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
+
+    @classmethod
+    def is_ollama_installed(cls) -> bool:
+        """Check if the Ollama CLI binary is available."""
+        try:
+            result = subprocess.run(
+                ["ollama", "--version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+                text=True,
+            )
+            return result.returncode == 0
+        except OSError:
+            return False
+
+    @classmethod
+    def start_ollama_service(cls, base_url: str = "http://localhost:11434") -> bool:
+        """Best-effort start of `ollama serve` and wait briefly for readiness."""
+        if cls.is_ollama_running(base_url=base_url):
+            return True
+        if not cls.is_ollama_installed():
+            return False
+        try:
+            subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            for _ in range(10):
+                if cls.is_ollama_running(base_url=base_url):
+                    return True
+                time.sleep(1)
+        except Exception:
+            pass
+        return False
+
+    @classmethod
+    def list_models_sync(cls, base_url: str = "http://localhost:11434") -> list[str]:
+        """Synchronously query Ollama for installed model names."""
+        try:
+            response = requests.get(f"{base_url.rstrip('/')}/api/tags", timeout=3)
+            if response.status_code == 200:
+                return [m["name"] for m in response.json().get("models", [])]
+        except requests.RequestException:
+            pass
+        return []
     
     def __init__(
         self,
@@ -127,15 +204,11 @@ class OllamaAdapter(BaseLLMAdapter):
             raise ConnectionError(f"Failed to communicate with Ollama server: {str(e)}") from e
 
     def _is_ollama_running(self) -> bool:
-        try:
-            response = requests.get(f"{self.base_url}/api/version", timeout=2)
-            return response.status_code == 200
-        except requests.exceptions.RequestException:
-            return False
+        return self.is_ollama_running(base_url=self.base_url)
 
     def _start_ollama_service(self) -> None:
         """Start the Ollama service if not already running.
-        
+
         Raises:
             OllamaNotInstalledError: If the ollama binary is not found on PATH.
             RuntimeError: If the service fails to start for other reasons.
@@ -144,6 +217,8 @@ class OllamaAdapter(BaseLLMAdapter):
             logger.info("Ollama service is running")
             return
         logger.info("Starting Ollama service...")
+        if not self.is_ollama_installed():
+            raise OllamaNotInstalledError()
         try:
             self.ollama_process = subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             for i in range(30):
@@ -152,8 +227,6 @@ class OllamaAdapter(BaseLLMAdapter):
                     return
                 time.sleep(1)
             raise RuntimeError("Timeout waiting for Ollama service to start")
-        except FileNotFoundError:
-            raise OllamaNotInstalledError()
         except OllamaNotInstalledError:
             raise
         except RuntimeError:
