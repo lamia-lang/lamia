@@ -140,14 +140,4 @@ providers:
       - mistral
       - phi
 
-# Validation settings
-validation:
-  enabled: true
-  max_retries: 1
-  validators:
-    - type: "html"
-      strict: false
-    - type: "length"
-      min_length: 100
-    - type: "html_structure"
-      model: HtmlStructure""".lstrip()
+""".lstrip()

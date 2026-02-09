@@ -51,3 +51,6 @@ build/
 # Lamia internal state
 .lamia/
 .lamia_cache/
+
+# Documentation build output
+site/

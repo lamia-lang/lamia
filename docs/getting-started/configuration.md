@@ -13,11 +13,6 @@ engine:
   max_retries: 3
   log_level: "INFO"
 
-# Validation settings
-validation:
-  strict_mode: true
-  custom_validators_path: "./validators"
-
 # LLM provider configurations
 llm:
   default_provider: "openai"
