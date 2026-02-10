@@ -47,13 +47,20 @@ class MissingAPIKeysError(Exception):
         
         self.missing = missing
         missing_providers = [model_provider for model_provider, _ in missing]
+        # Build example export commands from the actual missing env vars
+        example_exports = ", ".join(
+            f"export {env_vars[0]}=..." if isinstance(env_vars, list) and env_vars else f"export {env_vars}=..."
+            for _, env_vars in missing[:2]
+        )
+        lamia_env_vars = LamiaAdapter.env_var_names()
+        lamia_key_name = lamia_env_vars[0]
         message = (
             "The following engines are missing required API keys:\n" +
             "\n".join([f"- {model_provider}: missing {env_vars}" for model_provider, env_vars in missing]) +
             "\n\nPlease provide the missing API keys in one of the following ways:\n" +
-            "- As environment variables (e.g., export OPENAI_API_KEY=...)\n" +
-            "- As a parameter to the Lamia() constructor like this: " + get_api_keys_constructor_string([provider for provider,_ in missing]) + "\n" +
-            (f"You can also use LAMIA_API_KEY or {get_api_keys_constructor_string(['lamia'])} to proxy remote adapters ({', '.join(LamiaAdapter.get_supported_providers())}).\n" if all(provider in LamiaAdapter.get_supported_providers() for provider in missing_providers) else "") +
+            f"- As environment variables (e.g., {example_exports})\n" +
+            "- As a parameter to the Lamia() constructor like this: " + get_api_keys_constructor_string([provider for provider, _ in missing]) + "\n" +
+            (f"You can also use {lamia_key_name} or {get_api_keys_constructor_string(['lamia'])} to proxy remote adapters ({', '.join(LamiaAdapter.get_supported_providers())}).\n" if all(provider in LamiaAdapter.get_supported_providers() for provider in missing_providers) else "") +
             "Alternatively, remove these engines from your model_chain in the config."
         )
         super().__init__(message)

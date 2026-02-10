@@ -9,8 +9,7 @@ import asyncio
 import logging
 from typing import Any, Optional, List, Dict, Union, Tuple, Type
 
-# Load environment variables from .env file
-from lamia import env_loader
+from lamia.env_loader import load_env_files
 from lamia.engine.engine import LamiaEngine
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
@@ -46,6 +45,7 @@ class Lamia:
         web_config: Optional[Dict[str, Any]] = None,
     ):
         # Initialize engine - ready to use immediately!
+        load_env_files()
         config_provider = build_config_from_models(models, api_keys, retry_config, web_config)
         self._engine = LamiaEngine(config_provider)
 

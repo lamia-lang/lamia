@@ -1,6 +1,5 @@
 """Web operations manager - dispatches to browser or HTTP managers."""
 
-import rsa
 from lamia.engine.managers import Manager
 from lamia.engine.config_provider import ConfigProvider
 from lamia.validation.base import ValidationResult, BaseValidator

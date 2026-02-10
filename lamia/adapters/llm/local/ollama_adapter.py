@@ -14,30 +14,6 @@ from lamia.errors import OllamaNotInstalledError
 logger = logging.getLogger(__name__)
 
 
-# ── Module-level Ollama utilities (shared with CLI wizard) ───────────────
-
-def is_ollama_installed() -> bool:
-    """Check if the Ollama CLI is available."""
-    return OllamaAdapter.is_ollama_installed()
-
-
-def is_ollama_running(base_url: str = "http://localhost:11434") -> bool:
-    """Check if the Ollama service is currently responding."""
-    return OllamaAdapter.is_ollama_running(base_url=base_url)
-
-
-def start_ollama_service(base_url: str = "http://localhost:11434") -> bool:
-    """Best-effort start of ``ollama serve``.  Returns True if running afterwards."""
-    return OllamaAdapter.start_ollama_service(base_url=base_url)
-
-
-def list_ollama_models_sync(base_url: str = "http://localhost:11434") -> list[str]:
-    """Synchronously query Ollama for installed model names."""
-    return OllamaAdapter.list_models_sync(base_url=base_url)
-
-
-# ── Adapter class ────────────────────────────────────────────────────────
-
 # Global registry to track instances for cleanup
 _active_instances = weakref.WeakSet()
 

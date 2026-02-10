@@ -1,50 +1,48 @@
 """
 Environment variable loader for Lamia.
 
-Loading priority (highest to lowest):
-1. Actual environment variables (set in shell)
-2. Project-level .env file (in current directory)
-3. Global ~/.lamia/.env file (shared across all projects)
+Loading priority (highest → lowest):
+1. Shell environment variables (already set by the user)
+2. Project-level ``.env`` in the current working directory
+3. Global Lamia ``.env`` (shared across all projects)
+
+SECURITY: We always pass an explicit path to ``load_dotenv`` because the
+default behaviour walks up the directory tree, which can leak secrets from
+parent directories in multi-tenant environments.
 """
 
 import logging
-import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Global Lamia config directory name (not a magic string)
 LAMIA_GLOBAL_DIR_NAME = ".lamia"
-LAMIA_GLOBAL_ENV_FILENAME = ".env"
+ENV_FILENAME = ".env"
 
 
 def get_global_lamia_dir() -> Path:
-    """Get the path to the global Lamia config directory (~/.lamia)."""
+    """Return the path to the global Lamia config directory."""
     return Path.home() / LAMIA_GLOBAL_DIR_NAME
 
 
 def get_global_env_path() -> Path:
-    """Get the path to the global Lamia .env file (~/.lamia/.env)."""
-    return get_global_lamia_dir() / LAMIA_GLOBAL_ENV_FILENAME
+    """Return the path to the global Lamia env file."""
+    return get_global_lamia_dir() / ENV_FILENAME
 
 
-try:
-    from dotenv import load_dotenv
+def get_project_env_path(project_dir: Path) -> Path:
+    """Return the path to the project-level env file."""
+    return project_dir / ENV_FILENAME
 
-    # 1. Load project-level .env first (does NOT override existing shell env vars)
-    load_dotenv()
 
-    # 2. Load global ~/.lamia/.env as fallback (does NOT override anything already set)
-    global_env_path = get_global_env_path()
-    if global_env_path.exists():
-        load_dotenv(global_env_path)
-    elif global_env_path.parent.exists():
-        # ~/.lamia dir exists but no .env file — that's fine, user may not have set up global keys yet
-        pass
-    else:
-        # ~/.lamia dir doesn't exist — first-time user, nothing to warn about
-        pass
+def load_env_files() -> None:
+    """Load project-level and global env files with explicit paths only."""
+    project_env = get_project_env_path(Path.cwd())
+    if project_env.is_file():
+        load_dotenv(project_env)
 
-except ImportError:
-    # python-dotenv not installed, skip loading
-    pass
+    global_env = get_global_env_path()
+    if global_env.is_file():
+        load_dotenv(global_env)

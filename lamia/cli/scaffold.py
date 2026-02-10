@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from lamia.engine.managers.llm.providers import ProviderRegistry
+
 if TYPE_CHECKING:
     from lamia.cli.init_wizard import WizardResult
 
@@ -37,7 +39,7 @@ ANTHROPIC_MODELS: list[tuple[str, str]] = [
     ("claude-opus-4-1", "legacy opus"),
 ]
 
-OLLAMA_MODELS: list[tuple[str, str]] = [
+OLLAMA_SUGGESTED_MODELS: list[tuple[str, str]] = [
     ("llama3.2:1b", "Small and fast (1B params)"),
     ("llama2", "Good all-rounder"),
     ("mixtral", "Mixture of experts, very capable — will be slow on most hardware"),
@@ -59,6 +61,10 @@ REMOTE_PROVIDER_MODELS: dict[str, list[tuple[str, str]]] = {
 }
 
 PROVIDER_ORDER: tuple[str, ...] = tuple(DEFAULT_MODELS.keys())
+
+# Providers whose env vars are scaffolded in .env templates
+_ENV_SCAFFOLD_PROVIDERS = ("openai", "anthropic", "lamia")
+_PROVIDER_REGISTRY = ProviderRegistry(set(_ENV_SCAFFOLD_PROVIDERS))
 
 
 def create_minimal_config(config_path: str, with_extensions: bool = False, extensions_folder_name: str = "extensions") -> bool:
@@ -101,17 +107,17 @@ def update_config_with_extensions(config_path: str, extensions_folder_name: str 
     return True
 
 def create_env_file(env_path: str) -> bool:
-    """Create a .env file with dummy API keys if it does not exist, and add a comment hinting the user to change them."""
+    """Create a .env file with placeholder API keys if it does not exist."""
     if os.path.exists(env_path):
         return False  # Already exists
-    env_content = (
-        "# TODO: Replace the API keys below with your own keys before running the app!\n"
-        "OPENAI_API_KEY=sk-your-openai-key-here\n"
-        "ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here\n"
-        "LAMIA_API_KEY=sk-your-openai-key-here\n"
-    )
+    lines = ["# TODO: Replace the API keys below with your own keys before running the app!"]
+    for provider in _ENV_SCAFFOLD_PROVIDERS:
+        env_vars = _PROVIDER_REGISTRY.get_env_var_names(provider)
+        if not env_vars:
+            continue
+        lines.append(f"{env_vars[0]}=sk-your-{provider}-key-here")
     with open(env_path, "w") as f:
-        f.write(env_content)
+        f.write("\n".join(lines) + "\n")
     return True
 
 def create_config_from_wizard_result(config_path: str, wizard_result: "WizardResult") -> bool:
@@ -166,6 +172,6 @@ providers:
     enabled: true
     default_model: {DEFAULT_MODELS["ollama"]}
     models:
-{_render_models(OLLAMA_MODELS)}
+{_render_models(OLLAMA_SUGGESTED_MODELS)}
 
 """.lstrip()
