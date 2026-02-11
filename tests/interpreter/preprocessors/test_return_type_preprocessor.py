@@ -207,3 +207,67 @@ web.get_text(".content") -> File(HTML, "page.html")
         processed, _ = self.preprocessor.preprocess(source)
 
         assert "__LAMIA_FILE_WRITE__" in processed
+
+
+class TestStandaloneTypedPromptPreprocessor:
+    """Test preprocessing of 'prompt' -> Type shorthand expressions."""
+
+    def setup_method(self):
+        self.preprocessor = WithReturnTypePreprocessor()
+
+    def test_single_quoted_prompt_with_type(self):
+        """'prompt' -> HTML becomes a synthetic function def."""
+        source = "'return html' -> HTML"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "def __LAMIA_TYPED_PROMPT_0() -> HTML:" in processed
+        assert "'return html'" in processed
+
+    def test_double_quoted_prompt_with_type(self):
+        """\"prompt\" -> JSON becomes a synthetic function def."""
+        source = '"extract data" -> JSON'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "def __LAMIA_TYPED_PROMPT_0() -> JSON:" in processed
+        assert '"extract data"' in processed
+
+    def test_parametric_type(self):
+        """'prompt' -> HTML[Model] preserves parametric type."""
+        source = "'get page' -> HTML[PageModel]"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "-> HTML[PageModel]:" in processed
+
+    def test_does_not_consume_file_write(self):
+        """'prompt' -> File(...) is handled by file write, not standalone."""
+        source = '"Generate text" -> File("output.txt")'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "__LAMIA_FILE_WRITE__" in processed
+        assert "__LAMIA_TYPED_PROMPT" not in processed
+
+    def test_multiple_standalone_prompts(self):
+        """Multiple standalone prompts get unique function names."""
+        source = "'prompt one' -> HTML\n'prompt two' -> JSON"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "__LAMIA_TYPED_PROMPT_0" in processed
+        assert "__LAMIA_TYPED_PROMPT_1" in processed
+        assert "-> HTML:" in processed
+        assert "-> JSON:" in processed
+
+    def test_indentation_preserved(self):
+        """Indented prompt preserves indentation in the generated function."""
+        source = "    'indented prompt' -> HTML"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "    def __LAMIA_TYPED_PROMPT_0() -> HTML:" in processed
+        assert "        'indented prompt'" in processed
+
+    def test_plain_string_without_type_not_affected(self):
+        """A standalone string without -> Type is left unchanged."""
+        source = "'just a string'"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert processed == source
+        assert "__LAMIA_TYPED_PROMPT" not in processed

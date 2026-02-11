@@ -5,11 +5,20 @@ Handles preprocessing of:
 - with session("name") -> Type: syntax
 - web.method(args) -> Type expressions
 - "prompt" -> File(...) expressions
+- "prompt" -> Type standalone expressions (shorthand for a typed LLM function)
 """
 
 import re
 import hashlib
 from typing import Dict, Tuple
+
+# Shared sub-pattern matching any single- or triple-quoted string literal.
+_QUOTED_STRING = (
+    r'(\"\"\"[^\"]*\"\"\"|'   # triple-double-quoted string
+    r"'''[^']*'''|"            # triple-single-quoted string
+    r'"[^"\n]*"|'              # double-quoted string
+    r"'[^'\n]*')"              # single-quoted string
+)
 
 
 class WithReturnTypePreprocessor:
@@ -38,7 +47,10 @@ class WithReturnTypePreprocessor:
         
         # Process "prompt" -> File(...) expressions
         processed_code = self._process_file_write_expressions(processed_code)
-        
+
+        # Process "prompt" -> Type shorthand (must run AFTER file writes)
+        processed_code = self._process_standalone_typed_prompts(processed_code)
+
         return processed_code, return_types
     
     def _process_session_statements(self, source_code: str, return_types: Dict[str, str]) -> str:
@@ -87,16 +99,11 @@ class WithReturnTypePreprocessor:
 
         The syntax transformer then handles __LAMIA_FILE_WRITE__ markers.
         """
-        # Match: string_literal -> File(...)
-        # The string can use single or double quotes, possibly triple-quoted.
         file_write_pattern = (
-            r'(\s*)'                            # indent
-            r'(\"\"\"[^\"]*\"\"\"|'             # triple-double-quoted string
-            r"'''[^']*'''|"                     # triple-single-quoted string
-            r'"[^"\n]*"|'                       # double-quoted string
-            r"'[^'\n]*')"                       # single-quoted string
-            r'\s*->\s*'                         # arrow
-            r'(File\([^\n]+\))'                 # File(...) to end of meaningful parens
+            r'(\s*)'               # indent
+            + _QUOTED_STRING +
+            r'\s*->\s*'            # arrow
+            r'(File\([^\n]+\))'    # File(...) to end of meaningful parens
         )
 
         def replace_file_write(match: re.Match) -> str:
@@ -106,6 +113,43 @@ class WithReturnTypePreprocessor:
             return f"{indent}__LAMIA_FILE_WRITE__({string_lit}, {file_call})"
 
         return re.sub(file_write_pattern, replace_file_write, source_code)
+
+    def _process_standalone_typed_prompts(self, source_code: str) -> str:
+        """Process standalone ``"prompt" -> Type`` shorthand.
+
+        Rewrites each match into a synthetic function definition so the
+        LLM command detector and syntax transformer can handle it like
+        any other typed LLM function::
+
+            "return html" -> HTML
+
+        becomes::
+
+            def __lamia_typed_prompt_0() -> HTML:
+                "return html"
+
+        Must run **after** ``_process_file_write_expressions`` so that
+        ``"prompt" -> File(...)`` is not consumed here.
+        """
+        typed_prompt_pattern = (
+            r'^(\s*)'                              # indent
+            + _QUOTED_STRING +
+            r'\s*->\s*'                            # arrow
+            r'([A-Za-z_]\w*(?:\[[^\]]+\])?)'      # TypeName or TypeName[Inner]
+            r'\s*$'                                # end of line
+        )
+
+        counter = [0]
+
+        def replace_typed_prompt(match: re.Match) -> str:
+            indent = match.group(1)
+            string_lit = match.group(2)
+            type_name = match.group(3)
+            idx = counter[0]
+            counter[0] += 1
+            return f"{indent}def __LAMIA_TYPED_PROMPT_{idx}() -> {type_name}:\n{indent}    {string_lit}"
+
+        return re.sub(typed_prompt_pattern, replace_typed_prompt, source_code, flags=re.MULTILINE)
 
     def _generate_unique_key(self, content: str) -> str:
         """Generate a unique key for content."""
