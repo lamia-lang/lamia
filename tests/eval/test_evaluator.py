@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
-from lamia.eval.evaluator import ModelEvaluator, EvaluationResult, PromptTask, ScriptTask
+from lamia.eval.evaluator import ModelAttemptResult, ModelEvaluator, EvaluationResult, PromptTask, ScriptTask
 from lamia.eval.model_cost import ModelCost
 
 
@@ -158,6 +158,43 @@ class TestModelEvaluator:
                 script_func=dummy_script,
                 models=[]
             )
+
+
+class TestStepBackStrategy:
+    """Test step_back strategy terminates correctly."""
+
+    @pytest.mark.asyncio
+    async def test_step_back_terminates_when_all_models_fail(self):
+        """step_back must NOT loop infinitely when cheapest model fails."""
+        mock_lamia = Mock()
+        mock_lamia._engine = Mock()
+        mock_lamia.run_async = AsyncMock(side_effect=RuntimeError("model error"))
+        evaluator = ModelEvaluator(lamia_instance=mock_lamia)
+
+        models = ["provider:top", "provider:mid", "provider:cheap"]
+        result = await evaluator.evaluate_prompt(
+            prompt="test", return_type=None, models=models, strategy="step_back",
+        )
+
+        assert not result.success
+        assert result.error_message == "No model succeeded"
+        # With 3 models step_back visits at most 2 (cheapest, then index 0)
+        assert len(result.attempts) <= len(models)
+
+    @pytest.mark.asyncio
+    async def test_step_back_single_model_terminates(self):
+        """step_back with one model should try once and stop."""
+        mock_lamia = Mock()
+        mock_lamia._engine = Mock()
+        mock_lamia.run_async = AsyncMock(side_effect=RuntimeError("fail"))
+        evaluator = ModelEvaluator(lamia_instance=mock_lamia)
+
+        result = await evaluator.evaluate_prompt(
+            prompt="test", return_type=None, models=["p:m"], strategy="step_back",
+        )
+
+        assert not result.success
+        assert len(result.attempts) == 1
 
 
 class TestPromptTask:

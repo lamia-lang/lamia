@@ -215,6 +215,8 @@ class ModelEvaluator:
                     attempts=attempts
                 )
             
+            if current_idx == 0:
+                break  # Most-capable model failed, nothing left to try
             current_idx = max(0, current_idx - 2)
         
         return EvaluationResult(

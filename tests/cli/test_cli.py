@@ -12,7 +12,15 @@ import pytest
 
 from lamia.cli import main
 from lamia.cli.cli import HYBRID_EXTENSIONS, interactive_mode
-from lamia.cli.eval_cli import handle_eval, _print_eval_results
+from lamia.cli.eval_cli import (
+    _extract_llm_prompts,
+    _print_attempt_results,
+    _print_prompt_header,
+    _resolve_return_type,
+    _resolve_type_name,
+    _run_evaluation,
+    handle_eval,
+)
 from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
 from lamia.eval.evaluator import EvaluationResult, ModelAttemptResult
 from lamia.eval.model_cost import ModelCost
@@ -368,6 +376,304 @@ class TestCLIConstantsImmutability:
         """Test that logger is properly configured."""
         from lamia.cli.cli import logger
         assert logger.name == "lamia.cli.cli"
+
+
+# ── Eval CLI tests ──────────────────────────────────────────────────────
+
+_SAMPLE_HU_SOURCE = """\
+from pydantic import BaseModel
+
+class Weather(BaseModel):
+    temperature: float
+
+def get_weather() -> HTML:
+    "What is the weather in Paris?"
+
+def translate():
+    "Translate the following to French: hello world"
+"""
+
+_SAMPLE_HU_MIXED = """\
+def login() -> HTML:
+    "https://www.linkedin.com/login"
+
+def summarize():
+    "Summarize the following article"
+"""
+
+_SAMPLE_HU_NO_LLM = """\
+import os
+x = 1 + 2
+print(x)
+"""
+
+
+class TestExtractLLMPrompts:
+    """Test hybrid-file parsing and LLM prompt extraction."""
+
+    def test_extracts_llm_functions(self):
+        prompts = _extract_llm_prompts(_SAMPLE_HU_SOURCE)
+        assert len(prompts) == 2
+        assert prompts[0][0] == "What is the weather in Paris?"
+        assert prompts[1][0] == "Translate the following to French: hello world"
+
+    def test_resolves_known_return_type(self):
+        from lamia.types import HTML
+        prompts = _extract_llm_prompts(_SAMPLE_HU_SOURCE)
+        # get_weather has -> HTML
+        assert prompts[0][1] is HTML
+        # translate has no return type annotation
+        assert prompts[1][1] is None
+
+    def test_returns_empty_for_non_llm_script(self):
+        prompts = _extract_llm_prompts(_SAMPLE_HU_NO_LLM)
+        assert prompts == []
+
+    def test_filters_out_web_commands(self):
+        """URLs are classified as web commands and excluded from eval."""
+        prompts = _extract_llm_prompts(_SAMPLE_HU_MIXED)
+        assert len(prompts) == 1
+        assert prompts[0][0] == "Summarize the following article"
+
+    def test_standalone_typed_prompt(self):
+        """Standalone 'prompt' -> Type is handled natively by the preprocessor."""
+        prompts = _extract_llm_prompts("'return html' -> HTML")
+        assert len(prompts) == 1
+        assert prompts[0][0] == "return html"
+        from lamia.types import HTML
+        assert prompts[0][1] is HTML
+
+    def test_standalone_untyped_prompt(self):
+        """Standalone quoted string without -> Type is detected as an LLM function."""
+        prompts = _extract_llm_prompts('def greet():\n    "Say hello"\n')
+        assert len(prompts) == 1
+        assert prompts[0][0] == "Say hello"
+
+    def test_standalone_parametric_type(self):
+        """Standalone 'prompt' -> HTML[Model] resolves the base type."""
+        prompts = _extract_llm_prompts("'extract data' -> JSON[MyModel]")
+        assert len(prompts) == 1
+        assert prompts[0][0] == "extract data"
+        from lamia.types import JSON
+        assert prompts[0][1] is JSON
+
+
+class TestResolveTypeName:
+    """Test type name string resolution."""
+
+    def test_known_types(self):
+        from lamia.types import HTML, JSON, YAML
+        assert _resolve_type_name("HTML") is HTML
+        assert _resolve_type_name("JSON") is JSON
+        assert _resolve_type_name("YAML") is YAML
+
+    def test_none_and_unknown(self):
+        assert _resolve_type_name(None) is None
+        assert _resolve_type_name("Bogus") is None
+
+
+class TestResolveReturnType:
+    """Test return type resolution from parsed AST types."""
+
+    def test_simple_known_type(self):
+        from lamia.types import HTML, JSON
+        from lamia.interpreter.detectors.llm_command_detector import SimpleReturnType
+        assert _resolve_return_type(SimpleReturnType(base_type="HTML", full_type="HTML")) is HTML
+        assert _resolve_return_type(SimpleReturnType(base_type="JSON", full_type="JSON")) is JSON
+
+    def test_parametric_resolves_base_type(self):
+        from lamia.types import HTML
+        from lamia.interpreter.detectors.llm_command_detector import ParametricReturnType
+        rt = ParametricReturnType(base_type="HTML", inner_type="Weather", full_type="HTML[Weather]")
+        assert _resolve_return_type(rt) is HTML
+
+    def test_unknown_type_returns_none(self):
+        from lamia.interpreter.detectors.llm_command_detector import SimpleReturnType
+        assert _resolve_return_type(SimpleReturnType(base_type="UnknownType", full_type="UnknownType")) is None
+
+    def test_none_returns_none(self):
+        assert _resolve_return_type(None) is None
+
+    def test_file_write_with_inner(self):
+        from lamia.types import JSON
+        from lamia.interpreter.detectors.llm_command_detector import FileWriteReturnType, SimpleReturnType
+        inner = SimpleReturnType(base_type="JSON", full_type="JSON")
+        rt = FileWriteReturnType(path="out.json", inner_return_type=inner)
+        assert _resolve_return_type(rt) is JSON
+
+    def test_file_write_without_inner(self):
+        from lamia.interpreter.detectors.llm_command_detector import FileWriteReturnType
+        rt = FileWriteReturnType(path="out.txt", inner_return_type=None)
+        assert _resolve_return_type(rt) is None
+
+
+class TestPrintPromptHeader:
+    """Test prompt header formatting."""
+
+    def test_short_prompt(self, capsys):
+        _print_prompt_header(1, 3, "Hello world")
+        out = capsys.readouterr().out
+        assert "[1/3]" in out
+        assert "Hello world" in out
+
+    def test_long_prompt_is_truncated(self, capsys):
+        long_prompt = "A" * 200
+        _print_prompt_header(1, 1, long_prompt)
+        out = capsys.readouterr().out
+        assert "..." in out
+
+    def test_multiline_prompt_is_flattened(self, capsys):
+        _print_prompt_header(1, 1, "line1\nline2\nline3")
+        out = capsys.readouterr().out
+        assert "line1 line2 line3" in out
+
+
+class TestPrintAttemptResults:
+    """Test coloured attempt results formatting."""
+
+    def test_pass_shown_green(self, capsys):
+        result = EvaluationResult(
+            minimum_working_model="openai:gpt-4o",
+            success=True,
+            validation_pass_rate=100.0,
+            attempts=[ModelAttemptResult(model="openai:gpt-4o", success=True)],
+        )
+        _print_attempt_results(result)
+        out = capsys.readouterr().out
+        assert "PASS" in out
+        assert "openai:gpt-4o" in out
+        assert "cheapest" in out
+
+    def test_fail_shown_red(self, capsys):
+        result = EvaluationResult(
+            minimum_working_model=None,
+            success=False,
+            validation_pass_rate=0.0,
+            attempts=[
+                ModelAttemptResult(model="openai:gpt-4o-mini", success=False, error="bad output"),
+            ],
+        )
+        _print_attempt_results(result)
+        out = capsys.readouterr().out
+        assert "FAIL" in out
+        assert "bad output" in out
+
+
+class TestRunEvaluation:
+    """Test the async evaluation loop."""
+
+    @pytest.mark.asyncio
+    async def test_stops_on_all_fail(self, capsys):
+        """When all models fail on a prompt, evaluation stops early."""
+        fail_result = EvaluationResult(
+            minimum_working_model=None,
+            success=False,
+            validation_pass_rate=0.0,
+            attempts=[ModelAttemptResult(model="openai:gpt-4o", success=False, error="err")],
+            error_message="No model succeeded",
+        )
+        mock_evaluator = AsyncMock()
+        mock_evaluator.evaluate_prompt = AsyncMock(return_value=fail_result)
+        mock_evaluator.__aenter__ = AsyncMock(return_value=mock_evaluator)
+        mock_evaluator.__aexit__ = AsyncMock(return_value=False)
+
+        prompts = [("prompt1", None), ("prompt2", None)]
+
+        with patch("lamia.cli.eval_cli.ModelEvaluator", return_value=mock_evaluator):
+            mock_lamia = Mock()
+            await _run_evaluation(mock_lamia, prompts, ["openai:gpt-4o"], "binary_search")
+
+        # Only the first prompt should have been evaluated
+        mock_evaluator.evaluate_prompt.assert_called_once()
+        out = capsys.readouterr().out
+        assert "Stopping evaluation" in out
+
+    @pytest.mark.asyncio
+    async def test_all_prompts_pass(self, capsys):
+        """When all prompts pass, evaluation completes successfully."""
+        pass_result = EvaluationResult(
+            minimum_working_model="openai:gpt-4o",
+            success=True,
+            validation_pass_rate=100.0,
+            attempts=[ModelAttemptResult(model="openai:gpt-4o", success=True)],
+        )
+        mock_evaluator = AsyncMock()
+        mock_evaluator.evaluate_prompt = AsyncMock(return_value=pass_result)
+        mock_evaluator.__aenter__ = AsyncMock(return_value=mock_evaluator)
+        mock_evaluator.__aexit__ = AsyncMock(return_value=False)
+
+        prompts = [("prompt1", None), ("prompt2", None)]
+
+        with patch("lamia.cli.eval_cli.ModelEvaluator", return_value=mock_evaluator):
+            mock_lamia = Mock()
+            await _run_evaluation(mock_lamia, prompts, ["openai:gpt-4o"], "binary_search")
+
+        assert mock_evaluator.evaluate_prompt.call_count == 2
+        out = capsys.readouterr().out
+        assert "evaluated successfully" in out
+
+
+class TestHandleEvalIntegration:
+    """Integration tests for the full handle_eval flow."""
+
+    def setup_method(self):
+        self.original_argv = sys.argv.copy()
+
+    def teardown_method(self):
+        sys.argv = self.original_argv
+
+    def test_missing_script_exits(self):
+        sys.argv = ["lamia", "eval", "nonexistent.hu"]
+        with pytest.raises(SystemExit) as exc_info:
+            handle_eval()
+        assert exc_info.value.code == 1
+
+    def test_no_llm_prompts_exits(self, tmp_path):
+        script = tmp_path / "empty.hu"
+        script.write_text("x = 1 + 2\n")
+        sys.argv = ["lamia", "eval", str(script)]
+        with pytest.raises(SystemExit) as exc_info:
+            handle_eval()
+        assert exc_info.value.code == 1
+
+    def test_full_interactive_flow(self, tmp_path, capsys):
+        """Simulate the full interactive flow with mocked evaluation."""
+        script = tmp_path / "test.hu"
+        script.write_text('def greet():\n    "Say hello"\n')
+        sys.argv = ["lamia", "eval", str(script)]
+
+        pass_result = EvaluationResult(
+            minimum_working_model="openai:gpt-4o",
+            success=True,
+            validation_pass_rate=100.0,
+            attempts=[ModelAttemptResult(model="openai:gpt-4o", success=True)],
+        )
+        mock_evaluator = AsyncMock()
+        mock_evaluator.evaluate_prompt = AsyncMock(return_value=pass_result)
+        mock_evaluator.__aenter__ = AsyncMock(return_value=mock_evaluator)
+        mock_evaluator.__aexit__ = AsyncMock(return_value=False)
+
+        # Mock: openai has a key, others don't
+        def fake_detect(provider, _project_dir):
+            if provider == "openai":
+                return ("sk-real-key", "OPENAI_API_KEY", "shell environment")
+            return (None, f"{provider.upper()}_API_KEY", None)
+
+        # Interactive inputs: provider=1 (openai), max_model=default, min_model=default, strategy=1
+        inputs = iter(["1", "", "", "1"])
+
+        with (
+            patch("builtins.input", side_effect=inputs),
+            patch("lamia.cli.eval_cli.detect_api_key", side_effect=fake_detect),
+            patch("lamia.cli.eval_cli.handle_api_key"),
+            patch("lamia.cli.eval_cli.ModelEvaluator", return_value=mock_evaluator),
+            patch("lamia.cli.eval_cli.Lamia"),
+        ):
+            handle_eval()
+
+        out = capsys.readouterr().out
+        assert "Model Evaluation Setup" in out
+        assert "evaluated successfully" in out
 
 
 sum_py_content = """

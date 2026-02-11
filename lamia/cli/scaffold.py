@@ -31,7 +31,7 @@ OPENAI_MODELS: list[tuple[str, str]] = [
 ]
 
 ANTHROPIC_MODELS: list[tuple[str, str]] = [
-    ("claude-haiku-3-5-20241022", "previous fast model"),
+    ("claude-3-5-haiku-20241022", "previous fast model"),
     ("claude-haiku-4-5-20251001", "fastest, near-frontier"),
     ("claude-sonnet-4-5-20250929", "best speed/intelligence balance"),
     ("claude-opus-4-6", "most intelligent, best for agents"),

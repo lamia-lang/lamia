@@ -14,6 +14,14 @@ from lamia.env_loader import get_project_env_path, ENV_FILENAME
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def isolated_global_env(tmp_path):
+    """Prevent all tests from reading the real ~/.lamia/.env."""
+    fake_global = tmp_path / ".lamia_test_global" / ENV_FILENAME
+    with patch("lamia.cli.api_key_utils.get_global_env_path", return_value=fake_global):
+        yield fake_global
+
+
 @pytest.fixture()
 def no_ollama():
     """Prevent the wizard from touching a real Ollama installation."""
@@ -105,24 +113,22 @@ class TestWizardKeyDetection:
     def test_detects_key_from_project_env(self, tmp_path, monkeypatch, capsys, no_ollama):
         project_env = get_project_env_path(tmp_path)
         project_env.write_text("OPENAI_API_KEY=sk-proj-key\n")
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-key")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         _feed_inputs(monkeypatch, ["1", "1", "", "n"])
         run_init_wizard(str(tmp_path))
         output = capsys.readouterr().out
         assert f"found via {project_env}" in output
 
-    def test_detects_key_from_global_env(self, tmp_path, monkeypatch, capsys, no_ollama):
-        global_env = tmp_path / "fake_global" / ENV_FILENAME
-        global_env.parent.mkdir()
-        global_env.write_text("OPENAI_API_KEY=sk-global-key\n")
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-global-key")
+    def test_detects_key_from_global_env(self, tmp_path, monkeypatch, capsys, no_ollama, isolated_global_env):
+        isolated_global_env.parent.mkdir(parents=True, exist_ok=True)
+        isolated_global_env.write_text("OPENAI_API_KEY=sk-global-key\n")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         _feed_inputs(monkeypatch, ["1", "1", "", "n"])
-        with patch("lamia.cli.init_wizard.get_global_env_path", return_value=global_env):
-            run_init_wizard(str(tmp_path))
+        run_init_wizard(str(tmp_path))
         output = capsys.readouterr().out
-        assert f"found via {global_env}" in output
+        assert f"found via {isolated_global_env}" in output
 
     def test_reports_no_api_key_when_missing(self, tmp_path, monkeypatch, capsys, no_ollama):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -164,19 +170,16 @@ class TestWizardKeyDetection:
 
 class TestWizardKeyStorage:
 
-    def test_saves_key_globally_with_secure_permissions(self, tmp_path, monkeypatch, no_ollama):
+    def test_saves_key_globally_with_secure_permissions(self, tmp_path, monkeypatch, no_ollama, isolated_global_env):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        global_env = tmp_path / "fake_global" / ENV_FILENAME
         # provider, model, retries, enter key, store globally, no fallback
         _feed_inputs(monkeypatch, ["1", "1", "", "sk-new-global", "y", "n"])
-        with patch("lamia.cli.init_wizard.get_global_env_path", return_value=global_env), \
-             patch("lamia.env_loader.get_global_lamia_dir", return_value=global_env.parent):
-            run_init_wizard(str(tmp_path))
-        assert global_env.exists()
-        content = global_env.read_text()
+        run_init_wizard(str(tmp_path))
+        assert isolated_global_env.exists()
+        content = isolated_global_env.read_text()
         assert "OPENAI_API_KEY=sk-new-global" in content
-        mode = global_env.stat().st_mode
+        mode = isolated_global_env.stat().st_mode
         assert mode & stat.S_IRUSR
         assert mode & stat.S_IWUSR
         assert not (mode & stat.S_IRGRP)
@@ -196,12 +199,13 @@ class TestWizardKeyStorage:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         local_env = get_project_env_path(tmp_path)
-        local_env.write_text("OPENAI_API_KEY=old-key\nOTHER_VAR=keep\n")
+        # Use a placeholder key so detection reports "no API key" and prompts for a new one
+        local_env.write_text("OPENAI_API_KEY=sk-your-openai-key-here\nOTHER_VAR=keep\n")
         _feed_inputs(monkeypatch, ["1", "1", "", "new-key", "n", "n"])
         run_init_wizard(str(tmp_path))
         content = local_env.read_text()
         assert "OPENAI_API_KEY=new-key" in content
-        assert "old-key" not in content
+        assert "your-openai-key-here" not in content
         assert "OTHER_VAR=keep" in content
 
     def test_saves_key_sets_env_var_in_process(self, tmp_path, monkeypatch, no_ollama):
