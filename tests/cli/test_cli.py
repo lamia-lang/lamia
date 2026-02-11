@@ -12,7 +12,10 @@ import pytest
 
 from lamia.cli import main
 from lamia.cli.cli import HYBRID_EXTENSIONS, interactive_mode
+from lamia.cli.eval_cli import handle_eval, _print_eval_results
 from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
+from lamia.eval.evaluator import EvaluationResult, ModelAttemptResult
+from lamia.eval.model_cost import ModelCost
 from lamia.interpreter.command_types import CommandType
 
 

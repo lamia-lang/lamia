@@ -21,6 +21,7 @@ from lamia.errors import (
 )
 from .scaffold import create_minimal_config, ensure_extensions_folder, update_config_with_extensions, create_env_file, create_config_from_wizard_result
 from .init_wizard import run_init_wizard
+from .eval_cli import handle_eval
 from .cli_styling import setup_cli_logging
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.hybrid_executor import HybridExecutor
@@ -190,6 +191,9 @@ def main():
 
             print("\nDone! Run 'lamia <file.hu>' or 'lamia' for interactive mode.")
             return
+        return
+    elif len(sys.argv) > 1 and sys.argv[1] == "eval":
+        handle_eval()
         return
     else:
         parser = argparse.ArgumentParser(

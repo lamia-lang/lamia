@@ -171,7 +171,7 @@ class TestWizardKeyStorage:
         # provider, model, retries, enter key, store globally, no fallback
         _feed_inputs(monkeypatch, ["1", "1", "", "sk-new-global", "y", "n"])
         with patch("lamia.cli.init_wizard.get_global_env_path", return_value=global_env), \
-             patch("lamia.cli.init_wizard.get_global_lamia_dir", return_value=global_env.parent):
+             patch("lamia.env_loader.get_global_lamia_dir", return_value=global_env.parent):
             run_init_wizard(str(tmp_path))
         assert global_env.exists()
         content = global_env.read_text()

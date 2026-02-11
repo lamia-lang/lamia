@@ -9,14 +9,15 @@ from pathlib import Path
 from typing import Optional
 
 from lamia.adapters.llm.local.ollama_adapter import OllamaAdapter
+from lamia.cli.prompts import input_number, input_yes_no, pick_from_list
 from lamia.cli.scaffold import (
     DEFAULT_MODELS,
     OLLAMA_SUGGESTED_MODELS,
     PROVIDER_ORDER,
     REMOTE_PROVIDER_MODELS,
 )
-from lamia.env_loader import get_global_lamia_dir, get_global_env_path, get_project_env_path
 from lamia.engine.managers.llm.providers import ProviderRegistry
+from lamia.env_loader import get_global_env_path, get_project_env_path
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +83,9 @@ def run_init_wizard(project_dir: str, with_extensions: bool = False) -> WizardRe
     fallback_num = 1
     while True:
         if fallback_num < _MAX_SUGGESTED_CHAIN_LENGTH:
-            add = _input_yes_no(f"\n  Add {'a' if fallback_num == 1 else 'another'} fallback model?", default=True)
+            add = input_yes_no(f"\n  Add {'a' if fallback_num == 1 else 'another'} fallback model?", default=True)
         else:
-            add = _input_yes_no(f"\n  Add another fallback? ({fallback_num - 1} fallback(s) is usually sufficient)", default=False)
+            add = input_yes_no(f"\n  Add another fallback? ({fallback_num - 1} fallback(s) is usually sufficient)", default=False)
         if not add:
             break
         entry = _pick_chain_entry(project_dir, f"Fallback model {fallback_num}", provider_list, default_provider_idx, ollama_models)
@@ -110,7 +111,7 @@ def _pick_chain_entry(
 ) -> ModelChainEntry:
     """Interactively pick one provider + model + retries."""
     print(f"\n--- {label} ---")
-    provider = _pick_from_list("Provider", provider_list, default_provider_idx)
+    provider = pick_from_list("Provider", provider_list, default_provider_idx)
 
     if provider == "ollama":
         if ollama_models:
@@ -123,56 +124,11 @@ def _pick_chain_entry(
         default_model = DEFAULT_MODELS.get(provider, models[0][0] if models else "")
 
     default_model_idx = next((i for i, (n, _) in enumerate(models) if n == default_model), 0)
-    model = _pick_from_list("Model", models, default_model_idx)
+    model = pick_from_list("Model", models, default_model_idx)
 
-    retries = _input_number("  Max retries [default: 2]: ", max_val=10, default=2)
+    retries = input_number("  Max retries [default: 2]: ", max_val=10, default=2)
     _handle_api_key(project_dir, provider)
     return ModelChainEntry(name=f"{provider}:{model}", max_retries=retries)
-
-
-# ── Generic numbered-list picker ─────────────────────────────────────────
-
-def _pick_from_list(heading: str, items: list[tuple[str, str]], default_idx: int = 0) -> str:
-    """Show a numbered list of ``(value, description)`` tuples and return the chosen value."""
-    print(f"  {heading}:")
-    for i, (name, desc) in enumerate(items, 1):
-        marker = " (default)" if i == default_idx + 1 else ""
-        suffix = f" ({desc})" if desc else ""
-        print(f"    {i}. {name}{suffix}{marker}")
-    idx = _input_number(f"  Select number [default: {default_idx + 1}]: ", len(items), default_idx + 1)
-    return items[idx - 1][0]
-
-
-# ── Primitive input helpers ──────────────────────────────────────────────
-
-def _input_yes_no(prompt: str, default: bool = True) -> bool:
-    suffix = " [Y/n]: " if default else " [y/N]: "
-    while True:
-        raw = input(prompt + suffix).strip().lower()
-        if not raw:
-            return default
-        if raw in ("y", "yes"):
-            return True
-        if raw in ("n", "no"):
-            return False
-        print("  Please answer yes or no (y/n).")
-
-
-def _input_number(prompt: str, max_val: int, default: int = 1) -> int:
-    """Ask user to pick a 1-based number."""
-    while True:
-        raw = input(prompt).strip()
-        if not raw:
-            return default
-        if raw.lower() in ("q", "quit", "exit"):
-            return default
-        try:
-            val = int(raw)
-            if 1 <= val <= max_val:
-                return val
-        except ValueError:
-            pass
-        print(f"  Please enter a number between 1 and {max_val}.")
 
 
 # ── API key detection ────────────────────────────────────────────────────
@@ -245,7 +201,7 @@ def _handle_api_key(project_dir: str, provider: str) -> bool:
         print(f"  Warning: {provider} will fail at runtime without a key. Set {env_var} before running.")
         return True
     global_env = get_global_env_path()
-    if _input_yes_no(f"  Store this key globally in {global_env} for all Lamia projects?\n  (It will be available even for already existing projects)"):
+    if input_yes_no(f"  Store this key globally in {global_env} for all Lamia projects?\n  (It will be available even for already existing projects)"):
         _save_key(global_env, env_var, api_key, secure=True)
         print(f"  Saved {provider} key to {global_env} (available for all projects).")
     else:
