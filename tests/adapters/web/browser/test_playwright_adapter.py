@@ -4,10 +4,18 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import asyncio
 import time
-from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter, PLAYWRIGHT_AVAILABLE
+from lamia.adapters.web.browser.playwright_adapter import PLAYWRIGHT_AVAILABLE
 from lamia.adapters.web.browser.base import BaseBrowserAdapter, DOM_STABLE_MUTATION_QUIET_MS
 from lamia.internal_types import BrowserActionParams, SelectorType
 from lamia.errors import ExternalOperationTransientError, ExternalOperationPermanentError
+
+pytestmark = pytest.mark.skipif(
+    not PLAYWRIGHT_AVAILABLE,
+    reason="playwright is not installed",
+)
+
+# Import after skip marker so collection doesn't fail when playwright is missing
+from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
 
 
 class TestablePlaywrightAdapter(PlaywrightAdapter):

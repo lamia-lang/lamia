@@ -171,6 +171,7 @@ async def test_click_missing_selector_yields_permanent_error(monkeypatch):
 async def test_get_options_radio_buttons():
     """Test get_options() extracts radio button labels."""
     from selenium.webdriver.common.by import By
+    from selenium.common.exceptions import NoSuchElementException
     from unittest.mock import PropertyMock
     
     adapter = SeleniumAdapter()
