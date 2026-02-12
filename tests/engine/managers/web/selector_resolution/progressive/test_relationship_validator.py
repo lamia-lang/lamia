@@ -1,6 +1,5 @@
 """Tests for ElementRelationshipValidator."""
 
-from lib2to3.fixes.fix_print import parend_expr
 import pytest
 from unittest.mock import Mock, AsyncMock
 
