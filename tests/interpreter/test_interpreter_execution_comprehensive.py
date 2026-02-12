@@ -177,7 +177,6 @@ class TestHybridFileCacheValidation:
 
     def test_is_cache_valid_newer_cache(self, temp_dir):
         """Test cache validity when cache is newer than source."""
-        import time
         cache = HybridFileCache()
 
         # Create source file
@@ -185,8 +184,9 @@ class TestHybridFileCacheValidation:
         with open(hybrid_file, 'w') as f:
             f.write("def test(): pass")
 
-        # Ensure different timestamps on fast filesystems
-        time.sleep(0.05)
+        # Backdate source so cache written afterwards is strictly newer
+        old_time = os.path.getmtime(hybrid_file) - 1
+        os.utime(hybrid_file, (old_time, old_time))
 
         # Create cache file (will be newer)
         cache_path = cache.get_cache_path(hybrid_file)
@@ -207,11 +207,11 @@ class TestHybridFileCacheValidation:
         with open(cache_path, 'w') as f:
             f.write("def test(): pass")
 
-        # Create source file (will be newer)
-        import time
-        time.sleep(0.01)  # Ensure different timestamps
+        # Create source file and ensure it's strictly newer than cache
         with open(hybrid_file, 'w') as f:
             f.write("def test(): pass")
+        future_time = os.path.getmtime(cache_path) + 1
+        os.utime(hybrid_file, (future_time, future_time))
 
         is_valid = cache.is_cache_valid(hybrid_file, cache_path)
 
@@ -617,6 +617,10 @@ class TestInterpreterExecutionIntegration:
         hybrid_file = os.path.join(temp_dir, "test.hu")
         with open(hybrid_file, 'w') as f:
             f.write('def test(): return "hello"')
+
+        # Backdate source so cache written afterwards is strictly newer
+        old_time = os.path.getmtime(hybrid_file) - 1
+        os.utime(hybrid_file, (old_time, old_time))
 
         # Transform and cache
         with open(hybrid_file, 'r') as f:
