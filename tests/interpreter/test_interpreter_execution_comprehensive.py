@@ -177,12 +177,16 @@ class TestHybridFileCacheValidation:
 
     def test_is_cache_valid_newer_cache(self, temp_dir):
         """Test cache validity when cache is newer than source."""
+        import time
         cache = HybridFileCache()
 
         # Create source file
         hybrid_file = os.path.join(temp_dir, "script.hu")
         with open(hybrid_file, 'w') as f:
             f.write("def test(): pass")
+
+        # Ensure different timestamps on fast filesystems
+        time.sleep(0.05)
 
         # Create cache file (will be newer)
         cache_path = cache.get_cache_path(hybrid_file)
