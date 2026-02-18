@@ -34,13 +34,14 @@ logger = logging.getLogger(__name__)
 class SeleniumAdapter(BaseBrowserAdapter):
     """Real Selenium adapter for browser automation."""
     
-    def __init__(self, headless: bool = True, timeout: float = 10.0, session_config: Optional[Dict[str, Any]] = None, profile_name: Optional[str] = None):
+    def __init__(self, headless: bool = True, timeout: float = 10.0, session_config: Optional[Dict[str, Any]] = None, profile_name: Optional[str] = None, chrome_user_data_dir: Optional[str] = None):
         self.driver = None
         self.headless = headless
         self.default_timeout = timeout
         self.initialized = False
         self._last_dom_snapshot: Dict[str, Any] = {}
         self._last_dom_reason: str = ""
+        self.chrome_user_data_dir: Optional[str] = chrome_user_data_dir
         
         # Session persistence setup
         self.session_manager = SessionManager(session_config) if session_config else None
@@ -53,13 +54,14 @@ class SeleniumAdapter(BaseBrowserAdapter):
         
         # Successful selector cache to skip directly to working selectors on repeated runs
         self.selector_cache = SuccessfulSelectorCache()
+        # By default this adapter owns the webdriver lifecycle. For tab-scoped
+        # managers we can attach an existing driver and close only one tab.
+        self._owns_driver: bool = True
+        self._tab_window_handle: Optional[str] = None
+        self._parent_window_handle: Optional[str] = None
         
-        print(f"TO DELETE: session_manager={self.session_manager}, enabled={self.session_manager.enabled if self.session_manager else 'N/A'}")
         if self.session_manager and self.session_manager.enabled:
-            print(f"TO DELETE: Session persistence IS enabled for profile: {self.profile_name}")
             logger.info(f"Session persistence enabled for profile: {self.profile_name}")
-        else:
-            print(f"TO DELETE: Session persistence NOT enabled")
     
     def _require_selector(self, params: BrowserActionParams) -> str:
         """Ensure selector is provided for selector-based actions."""
@@ -169,8 +171,14 @@ class SeleniumAdapter(BaseBrowserAdapter):
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         
-        # Do not bind Chrome to a per-profile user data dir here. We manage
-        # session state (cookies/localStorage) explicitly per profile via
+        if self.chrome_user_data_dir:
+            # Use an existing Chrome profile directory -- carries over all
+            # cookies, extensions, fingerprint etc.  Chrome must be closed
+            # before this, otherwise the lock file prevents a second instance.
+            chrome_options.add_argument(f"--user-data-dir={self.chrome_user_data_dir}")
+            logger.info(f"SeleniumAdapter: Using Chrome user-data-dir: {self.chrome_user_data_dir}")
+        # When no user-data-dir is provided we manage session state
+        # (cookies/localStorage) explicitly per profile via
         # BrowserManager + SessionManager to avoid default profile leakage.
         
         try:
@@ -191,12 +199,22 @@ class SeleniumAdapter(BaseBrowserAdapter):
             logger.info("SeleniumAdapter: Closing WebDriver...")
             try:
                 # Do not auto-save here; BrowserManager handles profile-targeted saving
-                
-                self.driver.quit()
+                if self._owns_driver:
+                    self.driver.quit()
+                else:
+                    if self._tab_window_handle:
+                        current_handle = self.driver.current_window_handle
+                        self.driver.switch_to.window(self._tab_window_handle)
+                        self.driver.close()
+                        if self._parent_window_handle and self._parent_window_handle in self.driver.window_handles:
+                            self.driver.switch_to.window(self._parent_window_handle)
+                        elif current_handle in self.driver.window_handles:
+                            self.driver.switch_to.window(current_handle)
             except Exception as e:
                 logger.warning(f"Warning during driver cleanup: {e}")
             finally:
-                self.driver = None
+                if self._owns_driver:
+                    self.driver = None
                 self.initialized = False
             logger.info("SeleniumAdapter: WebDriver closed")
     

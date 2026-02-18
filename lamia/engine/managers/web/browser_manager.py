@@ -6,6 +6,7 @@ from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.internal_types import BrowserAction, BrowserActionType, BrowserActionParams
 from lamia.adapters.web.browser.base import BaseBrowserAdapter
 from lamia.adapters.retry.factory import RetriableAdapterFactory
+from lamia.adapters.retry.adapter_wrappers.retrying_browser_adapter import RetryingBrowserAdapter
 from lamia.interpreter.commands import WebCommand, WebActionType
 from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
 from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
@@ -44,6 +45,9 @@ class BrowserManager:
         
         # Active session profile name (hint from session blocks)
         self._active_profile: Optional[str] = None
+        # When set, the adapter will use this real Chrome user-data-dir
+        # instead of lamia's own session management.
+        self._chrome_user_data_dir: Optional[str] = None
         # Initialize selector resolution and suggestion services when we have a browser adapter
         self._selector_resolution_service = None
         self._selector_suggestion_service = None
@@ -410,14 +414,16 @@ class BrowserManager:
                     headless=self._browser_options.get("headless", False),
                     timeout=self._browser_options.get("timeout", 10.0),
                     session_config=session_config,
-                    profile_name=self._active_profile
+                    profile_name=self._active_profile,
+                    chrome_user_data_dir=self._chrome_user_data_dir,
                 )
             elif self._browser_engine == "playwright":
                 base_adapter = PlaywrightAdapter(
                     headless=self._browser_options.get("headless", False),
                     timeout=self._browser_options.get("timeout", 10.0),
                     session_config=session_config,
-                    profile_name=self._active_profile
+                    profile_name=self._active_profile,
+                    chrome_user_data_dir=self._chrome_user_data_dir,
                 )
             else:
                 raise ValueError(f"Unsupported browser engine: {self._browser_engine}")
@@ -449,6 +455,16 @@ class BrowserManager:
 
     def get_active_profile(self) -> Optional[str]:
         return self._active_profile
+
+    def set_chrome_user_data_dir(self, path: Optional[str]) -> None:
+        """Set the real Chrome user-data-dir for the next adapter creation.
+
+        When set the adapter will launch Chrome bound to the user's real
+        profile directory so all cookies/extensions/fingerprints carry over.
+        Must be called *before* the adapter is created (i.e. before any
+        browser action in the current session block).
+        """
+        self._chrome_user_data_dir = path
     
     async def save_session_cookies(self, profile_name: str):
         """Save current browser cookies for a specific session profile.
@@ -517,6 +533,74 @@ class BrowserManager:
         """Get current page HTML source."""
         adapter = await self._get_browser_adapter()
         return await adapter.get_page_source()
+
+    async def open_new_tab(self) -> "BrowserManager":
+        """Open a new browser tab and return a BrowserManager bound to it."""
+        adapter = await self._get_browser_adapter()
+        base_adapter = adapter.adapter if isinstance(adapter, RetryingBrowserAdapter) else adapter
+
+        if isinstance(base_adapter, SeleniumAdapter):
+            if not base_adapter.initialized or not base_adapter.driver:
+                raise RuntimeError("SeleniumAdapter is not initialized")
+
+            parent_handle = base_adapter.driver.current_window_handle
+            base_adapter.driver.execute_script("window.open('about:blank');")
+            new_handle = [h for h in base_adapter.driver.window_handles if h != parent_handle][-1]
+            base_adapter.driver.switch_to.window(new_handle)
+
+            tab_adapter = SeleniumAdapter(
+                headless=base_adapter.headless,
+                timeout=base_adapter.default_timeout,
+                session_config=None,
+                profile_name=base_adapter.profile_name,
+                chrome_user_data_dir=base_adapter.chrome_user_data_dir,
+            )
+            tab_adapter.driver = base_adapter.driver
+            tab_adapter.initialized = True
+            tab_adapter._owns_driver = False
+            tab_adapter._tab_window_handle = new_handle
+            tab_adapter._parent_window_handle = parent_handle
+            return self._create_tab_browser_manager(tab_adapter)
+
+        if isinstance(base_adapter, PlaywrightAdapter):
+            if not base_adapter.initialized or not base_adapter.context:
+                raise RuntimeError("PlaywrightAdapter is not initialized")
+
+            tab_page = await base_adapter.context.new_page()
+            tab_adapter = PlaywrightAdapter(
+                headless=base_adapter.headless,
+                timeout=base_adapter.default_timeout,
+                session_config=None,
+                profile_name=base_adapter.profile_name,
+                chrome_user_data_dir=base_adapter.chrome_user_data_dir,
+            )  # pyright: ignore[reportAbstractUsage]
+            tab_adapter.playwright = base_adapter.playwright
+            tab_adapter.browser = base_adapter.browser
+            tab_adapter.context = base_adapter.context
+            tab_adapter.page = tab_page
+            tab_adapter.initialized = True
+            tab_adapter._owns_browser_resources = False
+            return self._create_tab_browser_manager(tab_adapter)
+
+        raise RuntimeError(f"Unsupported adapter for new tab flow: {type(base_adapter).__name__}")
+
+    def _create_tab_browser_manager(self, tab_adapter: BaseBrowserAdapter) -> "BrowserManager":
+        """Create a BrowserManager instance bound to an already-open tab adapter."""
+        tab_manager = BrowserManager.__new__(BrowserManager)
+        tab_manager.config_provider = self.config_provider
+        tab_manager.web_manager = self.web_manager
+        tab_manager._browser_engine = self._browser_engine
+        tab_manager._browser_options = dict(self._browser_options)
+        tab_manager._active_profile = None
+        tab_manager._chrome_user_data_dir = None
+        tab_manager._selector_resolution_service = self._selector_resolution_service
+        tab_manager._selector_suggestion_service = self._selector_suggestion_service
+        tab_manager._browser_adapter = RetriableAdapterFactory.create_browser_adapter(
+            tab_adapter,
+            suggestion_service=self._selector_suggestion_service
+        )
+        tab_manager.all_selectors_failed_handler = None
+        return tab_manager
     
     @staticmethod
     def get_browser_manager_from_lamia(lamia_instance):

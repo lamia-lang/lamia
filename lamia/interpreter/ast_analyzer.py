@@ -1,10 +1,18 @@
 """AST analyzer for detecting used action namespaces in .hu files."""
 
 import ast
+import asyncio
 import logging
 from typing import Set, Dict, Any
+
 from lamia.types import BaseType
 import lamia.types as lamia_types
+from lamia.adapters.web.session_context import (
+    create_session_factory, SessionSkipException,
+    SessionLoginFailedError, validate_login_completion,
+    pre_validate_session,
+)
+from lamia.interpreter.command_types import CommandType
 
 logger = logging.getLogger(__name__)
 
@@ -183,11 +191,6 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
     execution_globals['InputType'] = InputType
     
     if 'session' in used_namespaces:
-        from lamia.adapters.web.session_context import create_session_factory, SessionSkipException
-        from lamia.interpreter.command_types import CommandType
-        import logging
-        import asyncio
-        
         # Get web_manager from lamia instance for session validation
         web_manager = None
         if lamia_instance:
@@ -201,6 +204,9 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
         session_factory = create_session_factory(web_manager)
         execution_globals['session'] = session_factory
         execution_globals['SessionSkipException'] = SessionSkipException
+        execution_globals['SessionLoginFailedError'] = SessionLoginFailedError
+        execution_globals['validate_login_completion'] = validate_login_completion
+        execution_globals['pre_validate_session'] = pre_validate_session
         execution_globals['logger'] = logging.getLogger(__name__)
         execution_globals['asyncio'] = asyncio  # Needed for asyncio.run() in session validation
         

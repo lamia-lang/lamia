@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class PlaywrightAdapter(BaseBrowserAdapter):
     """Playwright adapter for browser automation."""
     
-    def __init__(self, headless: bool = True, timeout: float = 10000.0, session_config: Optional[Dict[str, Any]] = None, profile_name: Optional[str] = None):
+    def __init__(self, headless: bool = True, timeout: float = 10000.0, session_config: Optional[Dict[str, Any]] = None, profile_name: Optional[str] = None, chrome_user_data_dir: Optional[str] = None):
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
@@ -43,11 +43,16 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         self.headless = headless
         self.default_timeout = timeout
         self.initialized = False
+        self.chrome_user_data_dir: Optional[str] = chrome_user_data_dir
         
         # Session persistence setup
         self.session_manager = SessionManager(session_config) if session_config else None
         self.profile_name = profile_name or "default"
         self.use_persistent_context = False
+        # By default this adapter owns browser/context/page lifecycle. For
+        # tab-scoped managers we can attach to an existing context+page and
+        # close only that page.
+        self._owns_browser_resources: bool = True
         
         if self.session_manager and self.session_manager.enabled:
             self.use_persistent_context = True
@@ -125,7 +130,17 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         try:
             self.playwright = await async_playwright().start()
             
-            if self.use_persistent_context and self.session_manager:
+            if self.chrome_user_data_dir:
+                # Use the real Chrome user-data-dir -- carries over all
+                # cookies, extensions, fingerprint etc.
+                self.context = await self.playwright.chromium.launch_persistent_context(
+                    user_data_dir=self.chrome_user_data_dir,
+                    headless=self.headless,
+                    args=['--no-sandbox', '--disable-dev-shm-usage']
+                )
+                self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
+                logger.info(f"PlaywrightAdapter: Using Chrome user-data-dir: {self.chrome_user_data_dir}")
+            elif self.use_persistent_context and self.session_manager:
                 # Use persistent context for session management
                 user_data_dir = self.session_manager.get_profile_session_dir(self.profile_name)
                 
@@ -164,22 +179,26 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             # Save session data before closing
             if self.session_manager and self.session_manager.enabled and not self.use_persistent_context:
                 await self._save_session_data()
-            
-            if self.page:
+
+            if self._owns_browser_resources:
+                if self.page:
+                    await self.page.close()
+                if self.context:
+                    await self.context.close()
+                if self.browser:
+                    await self.browser.close()
+                if self.playwright:
+                    await self.playwright.stop()
+            elif self.page:
                 await self.page.close()
-            if self.context:
-                await self.context.close()
-            if self.browser:
-                await self.browser.close()
-            if self.playwright:
-                await self.playwright.stop()
         except Exception as e:
             logger.warning(f"Warning during browser cleanup: {e}")
         finally:
             self.page = None
-            self.context = None
-            self.browser = None
-            self.playwright = None
+            if self._owns_browser_resources:
+                self.context = None
+                self.browser = None
+                self.playwright = None
             self.initialized = False
         logger.info("PlaywrightAdapter: Browser closed")
     
@@ -760,11 +779,10 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         """Get the current page HTML source."""
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
-        
+
         if self.page:
             return await self.page.content()
-        else:
-            return ""
+        return ""
         
     async def get_current_url(self) -> Optional[str]:
         """Get the current page URL."""
@@ -872,5 +890,5 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         except Exception as e:
             logger.error(f"JavaScript execution failed: {e}")
             raise
-    
+
 

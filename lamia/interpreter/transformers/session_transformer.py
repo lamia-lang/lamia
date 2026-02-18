@@ -46,27 +46,41 @@ class SessionWithTransformer(ast.NodeTransformer):
     
     def _transform_session_with(self, node):
         """Transform a with session() statement."""
+        # Extract probe_url from session() call if provided
+        probe_url = self._extract_probe_url(node)
+
         # Check if we have a return type for this session
-        validation_call = None
+        return_type = None
+        pre_validation_call = None
         if self.return_types:
             # Use the single return type (simplified - only one return type supported)
             return_type = next(iter(self.return_types.values()))
-            validation_call = self._create_web_validation_call(return_type)
-        
+            pre_validation_call = self._create_pre_validation_call(probe_url, return_type)
+
         # Create the modified with statement body
         modified_body = []
-        
+
         # Add validation call at the BEGINNING if return type is specified
         # This checks if we're already in the desired state and can skip the session
-        if validation_call:
-            modified_body.append(validation_call)
-        
-        # Add the original session body after validation
-        modified_body.extend(node.body)
-        
+        if pre_validation_call:
+            modified_body.append(pre_validation_call)
+
+        if return_type:
+            # Wrap user body in try-except so post-validation always runs even
+            # when an action fails (e.g. element not found because login form changed).
+            # The user can then complete login manually during the polling window.
+            wrapped_body = self._wrap_user_body_in_try_except(node.body)
+            modified_body.append(wrapped_body)
+
+            post_validation_call = self._create_post_validation_call(probe_url, return_type)
+            modified_body.append(post_validation_call)
+        else:
+            # No return type: keep original body as-is, no wrapping
+            modified_body.extend(node.body)
+
         # Create new with statement with modified body
         modified_with = self._create_modified_with_statement(node, modified_body)
-        
+
         # Wrap the with statement in try-catch
         return self._wrap_in_try_catch(modified_with, node)
     
@@ -116,109 +130,54 @@ class SessionWithTransformer(ast.NodeTransformer):
             col_offset=getattr(original_node, 'col_offset', 0)
         )
 
-    def _create_web_validation_call(self, return_type: str) -> ast.stmt:
-        """Create validation logic that raises SessionSkipException if page is already valid.
+    def _wrap_user_body_in_try_except(self, body: list) -> ast.Try:
+        """Wrap the user's session body statements in try-except.
 
-        RETURN TYPE HANDLING STRATEGY #3: Session Block Validation
-        ========================================================
-        
-        This method handles the special case of `with session(...) -> Type:` blocks.
-        Unlike functions or expressions, a session block doesn't itself produce content
-        to validate. The arrow means "validate current page state as Type and skip 
-        session if already valid". 
-        
-        We inject validation logic at the BEGINNING of the session block to check
-        if we're already in the desired state. If validation succeeds, we raise
-        SessionSkipException to skip the rest of the block.
-        If validation fails, execution continues with the session actions.
+        When a web action fails (e.g. element not found because the login form
+        changed, or because the user is already logged in and the page
+        redirected), the exception is caught and logged as a warning.  This
+        ensures that ``validate_login_completion`` (appended after the body)
+        always executes, giving the user a chance to complete login manually.
 
-        Generated code (checks typed_result which is None when validation fails):
-        try:
-            _lamia_session_probe_result = lamia.run(WebCommand(action=WebActionType.GET_PAGE_SOURCE), return_type=Type)
-            # Check if validation succeeded (typed_result is not None when validation passes)
-            if _lamia_session_probe_result.typed_result is not None:
-                raise SessionSkipException(f"Session validation passed - already in desired state")
-        except Exception as e:
-            # Validation failed or raised an exception - continue with session actions
-            if "SessionSkipException" not in str(type(e)):
-                pass  # Continue execution
-            else:
-                raise  # Re-raise SessionSkipException
+        Generated code::
+
+            try:
+                <user body statements>
+            except Exception as _lamia_session_body_error:
+                logger.warning(
+                    f"Session action failed: {_lamia_session_body_error}. "
+                    "Waiting for manual login completion..."
+                )
         """
-        # Build return_type AST
-        rt_node = self._build_return_type_ast(return_type)
-
-        # Build WebCommand(action=WebActionType.GET_TEXT, selector='body')
-        web_command_call = self._build_web_command_ast()
-
-        # Build lamia.run(WebCommand(...), return_type=rt_node)
-        lamia_run_call = self._build_lamia_run_ast(web_command_call, rt_node)
-
-        # Create try-except block for validation
-        try_block = ast.Try(
-            body=[
-                # Run validation probe and capture result
-                ast.Assign(
-                    targets=[ast.Name(id='_lamia_session_probe_result', ctx=ast.Store())],
-                    value=lamia_run_call,
-                    lineno=1,
-                    col_offset=0,
-                ),
-                # If validation succeeded (typed_result is not None), skip the session
-                ast.If(
-                    test=ast.Compare(
-                        left=ast.Attribute(
-                            value=ast.Name(id='_lamia_session_probe_result', ctx=ast.Load()),
-                            attr='typed_result',
-                            ctx=ast.Load(),
-                        ),
-                        ops=[ast.IsNot()],
-                        comparators=[ast.Constant(value=None)],
-                    ),
-                    body=[
-                        ast.Raise(
-                            exc=ast.Call(
-                                func=ast.Name(id='SessionSkipException', ctx=ast.Load()),
-                                args=[ast.Constant(value="Session validation passed - already in desired state")],
-                                keywords=[],
-                            ),
-                            lineno=1,
-                            col_offset=0,
-                        )
-                    ],
-                    orelse=[ast.Pass()],
-                    lineno=1,
-                    col_offset=0,
-                ),
-            ],
+        return ast.Try(
+            body=list(body),
             handlers=[
-                # Catch any errors during the probe and continue, but re-raise SessionSkipException
                 ast.ExceptHandler(
                     type=ast.Name(id='Exception', ctx=ast.Load()),
-                    name='e',
+                    name='_lamia_session_body_error',
                     body=[
-                        ast.If(
-                            test=ast.Compare(
-                                left=ast.Constant(value="SessionSkipException"),
-                                ops=[ast.In()],
-                                comparators=[
-                                    ast.Call(
-                                        func=ast.Name(id='str', ctx=ast.Load()),
-                                        args=[
-                                            ast.Call(
-                                                func=ast.Name(id='type', ctx=ast.Load()),
-                                                args=[ast.Name(id='e', ctx=ast.Load())],
-                                                keywords=[],
-                                            )
+                        ast.Expr(
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id='logger', ctx=ast.Load()),
+                                    attr='warning',
+                                    ctx=ast.Load(),
+                                ),
+                                args=[
+                                    ast.JoinedStr(
+                                        values=[
+                                            ast.Constant(value="Session action failed: "),
+                                            ast.FormattedValue(
+                                                value=ast.Name(id='_lamia_session_body_error', ctx=ast.Load()),
+                                                conversion=-1,
+                                                format_spec=None,
+                                            ),
+                                            ast.Constant(value=". Waiting for manual login completion..."),
                                         ],
-                                        keywords=[],
                                     )
                                 ],
-                            ),
-                            body=[ast.Raise()],
-                            orelse=[ast.Pass()],
-                            lineno=1,
-                            col_offset=0,
+                                keywords=[],
+                            )
                         )
                     ],
                     lineno=1,
@@ -231,7 +190,39 @@ class SessionWithTransformer(ast.NodeTransformer):
             col_offset=0,
         )
 
-        return try_block
+    def _create_pre_validation_call(self, probe_url: Optional[str], return_type: str) -> ast.Expr:
+        """Create a call to pre_validate_session() at the start of the session body.
+
+        This replaces the previous inline AST validation block.  The function
+        checks both URL match (are we already on probe_url?) and model
+        validation, raising SessionSkipException if either confirms we are
+        already in the desired state.
+
+        Generated code::
+
+            pre_validate_session(lamia, "https://...", HTML[Model])
+        """
+        rt_node = self._build_return_type_ast(return_type)
+
+        probe_url_node: ast.expr
+        if probe_url is not None:
+            probe_url_node = ast.Constant(value=probe_url)
+        else:
+            probe_url_node = ast.Constant(value=None)
+
+        return ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id='pre_validate_session', ctx=ast.Load()),
+                args=[
+                    ast.Name(id='lamia', ctx=ast.Load()),
+                    probe_url_node,
+                    rt_node,
+                ],
+                keywords=[],
+            ),
+            lineno=1,
+            col_offset=0,
+        )
     
     def _build_return_type_ast(self, return_type: str) -> ast.expr:
         """Build AST node for return type."""
@@ -246,31 +237,39 @@ class SessionWithTransformer(ast.NodeTransformer):
         else:
             return ast.Name(id=return_type, ctx=ast.Load())
     
-    def _build_web_command_ast(self) -> ast.Call:
-        """Build WebCommand AST for GET_PAGE_SOURCE action."""
-        return ast.Call(
-            func=ast.Name(id='WebCommand', ctx=ast.Load()),
-            args=[],
-            keywords=[
-                ast.keyword(
-                    arg='action',
-                    value=ast.Attribute(
-                        value=ast.Name(id='WebActionType', ctx=ast.Load()),
-                        attr='GET_PAGE_SOURCE',
-                        ctx=ast.Load()
-                    )
-                )
-            ]
-        )
-    
-    def _build_lamia_run_ast(self, web_command_call: ast.Call, return_type_node: ast.expr) -> ast.Call:
-        """Build lamia.run() AST call."""
-        return ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id='lamia', ctx=ast.Load()),
-                attr='run',
-                ctx=ast.Load()
+    def _extract_probe_url(self, node) -> Optional[str]:
+        """Extract probe_url from session() call's second positional argument."""
+        for item in node.items:
+            if self._is_session_context(item):
+                call = item.context_expr
+                if len(call.args) >= 2 and isinstance(call.args[1], ast.Constant):
+                    return call.args[1].value
+        return None
+
+    def _create_post_validation_call(self, probe_url: Optional[str], return_type: str) -> ast.Expr:
+        """Create a call to validate_login_completion() at the end of the session body.
+
+        Generated code:
+            validate_login_completion(lamia, "https://...", HTML[HomePageModel])
+        """
+        rt_node = self._build_return_type_ast(return_type)
+
+        probe_url_node: ast.expr
+        if probe_url is not None:
+            probe_url_node = ast.Constant(value=probe_url)
+        else:
+            probe_url_node = ast.Constant(value=None)
+
+        return ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id='validate_login_completion', ctx=ast.Load()),
+                args=[
+                    ast.Name(id='lamia', ctx=ast.Load()),
+                    probe_url_node,
+                    rt_node,
+                ],
+                keywords=[],
             ),
-            args=[web_command_call],
-            keywords=[ast.keyword(arg='return_type', value=return_type_node)]
+            lineno=1,
+            col_offset=0,
         )

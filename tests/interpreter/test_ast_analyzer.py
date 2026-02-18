@@ -463,6 +463,7 @@ class TestCreateExecutionGlobals:
         
         assert 'session' in globals_dict
         assert 'SessionSkipException' in globals_dict
+        assert 'pre_validate_session' in globals_dict
         assert 'logger' in globals_dict
         assert 'asyncio' in globals_dict
         assert 'InputType' in globals_dict
@@ -484,7 +485,7 @@ class TestCreateExecutionGlobals:
         mock_engine.manager_factory = mock_manager_factory
         mock_manager_factory.get_manager.return_value = mock_web_manager
         
-        with patch('lamia.adapters.web.session_context.create_session_factory') as mock_create_session:
+        with patch('lamia.interpreter.ast_analyzer.create_session_factory') as mock_create_session:
             with patch('lamia.interpreter.command_types.CommandType') as mock_cmd_type:
                 used_namespaces = {'session'}
                 used_types = set()
@@ -578,7 +579,7 @@ class TestCreateExecutionGlobalsEdgeCases:
         # Make _engine property raise exception when accessed
         type(mock_lamia)._engine = Mock(side_effect=AttributeError("No engine"))
         
-        with patch('lamia.adapters.web.session_context.create_session_factory') as mock_create_session:
+        with patch('lamia.interpreter.ast_analyzer.create_session_factory') as mock_create_session:
             with patch('logging.getLogger') as mock_get_logger:
                 used_namespaces = {'session'}
                 used_types = set()
@@ -690,7 +691,7 @@ class TestCreateExecutionGlobalsIntegration:
         expected_keys = {
             'web', 'http', 'session', 'HTML', 'JSON', 
             'WebCommand', 'LLMCommand', 'InputType',
-            'SessionSkipException', 'logger', 'asyncio'
+            'SessionSkipException', 'pre_validate_session', 'logger', 'asyncio'
         }
         
         assert expected_keys.issubset(set(globals_dict.keys()))
