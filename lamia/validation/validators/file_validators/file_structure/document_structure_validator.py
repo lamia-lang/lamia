@@ -48,10 +48,12 @@ class TextAroundPayloadError(BaseValidationError):
         super().__init__(message, hint=hint)
 
 class InvalidPayloadError(BaseValidationError):
-    def __init__(self, expected_file_format: str, text: str):
-        # Generate dynamic message and hint
-        message = f"Invalid {expected_file_format}: no valid {expected_file_format} payload is found in the text: {text}"
-        
+    def __init__(self, expected_file_format: str, text: str, parse_error: Optional[Exception] = None):
+        cause_detail = f" Cause: {parse_error}" if parse_error else ""
+        message = (
+            f"Invalid {expected_file_format}: no valid {expected_file_format} payload "
+            f"is found in the text: {text}{cause_detail}"
+        )
         hint = f"Please ensure the response is a valid {expected_file_format}."
         
         super().__init__(message, hint=hint)
@@ -191,10 +193,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
             # Let semantic validation errors (like DuplicateHeaderError) bubble up unchanged
             raise
         except Exception as e:
-            # Only wrap basic parsing errors
             raise InvalidPayloadError(
                 expected_file_format=self.file_type(),
                 text=payload,
+                parse_error=e,
             ) from e
 
     @classmethod

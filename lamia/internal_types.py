@@ -1,7 +1,7 @@
 """Internal types used by Lamia engine - not part of public API."""
 
 from typing import Optional, List, Set, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from enum import Enum
 
 
@@ -62,7 +62,16 @@ class BrowserActionParams(BaseModel):
     wait_condition: Optional[str] = None
     description: Optional[str] = None  # For AI-powered actions
     scope_element_handle: Optional[Any] = None  # Selenium WebElement or Playwright ElementHandle to scope within
-    
+
+    @model_validator(mode="after")
+    def _auto_detect_xpath(self) -> "BrowserActionParams":
+        """Auto-detect XPath selectors so callers don't need to specify selector_type."""
+        if self.selector and self.selector_type == SelectorType.CSS:
+            s = self.selector.strip()
+            if s.startswith('//') or s.startswith('(/') or (s.startswith('/') and not s.startswith('/*')):
+                self.selector_type = SelectorType.XPATH
+        return self
+
     class Config:
         use_enum_values = True
 

@@ -228,8 +228,8 @@ Return ONLY the JSON object, no explanation:"""
         
         # If we couldn't extract a valid tag, log a warning
         logger.warning(
-            f"Last selector '{last_selector}' is not generic and couldn't extract tag. "
-            "Consider improving LLM prompt."
+            f"Could not extract a generic HTML tag from selector '{last_selector}'. "
+            "Resolution may fail if more specific selectors don't match."
         )
         return selectors
     

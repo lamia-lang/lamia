@@ -250,7 +250,7 @@ class LLMAmbiguityResolver(ElementAmbiguityResolver):
             summary = await self.browser.execute_script(
                 f"""
                 const el = arguments[0];
-                const text = (el.innerText || '').trim());
+                const text = (el.innerText || '').trim();
                 
                 // Capture ALL attributes
                 const attrs = {{}};

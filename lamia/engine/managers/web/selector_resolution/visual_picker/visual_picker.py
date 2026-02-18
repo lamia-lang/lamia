@@ -142,46 +142,17 @@ class VisualElementPicker:
         """Get user instruction text based on method and strategy."""
         
         if strategy == 'plural':
-            return f"🔢 Click on the area containing multiple: '{description}'"
+            return f"Select area with: '{description}'"
         
-        # Singular method instructions
-        instructions = {
-            'click': f"👆 Click on the element you want to CLICK: '{description}'",
-            'type_text': f"⌨️ Click on the input field for typing: '{description}'", 
-            'get_element': f"🎯 Click on the element: '{description}'",
-            'hover': f"🖱️ Click on the element to hover over: '{description}'",
-            'wait_for': f"⏳ Click on the element to wait for: '{description}'",
-            'select_option': f"📋 Click on the dropdown/select element: '{description}'",
-            'upload_file': f"📁 Click on the file input element: '{description}'"
-        }
-        
-        return instructions.get(method_name, f"🎯 Select element for {method_name}: '{description}'")
+        return f"Select: '{description}'"
     
     def _get_element_filter(self, method_name: str) -> Optional[str]:
-        """Get JavaScript element filter function for method-specific highlighting."""
+        """Get JavaScript element filter function for method-specific highlighting.
         
+        Returns None for most methods to allow selecting any element.
+        Only restricts for very specific input types.
+        """
         filters = {
-            'click': '''
-                function(el) {
-                    return el.tagName === 'BUTTON' || 
-                           el.tagName === 'A' || 
-                           el.getAttribute('role') === 'button' ||
-                           el.onclick !== null ||
-                           el.tagName === 'INPUT' && el.type === 'submit';
-                }
-            ''',
-            'type_text': '''
-                function(el) {
-                    return (el.tagName === 'INPUT' && ['text', 'email', 'password', 'search'].includes(el.type)) ||
-                           el.tagName === 'TEXTAREA' ||
-                           el.contentEditable === 'true';
-                }
-            ''',
-            'select_option': '''
-                function(el) {
-                    return el.tagName === 'SELECT';
-                }
-            ''',
             'upload_file': '''
                 function(el) {
                     return el.tagName === 'INPUT' && el.type === 'file';

@@ -109,18 +109,9 @@ class LamiaElementHighlighter {
             max-width: 80%;
             text-align: center;
         `;
-        // Determine if this is a template selection (looking for "ONE example")
-        const isTemplateSelection = instruction.includes('ONE example');
-        
         this.instructionElement.innerHTML = `
-            <div style="margin-bottom: 8px; font-weight: bold; color: #4CAF50;">${instruction}</div>
-            ${isTemplateSelection ? 
-                `<div style="font-size: 14px; margin-bottom: 4px; color: #FFC107;">💡 Click on ONE individual element as an example</div>
-                <div style="font-size: 13px; margin-bottom: 4px; color: #2196F3;">🎯 I'll find other similar elements automatically</div>` :
-                `<div style="font-size: 14px; margin-bottom: 4px; color: #FFC107;">💡 For multiple elements: Click on the container/area that contains ALL the elements you want</div>
-                <div style="font-size: 13px; margin-bottom: 4px; color: #2196F3;">🎯 Look for a form section or div that wraps question-answer pairs</div>`
-            }
-            <div style="font-size: 12px; opacity: 0.8;">⏱️ You have 3 minutes to select • Press ESC to cancel</div>
+            <div style="font-weight: bold; color: #4CAF50; font-size: 17px;">${instruction}</div>
+            <div style="font-size: 12px; opacity: 0.6; margin-top: 6px;">ESC to cancel</div>
         `;
         
         document.body.appendChild(this.overlayElement);
@@ -193,27 +184,17 @@ class LamiaElementHighlighter {
         event.preventDefault();
         event.stopPropagation();
         
-        const clickTarget = document.elementFromPoint(event.clientX, event.clientY);
-        console.log('Visual Picker: Click detected at', event.clientX, event.clientY,
-                     'target:', clickTarget ? clickTarget.tagName + (clickTarget.className ? '.' + clickTarget.className : '') : 'null');
-        
         const element = this.highlightedElement;
         if (!element) {
-            console.log('Visual Picker: No highlighted element - click not registered.',
-                        'Filter active:', !!this.elementFilter,
-                        'Click target was:', clickTarget ? clickTarget.tagName : 'null');
+            this.showRejectedClickFeedback(event.clientX, event.clientY);
             return;
         }
         
-        console.log('Visual Picker: Element clicked', element.tagName, element.className);
-        
-        // Get element information
         const elementInfo = this.getElementInfo(element);
-        console.log('Visual Picker: Element info collected', elementInfo);
+        console.log('Visual Picker: Selected', element.tagName, element.className);
         
         this.showSelectionFeedback(element);
         
-        // Give user visual feedback before stopping
         setTimeout(() => {
             this.stopPicker();
             
@@ -221,12 +202,8 @@ class LamiaElementHighlighter {
                 this.onElementSelected(elementInfo);
             }
             
-            // Also send to Python via global callback
             if (window.lamiaElementSelected) {
-                console.log('Visual Picker: Calling lamiaElementSelected callback');
                 window.lamiaElementSelected(elementInfo);
-            } else {
-                console.log('Visual Picker: WARNING - lamiaElementSelected callback not found');
             }
         }, 500);
     }
@@ -255,6 +232,32 @@ class LamiaElementHighlighter {
         document.body.appendChild(feedback);
         
         setTimeout(() => feedback.remove(), 2000);
+    }
+    
+    /**
+     * Show brief feedback when user clicks but no element is highlighted
+     */
+    showRejectedClickFeedback(x, y) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: ${Math.max(y - 30, 10)}px;
+            left: ${x}px;
+            transform: translateX(-50%);
+            background: rgba(255, 80, 80, 0.9);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 13px;
+            z-index: 1000002;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        `;
+        toast.textContent = 'Hover over an element first';
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; }, 800);
+        setTimeout(() => toast.remove(), 1200);
     }
     
     /**
@@ -349,8 +352,7 @@ class LamiaElementHighlighter {
             let selector = current.tagName.toLowerCase();
             
             if (current.id) {
-                selector = `*[@id="${current.id}"]`;
-                path = `/${selector}${path}`;
+                path = `//*[@id="${current.id}"]${path}`;
                 break;
             } else {
                 let sibling = current;

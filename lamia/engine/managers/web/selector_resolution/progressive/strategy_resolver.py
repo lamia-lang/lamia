@@ -4,7 +4,7 @@ import logging
 from typing import List, Any, Optional, Tuple
 from dataclasses import dataclass
 
-from lamia.adapters.web.browser.base import BrowserActionParams
+from lamia.internal_types import BrowserActionParams
 from lamia.engine.config_provider import ConfigProvider
 from lamia.engine.managers.llm.llm_manager import LLMManager
 from .progressive_selector_strategy import (
@@ -163,15 +163,7 @@ class ProgressiveSelectorResolver:
         raise ValueError(f"Could not resolve '{description}' after {max_retries} attempts")
     
     async def _find_elements(self, selector: str) -> List[Any]:
-        """
-        Find elements using selector.
-        
-        Args:
-            selector: CSS or XPath selector
-            
-        Returns:
-            List of element handles
-        """
+        """Find elements using selector."""
         try:
             params = BrowserActionParams(selector=selector)
             elements = await self.browser.get_elements(params)

@@ -1,7 +1,7 @@
 import json
 import re
 from collections import OrderedDict
-from typing import Optional, Type
+from typing import Optional, Type, Any
 
 from pydantic import BaseModel, create_model
 
@@ -76,13 +76,11 @@ class JSONStructureValidator(DocumentStructureValidator):
         match = re.search(r'({[\s\S]*})|\[[\s\S]*\]', response)
         return match.group(0) if match else None
 
-    def load_payload(self, payload: str) -> any:
-        # Detect and disallow duplicate keys to prevent silent data loss
-        def _reject_duplicates(pairs):
-            obj = OrderedDict()
+    def load_payload(self, payload: str) -> Any:
+        def _reject_duplicates(pairs: list) -> OrderedDict:
+            obj: OrderedDict = OrderedDict()
             for k, v in pairs:
                 if k in obj:
-                    # Raise descriptive error which will be caught by the validator framework
                     raise DuplicateKeyError(k, filetype="JSON object")
                 obj[k] = v
             return obj

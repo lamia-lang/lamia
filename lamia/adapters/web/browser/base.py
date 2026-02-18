@@ -187,6 +187,6 @@ class BaseBrowserAdapter(ABC):
         pass
 
     @abstractmethod
-    async def execute_script(self, script: str) -> Any:
-        """Execute a JavaScript script. Returns the result of the script execution."""
+    async def execute_script(self, script: str, *args: Any) -> Any:
+        """Execute a JavaScript script. Extra args are accessible as arguments[0], arguments[1], etc."""
         pass
