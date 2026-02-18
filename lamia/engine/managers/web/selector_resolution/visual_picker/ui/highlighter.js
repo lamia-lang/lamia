@@ -37,7 +37,17 @@ class LamiaElementHighlighter {
             onSelected = null
         } = options;
         
-        this.elementFilter = elementFilter;
+        // elementFilter may arrive as a string from Python JSON serialization
+        if (typeof elementFilter === 'string') {
+            try {
+                this.elementFilter = new Function('return ' + elementFilter)();
+            } catch (e) {
+                console.warn('Visual Picker: Could not parse elementFilter, ignoring:', e);
+                this.elementFilter = null;
+            }
+        } else {
+            this.elementFilter = elementFilter;
+        }
         this.onElementSelected = onSelected;
         
         this.createOverlay(instruction);
@@ -162,9 +172,15 @@ class LamiaElementHighlighter {
         }
         
         // Check if element passes filter
-        if (this.elementFilter && !this.elementFilter(element)) {
-            this.clearHighlight();
-            return;
+        if (this.elementFilter) {
+            try {
+                if (!this.elementFilter(element)) {
+                    this.clearHighlight();
+                    return;
+                }
+            } catch (e) {
+                console.warn('Visual Picker: Element filter error, allowing element:', e);
+            }
         }
         
         this.highlightElement(element);
@@ -177,13 +193,19 @@ class LamiaElementHighlighter {
         event.preventDefault();
         event.stopPropagation();
         
+        const clickTarget = document.elementFromPoint(event.clientX, event.clientY);
+        console.log('Visual Picker: Click detected at', event.clientX, event.clientY,
+                     'target:', clickTarget ? clickTarget.tagName + (clickTarget.className ? '.' + clickTarget.className : '') : 'null');
+        
         const element = this.highlightedElement;
         if (!element) {
-            console.log('Visual Picker: No highlighted element found');
+            console.log('Visual Picker: No highlighted element - click not registered.',
+                        'Filter active:', !!this.elementFilter,
+                        'Click target was:', clickTarget ? clickTarget.tagName : 'null');
             return;
         }
         
-        console.log('Visual Picker: Element clicked', element);
+        console.log('Visual Picker: Element clicked', element.tagName, element.className);
         
         // Get element information
         const elementInfo = this.getElementInfo(element);

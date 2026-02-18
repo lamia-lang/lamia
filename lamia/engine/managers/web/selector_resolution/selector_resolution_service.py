@@ -111,7 +111,7 @@ class SelectorResolutionService:
 
             # For natural language selectors, use visual picker as primary method
             if selector_type == SelectorType.NATURAL_LANGUAGE:
-                logger.info(f"🎯 Natural language selector detected: '{original_selector}', operation_type: '{operation_type}'")
+                logger.info(f"Natural language selector detected: '{original_selector}', operation_type: '{operation_type}'")
                 
                 try:
                     logger.info("Using progressive selector resolution (fallback method)")

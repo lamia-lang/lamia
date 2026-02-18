@@ -343,7 +343,10 @@ class BrowserManager:
         if action.action == BrowserActionType.NAVIGATE:
             return await adapter.navigate(action.params)
         elif action.action == BrowserActionType.CLICK:
-            return await adapter.click(action.params)
+            logger.info(f"Click: selector='{action.params.selector}'")
+            result = await adapter.click(action.params)
+            logger.info(f"Click completed: selector='{action.params.selector}'")
+            return result
         elif action.action == BrowserActionType.TYPE:
             return await adapter.type_text(action.params)
         elif action.action == BrowserActionType.WAIT:

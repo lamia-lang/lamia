@@ -5,7 +5,7 @@ import re
 from enum import Enum
 from typing import List, Optional, Tuple, Set
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
 from lamia.interpreter.commands import LLMCommand
@@ -56,6 +56,27 @@ class ProgressiveSelectorStrategyIntent(BaseModel):
     element_count: ElementCount
     relationship: Relationship
     strictness: Strictness
+
+    @field_validator("element_count", mode="before")
+    @classmethod
+    def _coerce_element_count(cls, v: str) -> str:
+        if not v or not v.strip():
+            return ElementCount.SINGLE.value
+        return v.strip().lower()
+
+    @field_validator("relationship", mode="before")
+    @classmethod
+    def _coerce_relationship(cls, v: str) -> str:
+        if not v or not v.strip():
+            return Relationship.NONE.value
+        return v.strip().lower()
+
+    @field_validator("strictness", mode="before")
+    @classmethod
+    def _coerce_strictness(cls, v: str) -> str:
+        if not v or not v.strip():
+            return Strictness.RELAXED.value
+        return v.strip().lower()
 
 class ProgressiveSelectorStrategyModel(BaseModel):
     intent: ProgressiveSelectorStrategyIntent

@@ -239,10 +239,12 @@ class BrowserOverlay:
         
         # Optional: Add periodic audio reminder beeps
         beep_counter = 0
+        poll_count = 0
         
         while not self._selection_event.is_set():
             try:
                 result = await self.browser.execute_script(poll_js)
+                poll_count += 1
                 
                 if result.get('cancelled'):
                     logger.info("Element selection was cancelled by user")
@@ -251,12 +253,16 @@ class BrowserOverlay:
                 
                 selection_result = result.get('result')
                 if selection_result:
-                    logger.debug("Selection result received from JavaScript")
+                    logger.info(f"Selection received: {selection_result.get('tagName', '?')} "
+                                f"(id={selection_result.get('id', '')}, "
+                                f"class={selection_result.get('className', '')[:60]})")
                     self._selection_result = selection_result
                     self._selection_event.set()
                     break
                 
-                # Poll every 5 seconds to dramatically reduce log spam while keeping responsive UI
+                if poll_count % 6 == 0:
+                    logger.info(f"Visual picker still waiting for selection... ({poll_count * 5}s elapsed)")
+
                 await asyncio.sleep(5.0)
                 
                 # Optional periodic beep every 30 seconds (6 x 5 second cycles)

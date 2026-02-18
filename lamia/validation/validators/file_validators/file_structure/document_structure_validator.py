@@ -152,10 +152,17 @@ class DocumentStructureValidator(BaseValidator, ABC):
             for arg in args:
                 self._validate_no_raw_ordered_dict_patterns(arg, context)
 
+    @staticmethod
+    def _strip_markdown_fences(text: str) -> str:
+        """Strip markdown code fences (```lang ... ```) that LLMs commonly wrap around responses."""
+        fence_re = re.compile(r'^```\w*\s*\n?([\s\S]*?)\n?\s*```\s*$')
+        m = fence_re.match(text)
+        return m.group(1).strip() if m else text
+
     def parse(self, response: str) -> Any:
-        stripped = response.strip()
+        stripped = self._strip_markdown_fences(response.strip())
         if self.strict:
-            payload = response
+            payload = stripped
 
             if self.generate_hints:
                 payload = self.extract_payload(stripped)
