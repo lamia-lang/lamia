@@ -86,5 +86,8 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
     async def save_session_state(self) -> None:
         await self.retry_handler.execute(self.adapter.save_session_state)
 
+    async def get_elements(self, params: BrowserActionParams) -> List[Any]:
+        return await self.retry_handler.execute(self.adapter.get_elements, params)
+
     async def execute_script(self, script: str) -> Any:
         return await self.retry_handler.execute(self.adapter.execute_script, script)

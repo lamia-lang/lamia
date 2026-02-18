@@ -182,6 +182,11 @@ class BaseBrowserAdapter(ABC):
         pass
     
     @abstractmethod
+    async def get_elements(self, params: BrowserActionParams) -> List[Any]:
+        """Get multiple elements matching a selector."""
+        pass
+
+    @abstractmethod
     async def execute_script(self, script: str) -> Any:
         """Execute a JavaScript script. Returns the result of the script execution."""
         pass

@@ -1,7 +1,7 @@
 """Core visual element picker orchestrator."""
 
 import logging
-import json
+import re
 import asyncio
 from typing import Dict, List, Any, Optional, Tuple
 from .overlay import BrowserOverlay
@@ -216,24 +216,35 @@ class VisualElementPicker:
     async def _generate_scoped_selectors(self, description: str, selection_result: Dict[str, Any]) -> str:
         """Generate CSS/XPath selectors scoped to the user's selection."""
         
-        # Check if this is a template-based selection (from our improved plural strategy)
+        # Template-based selections already have a working selector
         if selection_result.get('selection_type') == 'template':
             logger.info("Using template-based selector (no LLM needed)")
-            # Template-based selections already found the working selector
             found_elements = selection_result.get('found_elements', [])
             if found_elements:
-                # The plural strategy already tested and found a working selector
-                # We'll extract it from the found elements
                 return await self._extract_selector_from_template_result(selection_result)
         
         selected_element = selection_result.get('selected_element', {})
-        container_xpath = selected_element.get('xpath', '')
+
+        # For single-element selections, use the element's own xpath/css directly
+        if selection_result.get('selection_type') == 'single':
+            xpath = selected_element.get('xpath', '')
+            css = selected_element.get('cssSelector', '')
+            if xpath:
+                logger.info(f"Using selected element XPath directly: {xpath}")
+                return xpath
+            if css:
+                logger.info(f"Using selected element CSS selector directly: {css}")
+                return css
+
+        # For container/plural selections, ask LLM for a generic selector
+        return await self._generate_generic_selector_via_llm(selected_element)
+
+    async def _generate_generic_selector_via_llm(self, selected_element: Dict[str, Any]) -> str:
+        """Ask the LLM to produce a generic XPath for container/plural selections."""
         container_html = selected_element.get('outerHTML', '')
-        
-        # Limit HTML size for LLM prompt
         if len(container_html) > 2000:
             container_html = container_html[:2000] + "..."
-        
+
         prompt = f"""Analyze this selected element and generate a GENERIC XPath that will match ALL SIMILAR elements on the page:
 
 SELECTED ELEMENT:
@@ -241,51 +252,55 @@ SELECTED ELEMENT:
 
 TASK: Create ONE generic XPath selector that will find ALL elements similar to the selected one.
 
-ANALYSIS REQUIREMENTS:
-1. Look at the structure, classes, and attributes of the selected element
-2. Identify the most distinctive patterns that would match similar elements
-3. Generate a generic XPath that matches the structure pattern, not specific values
-4. The XPath should find ALL instances of this type of element on any similar page
-
 RULES:
-- Return ONLY ONE generic XPath selector (the best one)
-- Use structural patterns (tag names, class patterns, attribute patterns)  
+- Return ONLY the XPath string on a single line, nothing else
+- Use structural patterns (tag names, class patterns, attribute patterns)
 - Avoid specific text content or unique IDs
 - Focus on repeatable structural characteristics
-- The selector should work for similar forms across different pages
 
-EXAMPLE:
-If selected element is a form field with class "input-group", generate:
-//div[contains(@class,'input-group')]
+EXAMPLE INPUT: <div class="input-group"><label>Name</label><input type="text"></div>
+EXAMPLE OUTPUT: //div[contains(@class,'input-group')]
 
-Return only the XPath string (no JSON array, no quotes):
-//your-xpath-here"""
-        
+Your XPath:"""
+
         from lamia.interpreter.commands import LLMCommand
         llm_command = LLMCommand(prompt=prompt)
         result = await self.llm_manager.execute(llm_command)
-        
-        # The LLM should return a single XPath string, not JSON
-        xpath_selector = result.validated_text.strip()
-        
-        # Clean up any extraneous characters
-        if xpath_selector.startswith('"') and xpath_selector.endswith('"'):
-            xpath_selector = xpath_selector[1:-1]
-        if xpath_selector.startswith("'") and xpath_selector.endswith("'"):
-            xpath_selector = xpath_selector[1:-1]
-            
-        # Ensure selector is properly formatted as XPath
-        if xpath_selector and not xpath_selector.startswith('//') and not xpath_selector.startswith('/'):
-            xpath_selector = f"//{xpath_selector}"
-        
+
+        xpath_selector = self._extract_xpath_from_llm_response(result.validated_text)
+
         if xpath_selector:
             logger.info(f"Generated generic XPath selector: {xpath_selector}")
             return xpath_selector
-        else:
-            logger.warning("Failed to parse LLM XPath response, using fallback")
-        
-        # Fallback: create generic XPath for form elements with both label and input
+
+        logger.warning("Failed to extract XPath from LLM response, using fallback")
         return "//div[(.//label or .//span[contains(@class,'label')]) and (.//input or .//textarea)]"
+
+    @staticmethod
+    def _extract_xpath_from_llm_response(text: str) -> Optional[str]:
+        """Extract the first valid XPath expression from a possibly verbose LLM response."""
+        text = text.strip()
+
+        # If the entire response is a clean xpath, use it directly
+        if re.match(r'^//[a-zA-Z]', text) and '\n' not in text and len(text) < 200:
+            return text
+
+        # Look for xpath patterns in the response (// followed by tag and optional predicates)
+        xpath_pattern = re.compile(r'(//[a-zA-Z][\w*]*(?:\[.+?\])*(?:/[a-zA-Z][\w*]*(?:\[.+?\])*)*)')
+        matches = xpath_pattern.findall(text)
+        if matches:
+            # Return the first match that looks reasonable
+            for match in matches:
+                if len(match) < 300:
+                    return match
+
+        # Try CSS-style selectors as fallback
+        css_pattern = re.compile(r'([a-zA-Z][\w-]*(?:\.[a-zA-Z][\w-]*)+)')
+        css_matches = css_pattern.findall(text)
+        if css_matches:
+            return css_matches[0]
+
+        return None
     
     async def _find_elements_with_selector(self, selector: str) -> List[Any]:
         """Find elements using the resolved selector."""
