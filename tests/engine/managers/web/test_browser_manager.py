@@ -536,3 +536,113 @@ class TestBrowserManagerIntegration:
                 assert mock_execute.call_count == 5
                 # 4 commands have selectors, so resolve should be called 4 times
                 assert mock_resolve.call_count == 4
+
+
+class TestBrowserManagerStaleCacheInvalidation:
+    """Test that stale cached selectors are invalidated and re-resolved."""
+
+    def setup_method(self):
+        config_dict = {"web_config": {"browser_engine": "selenium"}}
+        self.config_provider = ConfigProvider(config_dict)
+        self.manager = BrowserManager(self.config_provider)
+
+    @pytest.mark.asyncio
+    async def test_stale_cached_selector_is_invalidated_and_retried(self):
+        """When a cached resolved selector fails, it should be invalidated and re-resolved."""
+        from lamia.errors import ExternalOperationPermanentError
+
+        command = WebCommand(action=WebActionType.GET_TEXT, selector="question")
+
+        stale_action = BrowserAction(
+            action=BrowserActionType.GET_TEXT,
+            params=BrowserActionParams(selector='//*[@id="ember479"]/label[1]'),
+        )
+        fresh_action = BrowserAction(
+            action=BrowserActionType.GET_TEXT,
+            params=BrowserActionParams(selector='//*[@id="ember999"]/label[1]'),
+        )
+
+        resolve_call_count = 0
+
+        async def mock_resolve(action):
+            nonlocal resolve_call_count
+            resolve_call_count += 1
+            if resolve_call_count == 1:
+                return stale_action
+            return fresh_action
+
+        execute_call_count = 0
+
+        async def mock_execute(action, original_action_type=None):
+            nonlocal execute_call_count
+            execute_call_count += 1
+            if execute_call_count == 1:
+                raise ExternalOperationPermanentError("element not found on page")
+            return "Question text"
+
+        mock_resolution_service = AsyncMock()
+        self.manager._selector_resolution_service = mock_resolution_service
+
+        with patch.object(self.manager, '_resolve_selectors', side_effect=mock_resolve):
+            with patch.object(self.manager, '_execute_browser_action', side_effect=mock_execute):
+                with patch('lamia.engine.managers.web.browser_manager.get_scope_manager') as mock_scope:
+                    mock_scope.return_value = Mock(current_url='https://linkedin.com/jobs')
+                    result = await self.manager.execute(command)
+
+        assert result == "Question text"
+        assert resolve_call_count == 2
+        assert execute_call_count == 2
+        mock_resolution_service.invalidate_cached_selector.assert_called_once_with(
+            "question", "https://linkedin.com/jobs",
+        )
+
+    @pytest.mark.asyncio
+    async def test_non_resolved_selector_failure_propagates(self):
+        """When a non-resolved (original) selector fails, error should propagate without retry."""
+        from lamia.errors import ExternalOperationPermanentError
+
+        command = WebCommand(action=WebActionType.CLICK, selector="#submit-btn")
+
+        with patch.object(self.manager, '_resolve_selectors', side_effect=lambda a: a):
+            with patch.object(self.manager, '_execute_browser_action') as mock_execute:
+                mock_execute.side_effect = ExternalOperationPermanentError("not found")
+                with pytest.raises(ExternalOperationPermanentError):
+                    await self.manager.execute(command)
+
+    @pytest.mark.asyncio
+    async def test_stale_cache_retry_also_fails_propagates_error(self):
+        """When re-resolution also fails, the second error should propagate."""
+        from lamia.errors import ExternalOperationPermanentError
+
+        command = WebCommand(action=WebActionType.CLICK, selector="submit button")
+
+        stale_action = BrowserAction(
+            action=BrowserActionType.CLICK,
+            params=BrowserActionParams(selector='button#old-submit'),
+        )
+        fresh_action = BrowserAction(
+            action=BrowserActionType.CLICK,
+            params=BrowserActionParams(selector='button#new-submit'),
+        )
+
+        resolve_call_count = 0
+
+        async def mock_resolve(action):
+            nonlocal resolve_call_count
+            resolve_call_count += 1
+            if resolve_call_count == 1:
+                return stale_action
+            return fresh_action
+
+        async def mock_execute(action, original_action_type=None):
+            raise ExternalOperationPermanentError("element not found on page")
+
+        mock_resolution_service = AsyncMock()
+        self.manager._selector_resolution_service = mock_resolution_service
+
+        with patch.object(self.manager, '_resolve_selectors', side_effect=mock_resolve):
+            with patch.object(self.manager, '_execute_browser_action', side_effect=mock_execute):
+                with patch('lamia.engine.managers.web.browser_manager.get_scope_manager') as mock_scope:
+                    mock_scope.return_value = Mock(current_url='https://example.com')
+                    with pytest.raises(ExternalOperationPermanentError):
+                        await self.manager.execute(command)

@@ -256,6 +256,8 @@ class SelectorResolutionService:
             page_url: URL of the page where selector failed
         """
         await self.cache.invalidate(original_selector, page_url)
+        for selector in list(self.multi_cache._cache.get(original_selector, {}).get('selectors', {}).keys()):
+            await self.multi_cache.remove_failed_selector(original_selector, selector, page_url)
     
     def get_cache_size(self) -> int:
         """Get number of cached selector resolutions.
