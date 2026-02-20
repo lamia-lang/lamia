@@ -422,7 +422,7 @@ class TestBrowserManagerEdgeCases:
         browser_action = self.manager._web_command_to_browser_action(command)
         
         assert browser_action.params.selector == "button"
-        # Element handle would be used during execution
+        assert browser_action.params.scope_element_handle is mock_element_handle
     
     def test_has_selector_with_whitespace_selector(self):
         """Test selector detection with whitespace-only selector."""

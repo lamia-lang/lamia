@@ -4,6 +4,32 @@ from enum import Enum
 from lxml import etree
 from cssselect import parse
 
+HTML_TAG_NAMES = frozenset({
+    "a", "abbr", "address", "area", "article", "aside", "audio",
+    "b", "base", "bdi", "bdo", "blockquote", "body", "br", "button",
+    "canvas", "caption", "cite", "code", "col", "colgroup",
+    "data", "datalist", "dd", "del", "details", "dfn", "dialog", "div", "dl", "dt",
+    "em", "embed",
+    "fieldset", "figcaption", "figure", "footer", "form",
+    "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html",
+    "i", "iframe", "img", "input", "ins",
+    "kbd",
+    "label", "legend", "li", "link",
+    "main", "map", "mark", "menu", "meta", "meter",
+    "nav", "noscript",
+    "object", "ol", "optgroup", "option", "output",
+    "p", "param", "picture", "pre", "progress",
+    "q",
+    "rp", "rt", "ruby",
+    "s", "samp", "script", "search", "section", "select", "slot", "small",
+    "source", "span", "strong", "style", "sub", "summary", "sup", "svg",
+    "table", "tbody", "td", "template", "textarea", "tfoot", "th", "thead",
+    "time", "title", "tr", "track",
+    "u", "ul",
+    "var", "video",
+    "wbr",
+})
+
 
 class SelectorType(Enum):
     """Types of selectors that can be parsed."""
@@ -68,8 +94,12 @@ class SelectorParser:
         """Check if selector has CSS-like structure."""
         css_chars = {'.', '#', '[', ']', ':', '>', '+', '~', '*'}
         has_css_chars = any(char in selector for char in css_chars)
+        if has_css_chars:
+            return True
         is_simple_identifier = selector.replace('-', '').replace('_', '').isalnum() and ' ' not in selector
-        return has_css_chars or is_simple_identifier
+        if is_simple_identifier:
+            return selector.lower() in HTML_TAG_NAMES
+        return False
     
     def _is_valid_xpath(self, selector: str) -> bool:
         """Validate XPath syntax using lxml parser."""

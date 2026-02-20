@@ -129,14 +129,14 @@ class BrowserManager:
         if not browser_action_type:
             raise ValueError(f"Unsupported web action: {command.action}")
         
-        # Create BrowserActionParams - get value from command.url for navigation, command.value for input
         if browser_action_type == BrowserActionType.NAVIGATE:
             params = BrowserActionParams(value=command.url)
         else:
             params = BrowserActionParams(
                 selector=command.selector,
                 fallback_selectors=command.fallback_selectors,
-                value=command.value
+                value=command.value,
+                scope_element_handle=command.scope_element_handle,
             )
         
         return BrowserAction(
@@ -205,10 +205,10 @@ class BrowserManager:
                 parent_context=parent_context
             )
             
-            # Create new action with resolved selector
             new_params = BrowserActionParams(
                 selector=resolved_selector,
-                value=action.params.value
+                value=action.params.value,
+                scope_element_handle=action.params.scope_element_handle,
             )
             
             return BrowserAction(
@@ -268,13 +268,12 @@ class BrowserManager:
         
         for i, selector in enumerate(selectors):
             try:
-                # Create params with single selector
                 single_params = BrowserActionParams(
                     selector=selector,
                     value=params.value,
                     timeout=params.timeout,
-                    # ... copy other params
-                    fallback_selectors=None  # Don't pass fallbacks down
+                    scope_element_handle=params.scope_element_handle,
+                    fallback_selectors=None,
                 )
                 
                 # Execute with this selector

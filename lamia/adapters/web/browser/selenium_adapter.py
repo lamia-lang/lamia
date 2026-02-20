@@ -99,18 +99,20 @@ class SeleniumAdapter(BaseBrowserAdapter):
         """Raise permanent or transient error based on DOM stability."""
         if self._is_dom_stable_sync():
             logger.info(
-                "SeleniumAdapter: Raising permanent error on selector not found because DOM is stable (%s)", self._last_dom_reason
+                "SeleniumAdapter: Element not found and page is fully loaded (%s) — selector does not match any element",
+                self._last_dom_reason,
             )
             raise ExternalOperationPermanentError(
-                f"{message} (DOM stable)",
+                f"{message} — element not found on page (page fully loaded)",
                 retry_history=[],
                 original_error=original_error
             )
         logger.info(
-            "SeleniumAdapter: Raising transient error when trying to find selector because DOM is unstable (%s)", self._last_dom_reason
+            "SeleniumAdapter: Element not found but page is still loading (%s) — will retry",
+            self._last_dom_reason,
         )
         raise ExternalOperationTransientError(
-            f"{message} (DOM still changing)",
+            f"{message} — element not found yet (page still loading)",
             retry_history=[],
             original_error=original_error
         )

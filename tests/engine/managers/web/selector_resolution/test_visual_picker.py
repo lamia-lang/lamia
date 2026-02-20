@@ -1058,13 +1058,9 @@ class TestVisualPickerIntegration:
                 "selection_type": "single"
             }
 
-            mock_llm_result = Mock()
-            mock_llm_result.validated_text = "//button[@id='submit']"
-            mock_llm_manager.execute = AsyncMock(return_value=mock_llm_result)
-
             mock_browser_adapter.get_elements = AsyncMock(return_value=[Mock()])
 
-            # First call - cache miss
+            # First call - cache miss; single selections use element xpath directly
             selector1, elements1 = await picker.pick_element_for_method(
                 method_name="click",
                 description="submit button",
@@ -1072,7 +1068,7 @@ class TestVisualPickerIntegration:
             )
 
             assert mock_pick.call_count == 1
-            assert selector1 == "//button[@id='submit']"
+            assert selector1 == "//button"
 
             # Second call - cache hit (real cache workflow)
             mock_pick.reset_mock()

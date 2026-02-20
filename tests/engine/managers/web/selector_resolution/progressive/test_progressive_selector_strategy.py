@@ -290,3 +290,41 @@ class TestGenericTagValidation:
             result = strategy._ensure_generic_tag_suffix(selectors)
             assert result == selectors
 
+
+class TestEnumCoercion:
+    """Test that empty/blank enum values are coerced to sensible defaults."""
+
+    def test_empty_strictness_defaults_to_relaxed(self):
+        intent = ProgressiveSelectorStrategyIntent(
+            element_count="multiple", relationship="siblings", strictness=""
+        )
+        assert intent.strictness == Strictness.RELAXED
+
+    def test_empty_relationship_defaults_to_none(self):
+        intent = ProgressiveSelectorStrategyIntent(
+            element_count="single", relationship="", strictness="strict"
+        )
+        assert intent.relationship == Relationship.NONE
+
+    def test_empty_element_count_defaults_to_single(self):
+        intent = ProgressiveSelectorStrategyIntent(
+            element_count="", relationship="grouped", strictness="relaxed"
+        )
+        assert intent.element_count == ElementCount.SINGLE
+
+    def test_whitespace_only_treated_as_empty(self):
+        intent = ProgressiveSelectorStrategyIntent(
+            element_count="  ", relationship="  ", strictness="  "
+        )
+        assert intent.element_count == ElementCount.SINGLE
+        assert intent.relationship == Relationship.NONE
+        assert intent.strictness == Strictness.RELAXED
+
+    def test_valid_values_still_work(self):
+        intent = ProgressiveSelectorStrategyIntent(
+            element_count="multiple", relationship="grouped", strictness="strict"
+        )
+        assert intent.element_count == ElementCount.MULTIPLE
+        assert intent.relationship == Relationship.GROUPED
+        assert intent.strictness == Strictness.STRICT
+

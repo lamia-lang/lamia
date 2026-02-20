@@ -249,8 +249,8 @@ class TestVisualElementPickerPickElementForMethod:
 class TestVisualElementPickerHelperMethods:
     """Test VisualElementPicker helper methods."""
 
-    def test_get_instruction_text_click(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test getting instruction text for click method."""
+    def test_get_instruction_text_singular(self, mock_browser_adapter, mock_llm_manager, config_provider):
+        """Test getting instruction text for singular selection."""
         picker = VisualElementPicker(
             mock_browser_adapter,
             mock_llm_manager,
@@ -258,20 +258,8 @@ class TestVisualElementPickerHelperMethods:
         )
 
         instruction = picker._get_instruction_text("click", "submit button", "singular")
-        assert "click" in instruction.lower()
+        assert "select" in instruction.lower()
         assert "submit button" in instruction
-
-    def test_get_instruction_text_type_text(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test getting instruction text for type_text method."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        instruction = picker._get_instruction_text("type_text", "username field", "singular")
-        assert "typing" in instruction.lower() or "input" in instruction.lower()
-        assert "username field" in instruction
 
     def test_get_instruction_text_plural(self, mock_browser_adapter, mock_llm_manager, config_provider):
         """Test getting instruction text for plural strategy."""
@@ -282,44 +270,31 @@ class TestVisualElementPickerHelperMethods:
         )
 
         instruction = picker._get_instruction_text("get_elements", "all items", "plural")
-        assert "multiple" in instruction.lower() or "area" in instruction.lower()
+        assert "area" in instruction.lower()
 
-    def test_get_element_filter_click(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test getting element filter for click method."""
+    def test_get_element_filter_most_methods_return_none(self, mock_browser_adapter, mock_llm_manager, config_provider):
+        """Test that most methods have no element filter (allow any element)."""
         picker = VisualElementPicker(
             mock_browser_adapter,
             mock_llm_manager,
             config_provider
         )
 
-        filter_func = picker._get_element_filter("click")
+        assert picker._get_element_filter("click") is None
+        assert picker._get_element_filter("type_text") is None
+        assert picker._get_element_filter("get_element") is None
+
+    def test_get_element_filter_upload_file(self, mock_browser_adapter, mock_llm_manager, config_provider):
+        """Test that upload_file has a filter for file inputs."""
+        picker = VisualElementPicker(
+            mock_browser_adapter,
+            mock_llm_manager,
+            config_provider
+        )
+
+        filter_func = picker._get_element_filter("upload_file")
         assert filter_func is not None
-        assert "BUTTON" in filter_func
-        assert "A" in filter_func
-
-    def test_get_element_filter_type_text(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test getting element filter for type_text method."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        filter_func = picker._get_element_filter("type_text")
-        assert filter_func is not None
-        assert "INPUT" in filter_func
-        assert "TEXTAREA" in filter_func
-
-    def test_get_element_filter_unknown_method(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test getting element filter for unknown method returns None."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        filter_func = picker._get_element_filter("unknown_method")
-        assert filter_func is None
+        assert "file" in filter_func
 
 
 class TestVisualElementPickerErrorHandling:

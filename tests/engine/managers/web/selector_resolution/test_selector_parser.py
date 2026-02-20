@@ -137,6 +137,34 @@ class TestSelectorParser:
         for selector in natural_language_selectors:
             result = self.parser.classify(selector)
             assert result == SelectorType.NATURAL_LANGUAGE, f"Selector '{selector}' should be natural language"
+
+    def test_single_word_natural_language_not_html_tag(self):
+        """Single words that are NOT HTML tags must be classified as natural language."""
+        non_tag_words = [
+            "question",
+            "password",
+            "username",
+            "email",
+            "answer",
+            "description",
+            "name",
+            "phone",
+            "salary",
+        ]
+        for selector in non_tag_words:
+            result = self.parser.classify(selector)
+            assert result == SelectorType.NATURAL_LANGUAGE, (
+                f"Selector '{selector}' is not an HTML tag and should be natural language, got {result}"
+            )
+
+    def test_single_word_html_tags_are_valid_css(self):
+        """Single words that ARE valid HTML tags should be classified as valid CSS."""
+        tag_selectors = ["div", "span", "button", "input", "p", "a", "h1", "nav", "header", "section"]
+        for selector in tag_selectors:
+            result = self.parser.classify(selector)
+            assert result == SelectorType.VALID_CSS, (
+                f"HTML tag '{selector}' should be valid CSS, got {result}"
+            )
     
     def test_whitespace_handling(self):
         """Test that whitespace is properly handled."""
