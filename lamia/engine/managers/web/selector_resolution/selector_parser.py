@@ -92,7 +92,7 @@ class SelectorParser:
     
     def _looks_like_css(self, selector: str) -> bool:
         """Check if selector has CSS-like structure."""
-        css_chars = {'.', '#', '[', ']', ':', '>', '+', '~', '*'}
+        css_chars = {'.', '#', '[', ']', ':', '>', '+', '~', '*', ','}
         has_css_chars = any(char in selector for char in css_chars)
         if has_css_chars:
             return True

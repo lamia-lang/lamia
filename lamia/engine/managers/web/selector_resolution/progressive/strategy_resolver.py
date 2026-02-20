@@ -16,6 +16,7 @@ from .relationship_validator import ElementRelationshipValidator
 from .element_ambiguity_resolver import ElementAmbiguityResolver
 from .llm_ambiguity_resolver import LLMAmbiguityResolver
 from .human_assisted_ambiguity_resolver import HumanAssistedAmbiguityResolver
+from .unique_selector_extractor import UniqueSelectorExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class ProgressiveSelectorResolver:
         self.config_provider = config_provider
         self.strategy_gen = ProgressiveSelectorStrategy(llm_manager)
         self.relationship_validator = ElementRelationshipValidator(browser_adapter)
+        self._unique_selector_extractor = UniqueSelectorExtractor(browser_adapter)
         
         # Initialize ambiguity resolvers
         self._ambiguity_resolvers = self._create_ambiguity_resolvers(
@@ -218,7 +220,20 @@ class ProgressiveSelectorResolver:
                     continue
                 elements = resolved_elements
 
-            logger.info(f"✓ Successfully resolved with {step_name} selector")
+                unique_selector = await self._extract_unique_selector(elements[0])
+                if unique_selector:
+                    logger.info(
+                        f"✓ Resolved ambiguity: generic '{selector}' → unique '{unique_selector}'"
+                    )
+                    selector = unique_selector
+                else:
+                    logger.warning(
+                        f"Could not extract unique selector after disambiguation; "
+                        f"generic '{selector}' will NOT be cached"
+                    )
+                    return ResolutionOutcome(None, elements, had_matches)
+
+            logger.info(f"✓ Successfully resolved with {step_name} selector: '{selector}'")
             return ResolutionOutcome(selector, elements, had_matches)
 
         return ResolutionOutcome(None, [], had_matches)
@@ -231,6 +246,10 @@ class ProgressiveSelectorResolver:
             return True
 
         return False
+
+    async def _extract_unique_selector(self, element: Any) -> Optional[str]:
+        """Extract a unique CSS/XPath selector for a disambiguated element."""
+        return await self._unique_selector_extractor.generate(element)
 
     async def _resolve_ambiguity(
         self,

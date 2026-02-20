@@ -25,7 +25,7 @@ class TestRelationshipValidator:
         assert validator.browser == mock_browser_adapter
 
     def test_validate_count_single(self, mock_browser_adapter):
-        """Test single count validation."""
+        """SINGLE count allows multiple matches — ambiguity resolution handles that."""
         validator = ElementRelationshipValidator(mock_browser_adapter)
 
         elements = [Mock()]
@@ -33,10 +33,8 @@ class TestRelationshipValidator:
         assert is_valid is True
 
         elements = [Mock(), Mock()]
-        is_valid, reason = validator._validate_count(elements, ElementCount.SINGLE)
-        assert is_valid is False
-        assert reason is not None
-        assert "expected 1 element" in reason.lower()
+        is_valid, _ = validator._validate_count(elements, ElementCount.SINGLE)
+        assert is_valid is True
 
     def test_validate_count_multiple(self, mock_browser_adapter):
         """Test multiple count validation."""

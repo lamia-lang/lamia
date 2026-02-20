@@ -267,6 +267,145 @@ class TestProgressiveSelectorResolverAmbiguity:
         assert resolver._is_ambiguous([Mock()], intent) is False
 
 @pytest.mark.asyncio
+class TestAmbiguityResolutionExtractsUniqueSelector:
+    """Verify that after ambiguity resolution the returned selector is unique, not the generic one."""
+
+    async def test_generic_selector_replaced_by_unique_after_disambiguation(
+        self, mock_llm_manager, mock_browser_adapter, mock_cache, mock_config_provider
+    ):
+        """When a generic selector like 'button' matches many elements, ambiguity
+        resolution picks one.  The resolver must return a unique selector for that
+        element — NOT the original 'button'."""
+        # LLM generates selectors from specific to generic
+        mock_intent = ProgressiveSelectorStrategyIntent(
+            element_count=ElementCount.SINGLE,
+            relationship=Relationship.NONE,
+            strictness=Strictness.RELAXED,
+        )
+        mock_model = ProgressiveSelectorStrategyModel(
+            intent=mock_intent,
+            selectors=["button.review-next", "button"],
+        )
+        mock_llm_manager.execute = AsyncMock(
+            return_value=ValidationResult(is_valid=True, result_type=mock_model)
+        )
+
+        chosen_element = Mock(name="chosen-button")
+        other_element = Mock(name="other-button")
+
+        # First selector finds nothing; second ('button') finds many
+        mock_browser_adapter.get_elements = AsyncMock(
+            side_effect=[
+                [],                                     # 'button.review-next' → 0
+                [chosen_element, other_element, Mock()], # 'button' → 3 (ambiguous)
+            ]
+        )
+
+        # execute_script returns a unique CSS selector for the chosen element
+        mock_browser_adapter.execute_script = AsyncMock(
+            return_value="button.artdeco-button--primary:nth-of-type(2)"
+        )
+
+        resolver = ProgressiveSelectorResolver(
+            mock_browser_adapter,
+            mock_llm_manager,
+            mock_cache,
+            mock_config_provider,
+        )
+
+        # Patch LLM ambiguity resolver to return the chosen element
+        resolver._ambiguity_resolvers[0].resolve_ambiguity = AsyncMock(
+            return_value=[chosen_element]
+        )
+
+        selector, elements = await resolver.resolve("next or review button", "http://example.com")
+
+        # The returned selector must be the unique one, NOT 'button'
+        assert selector != "button"
+        assert selector == "button.artdeco-button--primary:nth-of-type(2)"
+        assert elements == [chosen_element]
+
+    async def test_no_cache_when_unique_selector_extraction_fails(
+        self, mock_llm_manager, mock_browser_adapter, mock_cache, mock_config_provider
+    ):
+        """If unique selector extraction fails after disambiguation, the resolver
+        must NOT return the generic selector (which would be wrongly cached)."""
+        mock_intent = ProgressiveSelectorStrategyIntent(
+            element_count=ElementCount.SINGLE,
+            relationship=Relationship.NONE,
+            strictness=Strictness.RELAXED,
+        )
+        mock_model = ProgressiveSelectorStrategyModel(
+            intent=mock_intent,
+            selectors=["button"],
+        )
+        mock_llm_manager.execute = AsyncMock(
+            return_value=ValidationResult(is_valid=True, result_type=mock_model)
+        )
+
+        chosen_element = Mock(name="chosen-button")
+        mock_browser_adapter.get_elements = AsyncMock(
+            side_effect=[
+                [chosen_element, Mock()],  # 'button' → 2 elements (ambiguous)
+                [chosen_element, Mock()],  # retry 'button' → still ambiguous
+            ]
+        )
+
+        # Unique selector extraction fails
+        mock_browser_adapter.execute_script = AsyncMock(return_value=None)
+
+        resolver = ProgressiveSelectorResolver(
+            mock_browser_adapter,
+            mock_llm_manager,
+            mock_cache,
+            mock_config_provider,
+        )
+
+        resolver._ambiguity_resolvers[0].resolve_ambiguity = AsyncMock(
+            return_value=[chosen_element]
+        )
+
+        # Should raise because we refuse to return the generic 'button'
+        with pytest.raises(ValueError, match="Could not resolve"):
+            await resolver.resolve("next or review button", "http://example.com")
+
+    async def test_non_ambiguous_selector_returned_as_is(
+        self, mock_llm_manager, mock_browser_adapter, mock_cache, mock_config_provider
+    ):
+        """When a selector matches exactly one element (no ambiguity), it should
+        be returned directly without unique-selector extraction."""
+        mock_intent = ProgressiveSelectorStrategyIntent(
+            element_count=ElementCount.SINGLE,
+            relationship=Relationship.NONE,
+            strictness=Strictness.STRICT,
+        )
+        mock_model = ProgressiveSelectorStrategyModel(
+            intent=mock_intent,
+            selectors=["button.review-next"],
+        )
+        mock_llm_manager.execute = AsyncMock(
+            return_value=ValidationResult(is_valid=True, result_type=mock_model)
+        )
+
+        single_element = Mock()
+        mock_browser_adapter.get_elements = AsyncMock(return_value=[single_element])
+
+        resolver = ProgressiveSelectorResolver(
+            mock_browser_adapter,
+            mock_llm_manager,
+            mock_cache,
+            mock_config_provider,
+        )
+
+        selector, elements = await resolver.resolve("next or review button", "http://example.com")
+
+        assert selector == "button.review-next"
+        assert elements == [single_element]
+        # execute_script should NOT be called (no disambiguation needed)
+        mock_browser_adapter.execute_script.assert_not_called()
+
+
+@pytest.mark.asyncio
 class TestProgressiveSelectorResolverValidation:
     """Test validation integration."""
 

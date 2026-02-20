@@ -62,11 +62,14 @@ class VisualElementPicker:
         """
         logger.info(f"Visual picking for {method_name}('{description}') on {page_url}")
         
-        # Check cache first
         cached = await self.cache.get(method_name, description, page_url)
         if cached:
             logger.info("Using cached visual selection")
-            return await self._use_cached_selection(cached)
+            try:
+                return await self._use_cached_selection(cached)
+            except ValueError:
+                logger.info("Stale cache invalidated, showing visual picker to user")
+                await self.cache.invalidate(method_name, description, page_url)
         
         # Determine selection strategy based on method
         is_plural = method_name in ['get_elements']

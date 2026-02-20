@@ -971,6 +971,56 @@ class TestVisualElementPickerCacheWorkflow:
             mock_pick.assert_called_once()
 
 
+    @pytest.mark.asyncio
+    async def test_stale_cache_invalidates_and_shows_picker(self, mock_browser_adapter, mock_llm_manager, config_provider):
+        """When cached selector finds no elements, invalidate and show picker UI."""
+        picker = VisualElementPicker(
+            mock_browser_adapter,
+            mock_llm_manager,
+            config_provider
+        )
+
+        # Pre-populate cache with a stale selector
+        await picker.cache.set(
+            method_name="click",
+            description="submit button",
+            page_url="https://example.com/page",
+            selection_data={"selector": "button#old-submit", "element_count": 1}
+        )
+
+        # First get_elements call (from stale cache) returns empty; second returns a real element
+        mock_element = Mock()
+        mock_browser_adapter.get_elements = AsyncMock(
+            side_effect=[[], [mock_element]]
+        )
+
+        with patch.object(picker.overlay, 'pick_single_element', new_callable=AsyncMock) as mock_pick:
+            mock_pick.return_value = {
+                "selected_element": {
+                    "tagName": "BUTTON",
+                    "xpath": "//button[@id='new-submit']",
+                    "outerHTML": "<button id='new-submit'>Submit</button>"
+                },
+                "selection_type": "single"
+            }
+
+            selector, elements = await picker.pick_element_for_method(
+                method_name="click",
+                description="submit button",
+                page_url="https://example.com/page"
+            )
+
+            # Should have shown the picker after stale cache
+            mock_pick.assert_called_once()
+            assert selector == "//button[@id='new-submit']"
+            assert len(elements) == 1
+
+            # Stale entry should be gone from cache
+            cached = await picker.cache.get("click", "submit button", "https://example.com/page")
+            assert cached is not None
+            assert cached['selection_data']['selector'] == "//button[@id='new-submit']"
+
+
 class TestVisualElementPickerStrategyRouting:
     """Test VisualElementPicker strategy routing."""
 

@@ -86,6 +86,9 @@ class ElementRelationshipValidator:
         """
         Validate element count based on specification.
         
+        For SINGLE intent, multiple matches are allowed here because
+        ambiguity resolution (downstream) handles that case.
+        
         Args:
             elements: List of found elements
             element_count_spec: Count intent ("single" or "multiple")
@@ -94,11 +97,6 @@ class ElementRelationshipValidator:
             (is_valid, reason_if_invalid)
         """
         actual_count = len(elements)
-        
-        if element_count_spec == ElementCount.SINGLE:
-            if actual_count != 1:
-                return False, f"Expected 1 element, found {actual_count}"
-            return True, None
 
         if element_count_spec == ElementCount.MULTIPLE:
             if actual_count < 2:

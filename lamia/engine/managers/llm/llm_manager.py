@@ -314,7 +314,7 @@ class LLMManager(Manager):
                 f"Model '{model.name}' attempt {attempts} validation failed: "
                 f"{validation_result.error_message}"
             )
-            logger.info(f"[Lamia][FailedResponse][Attempt {attempts}] {response.text[:500]}")
+            logger.debug(f"[Lamia][FailedResponse][Attempt {attempts}] {response.text[:500]}")
 
             # Construct retry prompt based on context memory
             # TODO: Maybe we need to send whole chat history, for telling about all errors that the model made?

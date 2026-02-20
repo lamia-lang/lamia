@@ -261,7 +261,10 @@ Return ONLY the JSON object, no explanation:"""
     
     def _extract_tag_from_selector(self, selector: str) -> Optional[str]:
         """
-        Extract the HTML tag from a CSS selector or XPath.
+        Extract the target HTML tag from a CSS selector or XPath.
+        
+        For CSS, the target is the rightmost simple selector (after the last
+        combinator), e.g. ``div.container > input[type='text']`` → ``input``.
         
         Args:
             selector: CSS selector or XPath expression
@@ -270,15 +273,19 @@ Return ONLY the JSON object, no explanation:"""
             Extracted tag name or None if not found
         """
         selector = selector.strip()
-        
-        # XPath: //tag, //tag[@attr], //tag[contains(...)]
-        xpath_match = re.match(r'^//([a-zA-Z][a-zA-Z0-9]*)', selector)
-        if xpath_match:
-            return xpath_match.group(1).lower()
-        
-        # CSS: tag.class, tag#id, tag[attr], tag:pseudo
-        css_match = re.match(r'^([a-zA-Z][a-zA-Z0-9]*)', selector)
-        if css_match:
-            return css_match.group(1).lower()
-        
+
+        # XPath: extract the last tag in the path
+        if selector.startswith("//") or selector.startswith("(/"):
+            tags = re.findall(r'//([a-zA-Z][a-zA-Z0-9]*)', selector)
+            if tags:
+                return tags[-1].lower()
+            return None
+
+        # CSS: split on combinators (>, +, ~, space) and take the rightmost part
+        parts = re.split(r'\s*[>+~]\s*|\s+', selector)
+        for part in reversed(parts):
+            tag_match = re.match(r'^([a-zA-Z][a-zA-Z0-9]*)', part.strip())
+            if tag_match:
+                return tag_match.group(1).lower()
+
         return None

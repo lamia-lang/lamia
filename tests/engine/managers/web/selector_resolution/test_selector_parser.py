@@ -40,7 +40,9 @@ class TestSelectorParser:
             "p:first-child",
             "p:nth-child(2)",
             "div.class > p:first-child",
-            "button[type='submit']:not(:disabled)"
+            "button[type='submit']:not(:disabled)",
+            "input, select, textarea",
+            "h1, h2, h3",
         ]
         
         for selector in valid_css_selectors:

@@ -236,6 +236,17 @@ class TestGenericTagValidation:
             assert strategy._extract_tag_from_selector(selector) == expected
 
         @pytest.mark.parametrize("selector,expected", [
+            ("div.container > input[type='text']", "input"),
+            ("div.container > div.item > input[type='text'][name*='q'] + input", "input"),
+            ("ul > li > a.link", "a"),
+            ("form div.field > label + input", "input"),
+            ("section article > p", "p"),
+        ])
+        def test_extract_target_tag_from_compound_css(self, strategy, selector, expected):
+            """Rightmost tag (the target) should be extracted, not the container."""
+            assert strategy._extract_tag_from_selector(selector) == expected
+
+        @pytest.mark.parametrize("selector,expected", [
             ("//button[@class='login']", "button"),
             ("//div[contains(text(), 'hello')]", "div"),
             ("//a[@href]", "a"),
