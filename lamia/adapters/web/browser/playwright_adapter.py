@@ -228,25 +228,46 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         """Find element using primary selector and fallbacks.
         
         Supports scoped search if params.scope_element_handle is provided.
+        When the scope element itself matches the selector, it is returned
+        directly (mirrors SeleniumAdapter._element_matches behaviour).
         """
         selectors = [params.selector] + (params.fallback_selectors or [])
         timeout = params.timeout * 1000 if params.timeout else self.default_timeout
-        
-        # Determine search root: scoped element or page
+
         search_root = params.scope_element_handle if params.scope_element_handle else self.page
-        
+
+        last_error: Exception = Exception(f"Could not find element with any of the selectors: {selectors}")
         for selector in selectors:
             try:
                 playwright_selector = self._get_playwright_selector(selector, params.selector_type)
                 element = await search_root.wait_for_selector(playwright_selector, timeout=timeout)
                 logger.debug(f"Found element with selector: {selector}")
                 return element
-            except Exception:
+            except Exception as exc:
+                last_error = exc
+                if params.scope_element_handle and await self._scope_matches_selector(params.scope_element_handle, selector, params.selector_type):
+                    logger.debug(f"Scope element itself matches selector: {selector}")
+                    return params.scope_element_handle
                 logger.debug(f"Selector failed: {selector}")
                 continue
-        
-        # If all selectors failed
-        raise Exception(f"Could not find element with any of the selectors: {selectors}")
+
+        raise last_error
+
+    async def _scope_matches_selector(self, element, selector: str, selector_type: SelectorType) -> bool:
+        """Check if the scope element itself matches the given selector."""
+        try:
+            tag = await element.evaluate("el => el.tagName.toLowerCase()")
+            for part in selector.split(","):
+                part = part.strip().lower()
+                if tag == part:
+                    return True
+            matches = await element.evaluate(
+                "(el, css) => el.matches(css)",
+                self._get_playwright_selector(selector, selector_type),
+            )
+            return bool(matches)
+        except Exception:
+            return False
     
     async def navigate(self, params: BrowserActionParams) -> None:
         """Navigate to a URL."""
@@ -265,11 +286,10 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Click element {selector}")
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
-        timeout = self._get_timeout_ms(params)
         
         try:
-            await self.page.click(playwright_selector, timeout=timeout)
+            element = await self._find_element_with_fallbacks(params)
+            await element.click()
             logger.info(f"PlaywrightAdapter: Successfully clicked {selector}")
             await self._wait_for_dom_stability()
         except PlaywrightTimeoutError as e:
@@ -292,11 +312,10 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         text = params.value
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Type '{text}' into {selector}")
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
-        timeout = self._get_timeout_ms(params)
         
         try:
-            await self.page.fill(playwright_selector, text, timeout=timeout)
+            element = await self._find_element_with_fallbacks(params)
+            await element.fill(text)
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
                 f"Element '{selector}' not found for typing",
@@ -320,11 +339,10 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         file_path = params.value
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Upload file '{file_path}' to {selector}")
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
-        timeout = self._get_timeout_ms(params)
         
         try:
-            await self.page.set_input_files(playwright_selector, file_path, timeout=timeout)
+            element = await self._find_element_with_fallbacks(params)
+            await element.set_input_files(file_path)
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
                 f"File input '{selector}' not found for upload",
@@ -348,17 +366,18 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Wait for {selector} to be {condition}")
         
+        search_root = params.scope_element_handle if params.scope_element_handle else self.page
         playwright_selector = self._get_playwright_selector(selector, params.selector_type)
         
         try:
             if condition == "visible":
-                await self.page.wait_for_selector(playwright_selector, state="visible", timeout=timeout)
+                await search_root.wait_for_selector(playwright_selector, state="visible", timeout=timeout)
             elif condition == "hidden":
-                await self.page.wait_for_selector(playwright_selector, state="hidden", timeout=timeout)
+                await search_root.wait_for_selector(playwright_selector, state="hidden", timeout=timeout)
             elif condition == "present":
-                await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+                await search_root.wait_for_selector(playwright_selector, timeout=timeout)
             elif condition == "clickable":
-                element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+                element = await search_root.wait_for_selector(playwright_selector, timeout=timeout)
                 await element.wait_for_element_state("stable")
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
@@ -373,11 +392,9 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Get text from {selector}")
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
-        timeout = self._get_timeout_ms(params)
         
         try:
-            element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+            element = await self._find_element_with_fallbacks(params)
             return await element.text_content() or ""
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
@@ -394,11 +411,9 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         attribute_name = params.value
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Get attribute '{attribute_name}' from {selector}")
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
-        timeout = self._get_timeout_ms(params)
         
         try:
-            element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+            element = await self._find_element_with_fallbacks(params)
             return await element.get_attribute(attribute_name) or ""
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
@@ -413,14 +428,15 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         selector = self._require_selector(params)
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
         
-        element = await self.page.query_selector(playwright_selector)
-        if not element:
+        try:
+            element = await self._find_element_with_fallbacks(params)
+        except Exception:
             await self._raise_dom_classified_error(
                 f"Element '{selector}' not found for visibility check",
                 PlaywrightError("Element not found")
             )
+            return False
         
         try:
             visible = await element.is_visible()
@@ -439,14 +455,15 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         selector = self._require_selector(params)
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
         
-        element = await self.page.query_selector(playwright_selector)
-        if not element:
+        try:
+            element = await self._find_element_with_fallbacks(params)
+        except Exception:
             await self._raise_dom_classified_error(
                 f"Element '{selector}' not found for enablement check",
                 PlaywrightError("Element not found")
             )
+            return False
         
         try:
             enabled = await element.is_enabled()
@@ -480,36 +497,48 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         """Detect the type of an input element.
         
         Returns InputType enum value as string.
+        If scope_element_handle is itself an input/select/textarea/button,
+        it is used directly without searching for children.
         """
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         from lamia.types import InputType
         
-        element = await self._find_element_with_fallbacks(params)
+        element = None
+        active_selector = params.selector or "scope_element"
+
+        if params.scope_element_handle:
+            try:
+                scope_tag = await params.scope_element_handle.evaluate("el => el.tagName.toLowerCase()")
+                if scope_tag in ("input", "select", "textarea", "button"):
+                    element = params.scope_element_handle
+                    active_selector = f"<{scope_tag}> (scope element)"
+            except Exception:
+                pass
+
+        if element is None:
+            element = await self._find_element_with_fallbacks(params)
+
         try:
-            # Get tag name
             tag_name = await element.evaluate("el => el.tagName.toLowerCase()")
             
-            # For input elements, get the type attribute
             if tag_name == "input":
                 type_value = (await element.get_attribute("type") or "text").lower()
             else:
-                # For select, textarea, button - use tag name as type
                 type_value = tag_name
             
-            # Direct enum lookup - covers all cases
             try:
                 result = InputType(type_value)
             except ValueError:
                 result = InputType.UNKNOWN
             
-            logger.info(f"PlaywrightAdapter: Detected input type -> {result.value}")
+            logger.info(f"PlaywrightAdapter: Detected input type for {active_selector} -> {result.value}")
             return result.value
             
         except PlaywrightError as e:
             raise ExternalOperationTransientError(
-                f"Input type detection failed: {e}",
+                f"Input type detection failed for '{active_selector}': {e}",
                 retry_history=[],
                 original_error=e
             )
@@ -527,11 +556,28 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         # Get scope element or use page
         search_root = params.scope_element_handle if params.scope_element_handle else self.page
         
-        # Find all selectable inputs within scope
+        # Find all selectable inputs within scope (or the scope element itself)
         try:
-            radios = await search_root.query_selector_all("input[type='radio']")
-            checkboxes = await search_root.query_selector_all("input[type='checkbox']")
-            selects = await search_root.query_selector_all("select")
+            scope_tag = ""
+            if params.scope_element_handle:
+                try:
+                    scope_tag = await params.scope_element_handle.evaluate("el => el.tagName.toLowerCase()")
+                except Exception:
+                    pass
+
+            if scope_tag == "select":
+                radios = []
+                checkboxes = []
+                selects = [params.scope_element_handle]
+            elif scope_tag == "input":
+                input_t = (await params.scope_element_handle.get_attribute("type") or "").lower()
+                radios = [params.scope_element_handle] if input_t == "radio" else []
+                checkboxes = [params.scope_element_handle] if input_t == "checkbox" else []
+                selects = []
+            else:
+                radios = await search_root.query_selector_all("input[type='radio']")
+                checkboxes = await search_root.query_selector_all("input[type='checkbox']")
+                selects = await search_root.query_selector_all("select")
         except PlaywrightError as e:
             raise ExternalOperationTransientError(
                 f"Failed to search for selectable inputs: {e}",
@@ -654,17 +700,17 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         """Get multiple elements matching selector.
         
         Returns list of Playwright ElementHandle objects for scoping.
+        When scoped and no children match, checks if the scope element
+        itself matches the selector.
         """
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         selector = self._require_selector(params)
         timeout = self._get_timeout_ms(params)
+        is_scoped = params.scope_element_handle is not None
+        search_root = params.scope_element_handle if is_scoped else self.page
         
-        # Use scope element if provided
-        search_root = params.scope_element_handle if params.scope_element_handle else self.page
-        
-        # Try all selectors in fallback chain
         selectors = [selector]
         if params.fallback_selectors:
             selectors.extend(params.fallback_selectors)
@@ -673,20 +719,19 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             try:
                 playwright_selector = self._get_playwright_selector(sel, params.selector_type)
                 
-                # Wait for at least one element
                 await search_root.wait_for_selector(playwright_selector, timeout=timeout)
-                
-                # Get all matching elements
                 elements = await search_root.query_selector_all(playwright_selector)
                 
                 logger.info(f"PlaywrightAdapter: Found {len(elements)} elements matching '{sel}'")
                 return elements
                 
             except PlaywrightTimeoutError:
+                if is_scoped and await self._scope_matches_selector(params.scope_element_handle, sel, params.selector_type):
+                    logger.debug(f"PlaywrightAdapter: Scope element itself matches '{sel}'")
+                    return [params.scope_element_handle]
                 logger.debug(f"PlaywrightAdapter: Selector '{sel}' did not match")
                 continue
         
-        # All selectors failed
         return []
     
     async def hover(self, params: BrowserActionParams) -> None:
@@ -696,11 +741,10 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Hover over {selector}")
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
-        timeout = self._get_timeout_ms(params)
         
         try:
-            await self.page.hover(playwright_selector, timeout=timeout)
+            element = await self._find_element_with_fallbacks(params)
+            await element.hover()
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
                 f"Element '{selector}' not found for hover",
@@ -714,11 +758,9 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Scroll to {selector}")
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
-        timeout = self._get_timeout_ms(params)
         
         try:
-            element = await self.page.wait_for_selector(playwright_selector, timeout=timeout)
+            element = await self._find_element_with_fallbacks(params)
             await element.scroll_into_view_if_needed()
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
@@ -734,11 +776,10 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         option_value = params.value
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Select option '{option_value}' in {selector}")
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
-        timeout = self._get_timeout_ms(params)
         
         try:
-            await self.page.select_option(playwright_selector, value=option_value, timeout=timeout)
+            element = await self._find_element_with_fallbacks(params)
+            await element.select_option(value=option_value)
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
                 f"Option '{option_value}' not found for '{selector}'",
@@ -752,13 +793,11 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         
         selector = self._require_selector(params)
         logger.info(f"PlaywrightAdapter: Submit form {selector}")
-        playwright_selector = self._get_playwright_selector(selector, params.selector_type)
         
-        # Find form element and submit
-        form_element = await self.page.query_selector(playwright_selector)
-        if form_element:
-            await form_element.evaluate("form => form.submit()")
-        else:
+        try:
+            element = await self._find_element_with_fallbacks(params)
+            await element.evaluate("form => form.submit()")
+        except Exception:
             await self._raise_dom_classified_error(
                 f"Form '{selector}' not found",
                 PlaywrightError("Form element not found")

@@ -200,8 +200,9 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if self.driver:
             logger.info("SeleniumAdapter: Closing WebDriver...")
             try:
-                # Do not auto-save here; BrowserManager handles profile-targeted saving
-                if self._owns_driver:
+                if not self._is_driver_responsive():
+                    logger.info("SeleniumAdapter: Driver already unreachable, skipping cleanup calls")
+                elif self._owns_driver:
                     self.driver.quit()
                 else:
                     if self._tab_window_handle:
@@ -219,6 +220,16 @@ class SeleniumAdapter(BaseBrowserAdapter):
                     self.driver = None
                 self.initialized = False
             logger.info("SeleniumAdapter: WebDriver closed")
+
+    def _is_driver_responsive(self) -> bool:
+        """Quick check whether the WebDriver/browser is still reachable."""
+        if not self.driver:
+            return False
+        try:
+            self.driver.title
+            return True
+        except Exception:
+            return False
     
     def _get_by_locator(self, selector: str, selector_type: SelectorType) -> tuple:
         """Convert selector to Selenium By locator."""
@@ -338,6 +349,10 @@ class SeleniumAdapter(BaseBrowserAdapter):
     def _wait_for_presence(self, by, value, timeout, scope_element=None):
         """Wait for element presence, optionally scoped to a parent element.
         
+        When scoped, first searches descendants. If nothing is found, checks
+        whether the scope element itself matches the selector (handles the case
+        where the caller already holds the target element).
+        
         Args:
             by: Selenium By locator type
             value: Locator value
@@ -345,16 +360,43 @@ class SeleniumAdapter(BaseBrowserAdapter):
             scope_element: Optional WebElement to search within
         """
         if scope_element:
-            # Search within the scoped element
-            def find_in_scope(driver):
+            self.driver.implicitly_wait(1)
+            try:
                 return scope_element.find_element(by, value)
-            return WebDriverWait(self.driver, timeout).until(find_in_scope)
+            except NoSuchElementException:
+                if self._element_matches(scope_element, by, value):
+                    return scope_element
+                raise
+            finally:
+                self.driver.implicitly_wait(self.default_timeout)
         else:
             # Global search
             return WebDriverWait(self.driver, timeout).until(
                 EC.presence_of_element_located((by, value))
             )
     
+    def _element_matches(element, by, value: str) -> bool:
+        """Check if an element itself matches the given locator."""
+        try:
+            tag = element.tag_name.lower()
+            if by == By.CSS_SELECTOR:
+                for part in value.split(","):
+                    part = part.strip().lower()
+                    if tag == part or part.startswith(tag + "[") or part.startswith(tag + ":"):
+                        return True
+                    if part.startswith("[") or part.startswith(".") or part.startswith("#"):
+                        parent = element.find_element(By.XPATH, "..")
+                        matches = parent.find_elements(by, value)
+                        return element in matches
+                return False
+            if by == By.XPATH:
+                parent = element.find_element(By.XPATH, "..")
+                matches = parent.find_elements(by, value)
+                return element in matches
+        except Exception:
+            pass
+        return False
+
     async def navigate(self, params: BrowserActionParams) -> None:
         """Navigate to a URL."""
         if not self.initialized:
@@ -527,12 +569,17 @@ class SeleniumAdapter(BaseBrowserAdapter):
             try:
                 by, value = self._get_by_locator(sel, params.selector_type)
                 
-                # Wait for at least one element to be present
                 if params.scope_element_handle:
-                    def find_in_scope(driver):
+                    self.driver.implicitly_wait(1)
+                    try:
                         elements = search_root.find_elements(by, value)
-                        return elements if elements else False
-                    elements = WebDriverWait(self.driver, timeout).until(find_in_scope)
+                    finally:
+                        self.driver.implicitly_wait(self.default_timeout)
+                    if not elements and self._element_matches(search_root, by, value):
+                        elements = [search_root]
+                    if not elements:
+                        logger.debug(f"SeleniumAdapter: No children matching '{sel}' in scope")
+                        continue
                 else:
                     WebDriverWait(self.driver, timeout).until(
                         EC.presence_of_element_located((by, value))
@@ -620,18 +667,29 @@ class SeleniumAdapter(BaseBrowserAdapter):
         
         from lamia.types import InputType
         
-        element, active_selector = self._find_element(params)
+        element = None
+        active_selector = params.selector or "scope_element"
+
+        if params.scope_element_handle:
+            try:
+                scope_tag = params.scope_element_handle.tag_name.lower()
+                if scope_tag in ("input", "select", "textarea", "button"):
+                    element = params.scope_element_handle
+                    active_selector = f"<{scope_tag}> (scope element)"
+            except Exception:
+                pass
+
+        if element is None:
+            element, active_selector = self._find_element(params)
+
         try:
             tag_name = element.tag_name.lower()
             
-            # For input elements, get the type attribute
             if tag_name == "input":
                 type_value = (element.get_attribute("type") or "text").lower()
             else:
-                # For select, textarea, button - use tag name as type
                 type_value = tag_name
             
-            # Direct enum lookup - covers all cases
             try:
                 result = InputType(type_value)
             except ValueError:
@@ -660,11 +718,28 @@ class SeleniumAdapter(BaseBrowserAdapter):
         # Get scope element or use driver
         search_root = params.scope_element_handle if params.scope_element_handle else self.driver
         
-        # Find all selectable inputs within scope
+        # Find all selectable inputs within scope (or the scope element itself)
         try:
-            radios = search_root.find_elements(By.XPATH, ".//input[@type='radio']")
-            checkboxes = search_root.find_elements(By.XPATH, ".//input[@type='checkbox']")
-            selects = search_root.find_elements(By.TAG_NAME, "select")
+            scope_tag = ""
+            if params.scope_element_handle:
+                try:
+                    scope_tag = params.scope_element_handle.tag_name.lower()
+                except Exception:
+                    pass
+
+            if scope_tag == "select":
+                radios = []
+                checkboxes = []
+                selects = [params.scope_element_handle]
+            elif scope_tag == "input":
+                input_t = (params.scope_element_handle.get_attribute("type") or "").lower()
+                radios = [params.scope_element_handle] if input_t == "radio" else []
+                checkboxes = [params.scope_element_handle] if input_t == "checkbox" else []
+                selects = []
+            else:
+                radios = search_root.find_elements(By.XPATH, ".//input[@type='radio']")
+                checkboxes = search_root.find_elements(By.XPATH, ".//input[@type='checkbox']")
+                selects = search_root.find_elements(By.TAG_NAME, "select")
         except WebDriverException as e:
             raise ExternalOperationTransientError(
                 f"Failed to search for selectable inputs: {e}",

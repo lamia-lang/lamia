@@ -541,7 +541,7 @@ class TestPlaywrightAdapterElementFinding:
         assert adapter.page.wait_for_selector.call_count == 2
     
     async def test_find_element_with_fallbacks_all_fail(self, adapter_with_page):
-        """Test finding element when all selectors fail."""
+        """Test finding element when all selectors fail re-raises last error."""
         adapter = adapter_with_page
         
         adapter.page.wait_for_selector.side_effect = Exception("All failed")
@@ -551,7 +551,7 @@ class TestPlaywrightAdapterElementFinding:
             fallback_selectors=[".btn", "button"]
         )
         
-        with pytest.raises(Exception, match="Could not find element"):
+        with pytest.raises(Exception, match="All failed"):
             await adapter._find_element_with_fallbacks(params)
     
     async def test_find_element_with_scoped_search(self, adapter_with_page):
@@ -607,6 +607,8 @@ class TestPlaywrightAdapterBasicActions:
     async def test_click_success(self, adapter_with_page):
         """Test successful click action."""
         adapter = adapter_with_page
+        mock_element = AsyncMock()
+        adapter.page.wait_for_selector.return_value = mock_element
         
         params = BrowserActionParams(
             selector="#button",
@@ -616,16 +618,16 @@ class TestPlaywrightAdapterBasicActions:
         
         await adapter.click(params)
         
-        adapter.page.click.assert_called_once_with("#button", timeout=5000.0)
+        adapter.page.wait_for_selector.assert_called_once_with("#button", timeout=5000.0)
+        mock_element.click.assert_called_once()
     
     async def test_click_timeout_error_stable_dom(self, adapter_with_page):
         """Test click timeout error with stable DOM."""
         adapter = adapter_with_page
         
         from lamia.adapters.web.browser.playwright_adapter import PlaywrightTimeoutError
-        adapter.page.click.side_effect = PlaywrightTimeoutError("Timeout")
+        adapter.page.wait_for_selector.side_effect = PlaywrightTimeoutError("Timeout")
         
-        # Mock stable DOM
         adapter.page.evaluate.return_value = {
             "readyStateComplete": True,
             "pendingFetches": 0,
@@ -641,6 +643,8 @@ class TestPlaywrightAdapterBasicActions:
     async def test_type_text_success(self, adapter_with_page):
         """Test successful text typing."""
         adapter = adapter_with_page
+        mock_element = AsyncMock()
+        adapter.page.wait_for_selector.return_value = mock_element
         
         params = BrowserActionParams(
             selector="#input",
@@ -649,7 +653,8 @@ class TestPlaywrightAdapterBasicActions:
         
         await adapter.type_text(params)
         
-        adapter.page.fill.assert_called_once_with("#input", "test text", timeout=10000.0)
+        adapter.page.wait_for_selector.assert_called_once_with("#input", timeout=10000.0)
+        mock_element.fill.assert_called_once_with("test text")
     
     async def test_type_text_no_selector(self, adapter_with_page):
         """Test type_text without selector."""
@@ -663,6 +668,8 @@ class TestPlaywrightAdapterBasicActions:
     async def test_upload_file_success(self, adapter_with_page):
         """Test successful file upload."""
         adapter = adapter_with_page
+        mock_element = AsyncMock()
+        adapter.page.wait_for_selector.return_value = mock_element
         
         params = BrowserActionParams(
             selector="input[type='file']",
@@ -671,11 +678,8 @@ class TestPlaywrightAdapterBasicActions:
         
         await adapter.upload_file(params)
         
-        adapter.page.set_input_files.assert_called_once_with(
-            "input[type='file']", 
-            "/path/to/file.txt", 
-            timeout=10000.0
-        )
+        adapter.page.wait_for_selector.assert_called_once_with("input[type='file']", timeout=10000.0)
+        mock_element.set_input_files.assert_called_once_with("/path/to/file.txt")
     
     async def test_upload_file_no_path(self, adapter_with_page):
         """Test upload_file without file path."""
@@ -766,7 +770,7 @@ class TestPlaywrightAdapterElementQueries:
         mock_element = AsyncMock()
         mock_element.is_visible.return_value = True
         
-        adapter.page.query_selector.return_value = mock_element
+        adapter.page.wait_for_selector.return_value = mock_element
         
         params = BrowserActionParams(selector="#button")
         result = await adapter.is_visible(params)
@@ -777,9 +781,8 @@ class TestPlaywrightAdapterElementQueries:
     async def test_is_visible_element_not_found(self, adapter_with_page):
         """Test is_visible when element not found."""
         adapter = adapter_with_page
-        adapter.page.query_selector.return_value = None
+        adapter.page.wait_for_selector.side_effect = Exception("Not found")
         
-        # Mock stable DOM for permanent error
         adapter.page.evaluate.return_value = {
             "readyStateComplete": True,
             "pendingFetches": 0,
@@ -798,7 +801,7 @@ class TestPlaywrightAdapterElementQueries:
         mock_element = AsyncMock()
         mock_element.is_enabled.return_value = True
         
-        adapter.page.query_selector.return_value = mock_element
+        adapter.page.wait_for_selector.return_value = mock_element
         
         params = BrowserActionParams(selector="#button")
         result = await adapter.is_enabled(params)
@@ -874,12 +877,15 @@ class TestPlaywrightAdapterAdvancedActions:
     async def test_hover_success(self, adapter_with_page):
         """Test successful hover action."""
         adapter = adapter_with_page
+        mock_element = AsyncMock()
+        adapter.page.wait_for_selector.return_value = mock_element
         
         params = BrowserActionParams(selector="#menu-item")
         
         await adapter.hover(params)
         
-        adapter.page.hover.assert_called_once_with("#menu-item", timeout=10000.0)
+        adapter.page.wait_for_selector.assert_called_once_with("#menu-item", timeout=10000.0)
+        mock_element.hover.assert_called_once()
     
     async def test_scroll_success(self, adapter_with_page):
         """Test successful scroll action."""
@@ -892,12 +898,14 @@ class TestPlaywrightAdapterAdvancedActions:
         
         await adapter.scroll(params)
         
-        adapter.page.wait_for_selector.assert_called_once()
+        adapter.page.wait_for_selector.assert_called_once_with("#bottom-content", timeout=10000.0)
         mock_element.scroll_into_view_if_needed.assert_called_once()
     
     async def test_select_option_success(self, adapter_with_page):
         """Test successful option selection."""
         adapter = adapter_with_page
+        mock_element = AsyncMock()
+        adapter.page.wait_for_selector.return_value = mock_element
         
         params = BrowserActionParams(
             selector="#country",
@@ -906,32 +914,28 @@ class TestPlaywrightAdapterAdvancedActions:
         
         await adapter.select_option(params)
         
-        adapter.page.select_option.assert_called_once_with(
-            "#country", 
-            value="USA", 
-            timeout=10000.0
-        )
+        adapter.page.wait_for_selector.assert_called_once_with("#country", timeout=10000.0)
+        mock_element.select_option.assert_called_once_with(value="USA")
     
     async def test_submit_form_success(self, adapter_with_page):
         """Test successful form submission."""
         adapter = adapter_with_page
         mock_form = AsyncMock()
         
-        adapter.page.query_selector.return_value = mock_form
+        adapter.page.wait_for_selector.return_value = mock_form
         
         params = BrowserActionParams(selector="#contact-form")
         
         await adapter.submit_form(params)
         
-        adapter.page.query_selector.assert_called_once_with("#contact-form")
+        adapter.page.wait_for_selector.assert_called_once_with("#contact-form", timeout=10000.0)
         mock_form.evaluate.assert_called_once_with("form => form.submit()")
     
     async def test_submit_form_not_found(self, adapter_with_page):
         """Test form submission when form not found."""
         adapter = adapter_with_page
-        adapter.page.query_selector.return_value = None
+        adapter.page.wait_for_selector.side_effect = Exception("Not found")
         
-        # Mock stable DOM for permanent error
         adapter.page.evaluate.return_value = {
             "readyStateComplete": True,
             "pendingFetches": 0,
@@ -1182,3 +1186,157 @@ class TestPlaywrightAdapterIntegration:
         
         with pytest.raises(ExternalOperationTransientError, match="DOM still changing"):
             await adapter._raise_dom_classified_error("Test", original_error)
+
+
+@pytest.mark.asyncio
+class TestPlaywrightAdapterScopeIsTarget:
+    """Test that methods correctly handle scope element being the target itself."""
+
+    @pytest.fixture
+    def adapter_with_page(self):
+        adapter = TestablePlaywrightAdapter()
+        adapter.initialized = True
+        adapter.page = AsyncMock()
+        return adapter
+
+    async def test_find_element_falls_back_to_scope_when_child_search_fails(self, adapter_with_page):
+        """_find_element_with_fallbacks returns scope element when it matches the selector."""
+        adapter = adapter_with_page
+        mock_scope = AsyncMock()
+        mock_scope.wait_for_selector.side_effect = Exception("No child found")
+        mock_scope.evaluate.return_value = True
+
+        params = BrowserActionParams(selector="input", scope_element_handle=mock_scope)
+        result = await adapter._find_element_with_fallbacks(params)
+
+        assert result is mock_scope
+
+    async def test_scope_matches_selector_by_tag(self, adapter_with_page):
+        adapter = adapter_with_page
+        mock_element = AsyncMock()
+        mock_element.evaluate.side_effect = lambda expr, *a: "select" if "tagName" in expr else True
+
+        result = await adapter._scope_matches_selector(mock_element, "select", SelectorType.CSS)
+        assert result is True
+
+    async def test_scope_matches_selector_css_matches(self, adapter_with_page):
+        adapter = adapter_with_page
+        mock_element = AsyncMock()
+        mock_element.evaluate.side_effect = lambda expr, *a: "div" if "tagName" in expr else True
+
+        result = await adapter._scope_matches_selector(mock_element, ".my-class", SelectorType.CSS)
+        assert result is True
+
+    async def test_scope_matches_selector_no_match(self, adapter_with_page):
+        adapter = adapter_with_page
+        mock_element = AsyncMock()
+        mock_element.evaluate.side_effect = lambda expr, *a: "span" if "tagName" in expr else False
+
+        result = await adapter._scope_matches_selector(mock_element, ".missing", SelectorType.CSS)
+        assert result is False
+
+    async def test_get_input_type_uses_scope_directly_for_input(self, adapter_with_page):
+        """get_input_type should use scope element directly if it's an input."""
+        adapter = adapter_with_page
+        mock_scope = AsyncMock()
+        mock_scope.evaluate.side_effect = lambda expr, *a: "input" if "tagName" in expr else None
+        mock_scope.get_attribute.return_value = "email"
+
+        params = BrowserActionParams(selector="input", scope_element_handle=mock_scope)
+        result = await adapter.get_input_type(params)
+
+        assert result == "email"
+
+    async def test_get_input_type_uses_scope_directly_for_select(self, adapter_with_page):
+        """get_input_type should use scope element directly if it's a select."""
+        adapter = adapter_with_page
+        mock_scope = AsyncMock()
+        mock_scope.evaluate.side_effect = lambda expr, *a: "select" if "tagName" in expr else None
+
+        params = BrowserActionParams(selector="select", scope_element_handle=mock_scope)
+        result = await adapter.get_input_type(params)
+
+        assert result == "select"
+
+    async def test_get_options_uses_scope_directly_for_select(self, adapter_with_page):
+        """get_options should use scope element directly when it's a <select>."""
+        adapter = adapter_with_page
+        mock_scope = AsyncMock()
+        mock_scope.evaluate.return_value = "select"
+
+        mock_option_1 = AsyncMock()
+        mock_option_1.text_content.return_value = "Option A"
+        mock_option_2 = AsyncMock()
+        mock_option_2.text_content.return_value = "Option B"
+        mock_scope.query_selector_all.return_value = [mock_option_1, mock_option_2]
+
+        params = BrowserActionParams(selector="select", scope_element_handle=mock_scope)
+        result = await adapter.get_options(params)
+
+        assert result == ["Option A", "Option B"]
+        mock_scope.query_selector_all.assert_called_once_with("option")
+
+    async def test_get_options_uses_scope_directly_for_radio(self, adapter_with_page):
+        """get_options should use scope element directly when it's a radio input."""
+        adapter = adapter_with_page
+        mock_scope = AsyncMock()
+        mock_scope.evaluate.return_value = "input"
+        mock_scope.get_attribute.side_effect = lambda attr: {
+            "type": "radio",
+            "id": "opt1",
+            "name": "group1",
+        }.get(attr, None)
+
+        mock_label = AsyncMock()
+        mock_label.text_content.return_value = "Radio label"
+        mock_scope.query_selector = AsyncMock(return_value=None)
+
+        search_root = mock_scope
+        search_root.query_selector.return_value = mock_label
+
+        params = BrowserActionParams(selector="input", scope_element_handle=mock_scope)
+        result = await adapter.get_options(params)
+
+        assert len(result) == 1
+
+    async def test_get_elements_returns_scope_when_it_matches(self, adapter_with_page):
+        """get_elements should return scope element itself if no children match but scope matches."""
+        adapter = adapter_with_page
+
+        from lamia.adapters.web.browser.playwright_adapter import PlaywrightTimeoutError
+        mock_scope = AsyncMock()
+        mock_scope.wait_for_selector.side_effect = PlaywrightTimeoutError("No children")
+        mock_scope.evaluate.side_effect = lambda expr, *a: "input" if "tagName" in expr else True
+
+        params = BrowserActionParams(selector="input", scope_element_handle=mock_scope)
+        result = await adapter.get_elements(params)
+
+        assert result == [mock_scope]
+
+    async def test_click_works_with_scoped_element(self, adapter_with_page):
+        """click should work through _find_element_with_fallbacks with scope."""
+        adapter = adapter_with_page
+        mock_scope = AsyncMock()
+        mock_found = AsyncMock()
+        mock_scope.wait_for_selector.return_value = mock_found
+
+        params = BrowserActionParams(selector="button", scope_element_handle=mock_scope)
+        await adapter.click(params)
+
+        mock_scope.wait_for_selector.assert_called_once()
+        mock_found.click.assert_called_once()
+        adapter.page.wait_for_selector.assert_not_called()
+
+    async def test_type_text_works_with_scoped_element(self, adapter_with_page):
+        """type_text should work through _find_element_with_fallbacks with scope."""
+        adapter = adapter_with_page
+        mock_scope = AsyncMock()
+        mock_found = AsyncMock()
+        mock_scope.wait_for_selector.return_value = mock_found
+
+        params = BrowserActionParams(selector="input", value="hello", scope_element_handle=mock_scope)
+        await adapter.type_text(params)
+
+        mock_scope.wait_for_selector.assert_called_once()
+        mock_found.fill.assert_called_once_with("hello")
+        adapter.page.wait_for_selector.assert_not_called()
