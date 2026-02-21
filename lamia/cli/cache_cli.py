@@ -198,11 +198,7 @@ class CacheCLI:
         """
         cache_data = self._load_cache()
         
-        # Create cache key (same format as AISelectorCache)
-        if parent_context:
-            cache_key = f"{original_selector}|{url}|{parent_context}"
-        else:
-            cache_key = f"{original_selector}|{url}"
+        cache_key = f"{original_selector}|{url}"
         
         # Add to cache
         cache_data[cache_key] = resolved_selector

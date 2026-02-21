@@ -45,7 +45,6 @@ class TestVisualElementPickerInitialization:
 
         assert picker.browser == mock_browser_adapter
         assert picker.llm_manager == mock_llm_manager
-        assert picker.cache is not None
         assert picker.overlay is not None
         assert picker.validator is not None
 
@@ -59,61 +58,13 @@ class TestVisualElementPickerInitialization:
 
         assert picker.overlay.browser == mock_browser_adapter
 
-    def test_picker_creates_cache(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test that picker creates VisualSelectionCache instance."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        assert picker.cache is not None
-
-    def test_picker_creates_validator(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test that picker creates SelectionValidator instance."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        assert picker.validator is not None
-
 
 class TestVisualElementPickerPickElementForMethod:
     """Test VisualElementPicker pick_element_for_method method."""
 
     @pytest.mark.asyncio
-    async def test_pick_element_cache_hit(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test picking element with cache hit."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        await picker.cache.set(
-            method_name="click",
-            description="submit button",
-            page_url="https://example.com/page",
-            selection_data={"selector": "button#submit", "element_count": 1}
-        )
-
-        mock_browser_adapter.get_elements = AsyncMock(return_value=[Mock()])
-
-        selector, elements = await picker.pick_element_for_method(
-            method_name="click",
-            description="submit button",
-            page_url="https://example.com/page"
-        )
-
-        assert selector == "button#submit"
-        assert len(elements) == 1
-        mock_llm_manager.execute.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_pick_element_cache_miss_shows_overlay(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test picking element with cache miss shows overlay."""
+    async def test_pick_element_shows_overlay(self, mock_browser_adapter, mock_llm_manager, config_provider):
+        """Test picking element shows overlay."""
         picker = VisualElementPicker(
             mock_browser_adapter,
             mock_llm_manager,
@@ -205,46 +156,6 @@ class TestVisualElementPickerPickElementForMethod:
                     page_url="https://example.com/page"
                 )
 
-    @pytest.mark.asyncio
-    async def test_pick_element_caches_result(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test that pick_element caches the result."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        with patch.object(picker.overlay, 'pick_single_element', new_callable=AsyncMock) as mock_pick:
-            mock_pick.return_value = {
-                "selected_element": {
-                    "tagName": "BUTTON",
-                    "xpath": "//button[@id='submit']",
-                    "outerHTML": "<button id='submit'>Submit</button>"
-                },
-                "selection_type": "single"
-            }
-
-            mock_llm_result = Mock()
-            mock_llm_result.validated_text = "//button[@id='submit']"
-            mock_llm_manager.execute = AsyncMock(return_value=mock_llm_result)
-
-            mock_browser_adapter.get_elements = AsyncMock(return_value=[Mock()])
-
-            await picker.pick_element_for_method(
-                method_name="click",
-                description="submit button",
-                page_url="https://example.com/page"
-            )
-
-            cached = await picker.cache.get(
-                "click",
-                "submit button",
-                "https://example.com/page"
-            )
-
-            assert cached is not None
-            assert cached["selection_data"]["selector"] == "//button[@id='submit']"
-
 
 class TestVisualElementPickerHelperMethods:
     """Test VisualElementPicker helper methods."""
@@ -299,31 +210,6 @@ class TestVisualElementPickerHelperMethods:
 
 class TestVisualElementPickerErrorHandling:
     """Test VisualElementPicker error handling."""
-
-    @pytest.mark.asyncio
-    async def test_pick_element_cache_stale(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test handling stale cache."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        await picker.cache.set(
-            method_name="click",
-            description="submit button",
-            page_url="https://example.com/page",
-            selection_data={"selector": "button#submit", "element_count": 1}
-        )
-
-        mock_browser_adapter.get_elements = AsyncMock(return_value=[])
-
-        with pytest.raises(ValueError, match="Cached selection no longer valid"):
-            await picker.pick_element_for_method(
-                method_name="click",
-                description="submit button",
-                page_url="https://example.com/page"
-            )
 
     @pytest.mark.asyncio
     async def test_pick_element_ambiguous_selection(self, mock_browser_adapter, mock_llm_manager, config_provider):

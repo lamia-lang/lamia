@@ -83,7 +83,6 @@ def service(mock_llm_manager, mock_get_page_html, mock_get_browser_adapter, conf
         config_provider=config_provider,
     )
     service.cache.clear()
-    service.multi_cache.clear()
     return service
 
 
@@ -97,7 +96,6 @@ def human_in_loop_service(mock_llm_manager, mock_get_page_html, mock_get_browser
         config_provider=human_in_loop_config_provider,
     )
     service.cache.clear()
-    service.multi_cache.clear()
     return service
 
 
@@ -131,12 +129,10 @@ async def test_resolve_natural_language_uses_progressive_resolver_and_caches(ser
     assert result == "button.btn__primary--large"
     mock_get_browser_adapter.assert_awaited_once()
     MockResolver.assert_called_once_with(mock_browser_adapter, mock_llm_manager, service.cache, config_provider)
-    mock_resolver.resolve.assert_awaited_once_with("sign in button", "https://example.com")
+    mock_resolver.resolve.assert_awaited_once_with("sign in button", "https://example.com", scope_element_handle=None)
     
     cached = await service.cache.get("sign in button", "https://example.com", None)
     assert cached == "button.btn__primary--large"
-    working = await service.multi_cache.get_working_selectors("sign in button", "https://example.com")
-    assert "button.btn__primary--large" in working
 
 
 @pytest.mark.asyncio
@@ -183,8 +179,6 @@ async def test_resolve_natural_language_fallback_to_visual_picker_when_progressi
     
     cached = await human_in_loop_service.cache.get("sign in button", "https://example.com", None)
     assert cached == "button.visual"
-    working = await human_in_loop_service.multi_cache.get_working_selectors("sign in button", "https://example.com")
-    assert "button.visual" in working
 
 
 @pytest.mark.asyncio
@@ -199,22 +193,6 @@ async def test_resolve_natural_language_no_human_in_loop_raises(service, mock_ll
                 selector="sign in button",
                 page_url="https://example.com"
             )
-
-
-@pytest.mark.asyncio
-async def test_multi_cache_hit_uses_existing_selector(service, mock_browser_adapter, mock_get_browser_adapter):
-    """Test that working selectors in multi-cache are reused."""
-    await service.multi_cache.add_working_selector("sign in", "button.cached", "https://example.com")
-    mock_browser_adapter.get_elements = AsyncMock(return_value=[Mock()])
-    
-    with patch("lamia.engine.managers.web.selector_resolution.selector_resolution_service.ProgressiveSelectorResolver") as MockResolver:
-        result = await service.resolve_selector(
-            selector="sign in",
-            page_url="https://example.com"
-        )
-    
-    assert result == "button.cached"
-    MockResolver.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -312,7 +290,6 @@ async def test_legacy_resolution_uses_parser_and_validator(mock_llm_manager, moc
         response_parser=mock_parser,
     )
     service.cache.clear()
-    service.multi_cache.clear()
     
     mock_llm_manager.execute.return_value = MockLLMResult("resolved")
     mock_validation_result = Mock()

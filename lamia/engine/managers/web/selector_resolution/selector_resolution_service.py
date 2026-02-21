@@ -1,9 +1,8 @@
 """Orchestrator service for AI-powered selector resolution."""
 
 import logging
-from typing import Optional, Callable, Awaitable
+from typing import Any, Optional, Callable, Awaitable
 from .ai_selector_cache import AISelectorCache
-from .multi_selector_cache import MultiSelectorCache
 from .selector_parser import SelectorParser, SelectorType
 from .response_parser import ResponseParser, AmbiguousFormatResponseParser
 from .progressive.strategy_resolver import ProgressiveSelectorResolver
@@ -31,12 +30,11 @@ class SelectorResolutionService:
         self.get_browser_adapter = get_browser_adapter_func
         self.config_provider = config_provider
         self.cache = AISelectorCache(config_provider)
-        self.multi_cache = MultiSelectorCache()  # For conditional selectors
         self.response_parser = response_parser or AmbiguousFormatResponseParser()
         self._progressive_resolver = None  # Lazy initialized
         self._visual_picker = None  # Lazy initialized
         
-    async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None, operation_type: Optional[str] = None, parent_context: Optional[str] = None) -> str:
+    async def resolve_selector(self, selector: str, page_url: str, page_context: Optional[str] = None, operation_type: Optional[str] = None, parent_context: Optional[str] = None, scope_element_handle: Optional[Any] = None) -> str:
         """Resolve a selector using AI if needed, with caching.
         
         Args:
@@ -68,40 +66,11 @@ class SelectorResolutionService:
             logger.debug(f"Selector is already valid, returning as-is")
             return original_selector
         
-        # Check traditional cache first (with parent context)
         context_desc = f" (within {parent_context})" if parent_context else ""
-        logger.debug(f"Checking cache for selector: '{original_selector}' on URL: '{page_url}'{context_desc}")
         cached_result = await self.cache.get(original_selector, page_url, parent_context)
         if cached_result:
             logger.info(f"Using cached resolution: '{original_selector}' → '{cached_result}'{context_desc}")
             return cached_result
-        
-        # For natural language selectors, also check multi-selector cache
-        if selector_type == SelectorType.NATURAL_LANGUAGE:
-            working_selectors = await self.multi_cache.get_working_selectors(original_selector, page_url)
-            if working_selectors:
-                logger.info(f"Found {len(working_selectors)} working selectors in multi-cache")
-                
-                # Try each working selector to see if any still work
-                browser_adapter = await self.get_browser_adapter() if self.get_browser_adapter else None
-                if browser_adapter:
-                    for selector in working_selectors:
-                        try:
-                            from lamia.internal_types import BrowserActionParams
-                            params = BrowserActionParams(selector=selector)
-                            elements = await browser_adapter.get_elements(params)
-                            
-                            if elements:
-                                logger.info(f"Multi-cache hit: '{original_selector}' → '{selector}'")
-                                return selector
-                            else:
-                                # This selector no longer works, downgrade it
-                                await self.multi_cache.remove_failed_selector(original_selector, selector, page_url)
-                        except Exception as e:
-                            logger.debug(f"Multi-cache selector failed: {selector} - {e}")
-                            await self.multi_cache.remove_failed_selector(original_selector, selector, page_url)
-        
-        logger.debug(f"No cache hit for: '{original_selector}' on '{page_url}'")
         
         # Use AI to resolve the selector
         try:
@@ -132,10 +101,10 @@ class SelectorResolutionService:
                             self.config_provider
                         )
                     
-                    # Resolve using progressive approach
                     resolved_selector, found_elements = await self._progressive_resolver.resolve(
                         original_selector,
-                        page_url
+                        page_url,
+                        scope_element_handle=scope_element_handle,
                     )
                     
                     logger.info(f"Progressive resolution succeeded: '{original_selector}' → '{resolved_selector}'")
@@ -153,10 +122,7 @@ class SelectorResolutionService:
                         )
                         
                         logger.info(f"✅ Visual picker succeeded: '{original_selector}' → '{resolved_selector}'")
-                        
-                        # Cache visual picker result
                         await self.cache.set(original_selector, page_url, resolved_selector, parent_context)
-                        await self.multi_cache.add_working_selector(original_selector, resolved_selector, page_url)
                         
                     except Exception as visual_error:
                         logger.warning(f"Visual picker failed: {visual_error}")
@@ -166,11 +132,8 @@ class SelectorResolutionService:
                 if resolved_selector is None:
                     raise ValueError("Failed to resolve the selector for the natural language selector")
                 
-                # Cache in both traditional cache and multi-selector cache
-                logger.debug(f"Caching progressive resolution: '{original_selector}' on '{page_url}' → '{resolved_selector}'")
                 await self.cache.set(original_selector, page_url, resolved_selector, parent_context)
-                await self.multi_cache.add_working_selector(original_selector, resolved_selector, page_url)
-                logger.info(f"Progressive resolution cached: '{original_selector}' → '{resolved_selector}'")
+                logger.info(f"Cached resolution: '{original_selector}' → '{resolved_selector}'")
                 
                 return resolved_selector
             
@@ -202,7 +165,7 @@ class SelectorResolutionService:
                 
                 if parse_result.is_ambiguous:
                     # Handle ambiguous response with validation and deduction
-                    resolved_selector = await self._handle_ambiguous_response(parse_result.options, original_selector, page_url, operation_type or "")
+                    resolved_selector = await self._handle_ambiguous_response(parse_result.options, original_selector, page_url, operation_type or "", parent_context)
                 else:
                     resolved_selector = parse_result.selector
                 
@@ -245,19 +208,16 @@ class SelectorResolutionService:
     async def clear_cache(self) -> None:
         """Clear all cached selector resolutions."""
         self.cache.clear()
-        self.multi_cache.clear()
-        logger.info("Cleared selector resolution cache and multi-selector cache")
+        logger.info("Cleared selector resolution cache")
     
     async def invalidate_cached_selector(self, original_selector: str, page_url: str) -> None:
-        """Invalidate a specific cached selector when it fails.
+        """Invalidate a specific cached selector across all caches.
         
         Args:
             original_selector: The original selector that failed
             page_url: URL of the page where selector failed
         """
         await self.cache.invalidate(original_selector, page_url)
-        for selector in list(self.multi_cache._cache.get(original_selector, {}).get('selectors', {}).keys()):
-            await self.multi_cache.remove_failed_selector(original_selector, selector, page_url)
     
     def get_cache_size(self) -> int:
         """Get number of cached selector resolutions.
@@ -267,7 +227,7 @@ class SelectorResolutionService:
         """
         return self.cache.size()
     
-    async def _handle_ambiguous_response(self, options: list, original_selector: str, page_url: str, operation_type: str) -> str:
+    async def _handle_ambiguous_response(self, options: list, original_selector: str, page_url: str, operation_type: str, parent_context: Optional[str] = None) -> str:
         """Handle an ambiguous AI response by validating suggestions and applying deduction logic.
         
         Args:

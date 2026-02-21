@@ -4,6 +4,7 @@ import os
 import json
 import logging
 from typing import Optional, Dict, Tuple
+from urllib.parse import urlparse
 
 from lamia.engine.config_provider import ConfigProvider
 
@@ -77,23 +78,28 @@ class AISelectorCache:
         self._save_cache(cache_data)
         logger.info(f"Saved selector to cache: '{original_selector}' -> '{resolved_selector}' for {page_url} (context: {parent_context})")
     
+    @staticmethod
+    def _extract_hostname(url: str) -> str:
+        """Extract hostname from URL for stable cache keys across page navigations."""
+        try:
+            parsed = urlparse(url)
+            if parsed.hostname:
+                return parsed.hostname
+        except Exception:
+            pass
+        return url
+
     def _create_cache_key(self, original_selector: str, page_url: str, parent_context: Optional[str] = None) -> str:
-        """Create cache key from selector, URL, and optional parent context.
-        
-        Args:
-            original_selector: The original selector
-            page_url: The page URL
-            parent_context: Optional parent element context
-            
-        Returns:
-            Cache key string
+        """Create cache key from selector and hostname.
+
+        Uses only the hostname (not full URL) so the same selector resolution
+        is reused across different pages on the same site.
+
+        parent_context is accepted for API compatibility but NOT included in the
+        key.
         """
-        if parent_context:
-            cache_key = f"{original_selector}|{page_url}|within:{parent_context}"
-        else:
-            cache_key = f"{original_selector}|{page_url}"
-        logger.debug(f"Created cache key: '{cache_key}'")
-        return cache_key
+        host = self._extract_hostname(page_url)
+        return f"{original_selector}|{host}"
     
     def _get_cache_file_path(self) -> str:
         """Get path to the selector cache file."""
@@ -170,25 +176,32 @@ class AISelectorCache:
         return len(cache_data)
     
     async def invalidate(self, original_selector: str, page_url: str, parent_context: Optional[str] = None) -> None:
-        """Invalidate a specific cached selector resolution.
+        """Invalidate cached selector resolutions.
+
+        Removes ALL entries that match the selector and URL regardless of
+        parent_context so that stale resolutions stored under any context
+        variant are cleaned up.
         
         Args:
             original_selector: The original selector to invalidate
             page_url: URL of the page where selector was used
-            parent_context: Optional parent element context
+            parent_context: Ignored — all context variants are removed
         """
         if not self.cache_enabled:
             return
-            
+
         cache_data = self._load_cache()
-        cache_key = self._create_cache_key(original_selector, page_url, parent_context)
-        
-        if cache_key in cache_data:
-            del cache_data[cache_key]
+        prefix = f"{original_selector}|"
+        keys_to_remove = [k for k in cache_data if k.startswith(prefix)]
+
+        for key in keys_to_remove:
+            del cache_data[key]
+
+        if keys_to_remove:
             self._save_cache(cache_data)
-            logger.info(f"Invalidated cached selector: '{original_selector}' for {page_url} (context: {parent_context})")
+            logger.info(f"Invalidated {len(keys_to_remove)} cached entries for selector '{original_selector}'")
         else:
-            logger.debug(f"No cached entry to invalidate for: '{original_selector}' on {page_url} (context: {parent_context})")
+            logger.debug(f"No cached entry to invalidate for: '{original_selector}' on {page_url}")
     
     async def reset_for_description(self, description: str) -> int:
         """Reset cache entries matching a specific description.

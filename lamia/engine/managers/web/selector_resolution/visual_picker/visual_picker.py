@@ -5,7 +5,6 @@ import re
 import asyncio
 from typing import Dict, List, Any, Optional, Tuple
 from .overlay import BrowserOverlay
-from .cache import VisualSelectionCache
 from .validation import SelectionValidator
 from lamia.engine.config_provider import ConfigProvider
 
@@ -40,7 +39,6 @@ class VisualElementPicker:
         self.browser = browser_adapter
         self.llm_manager = llm_manager
         self.overlay = BrowserOverlay(browser_adapter)
-        self.cache = VisualSelectionCache(config_provider)
         self.validator = SelectionValidator()
     
     async def pick_element_for_method(
@@ -61,61 +59,21 @@ class VisualElementPicker:
             (resolved_selector, found_elements) tuple
         """
         logger.info(f"Visual picking for {method_name}('{description}') on {page_url}")
-        
-        cached = await self.cache.get(method_name, description, page_url)
-        if cached:
-            logger.info("Using cached visual selection")
-            try:
-                return await self._use_cached_selection(cached)
-            except ValueError:
-                logger.info("Stale cache invalidated, showing visual picker to user")
-                await self.cache.invalidate(method_name, description, page_url)
-        
-        # Determine selection strategy based on method
+
         is_plural = method_name in ['get_elements']
         strategy = 'plural' if is_plural else 'singular'
-        
-        # Show visual picker
+
         selection_result = await self._show_picker(method_name, description, strategy)
-        
-        # Generate scoped selectors using AI
+
         resolved_selector = await self._generate_scoped_selectors(
-            description, 
+            description,
             selection_result
         )
-        
-        # Find elements using resolved selector
+
         elements = await self._find_elements_with_selector(resolved_selector)
-        
-        # Validate the result makes sense
         await self._validate_result(method_name, description, elements, is_plural)
-        
-        # Cache the successful selection (filter out non-serializable data)
-        cache_data = {
-            'selector': resolved_selector,
-            'element_count': len(elements)
-        }
-        
-        # Only cache serializable parts of selection_result
-        if selection_result:
-            cache_data['selection_type'] = selection_result.get('selection_type')
-            cache_data['working_selector'] = selection_result.get('working_selector')
-            # Skip 'found_elements' and 'selected_element' as they contain WebElement objects
-        
-        await self.cache.set(method_name, description, page_url, cache_data)
-        
-        # Log detailed information about the found selector
-        logger.info(f"✅ Visual picking successful for '{description}':")
-        logger.info(f"   📍 Resolved selector: {resolved_selector}")
-        logger.info(f"   🔢 Found {len(elements)} matching elements")
-        logger.info(f"   🎯 Selection strategy: {strategy}")
-        
-        # For template-based selections, log the working selector details
-        if selection_result and selection_result.get('selection_type') == 'template':
-            working_selector = selection_result.get('working_selector')
-            if working_selector:
-                logger.info(f"   🔧 Template selector: {working_selector}")
-        
+
+        logger.info(f"Visual picking resolved '{description}' → '{resolved_selector}' ({len(elements)} elements)")
         return resolved_selector, elements
     
     async def _show_picker(self, method_name: str, description: str, strategy: str) -> Dict[str, Any]:

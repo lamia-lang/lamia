@@ -97,22 +97,19 @@ class TestAISelectorCacheOperations:
         assert result == resolved
     
     @pytest.mark.asyncio
-    async def test_cache_with_parent_context(self):
-        """Test caching with parent context."""
+    async def test_cache_ignores_parent_context_in_key(self):
+        """Test that parent_context is accepted but does not affect the key."""
         selector = "submit button"
         url = "https://example.com"
         resolved = ".btn-submit"
-        parent_context = "form.login"
-        
-        await self.cache.set(selector, url, resolved, parent_context=parent_context)
-        
-        # Should hit with same context
-        result_with_context = await self.cache.get(selector, url, parent_context=parent_context)
+
+        await self.cache.set(selector, url, resolved, parent_context="form.login")
+
+        result_with_context = await self.cache.get(selector, url, parent_context="form.login")
         assert result_with_context == resolved
-        
-        # Should miss without context
+
         result_without_context = await self.cache.get(selector, url)
-        assert result_without_context is None
+        assert result_without_context == resolved
     
     @pytest.mark.asyncio
     async def test_cache_different_urls_separate(self):
@@ -149,17 +146,27 @@ class TestAISelectorCacheOperations:
     @pytest.mark.asyncio
     async def test_cache_key_generation(self):
         """Test cache key generation consistency."""
-        # This tests internal behavior through public API
         selector = "submit button"
         url = "https://example.com"
         resolved = ".btn-submit"
         
-        # Set once
         await self.cache.set(selector, url, resolved)
-        
-        # Should get the same value back (tests key consistency)
         result = await self.cache.get(selector, url)
         assert result == resolved
+
+    @pytest.mark.asyncio
+    async def test_cache_key_uses_hostname_not_full_url(self):
+        """Cache key uses hostname, so different paths on the same domain share cache."""
+        selector = "next button"
+        resolved = "button.next"
+
+        await self.cache.set(selector, "https://example.com/page/1?q=foo", resolved)
+
+        result_same_domain = await self.cache.get(selector, "https://example.com/other?q=bar")
+        assert result_same_domain == resolved
+
+        result_different_domain = await self.cache.get(selector, "https://other-site.com/page")
+        assert result_different_domain is None
     
     @pytest.mark.asyncio
     async def test_cache_with_special_characters(self):

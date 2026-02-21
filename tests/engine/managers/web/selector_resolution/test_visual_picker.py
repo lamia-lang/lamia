@@ -2,7 +2,6 @@
 Comprehensive tests for Visual Picker Module.
 
 This module tests all components of the visual element picker system:
-- VisualSelectionCache: Persistent caching of visual selections
 - ElementContextExtractor: HTML context extraction and XPath evaluation
 - BrowserOverlay: JavaScript picker injection and user interaction
 - VisualElementPicker: Main orchestrator for visual selection
@@ -12,7 +11,6 @@ This module tests all components of the visual element picker system:
 - SingularSelectionStrategy: Single element selection
 
 Coverage areas:
-- Cache operations (get/set/invalidate)
 - Context extraction (XPath evaluation)
 - Overlay management (JS injection, polling)
 - Picker orchestration (cache workflow, strategy routing)
@@ -24,7 +22,6 @@ import pytest
 from typing import Dict, Any, List
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 
-from lamia.engine.managers.web.selector_resolution.visual_picker.cache import VisualSelectionCache
 from lamia.engine.managers.web.selector_resolution.visual_picker.context_extractor import ElementContextExtractor
 from lamia.engine.managers.web.selector_resolution.visual_picker.overlay import BrowserOverlay
 from lamia.engine.managers.web.selector_resolution.visual_picker import VisualElementPicker
@@ -109,159 +106,6 @@ def mock_picker(mock_browser_adapter, mock_llm_manager, mock_overlay):
     picker.llm_manager = mock_llm_manager
     picker.overlay = mock_overlay
     return picker
-
-
-# ============================================================================
-# VisualSelectionCache Tests
-# ============================================================================
-
-class TestVisualSelectionCacheInitialization:
-    """Test VisualSelectionCache initialization."""
-
-    def test_cache_initialization_with_config_provider(self, config_provider):
-        """Test cache initialization with config provider."""
-        cache = VisualSelectionCache(config_provider)
-
-        assert cache.enabled is True
-        assert cache.cache_dir is not None
-
-    def test_cache_initialization_disabled(self, disabled_cache_config_provider):
-        """Test cache initialization when disabled."""
-        cache = VisualSelectionCache(disabled_cache_config_provider)
-
-        assert cache.enabled is False
-
-
-class TestVisualSelectionCacheOperations:
-    """Test VisualSelectionCache cache operations."""
-
-    @pytest.mark.asyncio
-    async def test_get_cache_miss(self, config_provider):
-        """Test getting cached selector when cache miss."""
-        cache = VisualSelectionCache(config_provider)
-
-        result = await cache.get(
-            method_name="click",
-            description="submit button",
-            page_url="https://example.com/page"
-        )
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_set_and_get_cache_hit(self, config_provider):
-        """Test caching and retrieving a selector."""
-        cache = VisualSelectionCache(config_provider)
-
-        selection_data = {
-            "selector": "button#submit",
-            "element_count": 1
-        }
-
-        await cache.set(
-            method_name="click",
-            description="submit button",
-            page_url="https://example.com/page",
-            selection_data=selection_data
-        )
-
-        result = await cache.get(
-            method_name="click",
-            description="submit button",
-            page_url="https://example.com/page"
-        )
-
-        assert result is not None
-        assert result["selection_data"]["selector"] == "button#submit"
-
-    @pytest.mark.asyncio
-    async def test_invalidate_cache_entry(self, config_provider):
-        """Test invalidating a specific cache entry."""
-        cache = VisualSelectionCache(config_provider)
-
-        selection_data = {"selector": "button#submit", "element_count": 1}
-        await cache.set("click", "submit button", "https://example.com/page", selection_data)
-
-        result = await cache.invalidate("click", "submit button", "https://example.com/page")
-        assert result is True
-
-        cached = await cache.get("click", "submit button", "https://example.com/page")
-        assert cached is None
-
-    @pytest.mark.asyncio
-    async def test_invalidate_by_url(self, config_provider):
-        """Test invalidating all cache entries for a URL."""
-        cache = VisualSelectionCache(config_provider)
-
-        await cache.set("click", "button1", "https://example.com/page", {"selector": "#btn1"})
-        await cache.set("type_text", "input1", "https://example.com/page", {"selector": "#input1"})
-        await cache.set("click", "button2", "https://other.com/page", {"selector": "#btn2"})
-
-        count = await cache.invalidate_by_url("https://example.com/page")
-        assert count == 2
-
-        result1 = await cache.get("click", "button1", "https://example.com/page")
-        result2 = await cache.get("click", "button2", "https://other.com/page")
-
-        assert result1 is None
-        assert result2 is not None
-
-    @pytest.mark.asyncio
-    async def test_clear_all_cache(self, config_provider):
-        """Test clearing all cache entries."""
-        cache = VisualSelectionCache(config_provider)
-
-        await cache.set("click", "button1", "https://example.com/page1", {"selector": "#btn1"})
-        await cache.set("click", "button2", "https://example.com/page2", {"selector": "#btn2"})
-
-        count = cache.clear_all()
-        assert count == 2
-
-        result1 = await cache.get("click", "button1", "https://example.com/page1")
-        result2 = await cache.get("click", "button2", "https://example.com/page2")
-
-        assert result1 is None
-        assert result2 is None
-
-    @pytest.mark.asyncio
-    async def test_cache_disabled_returns_none(self, disabled_cache_config_provider):
-        """Test that disabled cache always returns None."""
-        cache = VisualSelectionCache(disabled_cache_config_provider)
-
-        await cache.set("click", "button", "https://example.com", {"selector": "#btn"})
-        result = await cache.get("click", "button", "https://example.com")
-
-        assert result is None
-
-
-class TestVisualSelectionCacheStatistics:
-    """Test VisualSelectionCache statistics tracking."""
-
-    @pytest.mark.asyncio
-    async def test_get_stats_empty(self, config_provider):
-        """Test getting cache statistics when empty."""
-        cache = VisualSelectionCache(config_provider)
-
-        stats = cache.get_stats()
-
-        assert stats["enabled"] is True
-        assert stats["total_entries"] == 0
-
-    @pytest.mark.asyncio
-    async def test_get_stats_with_entries(self, config_provider):
-        """Test getting cache statistics with entries."""
-        cache = VisualSelectionCache(config_provider)
-
-        await cache.set("click", "button1", "https://example.com/page1", {"selector": "#btn1"})
-        await cache.set("type_text", "input1", "https://example.com/page1", {"selector": "#input1"})
-        await cache.set("click", "button2", "https://example.com/page2", {"selector": "#btn2"})
-
-        stats = cache.get_stats()
-
-        assert stats["total_entries"] == 3
-        assert "by_method" in stats
-        assert stats["by_method"]["click"] == 2
-        assert stats["by_method"]["type_text"] == 1
 
 
 # ============================================================================
@@ -895,54 +739,22 @@ class TestVisualElementPickerInitialization:
 
         assert picker.browser == mock_browser_adapter
         assert picker.llm_manager == mock_llm_manager
-        assert picker.cache is not None
         assert picker.overlay is not None
         assert picker.validator is not None
 
 
-class TestVisualElementPickerCacheWorkflow:
-    """Test VisualElementPicker cache workflow."""
+class TestVisualElementPickerOverlayWorkflow:
+    """Test VisualElementPicker overlay workflow."""
 
     @pytest.mark.asyncio
-    async def test_pick_element_cache_hit(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test picking element with cache hit."""
+    async def test_pick_element_calls_overlay(self, mock_browser_adapter, mock_llm_manager, config_provider):
+        """Test picking element shows overlay."""
         picker = VisualElementPicker(
             mock_browser_adapter,
             mock_llm_manager,
             config_provider
         )
 
-        # Pre-populate cache with the format that cache.set() uses
-        await picker.cache.set(
-            method_name="click",
-            description="submit button",
-            page_url="https://example.com/page",
-            selection_data={"selector": "button#submit", "element_count": 1}
-        )
-
-        # Mock element finding
-        mock_browser_adapter.get_elements = AsyncMock(return_value=[Mock()])
-
-        selector, elements = await picker.pick_element_for_method(
-            method_name="click",
-            description="submit button",
-            page_url="https://example.com/page"
-        )
-
-        assert selector == "button#submit"
-        assert len(elements) == 1
-        mock_llm_manager.execute.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_pick_element_cache_miss_calls_overlay(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test picking element with cache miss shows overlay."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        # Mock overlay selection
         with patch.object(picker.overlay, 'pick_single_element', new_callable=AsyncMock) as mock_pick:
             mock_pick.return_value = {
                 "selected_element": {
@@ -953,12 +765,10 @@ class TestVisualElementPickerCacheWorkflow:
                 "selection_type": "single"
             }
 
-            # Mock LLM response
             mock_llm_result = Mock()
             mock_llm_result.validated_text = "//button[@id='submit']"
             mock_llm_manager.execute = AsyncMock(return_value=mock_llm_result)
 
-            # Mock element finding
             mock_browser_adapter.get_elements = AsyncMock(return_value=[Mock()])
 
             selector, elements = await picker.pick_element_for_method(
@@ -969,56 +779,6 @@ class TestVisualElementPickerCacheWorkflow:
 
             assert selector is not None
             mock_pick.assert_called_once()
-
-
-    @pytest.mark.asyncio
-    async def test_stale_cache_invalidates_and_shows_picker(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """When cached selector finds no elements, invalidate and show picker UI."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        # Pre-populate cache with a stale selector
-        await picker.cache.set(
-            method_name="click",
-            description="submit button",
-            page_url="https://example.com/page",
-            selection_data={"selector": "button#old-submit", "element_count": 1}
-        )
-
-        # First get_elements call (from stale cache) returns empty; second returns a real element
-        mock_element = Mock()
-        mock_browser_adapter.get_elements = AsyncMock(
-            side_effect=[[], [mock_element]]
-        )
-
-        with patch.object(picker.overlay, 'pick_single_element', new_callable=AsyncMock) as mock_pick:
-            mock_pick.return_value = {
-                "selected_element": {
-                    "tagName": "BUTTON",
-                    "xpath": "//button[@id='new-submit']",
-                    "outerHTML": "<button id='new-submit'>Submit</button>"
-                },
-                "selection_type": "single"
-            }
-
-            selector, elements = await picker.pick_element_for_method(
-                method_name="click",
-                description="submit button",
-                page_url="https://example.com/page"
-            )
-
-            # Should have shown the picker after stale cache
-            mock_pick.assert_called_once()
-            assert selector == "//button[@id='new-submit']"
-            assert len(elements) == 1
-
-            # Stale entry should be gone from cache
-            cached = await picker.cache.get("click", "submit button", "https://example.com/page")
-            assert cached is not None
-            assert cached['selection_data']['selector'] == "//button[@id='new-submit']"
 
 
 class TestVisualElementPickerStrategyRouting:
@@ -1094,8 +854,8 @@ class TestVisualPickerIntegration:
     """Integration tests for complete visual picker workflow."""
 
     @pytest.mark.asyncio
-    async def test_full_cache_workflow(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test complete cache workflow from miss to hit."""
+    async def test_pick_element_returns_selector_and_elements(self, mock_browser_adapter, mock_llm_manager, config_provider):
+        """Test visual picker returns resolved selector and found elements."""
         picker = VisualElementPicker(
             mock_browser_adapter,
             mock_llm_manager,
@@ -1110,57 +870,12 @@ class TestVisualPickerIntegration:
 
             mock_browser_adapter.get_elements = AsyncMock(return_value=[Mock()])
 
-            # First call - cache miss; single selections use element xpath directly
-            selector1, elements1 = await picker.pick_element_for_method(
+            selector, elements = await picker.pick_element_for_method(
                 method_name="click",
                 description="submit button",
                 page_url="https://example.com/page"
             )
 
             assert mock_pick.call_count == 1
-            assert selector1 == "//button"
-
-            # Second call - cache hit (real cache workflow)
-            mock_pick.reset_mock()
-            selector2, elements2 = await picker.pick_element_for_method(
-                method_name="click",
-                description="submit button",
-                page_url="https://example.com/page"
-            )
-
-            assert selector1 == selector2
-            mock_pick.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_cache_invalidation_flow(self, mock_browser_adapter, mock_llm_manager, config_provider):
-        """Test cache invalidation and re-selection."""
-        picker = VisualElementPicker(
-            mock_browser_adapter,
-            mock_llm_manager,
-            config_provider
-        )
-
-        with patch.object(picker.overlay, 'pick_single_element', new_callable=AsyncMock) as mock_pick:
-            mock_pick.return_value = {
-                "selected_element": {"tagName": "BUTTON", "xpath": "//button", "outerHTML": "<button>X</button>"},
-                "selection_type": "single"
-            }
-
-            mock_llm_result = Mock()
-            mock_llm_result.validated_text = "//button"
-            mock_llm_manager.execute = AsyncMock(return_value=mock_llm_result)
-
-            mock_browser_adapter.get_elements = AsyncMock(return_value=[Mock()])
-
-            # First selection
-            await picker.pick_element_for_method("click", "submit button", "https://example.com/page")
-            assert mock_pick.call_count == 1
-
-            # Invalidate cache
-            await picker.cache.invalidate_by_url("https://example.com/page")
-
-            # Second selection after invalidation - should call overlay again
-            mock_pick.reset_mock()
-            await picker.pick_element_for_method("click", "submit button", "https://example.com/page")
-
-            mock_pick.assert_called_once()
+            assert selector == "//button"
+            assert len(elements) == 1
