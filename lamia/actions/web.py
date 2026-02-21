@@ -64,7 +64,30 @@ class WebActions:
         """
         self._element_handle = element_handle
         self._executor = executor
-    
+
+    def __repr__(self) -> str:
+        if self._element_handle is None:
+            return "<web global>"
+        try:
+            tag = self._element_handle.tag_name
+            text = (self._element_handle.text or "")[:80]
+            el_id = self._element_handle.get_attribute("id") or ""
+            el_class = self._element_handle.get_attribute("class") or ""
+            parts = [f"<{tag}"]
+            if el_id:
+                parts.append(f' id="{el_id}"')
+            if el_class:
+                classes_short = el_class[:50] + ("..." if len(el_class) > 50 else "")
+                parts.append(f' class="{classes_short}"')
+            parts.append(">")
+            desc = "".join(parts)
+            if text:
+                text_preview = text.replace("\n", " ").strip()[:60]
+                desc += f' "{text_preview}"'
+            return desc
+        except Exception:
+            return f"<element@{id(self._element_handle):#x}>"
+
     def _execute_if_available(self, command: WebCommand, result_processor: Optional[Any] = None):
         """Execute command if executor is available, otherwise return command.
         
@@ -83,7 +106,7 @@ class WebActions:
         """
         if self._executor:
             validation_result = asyncio.run(self._executor.execute(command))
-            result = validation_result.result_type or validation_result
+            result = validation_result.result_type if validation_result.result_type is not None else validation_result
             
             if result_processor:
                 result = result_processor(result)

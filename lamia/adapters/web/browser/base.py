@@ -190,3 +190,18 @@ class BaseBrowserAdapter(ABC):
     async def execute_script(self, script: str, *args: Any) -> Any:
         """Execute a JavaScript script. Extra args are accessible as arguments[0], arguments[1], etc."""
         pass
+
+    @abstractmethod
+    async def get_input_type(self, params: BrowserActionParams) -> str:
+        """Detect the type of an input element (text, checkbox, radio, select, textarea, etc.)."""
+        pass
+
+    @abstractmethod
+    async def is_checked(self, params: BrowserActionParams) -> bool:
+        """Check if a checkbox/radio element is checked."""
+        pass
+
+    @abstractmethod
+    async def get_options(self, params: BrowserActionParams) -> List[str]:
+        """Get available options from a select/dropdown element."""
+        pass

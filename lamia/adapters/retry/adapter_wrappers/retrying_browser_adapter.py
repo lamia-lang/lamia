@@ -91,3 +91,12 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
 
     async def execute_script(self, script: str, *args: Any) -> Any:
         return await self.retry_handler.execute(self.adapter.execute_script, script, *args)
+
+    async def get_input_type(self, params: BrowserActionParams) -> str:
+        return await self.retry_handler.execute(self.adapter.get_input_type, params)
+
+    async def is_checked(self, params: BrowserActionParams) -> bool:
+        return await self.retry_handler.execute(self.adapter.is_checked, params)
+
+    async def get_options(self, params: BrowserActionParams) -> List[str]:
+        return await self.retry_handler.execute(self.adapter.get_options, params)
