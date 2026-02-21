@@ -1,4 +1,5 @@
 import asyncio
+import signal
 import sys
 import os
 import readline  # For better input handling (command history)
@@ -144,6 +145,8 @@ async def interactive_mode(lamia: Lamia):
 
 def main():
     """Main entry point for the Lamia CLI."""
+    _install_sigint_handler()
+
     if len(sys.argv) > 1 and sys.argv[1] == "init":
         parser = argparse.ArgumentParser(
             description="Lamia CLI",
@@ -293,6 +296,7 @@ def main():
     # Note: Lazy loading is now handled by HybridExecutor for .hu files
     # Python files still need sys.path management for regular execution
 
+    lamia = None
     try:
         # Handle --no-cache flag
         if args.no_cache:
@@ -342,6 +346,8 @@ def main():
                     if logger.level <= logging.DEBUG:
                         traceback.print_exc()
                     sys.exit(1)
+                except KeyboardInterrupt:
+                    _graceful_shutdown(lamia)
                 except Exception as e:
                     # Fallback - check if it looks like a syntax/parsing error
                     error_msg = str(e).lower()
@@ -358,6 +364,8 @@ def main():
                     logger.info(f"Executing script: {prompt_file}")
                     runpy.run_path(prompt_file, run_name="__main__")
                     sys.exit(0)
+                except KeyboardInterrupt:
+                    _graceful_shutdown(lamia)
                 except Exception as e:
                     logger.error(f"❌ Error executing script: {e}")
                     traceback.print_exc()
@@ -379,8 +387,38 @@ def main():
         logger.error("Check your config.yaml and logs for details.")
         sys.exit(1)
     except KeyboardInterrupt:
-        logger.info("\n\nGoodbye! 👋")
-        sys.exit(0)
+        _graceful_shutdown(lamia)
+
+
+def _install_sigint_handler() -> None:
+    """Install a SIGINT handler that immediately silences loggers and exits.
+
+    When Ctrl+C is pressed the OS sends SIGINT to the whole process group,
+    killing ChromeDriver instantly.  In-flight Selenium calls then fail and
+    urllib3 retries each one, flooding the console with warnings.
+    Raising KeyboardInterrupt from the handler is not enough because asyncio
+    absorbs it and the loop continues processing fields against a dead browser.
+    Instead we mute every noisy logger and terminate the process directly.
+    """
+    def _handler(signum: int, frame: object) -> None:
+        logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+        logging.getLogger("selenium").setLevel(logging.CRITICAL)
+        logging.getLogger("lamia").setLevel(logging.CRITICAL)
+        print("\nShutting down...", flush=True)
+        os._exit(0)
+
+    signal.signal(signal.SIGINT, _handler)
+
+
+def _graceful_shutdown(lamia_instance: 'Optional[Lamia]') -> None:
+    """Clean up resources after the signal handler has already muted loggers."""
+    logger.info("\nShutting down...")
+    if lamia_instance is not None:
+        try:
+            asyncio.run(lamia_instance._engine.cleanup())
+        except Exception:
+            pass
+    sys.exit(0)
 
 
 def _log_external_error(prefix: str, exc: Exception) -> None:
