@@ -152,6 +152,9 @@ class TestWebManagerCommandRouting:
         # Create a custom action type that's not in either category
         command = Mock()
         command.action = "UNSUPPORTED_ACTION"
+        command.selector = None
+        command.value = None
+        command.scope_element_handle = None
         
         with pytest.raises(ValueError, match="Unsupported web action: UNSUPPORTED_ACTION"):
             await self.manager.execute(command)
@@ -399,6 +402,7 @@ class TestWebManagerEdgeCases:
         command.selector = ""
         command.value = ""
         command.text = ""
+        command.scope_element_handle = None
         
         signature = self.manager._get_action_signature(command)
         assert signature == "WebActionType.CLICK"
@@ -407,9 +411,10 @@ class TestWebManagerEdgeCases:
         """Test action signature generation with missing attributes."""
         command = Mock()
         command.action = WebActionType.NAVIGATE
-        # Explicitly set selector and text to None to avoid Mock attributes
         command.selector = None
+        command.value = None
         command.text = None
+        command.scope_element_handle = None
         
         signature = self.manager._get_action_signature(command)
         assert signature == "WebActionType.NAVIGATE"

@@ -92,14 +92,12 @@ class WebManager(Manager[WebCommand]):
         
         # Wrap result in ValidationResult if it's not already
         if validator is not None:
-            # Safe string conversion for logging
-            result_str = str(result) if result is not None else 'None'
-            if len(result_str) > 1000:
-                result_str = result_str[0:1000] + '...'
-            logger.info(f"Validating result in the web_manager: {result_str}")
+            result_preview = self._format_result_preview(result)
+            logger.info(f"Validating result in the web_manager: {result_preview}")
             validation_result = await validator.validate(result)
         else:
-            logger.info(f"Validator is None, returning result as is: {str(result)}")
+            result_preview = self._format_result_preview(result)
+            logger.info(f"Validator is None, returning result as is: {result_preview}")
             validation_result = ValidationResult(
                 is_valid=True,
                 result_type=result,
@@ -108,15 +106,35 @@ class WebManager(Manager[WebCommand]):
 
         return validation_result
     
+    @staticmethod
+    def _format_result_preview(result: Any) -> str:
+        if isinstance(result, list):
+            count = len(result)
+            if count == 0:
+                return "[] (empty)"
+            lines = [f"[{count} elements]:"]
+            for i, item in enumerate(result):
+                lines.append(f"  [{i}] {repr(item)}")
+            return "\n".join(lines)
+        result_str = str(result) if result is not None else "None"
+        if len(result_str) > 500:
+            return result_str[:500] + "..."
+        return result_str
+
     def _get_action_signature(self, command: WebCommand) -> str:
-        """Create a unique signature for the action to detect repeats."""
-        # Generic signature that works for any website
-        if hasattr(command, 'selector') and command.selector:
-            return f"{command.action}:{command.selector}"
-        elif hasattr(command, 'text') and command.text:
-            return f"{command.action}:{command.text}"
-        else:
-            return f"{command.action}"
+        """Create a unique signature for the action to detect repeats.
+
+        When a command is scoped to a specific element handle, its identity
+        is included
+        """
+        parts = [str(command.action)]
+        if command.selector:
+            parts.append(str(command.selector))
+        elif command.value:
+            parts.append(str(command.value))
+        if command.scope_element_handle is not None:
+            parts.append(f"@{id(command.scope_element_handle)}")
+        return ":".join(parts)
     
     def _check_for_stuck_behavior(self, action_signature: str) -> None:
         """Check if we're stuck repeating the same action."""
