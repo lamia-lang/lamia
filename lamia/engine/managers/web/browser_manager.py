@@ -10,7 +10,6 @@ from lamia.adapters.retry.adapter_wrappers.retrying_browser_adapter import Retry
 from lamia.interpreter.commands import WebCommand, WebActionType
 from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
 from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
-from lamia.adapters.web.driver_scope_manager import get_scope_manager
 from .selector_resolution.selector_resolution_service import SelectorResolutionService
 from .selector_resolution.suggestions import SelectorSuggestionService
 from lamia.errors import ExternalOperationPermanentError, ExternalOperationTransientError
@@ -177,9 +176,7 @@ class BrowserManager:
                     get_browser_adapter_func=self._get_browser_adapter,
                 )
             
-            # Get current page URL from driver scope manager
-            scope_manager = get_scope_manager()
-            page_url = getattr(scope_manager, 'current_url', 'unknown')
+            page_url = await self._get_current_page_url()
 
             # Extract parent context from scope element handle
             parent_context = None
@@ -312,15 +309,12 @@ class BrowserManager:
         """
         try:
             from .selector_resolution.selector_parser import SelectorParser, SelectorType
-            from lamia.adapters.web.driver_scope_manager import get_scope_manager
             
-            # Only invalidate if this was an AI-resolved selector (natural language)
             parser = SelectorParser()
             selector_type = parser.classify(selector)
             
             if selector_type == SelectorType.NATURAL_LANGUAGE:
-                scope_manager = get_scope_manager()
-                page_url = getattr(scope_manager, 'current_url', 'unknown')
+                page_url = await self._get_current_page_url()
                 
                 logger.warning(
                     f"⚠️  Permanent error with AI-resolved selector '{selector}': {error}\n"
@@ -507,6 +501,13 @@ class BrowserManager:
             logger.error(f"Failed to load cookies for profile '{profile_name}': {e}")
             return False
     
+    async def _get_current_page_url(self) -> str:
+        """Get current page URL, returning 'unknown' on failure."""
+        try:
+            return await self.get_current_url() or "unknown"
+        except Exception:
+            return "unknown"
+
     async def _get_current_page_html(self) -> str:
         """Get current page HTML source."""
         adapter = await self._get_browser_adapter()

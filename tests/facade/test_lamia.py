@@ -451,21 +451,23 @@ class TestLamiaLifecycle:
             # This tests current behavior - if this is undesirable, implementation needs try/finally
             dummy_config_provider.reset_model_chain.assert_not_called()
 
-    def test_run_sync_raises_in_async_context(self):
-        """Test that run() raises appropriate error when called from async context."""
+    def test_run_sync_works_from_async_context(self):
+        """Test that run() works even from async context via EventLoopManager."""
         with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
             mock_engine = MagicMock()
             mock_engine.config_provider = MagicMock()
+            mock_engine.execute = AsyncMock(
+                return_value=MockValidationResult(is_valid=True, raw_text="response", result_type="response")
+            )
             MockEngine.return_value = mock_engine
 
             lamia = Lamia()
 
             async def call_sync_from_async():
-                # This should raise because asyncio.run doesn't work in running loop
-                lamia.run("test prompt")
+                return lamia.run("test prompt")
 
-            with pytest.raises(RuntimeError, match="cannot be used inside an async context"):
-                asyncio.run(call_sync_from_async())
+            result = asyncio.run(call_sync_from_async())
+            assert result == "response"
 
     def test_string_command_delegates_to_process_string_command(self):
         """Test that string commands are processed through process_string_command."""

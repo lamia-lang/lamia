@@ -1,9 +1,9 @@
 """Web automation actions including browser and HTTP operations with excellent IntelliSense support."""
 
 from typing import Optional, Dict, Any, Union, Tuple, List
+from lamia.async_bridge import EventLoopManager
 from lamia.internal_types import BrowserAction, BrowserActionType, BrowserActionParams, SelectorType
 from lamia.interpreter.commands import WebCommand, WebActionType
-import asyncio
 
 def _detect_selector_type(selector: str) -> SelectorType:
     """Auto-detect selector type from selector string."""
@@ -105,7 +105,7 @@ class WebActions:
             Executed result if executor available, otherwise the command
         """
         if self._executor:
-            validation_result = asyncio.run(self._executor.execute(command))
+            validation_result = EventLoopManager.run_coroutine(self._executor.execute(command))
             result = validation_result.result_type if validation_result.result_type is not None else validation_result
             
             if result_processor:

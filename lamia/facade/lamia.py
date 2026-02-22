@@ -9,6 +9,7 @@ import asyncio
 import logging
 from typing import Any, Optional, List, Dict, Union, Tuple, Type
 
+from lamia.async_bridge import EventLoopManager
 from lamia.env_loader import load_env_files
 from lamia.engine.engine import LamiaEngine
 from lamia import LLMModel
@@ -152,22 +153,13 @@ class Lamia:
             ExternalOperationFailedError: If external service fails with unclassified error
             RuntimeError: If run() is called inside an async context
         """
-        try:
-            return asyncio.run(
-                self.run_async(
-                    command,
-                    return_type,
-                    models=models,
-                )
+        return EventLoopManager.run_coroutine(
+            self.run_async(
+                command,
+                return_type,
+                models=models,
             )
-        except RuntimeError as e:
-            # Happens only if there is already a running event loop
-            if "running event loop" in str(e):
-                raise RuntimeError(
-                    "run() cannot be used inside an async context. "
-                    "Use 'await lamia.run_async(...)' instead."
-                ) from e
-            raise
+        )
 
     def get_validation_stats(self) -> Optional[Any]:
         """Get validation statistics."""
@@ -184,14 +176,7 @@ class Lamia:
     def __del__(self):
         """Clean up resources when the Lamia instance is destroyed."""
         try:
-            # Try to run cleanup in a new event loop if no loop is running
-            try:
-                # Check if there's already a running event loop
-                loop = asyncio.get_running_loop()
-                # There's a running loop, schedule cleanup on it
-                loop.create_task(self._engine.cleanup())
-            except RuntimeError:
-                # No running event loop, safe to create a new one
-                asyncio.run(self._engine.cleanup())
+            EventLoopManager.run_coroutine(self._engine.cleanup())
+            EventLoopManager.shutdown()
         except Exception as e:
             logger.warning(f"Error during Lamia cleanup: {e}")

@@ -547,53 +547,45 @@ class TestBrowserManagerStaleCacheInvalidation:
         self.manager = BrowserManager(self.config_provider)
 
     @pytest.mark.asyncio
-    async def test_stale_cached_selector_is_invalidated_and_retried(self):
-        """When a cached resolved selector fails, it should be invalidated and re-resolved."""
+    async def test_stale_cached_selector_triggers_invalidation(self):
+        """When a cached NL selector fails with permanent error,
+        _auto_invalidate_cache_on_error is called to clear the stale entry."""
         from lamia.errors import ExternalOperationPermanentError
 
-        command = WebCommand(action=WebActionType.GET_TEXT, selector="question")
+        command = WebCommand(action=WebActionType.GET_TEXT, selector="question label")
 
-        stale_action = BrowserAction(
+        resolved_action = BrowserAction(
             action=BrowserActionType.GET_TEXT,
-            params=BrowserActionParams(selector='//*[@id="ember479"]/label[1]'),
+            params=BrowserActionParams(
+                selector='question label',
+                fallback_selectors=['question label alt'],
+            ),
         )
-        fresh_action = BrowserAction(
-            action=BrowserActionType.GET_TEXT,
-            params=BrowserActionParams(selector='//*[@id="ember999"]/label[1]'),
-        )
-
-        resolve_call_count = 0
 
         async def mock_resolve(action):
-            nonlocal resolve_call_count
-            resolve_call_count += 1
-            if resolve_call_count == 1:
-                return stale_action
-            return fresh_action
+            return resolved_action
 
-        execute_call_count = 0
-
-        async def mock_execute(action, original_action_type=None):
-            nonlocal execute_call_count
-            execute_call_count += 1
-            if execute_call_count == 1:
-                raise ExternalOperationPermanentError("element not found on page")
-            return "Question text"
+        async def mock_single(action, adapter, original_action_type=None):
+            raise ExternalOperationPermanentError("element not found on page")
 
         mock_resolution_service = AsyncMock()
         self.manager._selector_resolution_service = mock_resolution_service
+        mock_adapter = AsyncMock()
 
-        with patch.object(self.manager, '_resolve_selectors', side_effect=mock_resolve):
-            with patch.object(self.manager, '_execute_browser_action', side_effect=mock_execute):
-                with patch('lamia.engine.managers.web.browser_manager.get_scope_manager') as mock_scope:
-                    mock_scope.return_value = Mock(current_url='https://linkedin.com/jobs')
-                    result = await self.manager.execute(command)
+        mock_get_url = AsyncMock(return_value='https://linkedin.com/jobs')
+        mock_get_source = AsyncMock(return_value='<html></html>')
 
-        assert result == "Question text"
-        assert resolve_call_count == 2
-        assert execute_call_count == 2
-        mock_resolution_service.invalidate_cached_selector.assert_called_once_with(
-            "question", "https://linkedin.com/jobs",
+        with patch.object(self.manager, '_resolve_selectors', side_effect=mock_resolve), \
+             patch.object(self.manager, '_get_browser_adapter', return_value=mock_adapter), \
+             patch.object(self.manager, '_execute_single_action', side_effect=mock_single), \
+             patch.object(self.manager, '_get_current_page_url', mock_get_url), \
+             patch.object(self.manager, 'get_current_url', mock_get_url), \
+             patch.object(self.manager, 'get_page_source', mock_get_source):
+            with pytest.raises(ExternalOperationPermanentError):
+                await self.manager.execute(command)
+
+        mock_resolution_service.invalidate_cached_selector.assert_any_call(
+            'question label', "https://linkedin.com/jobs",
         )
 
     @pytest.mark.asyncio
@@ -642,7 +634,6 @@ class TestBrowserManagerStaleCacheInvalidation:
 
         with patch.object(self.manager, '_resolve_selectors', side_effect=mock_resolve):
             with patch.object(self.manager, '_execute_browser_action', side_effect=mock_execute):
-                with patch('lamia.engine.managers.web.browser_manager.get_scope_manager') as mock_scope:
-                    mock_scope.return_value = Mock(current_url='https://example.com')
+                with patch.object(self.manager, '_get_current_page_url', return_value='https://example.com'):
                     with pytest.raises(ExternalOperationPermanentError):
                         await self.manager.execute(command)

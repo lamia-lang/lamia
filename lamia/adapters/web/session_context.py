@@ -4,9 +4,10 @@ import logging
 import os
 import platform
 import time
-import asyncio
 from pathlib import Path
 from typing import Optional, Any
+
+from lamia.async_bridge import EventLoopManager
 from urllib.parse import urlparse
 
 from lamia.interpreter.commands import WebCommand, WebActionType
@@ -137,13 +138,7 @@ class SessionContext:
                     pass
 
                 try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        loop.run_until_complete(browser_manager.load_session_cookies(name))
-                    except Exception:
-                        pass
-                    loop.close()
+                    EventLoopManager.run_coroutine(browser_manager.load_session_cookies(name))
                 except Exception as e:
                     logger.debug(f"Session state loading failed for '{name}': {e}")
 
@@ -173,10 +168,7 @@ class SessionContext:
             try:
                 browser_manager: BrowserManager = self.web_manager.browser_manager
                 try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    loop.run_until_complete(browser_manager.save_session_cookies(name))
-                    loop.close()
+                    EventLoopManager.run_coroutine(browser_manager.save_session_cookies(name))
                 except Exception as e:
                     logger.warning(f"Failed to save cookies for profile '{name}': {e}")
                 try:
@@ -249,12 +241,7 @@ def _get_web_manager(lamia_instance: Any) -> Optional[Any]:
 
 def _run_async(coro):
     """Run an async coroutine from synchronous code."""
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+    return EventLoopManager.run_coroutine(coro)
 
 
 def pre_validate_session(lamia_instance: Any, probe_url: Optional[str],

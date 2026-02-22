@@ -13,6 +13,7 @@ import runpy
 import traceback
 
 from lamia import Lamia
+from lamia.async_bridge import EventLoopManager
 from lamia.errors import (
     MissingAPIKeysError,
     ExternalOperationTransientError,
@@ -415,9 +416,10 @@ def _graceful_shutdown(lamia_instance: 'Optional[Lamia]') -> None:
     logger.info("\nShutting down...")
     if lamia_instance is not None:
         try:
-            asyncio.run(lamia_instance._engine.cleanup())
+            EventLoopManager.run_coroutine(lamia_instance._engine.cleanup())
         except Exception:
             pass
+    EventLoopManager.shutdown()
     sys.exit(0)
 
 

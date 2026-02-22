@@ -7,7 +7,6 @@ parameter handling, and integration with Lamia instances.
 
 import inspect
 import os
-import asyncio
 import logging
 from typing import Optional, Dict, Any
 from .hybrid_syntax_parser import HybridSyntaxParser
@@ -213,35 +212,6 @@ class HybridExecutor:
                 logger.error(f"Function not found even after lazy loading: {e}")
             raise
     
-    def _execute_in_new_loop(self, code, file_path, globals_dict=None, source_code=None):
-        """Execute code in a new event loop to avoid async context conflicts."""
-        compiled_code = compile(code, file_path, 'exec')
-        
-        if globals_dict is None:
-            globals_dict = {}
-        
-        globals_dict[self.lamia_var_name] = self.lamia
-        
-        # For non-cached execution, we need to extract types from source
-        if source_code:
-            self._extract_and_import_types(source_code, globals_dict)
-        
-        local_dict = {}
-        
-        # Execute in a new event loop to avoid async context conflicts
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            exec(compiled_code, globals_dict, local_dict)
-        finally:
-            loop.close()
-            # Restore the original event loop if there was one
-            try:
-                asyncio.set_event_loop(asyncio.get_event_loop())
-            except RuntimeError:
-                pass
-        
-        return local_dict
 
 
 class SmartTypeResolver:
