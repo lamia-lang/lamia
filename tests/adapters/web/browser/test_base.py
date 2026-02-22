@@ -3,6 +3,7 @@
 import pytest
 from abc import ABC
 from unittest.mock import Mock, AsyncMock
+from typing import List, Any
 from lamia.adapters.web.browser.base import (
     BaseBrowserAdapter,
     DOM_STABLE_MUTATION_QUIET_MS,
@@ -128,6 +129,18 @@ class MockBrowserAdapter(BaseBrowserAdapter):
 
     async def execute_script(self, script: str):
         pass
+
+    async def get_elements(self, params: BrowserActionParams) -> List[Any]:
+        return []
+    
+    async def get_input_type(self, params: BrowserActionParams) -> str:
+        return ""
+    
+    async def get_options(self, params: BrowserActionParams) -> List[str]:
+        return []
+    
+    async def is_checked(self, params: BrowserActionParams) -> bool:
+        return False
 
 
 @pytest.mark.asyncio
