@@ -30,7 +30,7 @@ class FSManager(Manager[FileCommand]):
             content = f.read()
         if validator is not None:
             return await validator.validate(content)
-        return ValidationResult(is_valid=True, result_type=content, error_message=None)
+        return ValidationResult(is_valid=True, typed_result=content, error_message=None)
 
     async def _write(
         self, command: FileCommand, validator: Optional[BaseValidator]
@@ -43,7 +43,7 @@ class FSManager(Manager[FileCommand]):
                 return validation_result
         else:
             validation_result = ValidationResult(
-                is_valid=True, result_type=command.content, error_message=None
+                is_valid=True, typed_result=command.content, error_message=None
             )
 
         self._ensure_parent_dirs(command.path)
@@ -70,7 +70,7 @@ class FSManager(Manager[FileCommand]):
                 return validation_result
         else:
             validation_result = ValidationResult(
-                is_valid=True, result_type=command.content, error_message=None
+                is_valid=True, typed_result=command.content, error_message=None
             )
 
         self._ensure_parent_dirs(command.path)

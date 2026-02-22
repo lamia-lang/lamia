@@ -38,7 +38,7 @@ class SelectorCorrectnessValidator(BaseValidator):
         if not response or not response.strip():
             return ValidationResult(
                 is_valid=False,
-                result_type=None,
+                typed_result=None,
                 error_message="Empty selector response"
             )
         
@@ -50,19 +50,19 @@ class SelectorCorrectnessValidator(BaseValidator):
             if selector_type in [SelectorType.VALID_CSS, SelectorType.VALID_XPATH]:
                 return ValidationResult(
                     is_valid=True,
-                    result_type=selector,
+                    typed_result=selector,
                     error_message=None
                 )
             else:
                 return ValidationResult(
                     is_valid=False,
-                    result_type=None,
+                    typed_result=None,
                     error_message=f"Invalid selector: {selector_type.value}"
                 )
                 
         except ValueError as e:
             return ValidationResult(
                 is_valid=False,
-                result_type=None,
+                typed_result=None,
                 error_message=str(e)
             )

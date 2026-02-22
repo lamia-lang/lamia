@@ -335,7 +335,7 @@ class TestWebActionsExecutor:
         """Test command execution when executor is available."""
         # Mock executor returning a validation result
         mock_result = Mock()
-        mock_result.result_type = "executed result"
+        mock_result.typed_result = "executed result"
         self.mock_executor.execute.return_value = mock_result
         
         command = WebCommand(action=WebActionType.CLICK, selector="#button")
@@ -347,7 +347,7 @@ class TestWebActionsExecutor:
     def test_execute_if_available_with_result_processor(self):
         """Test command execution with result processor."""
         mock_result = Mock()
-        mock_result.result_type = "raw result"
+        mock_result.typed_result = "raw result"
         self.mock_executor.execute.return_value = mock_result
         
         def processor(result):

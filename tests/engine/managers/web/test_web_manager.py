@@ -172,7 +172,7 @@ class TestWebManagerCommandRouting:
         # Should create default ValidationResult
         assert isinstance(result, ValidationResult)
         assert result.is_valid is True
-        assert result.result_type == expected_result
+        assert result.typed_result == expected_result
         assert result.error_message is None
 
 
@@ -393,7 +393,7 @@ class TestWebManagerEdgeCases:
             
             # Should succeed
             assert result.is_valid is True
-            assert result.result_type == long_result
+            assert result.typed_result == long_result
     
     def test_get_action_signature_with_empty_attributes(self):
         """Test action signature generation with empty attributes."""
@@ -441,7 +441,7 @@ class TestWebManagerEdgeCases:
         result = await self.manager.execute(command, validator=None)
         
         assert result.is_valid is True
-        assert result.result_type is None
+        assert result.typed_result is None
         assert result.error_message is None
 
 

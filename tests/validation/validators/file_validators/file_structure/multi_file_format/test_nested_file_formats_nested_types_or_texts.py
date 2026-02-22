@@ -34,8 +34,8 @@ async def test_file_structure_validator_deep_nesting(strict, file_content, valid
     result = await validator.validate(file_content)
     assert result.is_valid is not strict
     if not strict:
-        assert result.result_type.p == "This is a paragraph."
-        assert result.result_type.title == "Test"
+        assert result.typed_result.p == "This is a paragraph."
+        assert result.typed_result.title == "Test"
     if strict:
         assert "Field 'title': Element found but filtered out due to type constraint" in result.error_message
         assert "Field 'p': Element found but filtered out due to type constraint" in result.error_message
@@ -59,8 +59,8 @@ async def test_file_structure_validator_exact_nesting(strict, file_content, vali
     validator = validator_class(model=Root, strict=strict)  
     result = await validator.validate(file_content)
     assert result.is_valid is True
-    assert result.result_type.body.p == "This is a paragraph."
-    assert result.result_type.head.title == "Test"
+    assert result.typed_result.body.p == "This is a paragraph."
+    assert result.typed_result.head.title == "Test"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -85,17 +85,17 @@ async def test_file_structure_validator_direct_children_with_any_type(strict, fi
     result = await validator.validate(file_content)
     assert result.is_valid is True
     if validator_class == HTMLStructureValidator:
-        assert result.result_type.head == "<head><title>Test</title></head>"
-        assert result.result_type.body == "<body><p>This is a paragraph.</p></body>"
+        assert result.typed_result.head == "<head><title>Test</title></head>"
+        assert result.typed_result.body == "<body><p>This is a paragraph.</p></body>"
     elif validator_class == XMLStructureValidator:
-        assert result.result_type.head == "<head><title>Test</title></head>"
-        assert result.result_type.body == "<body><p>This is a paragraph.</p></body>"
+        assert result.typed_result.head == "<head><title>Test</title></head>"
+        assert result.typed_result.body == "<body><p>This is a paragraph.</p></body>"
     elif validator_class == JSONStructureValidator:
-        assert result.result_type.head == '{"title":"Test"}'
-        assert result.result_type.body == '{"p":"This is a paragraph."}'
+        assert result.typed_result.head == '{"title":"Test"}'
+        assert result.typed_result.body == '{"p":"This is a paragraph."}'
     elif validator_class == YAMLStructureValidator:
-        assert result.result_type.head == 'title: Test'
-        assert result.result_type.body == 'p: This is a paragraph.'
+        assert result.typed_result.head == 'title: Test'
+        assert result.typed_result.body == 'p: This is a paragraph.'
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])

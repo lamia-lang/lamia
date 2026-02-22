@@ -105,17 +105,17 @@ async def test_flat_structure_order_validation_all_formats_valids(strict, valida
     valid_payload = VALID_FLAT_PAYLOADS[payload_key]
     result = await validator.validate(valid_payload)
     assert result.is_valid is True
-    assert result.result_type is not None
+    assert result.typed_result is not None
 
     if validator_class == MarkdownStructureValidator:
-        assert result.result_type.name == "John"
-        assert result.result_type.contact == "Contact"
-        assert result.result_type.bio == "Biography" 
+        assert result.typed_result.name == "John"
+        assert result.typed_result.contact == "Contact"
+        assert result.typed_result.bio == "Biography" 
     else:
-        assert result.result_type.name == "John"
-        assert result.result_type.age == 25
-        assert result.result_type.field1 == 1
-        assert result.result_type.field2 == "test"
+        assert result.typed_result.name == "John"
+        assert result.typed_result.age == 25
+        assert result.typed_result.field1 == 1
+        assert result.typed_result.field2 == "test"
 
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("validator_class, payload_key, model", FLAT_VALIDATOR_CONFIGS)
@@ -281,11 +281,11 @@ async def test_complex_structure_order_validation_p_before_span(validator_class,
     validator = validator_class(model=ParagraphBeforeSpanRequest, strict=False, generate_hints=True)
     result = await validator.validate(payload)
     assert result.is_valid is True
-    assert hasattr(result.result_type, "p")
-    assert hasattr(result.result_type, "span")
+    assert hasattr(result.typed_result, "p")
+    assert hasattr(result.typed_result, "span")
     # Allow slight formatting differences by checking substrings
-    assert "Comment content" in str(result.result_type.p)
-    assert "User 2" in str(result.result_type.span)
+    assert "Comment content" in str(result.typed_result.p)
+    assert "User 2" in str(result.typed_result.span)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -309,10 +309,10 @@ async def test_complex_structure_order_validation_span_before_p(validator_class,
     validator = validator_class(model=SpanBeforeParagraphRequest, strict=False, generate_hints=True)
     result = await validator.validate(payload)
     assert result.is_valid is True
-    assert hasattr(result.result_type, "p")
-    assert hasattr(result.result_type, "span")
-    assert "nested" in str(result.result_type.span)
-    assert "Comment content" in str(result.result_type.p)
+    assert hasattr(result.typed_result, "p")
+    assert hasattr(result.typed_result, "span")
+    assert "nested" in str(result.typed_result.span)
+    assert "Comment content" in str(result.typed_result.p)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -336,9 +336,9 @@ async def test_complex_structure_order_validation_nested_span_in_non_primitive_p
     validator = validator_class(model=NestedSpanInComplexParagraphShouldNotBeIncluded, strict=False, generate_hints=True)
     result = await validator.validate(payload)
     assert result.is_valid is True
-    assert hasattr(result.result_type, "p")
-    assert hasattr(result.result_type, "span")
+    assert hasattr(result.typed_result, "p")
+    assert hasattr(result.typed_result, "span")
 
-    assert "Content with" in str(result.result_type.p)
-    assert "User 2" in str(result.result_type.span)
+    assert "Content with" in str(result.typed_result.p)
+    assert "User 2" in str(result.typed_result.span)
 

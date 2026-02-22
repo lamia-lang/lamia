@@ -19,6 +19,7 @@ from .detectors.llm_command_detector import (
     FileWriteReturnType,
 )
 from lamia.adapters.web.session_context import SessionSkipException
+from lamia.facade.result_types import LamiaResult
 
 logger = logging.getLogger(__name__)
 
@@ -232,12 +233,14 @@ class SmartTypeResolver:
         Returns:
             Appropriate value based on context
         """
-        # For parametric types, extract structured data (result_type)
-        if hasattr(lamia_result, 'result_type') and lamia_result.result_type is not None:
-            return lamia_result.result_type
-        
+        # For parametric types, extract structured data
+        if isinstance(lamia_result, LamiaResult) and lamia_result.typed_result is not None:
+            return lamia_result.typed_result
+
         # Fallback to raw text
-        return lamia_result.result_text if hasattr(lamia_result, 'result_text') else lamia_result
+        if isinstance(lamia_result, LamiaResult):
+            return lamia_result.result_text
+        return lamia_result
     
     @staticmethod
     def resolve_for_string_context(lamia_result) -> str:
@@ -249,11 +252,8 @@ class SmartTypeResolver:
         Returns:
             Raw text content
         """
-        # For string/file operations, extract raw text (result_text)
-        if hasattr(lamia_result, 'result_text'):
+        if isinstance(lamia_result, LamiaResult):
             return lamia_result.result_text
-        
-        # Fallback to string representation
         return str(lamia_result)
     
     @staticmethod
@@ -270,12 +270,12 @@ class SmartTypeResolver:
         logger.info(f"SmartTypeResolver: resolving {type(lamia_result)} for param_type {param_type}")
         
         # If parameter has a specific type annotation, try to match it
-        if param_type and hasattr(lamia_result, 'result_type') and lamia_result.result_type is not None:
-            logger.info(f"SmartTypeResolver: returning result_type {type(lamia_result.result_type)}")
-            return lamia_result.result_type
-        
+        if param_type and isinstance(lamia_result, LamiaResult) and lamia_result.typed_result is not None:
+            logger.info(f"SmartTypeResolver: returning typed_result {type(lamia_result.typed_result)}")
+            return lamia_result.typed_result
+
         # Default to raw text for untyped parameters
-        result = lamia_result.result_text if hasattr(lamia_result, 'result_text') else lamia_result
+        result = lamia_result.result_text if isinstance(lamia_result, LamiaResult) else lamia_result
         logger.info(f"SmartTypeResolver: returning fallback {type(result)}")
         return result
 

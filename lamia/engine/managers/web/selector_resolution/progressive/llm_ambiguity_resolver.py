@@ -164,7 +164,7 @@ class LLMAmbiguityResolver(ElementAmbiguityResolver):
             logger.debug("LLM ambiguity resolution failed: invalid response")
             return None
         
-        selection: AmbiguitySelectionModel = result.result_type  # type: ignore[assignment]
+        selection: AmbiguitySelectionModel = result.typed_result  # type: ignore[assignment]
         indices = [idx for idx in selection.selected_indices if 0 <= idx < len(elements)]
         
         if not indices:

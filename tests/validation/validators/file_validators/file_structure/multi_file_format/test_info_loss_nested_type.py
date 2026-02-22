@@ -153,7 +153,7 @@ class TestInfoLossNestedStructures:
             
             # Should succeed
             assert result.is_valid is True, f"Permissive mode should succeed for {validator_type}: {result.error_message}"
-            assert result.result_type is not None
+            assert result.typed_result is not None
             
             # Should have info_loss for the expected fields
             assert result.info_loss is not None, f"Permissive mode should track info_loss for {validator_type}"

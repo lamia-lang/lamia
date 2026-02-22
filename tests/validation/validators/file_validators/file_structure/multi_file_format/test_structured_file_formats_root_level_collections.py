@@ -25,7 +25,7 @@ async def test_file_structure_validator_should_select_first_when_many_fields_wit
     validator = validator_class(model=P1, strict=False)
     result = await validator.validate(file_content)
     assert result.is_valid is True
-    assert result.result_type.p == "paragraph1"
+    assert result.typed_result.p == "paragraph1"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -37,9 +37,9 @@ async def test_file_structure_validator_check_one_type_in_list(strict, file_cont
     validator = validator_class(model=List[Paragraph], strict=False)
     result = await validator.validate(file_content)
     assert result.is_valid is True
-    assert len(result.result_type) == 2
-    assert result.result_type[0].p == "paragraph1"
-    assert result.result_type[1].p == "paragraph2"
+    assert len(result.typed_result) == 2
+    assert result.typed_result[0].p == "paragraph1"
+    assert result.typed_result[1].p == "paragraph2"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -51,9 +51,9 @@ async def test_file_structure_validator_check_one_type_in_set_unique_items(stric
     validator = validator_class(model=set[Paragraph], strict=False)
     result = await validator.validate(file_content)
     assert result.is_valid is True
-    assert len(result.result_type) == 2
-    assert result.result_type[0].p == "paragraph1"
-    assert result.result_type[1].p == "paragraph2"
+    assert len(result.typed_result) == 2
+    assert result.typed_result[0].p == "paragraph1"
+    assert result.typed_result[1].p == "paragraph2"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -71,8 +71,8 @@ async def test_file_structure_validator_check_one_type_in_set_unique_items(stric
     validator = validator_class(model=set[Paragraph], strict=False)
     result = await validator.validate(file_content)
     assert result.is_valid is True
-    assert len(result.result_type) == 1
-    assert result.result_type[0].p == "dup_value"
+    assert len(result.typed_result) == 1
+    assert result.typed_result[0].p == "dup_value"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -89,16 +89,16 @@ async def test_file_structure_validator_flat_paragraphs_and_non_flat_paragraphs(
     validator = validator_class(model=List[FlatAndNonFlatParagraphs], strict=strict)
     result = await validator.validate(file_content)
     assert result.is_valid is True
-    assert len(result.result_type) == 2
-    assert result.result_type.p == "Flat"
+    assert len(result.typed_result) == 2
+    assert result.typed_result.p == "Flat"
     if validator_class == HTMLStructureValidator:
-        assert result.result_type.p == "<span>non-flat</span>"
+        assert result.typed_result.p == "<span>non-flat</span>"
     elif validator_class == XMLStructureValidator:
-        assert result.result_type.p == "<span>non-flat</span>"
+        assert result.typed_result.p == "<span>non-flat</span>"
     elif validator_class == JSONStructureValidator:
-        assert result.result_type.p == {"span": "non-flat"}
+        assert result.typed_result.p == {"span": "non-flat"}
     elif validator_class == YAMLStructureValidator:
-        assert result.result_type.p == "span: non-flat"
+        assert result.typed_result.p == "span: non-flat"
 
     class FlatParagraphs(BaseModel):
       p: str
@@ -106,6 +106,6 @@ async def test_file_structure_validator_flat_paragraphs_and_non_flat_paragraphs(
     validator = validator_class(model=List[FlatParagraphs], strict=strict)
     result = await validator.validate(file_content)
     assert result.is_valid is True
-    assert len(result.result_type) == 1
-    assert result.result_type.p == "Flat"
+    assert len(result.typed_result) == 1
+    assert result.typed_result.p == "Flat"
     

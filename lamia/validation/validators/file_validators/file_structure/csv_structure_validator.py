@@ -495,7 +495,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         return ValidationResult(
             is_valid=is_valid,
             validated_text=self.get_subtree_string(tree),
-            result_type=model_instance,
+            typed_result=model_instance,
             error_message=error_message,
             info_loss=info_loss if info_loss else None
         )

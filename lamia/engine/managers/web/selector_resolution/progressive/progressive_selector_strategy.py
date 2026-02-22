@@ -129,7 +129,7 @@ class ProgressiveSelectorStrategy:
         if not result.is_valid:
             raise ValueError(f"Failed to generate selectors with progressive strategy for: '{description}'")
         
-        typed_result: ProgressiveSelectorStrategyModel = result.result_type  # type: ignore[assignment]
+        typed_result: ProgressiveSelectorStrategyModel = result.typed_result  # type: ignore[assignment]
 
         # Validate that last selector is a generic HTML tag
         validated_selectors = self._ensure_generic_tag_suffix(typed_result.selectors)

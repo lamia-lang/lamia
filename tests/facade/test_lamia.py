@@ -27,7 +27,7 @@ class MockValidationResult:
     """Mock validation result matching engine.execute return type."""
     is_valid: bool
     raw_text: str
-    result_type: Any = None
+    typed_result: Any = None
     execution_context: TrackingContext = field(default_factory=_create_mock_tracking_context)
 
 
@@ -39,7 +39,7 @@ class TestLamiaLifecycle:
         with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
             mock_engine = MagicMock()
             mock_engine.execute = AsyncMock(
-                return_value=MockValidationResult(is_valid=True, raw_text="ok", result_type="ok")
+                return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
             )
             mock_engine.config_provider = MagicMock()
             MockEngine.return_value = mock_engine
@@ -47,7 +47,7 @@ class TestLamiaLifecycle:
             lamia = Lamia()
             result = asyncio.run(lamia.run_async("hello"))
 
-            # Without return_type, run_async returns response.result_type directly
+            # Without return_type, run_async returns response.typed_result directly
             assert result == "ok"
             # Engine should have been created with a config provider
             MockEngine.assert_called_once()
@@ -57,7 +57,7 @@ class TestLamiaLifecycle:
         with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
             mock_engine = MagicMock()
             mock_engine.execute = AsyncMock(
-                return_value=MockValidationResult(is_valid=True, raw_text="ok", result_type="ok")
+                return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
             )
             mock_engine.config_provider = MagicMock()
             MockEngine.return_value = mock_engine
@@ -78,7 +78,7 @@ class TestLamiaLifecycle:
         with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
             mock_engine = MagicMock()
             mock_engine.execute = AsyncMock(
-                return_value=MockValidationResult(is_valid=True, raw_text="ok", result_type="ok")
+                return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
             )
             mock_engine.config_provider = MagicMock()
             MockEngine.return_value = mock_engine
@@ -105,7 +105,7 @@ class TestLamiaLifecycle:
         with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
             mock_engine = MagicMock()
             mock_engine.execute = AsyncMock(
-                return_value=MockValidationResult(is_valid=True, raw_text="ok", result_type="ok")
+                return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
             )
             mock_engine.config_provider = MagicMock()
             MockEngine.return_value = mock_engine
@@ -189,7 +189,7 @@ class TestLamiaLifecycle:
         dummy_config_provider.reset_model_chain = MagicMock()
 
         async def _execute_stub(command, return_type=None):
-            return MockValidationResult(is_valid=True, raw_text="dummy response", result_type="dummy response")
+            return MockValidationResult(is_valid=True, raw_text="dummy response", typed_result="dummy response")
 
         dummy_engine = MagicMock()
         dummy_engine.execute = AsyncMock(side_effect=_execute_stub)
@@ -207,7 +207,7 @@ class TestLamiaLifecycle:
             dummy_config_provider.override_model_chain_with.assert_called_once_with(override_models)
             dummy_config_provider.reset_model_chain.assert_called_once()
 
-            # Result is the result_type from the response
+            # Result is the typed_result from the response
             assert result == "dummy response"
 
     @pytest.mark.asyncio
@@ -216,7 +216,7 @@ class TestLamiaLifecycle:
         with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
             mock_engine = MagicMock()
             mock_engine.execute = AsyncMock(
-                return_value=MockValidationResult(is_valid=True, raw_text="ok", result_type="ok")
+                return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
             )
             mock_engine.cleanup = AsyncMock()
             mock_engine.config_provider = MagicMock()
@@ -235,7 +235,7 @@ class TestLamiaLifecycle:
         with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
             mock_engine = MagicMock()
             mock_engine.execute = AsyncMock(
-                return_value=MockValidationResult(is_valid=True, raw_text="response", result_type="response")
+                return_value=MockValidationResult(is_valid=True, raw_text="response", typed_result="response")
             )
             mock_engine.config_provider = MagicMock()
             MockEngine.return_value = mock_engine
@@ -274,7 +274,7 @@ class TestLamiaLifecycle:
             mock_result = MockValidationResult(
                 is_valid=True,
                 raw_text="test response",
-                result_type=MyModel(value="parsed")
+                typed_result=MyModel(value="parsed")
             )
             mock_engine.execute = AsyncMock(return_value=mock_result)
             mock_engine.config_provider = MagicMock()
@@ -292,13 +292,13 @@ class TestLamiaLifecycle:
 
     @pytest.mark.asyncio
     async def test_run_async_without_return_type(self):
-        """Test run_async without return_type returns result_type directly."""
+        """Test run_async without return_type returns typed_result directly."""
         with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
             mock_engine = MagicMock()
             mock_result = MockValidationResult(
                 is_valid=True,
                 raw_text="test response",
-                result_type="direct result"
+                typed_result="direct result"
             )
             mock_engine.execute = AsyncMock(return_value=mock_result)
             mock_engine.config_provider = MagicMock()
@@ -307,7 +307,7 @@ class TestLamiaLifecycle:
             lamia = Lamia()
             result = await lamia.run_async("generate something")
 
-            # Without return_type, should return result_type directly
+            # Without return_type, should return typed_result directly
             assert result == "direct result"
 
     def test_get_validation_stats(self):
@@ -457,7 +457,7 @@ class TestLamiaLifecycle:
             mock_engine = MagicMock()
             mock_engine.config_provider = MagicMock()
             mock_engine.execute = AsyncMock(
-                return_value=MockValidationResult(is_valid=True, raw_text="response", result_type="response")
+                return_value=MockValidationResult(is_valid=True, raw_text="response", typed_result="response")
             )
             MockEngine.return_value = mock_engine
 
@@ -482,7 +482,7 @@ class TestLamiaLifecycle:
 
             mock_engine = MagicMock()
             mock_engine.execute = AsyncMock(
-                return_value=MockValidationResult(is_valid=True, raw_text="llm response", result_type="llm response")
+                return_value=MockValidationResult(is_valid=True, raw_text="llm response", typed_result="llm response")
             )
             mock_engine.config_provider = MagicMock()
             MockEngine.return_value = mock_engine
@@ -539,7 +539,7 @@ class TestLamiaLifecycle:
              patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
             mock_engine = MagicMock()
             mock_engine.execute = AsyncMock(
-                return_value=MockValidationResult(is_valid=True, raw_text="response", result_type="response")
+                return_value=MockValidationResult(is_valid=True, raw_text="response", typed_result="response")
             )
             mock_engine.config_provider = MagicMock()
             MockEngine.return_value = mock_engine

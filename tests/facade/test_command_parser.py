@@ -112,7 +112,7 @@ class TestLamiaCommandParsingIntegration:
     def test_fs_command_parsing(self, lamia):
         """Test that filesystem commands are parsed and dispatched correctly."""
         mock_result = MagicMock()
-        mock_result.result_type = "file content"
+        mock_result.typed_result = "file content"
         lamia._engine.execute = AsyncMock(return_value=mock_result)
 
         lamia.run("/tmp/file.txt")
@@ -126,7 +126,7 @@ class TestLamiaCommandParsingIntegration:
     def test_web_command_parsing(self, lamia):
         """Test that web commands are parsed and dispatched correctly."""
         mock_result = MagicMock()
-        mock_result.result_type = "page content"
+        mock_result.typed_result = "page content"
         lamia._engine.execute = AsyncMock(return_value=mock_result)
 
         lamia.run("https://example.com")
@@ -140,7 +140,7 @@ class TestLamiaCommandParsingIntegration:
     def test_llm_command_parsing(self, lamia):
         """Test that LLM commands are parsed and dispatched correctly."""
         mock_result = MagicMock()
-        mock_result.result_type = "weather info"
+        mock_result.typed_result = "weather info"
         lamia._engine.execute = AsyncMock(return_value=mock_result)
 
         lamia.run("What is the weather today?")

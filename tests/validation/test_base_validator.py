@@ -28,7 +28,7 @@ class TestValidationResult:
             hint="Try again",
             raw_text="raw response",
             validated_text="validated response",
-            result_type={"data": "value"},
+            typed_result={"data": "value"},
             info_loss={"field": "truncated"},
             execution_context=context
         )
@@ -38,7 +38,7 @@ class TestValidationResult:
         assert result.hint == "Try again"
         assert result.raw_text == "raw response"
         assert result.validated_text == "validated response"
-        assert result.result_type == {"data": "value"}
+        assert result.typed_result == {"data": "value"}
         assert result.info_loss == {"field": "truncated"}
         assert result.execution_context == context
 
@@ -51,7 +51,7 @@ class TestValidationResult:
         assert result.hint is None
         assert result.raw_text is None
         assert result.validated_text is None
-        assert result.result_type is None
+        assert result.typed_result is None
         assert result.info_loss is None
         assert result.execution_context is None
 
@@ -60,12 +60,12 @@ class TestValidationResult:
         result = ValidationResult(
             is_valid=True,
             validated_text="valid text",
-            result_type="parsed_value"
+            typed_result="parsed_value"
         )
 
         assert result.is_valid is True
         assert result.validated_text == "valid text"
-        assert result.result_type == "parsed_value"
+        assert result.typed_result == "parsed_value"
 
     def test_validation_result_invalid(self):
         """Test creating an invalid ValidationResult."""

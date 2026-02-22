@@ -36,19 +36,19 @@ This is the body paragraph.
     assert result.validated_text['subtitle'] == "Subsection"
     assert result.validated_text['body'] == "This is the body paragraph."
     
-    # Check typed values in result_type
-    assert isinstance(result.result_type, MyDocumentModel)
-    print(type(result.result_type.title))
-    assert isinstance(result.result_type.title, Heading1)
-    assert isinstance(result.result_type.intro, Paragraph)
-    assert isinstance(result.result_type.subtitle, Heading2)
-    assert isinstance(result.result_type.body, Paragraph)
+    # Check typed values in typed_result
+    assert isinstance(result.typed_result, MyDocumentModel)
+    print(type(result.typed_result.title))
+    assert isinstance(result.typed_result.title, Heading1)
+    assert isinstance(result.typed_result.intro, Paragraph)
+    assert isinstance(result.typed_result.subtitle, Heading2)
+    assert isinstance(result.typed_result.body, Paragraph)
     
     # Check the actual values in typed fields using .text property
-    assert result.result_type.title.text == "My Title"
-    assert result.result_type.intro.text == "This is the intro paragraph."
-    assert result.result_type.subtitle.text == "Subsection"
-    assert result.result_type.body.text == "This is the body paragraph."
+    assert result.typed_result.title.text == "My Title"
+    assert result.typed_result.intro.text == "This is the intro paragraph."
+    assert result.typed_result.subtitle.text == "Subsection"
+    assert result.typed_result.body.text == "This is the body paragraph."
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -136,7 +136,7 @@ This is another text.
     validator = MarkdownStructureValidator(model=P1, strict=False)
     result = await validator.validate(md)
     assert result.is_valid is True
-    assert result.result_type.intro == "This is the intro paragraph."
+    assert result.typed_result.intro == "This is the intro paragraph."
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -164,10 +164,10 @@ Another paragraph here.
     result = await validator.validate(markdown_content)
     assert result.is_valid is True
     print(result)
-    assert result.result_type.title.text == "Test Title"
-    assert result.result_type.intro.text == "This is a paragraph."
-    assert result.result_type.subtitle.text == "Subsection"
-    assert result.result_type.body.text == "Another paragraph here."
+    assert result.typed_result.title.text == "Test Title"
+    assert result.typed_result.intro.text == "This is a paragraph."
+    assert result.typed_result.subtitle.text == "Subsection"
+    assert result.typed_result.body.text == "Another paragraph here."
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
@@ -236,6 +236,6 @@ async def test_markdown_structure_validator_element_types(strict, element_type, 
     assert result.is_valid is True, f"Failed to validate {element_type.__name__} with text:\n{sample_text}\nError: {result.error_message}"
     
     # Verify type and content
-    assert isinstance(result.result_type.content, element_type)
-    assert result.result_type.content.text == result_text
+    assert isinstance(result.typed_result.content, element_type)
+    assert result.typed_result.content.text == result_text
 

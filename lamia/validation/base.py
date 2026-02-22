@@ -22,7 +22,7 @@ class ValidationResult:
         hint: Optional hint for fixing the response.
         raw_text: The original input text to the validator (e.g., LLM output with extra talking).
         validated_text: The valid, extracted part of the response (e.g., document without LLM talking).
-        result_type: The validated and resolved type (e.g., parsed Pydantic model or atomic type value).
+        typed_result: The validated and resolved type (e.g., parsed Pydantic model or atomic type value).
         info_loss: Optional dict or structure describing info-losing type conversions (e.g., float->int truncation).
         execution_context: Context information about how this result was generated.
     """
@@ -31,7 +31,7 @@ class ValidationResult:
     hint: Optional[str] = None
     raw_text: Optional[str] = None
     validated_text: Optional[str] = None
-    result_type: Optional[Any] = None
+    typed_result: Optional[Any] = None
     info_loss: Optional[dict] = None
     execution_context: Optional[TrackingContext] = None
 

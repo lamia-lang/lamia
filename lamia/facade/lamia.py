@@ -71,7 +71,8 @@ class Lamia:
         command: Union[str, Command], 
         return_type: Optional[Type[BaseType]] = None,
         *,
-        models: Optional[List[ModelWithRetries]] = None, 
+        models: Optional[List[ModelWithRetries]] = None,
+        _full_result: bool = False,
     ) -> Union[Any, LamiaResult]:
         """
         Generate a response, trying Python code first, then LLM.
@@ -114,16 +115,13 @@ class Lamia:
         if models is not None:
             self._engine.config_provider.reset_model_chain()
 
-        # If no return_type specified, return plain result for direct usage
-        # If return_type specified, wrap in LamiaResult with validation info
-        if return_type is None:
-            return response.result_type
-        else:
-            return LamiaResult(
-                result_text=response.raw_text, 
-                typed_result=response.result_type, 
-                tracking_context=response.execution_context
-            )
+        if return_type is None and not _full_result:
+            return response.typed_result
+        return LamiaResult(
+            result_text=response.raw_text,
+            typed_result=response.typed_result if return_type is not None else None,
+            tracking_context=response.execution_context
+        )
 
     def run(
         self,

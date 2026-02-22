@@ -104,7 +104,7 @@ class TestFSManagerRead:
             result = await self.fs_manager.execute(cmd)
             assert isinstance(result, ValidationResult)
             assert result.is_valid
-            assert result.result_type == "Test file content\nLine 2\nLine 3"
+            assert result.typed_result == "Test file content\nLine 2\nLine 3"
         finally:
             os.unlink(path)
 
@@ -143,7 +143,7 @@ class TestFSManagerRead:
         result = await self.fs_manager.execute(cmd)
         assert isinstance(result, ValidationResult)
         assert result.is_valid
-        assert result.result_type == "Mocked content"
+        assert result.typed_result == "Mocked content"
         mocked_file.assert_called_once_with("/mocked/path.txt", "r", encoding="utf-8")
 
     @patch("builtins.open", new_callable=mock_open, read_data="")
@@ -152,7 +152,7 @@ class TestFSManagerRead:
         result = await self.fs_manager.execute(cmd)
         assert isinstance(result, ValidationResult)
         assert result.is_valid
-        assert result.result_type == ""
+        assert result.typed_result == ""
 
     async def test_read_file_not_found(self) -> None:
         cmd = _make_command(FileActionType.READ, "/nonexistent/file.txt")
@@ -185,7 +185,7 @@ class TestFSManagerWrite:
             result = await self.fs_manager.execute(cmd)
             assert isinstance(result, ValidationResult)
             assert result.is_valid
-            assert result.result_type == "hello world"
+            assert result.typed_result == "hello world"
             with open(path, "r") as f:
                 assert f.read() == "hello world"
 
@@ -261,7 +261,7 @@ class TestFSManagerAppend:
             result = await self.fs_manager.execute(cmd)
             assert isinstance(result, ValidationResult)
             assert result.is_valid
-            assert result.result_type == "-end"
+            assert result.typed_result == "-end"
             with open(path, "r") as f:
                 assert f.read() == "start-end"
 
@@ -322,7 +322,7 @@ class TestFSManagerEncoding:
             result = await self.fs_manager.execute(cmd)
             assert isinstance(result, ValidationResult)
             assert result.is_valid
-            assert result.result_type == text
+            assert result.typed_result == text
         finally:
             os.unlink(path)
 
@@ -345,7 +345,7 @@ class TestFSManagerEncoding:
             result = await self.fs_manager.execute(read_cmd)
             assert isinstance(result, ValidationResult)
             assert result.is_valid
-            assert result.result_type == text
+            assert result.typed_result == text
 
     async def test_append_preserves_encoding(self) -> None:
         original = "café"
@@ -383,7 +383,7 @@ class TestFSManagerEncoding:
             result = await self.fs_manager.execute(read_cmd)
             assert isinstance(result, ValidationResult)
             assert result.is_valid
-            assert result.result_type == text
+            assert result.typed_result == text
 
 
 # ---------------------------------------------------------------------------
@@ -420,7 +420,7 @@ class TestFSManagerErrorHandling:
             result = await self.fs_manager.execute(cmd, None)
             assert isinstance(result, ValidationResult)
             assert result.is_valid
-            assert result.result_type == "text"
+            assert result.typed_result == "text"
         finally:
             os.unlink(path)
 
@@ -431,4 +431,4 @@ class TestFSManagerErrorHandling:
             result = await self.fs_manager.execute(cmd, None)
             assert isinstance(result, ValidationResult)
             assert result.is_valid
-            assert result.result_type == "hi"
+            assert result.typed_result == "hi"

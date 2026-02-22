@@ -13,9 +13,9 @@ async def test_object_validator_valid(strict):
     valid_json = '{"a": 1, "b": "hello"}'
     result = await validator.validate(valid_json)
     assert result.is_valid
-    assert result.result_type is not None
-    assert result.result_type.a == 1
-    assert result.result_type.b == "hello"
+    assert result.typed_result is not None
+    assert result.typed_result.a == 1
+    assert result.typed_result.b == "hello"
     assert result.info_loss is None
 
 @pytest.mark.asyncio
@@ -27,7 +27,7 @@ async def test_object_validator_invalid_type(strict):
     result = await validator.validate(invalid_json)
     assert not result.is_valid
     assert "Field 'a':" in result.error_message and "Cannot" in result.error_message and "convert" in result.error_message
-    assert result.result_type is None
+    assert result.typed_result is None
     assert result.info_loss is None
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_object_validator_missing_field(strict):
     result = await validator.validate(missing_field_json)
     assert not result.is_valid
     assert "Missing field 'b'" in result.error_message
-    assert result.result_type is None
+    assert result.typed_result is None
     assert result.info_loss is None
 
 @pytest.mark.asyncio
@@ -53,7 +53,7 @@ async def test_object_validator_invalid_json(strict):
     assert ("Response is not valid JSON:" in result.error_message or 
             "No valid JSON object found" in result.error_message or
             "Extracted JSON is not valid" in result.error_message)
-    assert result.result_type is None
+    assert result.typed_result is None
     assert result.info_loss is None
 
 @pytest.mark.asyncio
@@ -64,9 +64,9 @@ async def test_object_validator_permissive_extracts_json():
     result = await validator.validate(text_with_json)
     assert result.is_valid
     assert result.validated_text == '{"a": 1, "b": "hello"}'
-    assert result.result_type is not None
-    assert result.result_type.a == 1    
-    assert result.result_type.b == "hello"
+    assert result.typed_result is not None
+    assert result.typed_result.a == 1    
+    assert result.typed_result.b == "hello"
     assert result.info_loss is None
 
 # --- Pydantic BaseModel tests ---
@@ -81,9 +81,9 @@ async def test_object_validator_valid_pydantic(strict):
     valid_json = '{"a": 42, "b": "world"}'
     result = await validator.validate(valid_json)
     assert result.is_valid
-    assert result.result_type is not None
-    assert result.result_type.a == 42
-    assert result.result_type.b == "world"
+    assert result.typed_result is not None
+    assert result.typed_result.a == 42
+    assert result.typed_result.b == "world"
     assert result.info_loss is None
 
 @pytest.mark.asyncio
@@ -94,7 +94,7 @@ async def test_object_validator_invalid_type_pydantic(strict):
     result = await validator.validate(invalid_json)
     assert not result.is_valid
     assert "Field 'a':" in result.error_message and "Cannot" in result.error_message and "convert" in result.error_message
-    assert result.result_type is None
+    assert result.typed_result is None
     assert result.info_loss is None
 
 @pytest.mark.asyncio
@@ -105,7 +105,7 @@ async def test_object_validator_missing_field_pydantic(strict):
     result = await validator.validate(missing_field_json)
     assert not result.is_valid
     assert "Missing field 'b'" in result.error_message
-    assert result.result_type is None
+    assert result.typed_result is None
     assert result.info_loss is None
 
 # --- Hint generation tests ---
@@ -211,8 +211,8 @@ async def test_pydantic_field_constraints_are_enforced_on_objects(strict):
     result2 = await validator2.validate(valid_json)
     assert result.is_valid
     assert result2.is_valid
-    assert result.result_type is not None
-    assert result2.result_type is not None
+    assert result.typed_result is not None
+    assert result2.typed_result is not None
     assert result.info_loss is None
     assert result2.info_loss is None
 
@@ -222,8 +222,8 @@ async def test_pydantic_field_constraints_are_enforced_on_objects(strict):
     assert not result2.is_valid
     assert "at least 3 characters" in result.error_message
     assert "at least 3 characters" in result2.error_message
-    assert result.result_type is None
-    assert result2.result_type is None
+    assert result.typed_result is None
+    assert result2.typed_result is None
     assert result.info_loss is None
     assert result2.info_loss is None
 
@@ -240,14 +240,14 @@ async def test_pydantic_fields_with_multiple_constraints(strict):
 
     result = await validator.validate(valid_json)
     assert result.is_valid
-    assert result.result_type is not None
+    assert result.typed_result is not None
     assert result.info_loss is None
 
     # Test short string (should report length constraint error)
     result = await validator.validate(invalid_json_short_and_pattern)
     assert not result.is_valid
     assert "at least 3 characters" in result.error_message
-    assert result.result_type is None
+    assert result.typed_result is None
     assert result.info_loss is None
 
     # Test pattern violation (should report pattern constraint error)  
@@ -255,5 +255,5 @@ async def test_pydantic_fields_with_multiple_constraints(strict):
     assert not result.is_valid
 
     assert "String should match pattern '^abc'" in result.error_message
-    assert result.result_type is None
+    assert result.typed_result is None
     assert result.info_loss is None

@@ -108,7 +108,7 @@ async def test_nested_collections(strict: bool, file_content: str, validator_cla
     assert result.is_valid is True, f"Valid content should be accepted for {validator_class.__name__}"
     
     # Verify the parsed structure
-    parsed_data = result.result_type
+    parsed_data = result.typed_result
     assert isinstance(parsed_data.simple_list, list), "simple_list should be a list"
     assert isinstance(parsed_data.nested_list[0], list), "nested_list should be a 2D list"
     assert isinstance(parsed_data.deep_nested_list[0][0], list), "deep_nested_list should be a 3D list"

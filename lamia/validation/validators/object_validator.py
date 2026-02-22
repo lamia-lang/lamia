@@ -112,7 +112,7 @@ class ObjectValidator(BaseValidator):
                     is_valid = False
                     values[field] = None
                 else:
-                    values[field] = nested_result.result_type
+                    values[field] = nested_result.typed_result
                     # Collect nested info loss
                     if nested_result.info_loss:
                         info_loss[field] = nested_result.info_loss
@@ -143,7 +143,7 @@ class ObjectValidator(BaseValidator):
                         is_valid = False
                         nested_values.append(None)
                     else:
-                        nested_values.append(nested_result.result_type)
+                        nested_values.append(nested_result.typed_result)
                         # Collect nested info loss
                         if nested_result.info_loss:
                             field_info_loss[f"item_{idx}"] = nested_result.info_loss
@@ -179,7 +179,7 @@ class ObjectValidator(BaseValidator):
 
         return ValidationResult(
             is_valid=is_valid,
-            result_type=model_instance,
+            typed_result=model_instance,
             validated_text=validated_text,
             error_message=error_message,
             info_loss=info_loss if info_loss else None

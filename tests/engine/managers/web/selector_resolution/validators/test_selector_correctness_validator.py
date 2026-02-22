@@ -38,7 +38,7 @@ class TestSelectorCorrectnessValidator:
         
         assert strict_result.is_valid == permissive_result.is_valid
         assert strict_result.error_message == permissive_result.error_message
-        assert strict_result.result_type == permissive_result.result_type
+        assert strict_result.typed_result == permissive_result.typed_result
 
     @pytest.mark.asyncio
     async def test_validate_permissive_empty_selector(self):
@@ -49,7 +49,7 @@ class TestSelectorCorrectnessValidator:
         
         assert result.is_valid is False
         assert "Empty selector response" in result.error_message
-        assert result.result_type is None
+        assert result.typed_result is None
 
     @pytest.mark.asyncio
     async def test_validate_permissive_blank_selector(self):
@@ -60,7 +60,7 @@ class TestSelectorCorrectnessValidator:
         
         assert result.is_valid is False
         assert "Empty selector response" in result.error_message
-        assert result.result_type is None
+        assert result.typed_result is None
 
     @pytest.mark.asyncio
     async def test_validate_permissive_valid_css_id_selector(self):
@@ -71,7 +71,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_permissive(selector)
         
         assert result.is_valid is True
-        assert result.result_type == selector
+        assert result.typed_result == selector
         assert result.error_message is None
 
     @pytest.mark.asyncio
@@ -83,7 +83,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_permissive(selector)
         
         assert result.is_valid is True
-        assert result.result_type == selector
+        assert result.typed_result == selector
         assert result.error_message is None
 
     @pytest.mark.asyncio
@@ -95,7 +95,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_permissive(selector)
         
         assert result.is_valid is True
-        assert result.result_type == selector
+        assert result.typed_result == selector
         assert result.error_message is None
 
     @pytest.mark.asyncio
@@ -107,7 +107,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_permissive(selector)
         
         assert result.is_valid is True
-        assert result.result_type == selector
+        assert result.typed_result == selector
         assert result.error_message is None
 
     @pytest.mark.asyncio
@@ -119,7 +119,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_permissive(selector)
         
         assert result.is_valid is True
-        assert result.result_type == selector
+        assert result.typed_result == selector
         assert result.error_message is None
 
     @pytest.mark.asyncio
@@ -131,7 +131,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_permissive(selector)
         
         assert result.is_valid is True
-        assert result.result_type == selector
+        assert result.typed_result == selector
         assert result.error_message is None
 
     @pytest.mark.asyncio
@@ -143,7 +143,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_permissive(selector)
         
         assert result.is_valid is True
-        assert result.result_type == selector
+        assert result.typed_result == selector
         assert result.error_message is None
 
     @pytest.mark.asyncio
@@ -157,7 +157,7 @@ class TestSelectorCorrectnessValidator:
         assert result.is_valid is False
         assert "Invalid selector" in result.error_message
         assert SelectorType.NATURAL_LANGUAGE.value in result.error_message
-        assert result.result_type is None
+        assert result.typed_result is None
 
     @pytest.mark.asyncio
     async def test_validate_permissive_invalid_css(self):
@@ -169,7 +169,7 @@ class TestSelectorCorrectnessValidator:
         
         assert result.is_valid is False
         assert "Invalid selector" in result.error_message
-        assert result.result_type is None
+        assert result.typed_result is None
 
     @pytest.mark.asyncio
     async def test_validate_permissive_invalid_xpath(self):
@@ -181,7 +181,7 @@ class TestSelectorCorrectnessValidator:
         
         assert result.is_valid is False
         assert "Invalid selector" in result.error_message
-        assert result.result_type is None
+        assert result.typed_result is None
 
     @pytest.mark.asyncio
     async def test_validate_permissive_parser_value_error(self):
@@ -193,7 +193,7 @@ class TestSelectorCorrectnessValidator:
         
         assert result.is_valid is False
         assert result.error_message is not None
-        assert result.result_type is None
+        assert result.typed_result is None
 
     @pytest.mark.asyncio
     async def test_validate_permissive_selector_with_whitespace(self):
@@ -204,7 +204,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_permissive(selector)
         
         assert result.is_valid is True
-        assert result.result_type == "#trimmed"
+        assert result.typed_result == "#trimmed"
 
     @pytest.mark.asyncio
     async def test_validate_strict_valid_css(self):
@@ -215,7 +215,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_strict(selector)
         
         assert result.is_valid is True
-        assert result.result_type == selector
+        assert result.typed_result == selector
 
     @pytest.mark.asyncio
     async def test_validate_strict_valid_xpath(self):
@@ -226,7 +226,7 @@ class TestSelectorCorrectnessValidator:
         result = await validator.validate_strict(selector)
         
         assert result.is_valid is True
-        assert result.result_type == selector
+        assert result.typed_result == selector
 
     @pytest.mark.asyncio
     async def test_validate_strict_invalid_selector(self):

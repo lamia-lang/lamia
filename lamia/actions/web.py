@@ -106,7 +106,7 @@ class WebActions:
         """
         if self._executor:
             validation_result = EventLoopManager.run_coroutine(self._executor.execute(command))
-            result = validation_result.result_type if validation_result.result_type is not None else validation_result
+            result = validation_result.typed_result if validation_result.typed_result is not None else validation_result
             
             if result_processor:
                 result = result_processor(result)

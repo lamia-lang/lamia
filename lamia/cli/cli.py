@@ -67,14 +67,15 @@ async def interactive_mode(lamia: Lamia):
                     lines = []
                     # Show the prompt again for a new input
                     continue
-                # Immediate exit: only when typed alone before any other lines (no SEND needed)
+                # Immediate exit: only when typed alone before any real content (no SEND needed)
                 if not lines and line.strip().lower() in ['exit', 'quit', ':q']:
                     logger.info("\nGoodbye! 👋")
                     if running_task and not running_task.done():
                         running_task.cancel()
                     _graceful_shutdown(lamia)
                     return  # unreachable, but satisfies type checkers
-                lines.append(line)
+                if line.strip():
+                    lines.append(line)
             # If an immediate command like STATS was executed, restart outer loop
             if do_stats_command:
                 do_stats_command = False
@@ -88,7 +89,7 @@ async def interactive_mode(lamia: Lamia):
 
             # Generate LLM response
             logger.info("\nThinking... 🤔 (type STOP to interrupt)")
-            running_task = asyncio.create_task(lamia.run_async(user_input))
+            running_task = asyncio.create_task(lamia.run_async(user_input, _full_result=True))
             while not running_task.done():
                 try:
                     await asyncio.wait_for(asyncio.shield(running_task), timeout=0.2)

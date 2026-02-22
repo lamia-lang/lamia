@@ -31,7 +31,7 @@ def mock_llm_executor():
     )
     executor.execute = AsyncMock(return_value=ValidationResult(
         is_valid=True,
-        result_type=mock_model
+        typed_result=mock_model
     ))
     return executor
 
@@ -114,7 +114,7 @@ class TestProgressiveSelectorStrategyGeneration:
         )
         mock_llm_executor.execute = AsyncMock(return_value=ValidationResult(
             is_valid=True,
-            result_type=mock_model
+            typed_result=mock_model
         ))
 
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)
@@ -137,7 +137,7 @@ class TestProgressiveSelectorStrategyGeneration:
         )
         mock_llm_executor.execute = AsyncMock(return_value=ValidationResult(
             is_valid=True,
-            result_type=mock_model
+            typed_result=mock_model
         ))
 
         strategy = ProgressiveSelectorStrategy(mock_llm_executor)

@@ -468,7 +468,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         return ValidationResult(
             is_valid=True, 
             validated_text=validated_text_dict,
-            result_type=result_type,
+            typed_result=result_type,
         )
     
     def get_subtree_string(self, elem):

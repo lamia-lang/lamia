@@ -36,7 +36,7 @@ class AtomicTypeValidator(BaseValidator):
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         valid = self._validate_type(response)
         if valid:
-            return ValidationResult(is_valid=True, raw_text=response, validated_text=response.strip(), result_type=self.atomic_type)
+            return ValidationResult(is_valid=True, raw_text=response, validated_text=response.strip(), typed_result=self.atomic_type)
         return ValidationResult(
             is_valid=False,
             error_message=f"Response is not a valid {self.atomic_type}.",
@@ -57,7 +57,7 @@ class AtomicTypeValidator(BaseValidator):
             matches = re.findall(r'-?\d+', response)
             if len(matches) == 1:
                 value = matches[0]
-                return ValidationResult(is_valid=True, raw_text=response, validated_text=value, result_type=int(value))
+                return ValidationResult(is_valid=True, raw_text=response, validated_text=value, typed_result=int(value))
             elif len(matches) > 1:
                 return ValidationResult(
                     is_valid=False,
@@ -70,7 +70,7 @@ class AtomicTypeValidator(BaseValidator):
             float_matches = [m[0] if isinstance(m, tuple) else m for m in matches if '.' in (m[0] if isinstance(m, tuple) else m)]
             if len(matches) == 1:
                 value = matches[0][0] if isinstance(matches[0], tuple) else matches[0]
-                return ValidationResult(is_valid=True, raw_text=response, validated_text=value, result_type=float(value))
+                return ValidationResult(is_valid=True, raw_text=response, validated_text=value, typed_result=float(value))
             elif len(matches) > 1:
                 return ValidationResult(
                     is_valid=False,
@@ -83,7 +83,7 @@ class AtomicTypeValidator(BaseValidator):
             if len(matches) == 1:
                 value = matches[0]
                 bool_value = value.lower() in ['true', '1']
-                return ValidationResult(is_valid=True, raw_text=response, validated_text=value, result_type=bool_value)
+                return ValidationResult(is_valid=True, raw_text=response, validated_text=value, typed_result=bool_value)
             elif len(matches) > 1:
                 return ValidationResult(
                     is_valid=False,
@@ -93,7 +93,7 @@ class AtomicTypeValidator(BaseValidator):
                 )
         elif self.atomic_type in ['str', 'string']:
             if response.strip():
-                return ValidationResult(is_valid=True, raw_text=response, validated_text=response.strip(), result_type=response.strip())
+                return ValidationResult(is_valid=True, raw_text=response, validated_text=response.strip(), typed_result=response.strip())
         return ValidationResult(
             is_valid=False,
             error_message=f"Response does not contain a valid {self.atomic_type}.",

@@ -100,7 +100,7 @@ class WebManager(Manager[WebCommand]):
             logger.info(f"Validator is None, returning result as is: {result_preview}")
             validation_result = ValidationResult(
                 is_valid=True,
-                result_type=result,
+                typed_result=result,
                 error_message=None
             )
 

@@ -258,7 +258,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         if self.model is None:
             return ValidationResult(
                 is_valid=True,
-                result_type=None,
+                typed_result=None,
                 validated_text=self.get_subtree_string(tree),
                 raw_text=response
             )
@@ -289,7 +289,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
         if self.model is None:
             return ValidationResult(
                 is_valid=True,
-                result_type=None,
+                typed_result=None,
                 validated_text=self.get_subtree_string(tree),
                 raw_text=response
             )

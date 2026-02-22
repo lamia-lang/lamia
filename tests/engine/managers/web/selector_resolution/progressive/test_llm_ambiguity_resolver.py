@@ -115,7 +115,7 @@ class TestLLMAmbiguityResolverResolveAmbiguity:
         selection = AmbiguitySelectionModel(selected_indices=[0], reason="First button matches login")
         mock_llm_manager.execute.return_value = ValidationResult(
             is_valid=True,
-            result_type=selection
+            typed_result=selection
         )
 
         resolver = LLMAmbiguityResolver(mock_browser_adapter, mock_llm_manager)
@@ -146,7 +146,7 @@ class TestLLMAmbiguityResolverResolveAmbiguity:
         selection = AmbiguitySelectionModel(selected_indices=[0, 2], reason="Options 1 and 3 match")
         mock_llm_manager.execute.return_value = ValidationResult(
             is_valid=True,
-            result_type=selection
+            typed_result=selection
         )
 
         resolver = LLMAmbiguityResolver(mock_browser_adapter, mock_llm_manager)
@@ -181,7 +181,7 @@ class TestLLMAmbiguityResolverResolveAmbiguity:
         selection = AmbiguitySelectionModel(selected_indices=[0], reason="Submit button")
         mock_llm_manager.execute.side_effect = [
             ValidationResult(is_valid=False, error_message="Failed"),
-            ValidationResult(is_valid=True, result_type=selection),
+            ValidationResult(is_valid=True, typed_result=selection),
         ]
 
         resolver = LLMAmbiguityResolver(mock_browser_adapter, mock_llm_manager)
@@ -245,7 +245,7 @@ class TestLLMAmbiguityResolverResolveAmbiguity:
         selection = AmbiguitySelectionModel(selected_indices=[], reason="None match")
         mock_llm_manager.execute.return_value = ValidationResult(
             is_valid=True,
-            result_type=selection
+            typed_result=selection
         )
 
         resolver = LLMAmbiguityResolver(mock_browser_adapter, mock_llm_manager)
@@ -275,7 +275,7 @@ class TestLLMAmbiguityResolverResolveAmbiguity:
         selection = AmbiguitySelectionModel(selected_indices=[5, 0, 10], reason="Mixed indices")
         mock_llm_manager.execute.return_value = ValidationResult(
             is_valid=True,
-            result_type=selection
+            typed_result=selection
         )
 
         resolver = LLMAmbiguityResolver(mock_browser_adapter, mock_llm_manager)
@@ -305,7 +305,7 @@ class TestLLMAmbiguityResolverResolveAmbiguity:
         selection = AmbiguitySelectionModel(selected_indices=[1], reason="Second button")
         mock_llm_manager.execute.return_value = ValidationResult(
             is_valid=True,
-            result_type=selection
+            typed_result=selection
         )
 
         resolver = LLMAmbiguityResolver(

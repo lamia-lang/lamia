@@ -33,7 +33,7 @@ def mock_llm_manager():
     )
     manager.execute = AsyncMock(return_value=ValidationResult(
         is_valid=True,
-        result_type=mock_model
+        typed_result=mock_model
     ))
     return manager
 
@@ -208,7 +208,7 @@ class TestProgressiveSelectorResolverResolve:
         )
         mock_llm_manager.execute.return_value = ValidationResult(
             is_valid=True,
-            result_type=mock_model
+            typed_result=mock_model
         )
 
         resolver = ProgressiveSelectorResolver(
@@ -287,7 +287,7 @@ class TestAmbiguityResolutionExtractsUniqueSelector:
             selectors=["button.review-next", "button"],
         )
         mock_llm_manager.execute = AsyncMock(
-            return_value=ValidationResult(is_valid=True, result_type=mock_model)
+            return_value=ValidationResult(is_valid=True, typed_result=mock_model)
         )
 
         chosen_element = Mock(name="chosen-button")
@@ -340,7 +340,7 @@ class TestAmbiguityResolutionExtractsUniqueSelector:
             selectors=["button"],
         )
         mock_llm_manager.execute = AsyncMock(
-            return_value=ValidationResult(is_valid=True, result_type=mock_model)
+            return_value=ValidationResult(is_valid=True, typed_result=mock_model)
         )
 
         chosen_element = Mock(name="chosen-button")
@@ -384,7 +384,7 @@ class TestAmbiguityResolutionExtractsUniqueSelector:
             selectors=["button.review-next"],
         )
         mock_llm_manager.execute = AsyncMock(
-            return_value=ValidationResult(is_valid=True, result_type=mock_model)
+            return_value=ValidationResult(is_valid=True, typed_result=mock_model)
         )
 
         single_element = Mock()
@@ -425,7 +425,7 @@ class TestProgressiveSelectorResolverValidation:
         )
         mock_llm_manager.execute.return_value = ValidationResult(
             is_valid=True,
-            result_type=mock_model
+            typed_result=mock_model
         )
 
         # Elements found but validation will fail (no common ancestor set up)
