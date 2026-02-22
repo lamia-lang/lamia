@@ -67,10 +67,13 @@ async def interactive_mode(lamia: Lamia):
                     lines = []
                     # Show the prompt again for a new input
                     continue
-                # Check for exit commands
-                if line.lower() in ['exit', 'quit', ':q']:
+                # Immediate exit: only when typed alone before any other lines (no SEND needed)
+                if not lines and line.strip().lower() in ['exit', 'quit', ':q']:
                     logger.info("\nGoodbye! 👋")
-                    return
+                    if running_task and not running_task.done():
+                        running_task.cancel()
+                    _graceful_shutdown(lamia)
+                    return  # unreachable, but satisfies type checkers
                 lines.append(line)
             # If an immediate command like STATS was executed, restart outer loop
             if do_stats_command:
@@ -137,7 +140,16 @@ async def interactive_mode(lamia: Lamia):
                     print(f"Executed by: {result.tracking_context.command_type}")
         except KeyboardInterrupt:
             logger.info("\n\nGoodbye! 👋")
-            break
+            if running_task and not running_task.done():
+                running_task.cancel()
+            _graceful_shutdown(lamia)
+            return  # unreachable
+        except SystemExit:
+            logger.info("\nGoodbye! 👋")
+            if running_task and not running_task.done():
+                running_task.cancel()
+            _graceful_shutdown(lamia)
+            return  # unreachable
         except Exception as e:
             traceback.print_exc()
             logger.error(f"❌ Error: {str(e)}")
@@ -412,7 +424,11 @@ def _install_sigint_handler() -> None:
 
 
 def _graceful_shutdown(lamia_instance: 'Optional[Lamia]') -> None:
-    """Clean up resources after the signal handler has already muted loggers."""
+    """Clean up resources and terminate the process.
+
+    Uses os._exit() to bypass asyncio's loop-teardown which would otherwise
+    block waiting for cancelled tasks to drain.
+    """
     logger.info("\nShutting down...")
     if lamia_instance is not None:
         try:
@@ -420,7 +436,9 @@ def _graceful_shutdown(lamia_instance: 'Optional[Lamia]') -> None:
         except Exception:
             pass
     EventLoopManager.shutdown()
-    sys.exit(0)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
 
 
 def _log_external_error(prefix: str, exc: Exception) -> None:
