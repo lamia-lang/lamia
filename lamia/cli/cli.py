@@ -69,11 +69,8 @@ async def interactive_mode(lamia: Lamia):
                     continue
                 # Immediate exit: only when typed alone before any real content (no SEND needed)
                 if not lines and line.strip().lower() in ['exit', 'quit', ':q']:
-                    logger.info("\nGoodbye! 👋")
-                    if running_task and not running_task.done():
-                        running_task.cancel()
-                    _graceful_shutdown(lamia)
-                    return  # unreachable, but satisfies type checkers
+                    _exit_interactive(running_task, lamia)
+                    return
                 if line.strip():
                     lines.append(line)
             # If an immediate command like STATS was executed, restart outer loop
@@ -101,9 +98,9 @@ async def interactive_mode(lamia: Lamia):
                             running_task.cancel()
                             logger.warning("Prompt interrupted by user (STOP). Start typing a new prompt.")
                             break
-                        elif user_input.lower() in ['exit', 'quit', ':q']:
-                            logger.info("\nGoodbye! 👋")
-                            break
+                        elif stop_input.lower() in ['exit', 'quit', ':q']:
+                            _exit_interactive(running_task, lamia)
+                            return
             if running_task.done() and not running_task.cancelled():
                 result = running_task.result()
                 # TODO: use a logger without timestamps, etc
@@ -139,23 +136,22 @@ async def interactive_mode(lamia: Lamia):
                                 print(f"Tokens used: {{{', '.join(usage_parts)}}}")
                 else:
                     print(f"Executed by: {result.tracking_context.command_type}")
-        except KeyboardInterrupt:
-            logger.info("\n\nGoodbye! 👋")
-            if running_task and not running_task.done():
-                running_task.cancel()
-            _graceful_shutdown(lamia)
-            return  # unreachable
-        except SystemExit:
-            logger.info("\nGoodbye! 👋")
-            if running_task and not running_task.done():
-                running_task.cancel()
-            _graceful_shutdown(lamia)
-            return  # unreachable
+        except (KeyboardInterrupt, SystemExit):
+            _exit_interactive(running_task, lamia)
+            return
         except Exception as e:
             traceback.print_exc()
             logger.error(f"❌ Error: {str(e)}")
             logger.error(traceback.format_exc())
             continue
+
+def _exit_interactive(running_task: 'Optional[asyncio.Task[object]]', lamia: Lamia) -> None:
+    """Cancel any in-flight task and shut down cleanly."""
+    print("\nGoodbye! 👋")
+    if running_task and not running_task.done():
+        running_task.cancel()
+    _graceful_shutdown(lamia)
+
 
 def main():
     """Main entry point for the Lamia CLI."""
@@ -285,22 +281,27 @@ def main():
         parser.add_argument('--file', '-f', type=str, help='Read prompt from a file instead of interactive mode')
         parser.add_argument('--config', '-c', type=str, help='Path to config file (optional)')
         parser.add_argument('--log-level', default='INFO', help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+        #parser.add_argument('--verbose', '-v', action='store_true', help='Show all Lamia logs on console (default: only warnings/errors)')
+        parser.add_argument('--log-file', type=str, help='Custom path for the Lamia log file (default: .lamia/lamia.log)')
         parser.add_argument('--no-cache', action='store_true', help='Disable selector resolution cache (forces fresh resolution)')
         args = parser.parse_args()
 
-    # Setup colored logging for CLI
-    setup_cli_logging(args.log_level.upper())
+    setup_cli_logging(
+        level=args.log_level.upper(),
+        verbose=True,
+        log_file=args.log_file,
+    )
 
     prompt_file = args.filename or args.file
     config_path = args.config
 
     config_dict = None
     if config_path:
-        logger.info(f"Using configuration from: {config_path}")
+        logger.debug(f"Using configuration from: {config_path}")
         with open(config_path, 'r') as f:
             config_dict = yaml.safe_load(f)
     elif os.path.exists("config.yaml"):
-        logger.info("Using configuration from: config.yaml")
+        logger.debug("Using configuration from: config.yaml")
         with open("config.yaml", 'r') as f:
             config_dict = yaml.safe_load(f)
     else:
@@ -314,7 +315,7 @@ def main():
     try:
         # Handle --no-cache flag
         if args.no_cache:
-            logger.info("Cache disabled via --no-cache flag")
+            logger.debug("Cache disabled via --no-cache flag")
             if config_dict is None:
                 config_dict = {}
             if 'web' not in config_dict:
@@ -323,11 +324,7 @@ def main():
                 config_dict['web']['selector_resolution'] = {}
             config_dict['web']['selector_resolution']['cache_enabled'] = False
         
-        # Create Lamia instance with config
-        logger.info("Creating Lamia instance...")
         lamia = Lamia.from_config(config_dict)
-        
-        logger.info("✅ Lamia instance created successfully")
         
         if prompt_file:
             # File execution - no async needed
@@ -336,7 +333,6 @@ def main():
             if file_ext in HYBRID_EXTENSIONS:
                 # Process hybrid syntax file with lazy loading enabled
                 try:
-                    logger.info(f"Processing hybrid syntax file: {prompt_file}")
                     executor = HybridExecutor(lamia)
                     executor.execute_file(prompt_file, enable_lazy_dependency_loading=True)
                     sys.exit(0)
@@ -375,7 +371,6 @@ def main():
             else:
                 # Regular Python file
                 try:
-                    logger.info(f"Executing script: {prompt_file}")
                     runpy.run_path(prompt_file, run_name="__main__")
                     sys.exit(0)
                 except KeyboardInterrupt:
