@@ -83,7 +83,7 @@ class Lamia:
             return_type: The expected return type for validation (optional)
             
         Returns:
-            If return_type is None: Plain result (Any) for direct usage
+            If return_type is None: for lamia f(): functions without return types
             If return_type is specified: LamiaResult with validation info
             
         Raises:
@@ -121,7 +121,10 @@ class Lamia:
                 typed_result=response.typed_result if return_type is not None else None,
                 tracking_context=response.execution_context,
             )
-        return response.typed_result
+        if return_type is None:
+            return None # nothing was asked, reconsider if we need to return the raw_text in any case
+        else:
+            return response.typed_result or response.raw_text
 
     def run(
         self,
