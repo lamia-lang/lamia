@@ -5,9 +5,7 @@ This module handles parsing of command strings to determine the appropriate
 domain type and extract arguments for execution.
 """
 
-import re
-from typing import Optional, Tuple, Any, Dict
-from urllib.parse import urlparse
+from typing import Optional, Tuple, Any
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import Command, LLMCommand, WebCommand, FileCommand, WebActionType, FileActionType
 from lamia.validation.base import BaseValidator
@@ -53,13 +51,21 @@ class CommandParser:
             self._parsed_command = LLMCommand(content)
 
     def _determine_command_type(self) -> CommandType:
-        """Determine the type of command based on its format."""
-        if self.command.startswith("http://") or self.command.startswith("https://"):
+        """Determine the type of command based on its format.
+
+        Only explicit protocol prefixes trigger non-LLM routing:
+        - http:// / https:// → WEB (navigate to URL)
+        - file://             → FILESYSTEM (read a file)
+
+        Everything else is an LLM prompt.  File writes are always produced
+        by the `-> File(...)` transformer, never by this string parser.
+        """
+        stripped = self.command.strip()
+        if stripped.startswith(("http://", "https://")):
             return CommandType.WEB
-        elif self.command.startswith("file://") or "/" in self.command:
+        if stripped.startswith("file://"):
             return CommandType.FILESYSTEM
-        else:
-            return CommandType.LLM
+        return CommandType.LLM
 
     def _split_command_and_return_type(self) -> Tuple[str, Any]:
         command_parts = self.command.split("->")
@@ -79,7 +85,6 @@ class CommandParser:
     def _parse_web_command(self, command) -> WebCommand:
         """Parse web command into WebCommand object."""
         # For URLs, default to NAVIGATE action
-        print(f"Parsing web command: {command}")
         return WebCommand(
             action=WebActionType.NAVIGATE,
             url=command,

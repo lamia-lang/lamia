@@ -2,9 +2,7 @@ import asyncio
 import signal
 import sys
 import os
-import readline  # For better input handling (command history)
 from typing import Optional
-import ast
 import argparse
 import select
 import yaml
@@ -27,7 +25,6 @@ from .eval_cli import handle_eval
 from .cli_styling import setup_cli_logging
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.hybrid_executor import HybridExecutor
-
 # Hybrid syntax file extensions that should be processed
 HYBRID_EXTENSIONS = {'.hu', '.lm'}
 
@@ -38,7 +35,7 @@ async def interactive_mode(lamia: Lamia):
     logger.info("Lamia Interactive Mode")
     logger.info("Enter your prompts")
 
-    prompt_str = "\n🤖 > (SEND=submit, CANCEL=discard, STOP=interrupt, STATS=stats, Command/Ctrl C or EXIT=quit)\n> "
+    prompt_str = "\n🧟‍♀️ > (SEND=submit, CANCEL=discard, STOP=interrupt, STATS=stats, Command/Ctrl C or EXIT=quit)\n> "
 
     running_task = None
 
@@ -335,50 +332,49 @@ def main():
                 try:
                     executor = HybridExecutor(lamia)
                     executor.execute_file(prompt_file, enable_lazy_dependency_loading=True)
-                    sys.exit(0)
+                    _graceful_shutdown(lamia, 0)
                 except ExternalOperationTransientError as e:
                     _log_external_error("❌ External operation failed after all retries", e)
-                    sys.exit(1)
+                    _graceful_shutdown(lamia, 1)
                 except ExternalOperationPermanentError as e:
                     _log_external_error("❌ Permanent failure", e)
-                    sys.exit(1)
+                    _graceful_shutdown(lamia, 1)
                 except ExternalOperationRateLimitError as e:
                     _log_external_error("❌ Rate limit exceeded", e)
-                    sys.exit(1)
+                    _graceful_shutdown(lamia, 1)
                 except SyntaxError as e:
                     logger.error(f"❌ Syntax error in hybrid file: {e}")
                     logger.error(f"Line {e.lineno}: {e.text}")
                     if logger.level <= logging.DEBUG:
                         traceback.print_exc()
-                    sys.exit(1)
+                    _graceful_shutdown(lamia, 1)
                 except ImportError as e:
                     logger.error(f"❌ Missing dependency: {e}")
                     if logger.level <= logging.DEBUG:
                         traceback.print_exc()
-                    sys.exit(1)
+                    _graceful_shutdown(lamia, 1)
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
-                    # Fallback - check if it looks like a syntax/parsing error
                     error_msg = str(e).lower()
                     if any(keyword in error_msg for keyword in ['parse', 'syntax', 'transform', 'ast']):
                         logger.error(f"❌ Error processing hybrid syntax file: {e}")
                     else:
                         logger.error(f"❌ Runtime error: {e}")
-                    # Always show traceback for unexpected errors
                     traceback.print_exc()
-                    sys.exit(1)
+                    _graceful_shutdown(lamia, 1)
             else:
-                # Regular Python file
+                # Regular Python file — inject Lamia builtins so types like
+                # HTML, web, InputType are available without explicit imports.
                 try:
                     runpy.run_path(prompt_file, run_name="__main__")
-                    sys.exit(0)
+                    _graceful_shutdown(lamia, 0)
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
                     logger.error(f"❌ Error executing script: {e}")
                     traceback.print_exc()
-                    sys.exit(1)
+                    _graceful_shutdown(lamia, 1)
         else:
             # Interactive mode - needs async
             async def run_interactive():
@@ -419,13 +415,12 @@ def _install_sigint_handler() -> None:
     signal.signal(signal.SIGINT, _handler)
 
 
-def _graceful_shutdown(lamia_instance: 'Optional[Lamia]') -> None:
+def _graceful_shutdown(lamia_instance: 'Optional[Lamia]', exit_code: int = 0) -> None:
     """Clean up resources and terminate the process.
 
     Uses os._exit() to bypass asyncio's loop-teardown which would otherwise
     block waiting for cancelled tasks to drain.
     """
-    logger.info("\nShutting down...")
     if lamia_instance is not None:
         try:
             EventLoopManager.run_coroutine(lamia_instance._engine.cleanup())
@@ -434,7 +429,7 @@ def _graceful_shutdown(lamia_instance: 'Optional[Lamia]') -> None:
     EventLoopManager.shutdown()
     sys.stdout.flush()
     sys.stderr.flush()
-    os._exit(0)
+    os._exit(exit_code)
 
 
 def _log_external_error(prefix: str, exc: Exception) -> None:

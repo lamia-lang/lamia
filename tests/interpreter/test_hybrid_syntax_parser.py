@@ -937,3 +937,4 @@ def simple_text():
         
         func_info = result['llm_functions']['simple_text']
         assert func_info.return_type is None
+

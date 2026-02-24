@@ -3,10 +3,13 @@
 import ast
 import asyncio
 import logging
-from typing import Set, Dict, Any
+from typing import Set, Dict, Any, List, Optional
+
+from pydantic import BaseModel, Field
 
 from lamia.types import BaseType
 import lamia.types as lamia_types
+from lamia.async_bridge import EventLoopManager
 from lamia.adapters.web.session_context import (
     create_session_factory, SessionSkipException,
     SessionLoginFailedError, validate_login_completion,
@@ -189,6 +192,13 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
     # Always inject InputType for form automation
     from lamia.types import InputType
     execution_globals['InputType'] = InputType
+    # Always inject pydantic and typing essentials for .hu model definitions
+    execution_globals['BaseModel'] = BaseModel
+    execution_globals['Field'] = Field
+    execution_globals['List'] = List
+    execution_globals['Optional'] = Optional
+    execution_globals['Dict'] = Dict
+    execution_globals['Any'] = Any
     
     if 'session' in used_namespaces:
         # Get web_manager from lamia instance for session validation

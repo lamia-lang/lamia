@@ -18,30 +18,52 @@ def make_record(level: int, message: str) -> logging.LogRecord:
 
 def test_formatter_without_tty_keeps_plain_message():
     formatter = ColoredFormatter("%(levelname)s - %(message)s")
-    record = make_record(logging.INFO, "plain message")
+    record = make_record(logging.WARNING, "plain message")
 
-    with patch("sys.stdout.isatty", return_value=False):
+    with patch("sys.stderr.isatty", return_value=False):
         output = formatter.format(record)
 
     assert Colors.RESET not in output
 
 
-def test_formatter_colors_success_message_in_tty():
+def test_formatter_colors_warning_in_tty():
     formatter = ColoredFormatter("%(levelname)s - %(message)s")
-    record = make_record(logging.INFO, "✅ All good")
+    record = make_record(logging.WARNING, "something went wrong")
 
-    with patch("sys.stdout.isatty", return_value=True):
+    with patch("sys.stderr.isatty", return_value=True):
         output = formatter.format(record)
 
-    assert Colors.GREEN in output
+    assert Colors.YELLOW in output
     assert Colors.RESET in output
 
 
-def test_formatter_greys_prompt_messages_in_tty():
+def test_formatter_colors_error_in_tty():
     formatter = ColoredFormatter("%(levelname)s - %(message)s")
-    record = make_record(logging.INFO, "[Lamia][Ask] prompt")
+    record = make_record(logging.ERROR, "fatal error")
 
-    with patch("sys.stdout.isatty", return_value=True):
+    with patch("sys.stderr.isatty", return_value=True):
+        output = formatter.format(record)
+
+    assert Colors.RED in output
+    assert Colors.RESET in output
+
+
+def test_formatter_info_has_no_color_in_tty():
+    """INFO level is intentionally uncolored — only level-based coloring."""
+    formatter = ColoredFormatter("%(levelname)s - %(message)s")
+    record = make_record(logging.INFO, "✅ All good")
+
+    with patch("sys.stderr.isatty", return_value=True):
+        output = formatter.format(record)
+
+    assert Colors.GREEN not in output
+
+
+def test_formatter_debug_gets_grey_in_tty():
+    formatter = ColoredFormatter("%(levelname)s - %(message)s")
+    record = make_record(logging.DEBUG, "[Lamia][Ask] prompt")
+
+    with patch("sys.stderr.isatty", return_value=True):
         output = formatter.format(record)
 
     assert Colors.GREY in output

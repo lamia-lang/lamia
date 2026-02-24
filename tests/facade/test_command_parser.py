@@ -5,7 +5,7 @@ import pytest
 from lamia import Lamia
 from lamia.facade.command_parser import CommandParser
 from lamia.facade.result_types import LamiaResult
-from lamia.interpreter.commands import LLMCommand, WebCommand, FileCommand, WebActionType, FileActionType
+from lamia.interpreter.commands import LLMCommand, FileCommand, FileActionType
 
 
 def test_parses_llm_command_by_default():
@@ -16,20 +16,38 @@ def test_parses_llm_command_by_default():
     assert parser.return_type is None
 
 
-def test_parses_web_command_from_url():
+def test_url_is_llm_command_by_default():
     parser = CommandParser("https://example.com")
 
-    assert isinstance(parser.parsed_command, WebCommand)
-    assert parser.parsed_command.action == WebActionType.NAVIGATE
-    assert parser.parsed_command.url == "https://example.com"
+    assert isinstance(parser.parsed_command, LLMCommand)
+    assert parser.parsed_command.prompt == "https://example.com"
 
 
-def test_parses_file_command_from_path():
-    parser = CommandParser("/tmp/file.txt")
+def test_parses_file_command_from_file_url():
+    parser = CommandParser("file:///tmp/file.txt")
 
     assert isinstance(parser.parsed_command, FileCommand)
     assert parser.parsed_command.action == FileActionType.READ
-    assert parser.parsed_command.path == "/tmp/file.txt"
+    assert parser.parsed_command.path == "file:///tmp/file.txt"
+
+
+def test_plain_file_path_is_llm_not_filesystem():
+    """Plain paths are LLM prompts; file:// prefix is the explicit filesystem trigger."""
+    parser = CommandParser("/tmp/file.txt")
+    assert isinstance(parser.parsed_command, LLMCommand)
+
+
+def test_html_content_is_not_filesystem():
+    """HTML content with / in closing tags should be LLM, not FILESYSTEM."""
+    html = """
+    <div>
+      <h1>Title</h1>
+      <p>Hello World</p>
+    </div>
+    """
+    parser = CommandParser(html)
+    assert isinstance(parser.parsed_command, LLMCommand)
+
 
 
 def test_parses_return_type_suffix():
@@ -115,16 +133,15 @@ class TestLamiaCommandParsingIntegration:
         mock_result.typed_result = "file content"
         lamia._engine.execute = AsyncMock(return_value=mock_result)
 
-        lamia.run("/tmp/file.txt")
+        lamia.run("file:///tmp/file.txt")
 
         lamia._engine.execute.assert_called_once()
         command = lamia._engine.execute.call_args[0][0]
         assert isinstance(command, FileCommand)
         assert command.action == FileActionType.READ
-        assert command.path == "/tmp/file.txt"
 
-    def test_web_command_parsing(self, lamia):
-        """Test that web commands are parsed and dispatched correctly."""
+    def test_url_string_parsing_is_llm(self, lamia):
+        """URL strings are LLM prompts unless transformed into explicit WebCommand."""
         mock_result = MagicMock()
         mock_result.typed_result = "page content"
         lamia._engine.execute = AsyncMock(return_value=mock_result)
@@ -133,9 +150,8 @@ class TestLamiaCommandParsingIntegration:
 
         lamia._engine.execute.assert_called_once()
         command = lamia._engine.execute.call_args[0][0]
-        assert isinstance(command, WebCommand)
-        assert command.action == WebActionType.NAVIGATE
-        assert command.url == "https://example.com"
+        assert isinstance(command, LLMCommand)
+        assert command.prompt == "https://example.com"
 
     def test_llm_command_parsing(self, lamia):
         """Test that LLM commands are parsed and dispatched correctly."""

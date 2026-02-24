@@ -559,9 +559,9 @@ class TestCreateExecutionGlobals:
         
         globals_dict = create_execution_globals(used_namespaces, used_types)
         
-        # Should only contain InputType (always injected)
-        assert 'InputType' in globals_dict
-        assert len([k for k in globals_dict.keys() if not k.startswith('__')]) == 1
+        # Should contain always-injected .hu basics
+        expected = {'InputType', 'BaseModel', 'Field', 'List', 'Optional', 'Dict', 'Any'}
+        assert expected.issubset(set(globals_dict.keys()))
 
 
 class TestCreateExecutionGlobalsEdgeCases:

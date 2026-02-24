@@ -10,7 +10,7 @@ Handles transformation of:
 
 import ast
 import re
-from typing import Dict, Optional, List, Any, Union
+from typing import Dict, Optional, List, Any, Union, Set
 
 from ..detectors.llm_command_detector import (
     LLMCommandDetector,
@@ -27,6 +27,7 @@ from lamia.internal_types import (
     VALUE_SECOND_ARG_ACTIONS,
     BrowserActionType,
 )
+
 
 
 class HybridSyntaxTransformer(ast.NodeTransformer):
@@ -160,7 +161,6 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             return self._transform_llm_function(node, is_async)
         elif self._is_web_command_function(node):
             return self._transform_web_command_function(node, is_async)
-        
         return self.generic_visit(node)
     
     def _transform_llm_function(self, node, is_async: bool):
@@ -176,6 +176,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         return self._create_lamia_call_function(
             node, processed_command, func_info.return_type, is_async,
         )
+
     
     def _is_web_return_type_expression(self, node) -> bool:
         """Check if expression is preprocessed web return type expression."""
@@ -337,7 +338,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             )
 
         # Build optional return_type argument from function annotation for engine validation
-        return_type_kw = self._build_return_type_keyword(node)
+        return_type_kw = self._build_return_type_keyword_from_node(node)
 
         # Create lamia.run() call with the web command
         lamia_call = self._build_lamia_call(web_command_ast, return_type_kw, is_async)
@@ -357,8 +358,8 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             return node.body[1].value
         return None
     
-    def _build_return_type_keyword(self, node) -> Optional[ast.keyword]:
-        """Build return type keyword argument from function annotation.
+    def _build_return_type_keyword_from_node(self, node) -> Optional[ast.keyword]:
+        """Build return_type keyword from a function node's returns annotation.
 
         Note: File(...) return annotations are NOT handled here. They are
         intercepted earlier in the pipeline by _create_lamia_call_function
@@ -419,7 +420,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             lineno=getattr(node, 'lineno', 1),
             col_offset=getattr(node, 'col_offset', 0)
         )
-    
+
     def _transform_web_call(self, node):
         """
         Transform a web.method_name() call into WebCommand AST.
@@ -643,7 +644,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             lineno=getattr(node, 'lineno', 1),
             col_offset=getattr(node, 'col_offset', 0)
         )
-    
+
     # ── File write helpers (-> File(...) syntax) ──────────────────────────
 
     def _is_file_call(self, node) -> bool:
