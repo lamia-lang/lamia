@@ -274,8 +274,8 @@ def main():
             sys.exit(0)
         
         # Regular CLI arguments
-        parser.add_argument('filename', nargs='?', help='Prompt file to read from (if not provided, runs in interactive mode)')
-        parser.add_argument('--file', '-f', type=str, help='Read prompt from a file instead of interactive mode')
+        parser.add_argument('filename', nargs='?', help='Lamia script file to run (if not provided, runs in interactive mode)')
+        parser.add_argument('--file', '-f', type=str, help='Lamia script file to run (if not provided, runs in interactive mode)')
         parser.add_argument('--config', '-c', type=str, help='Path to config file (optional)')
         parser.add_argument('--log-level', default='INFO', help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
         #parser.add_argument('--verbose', '-v', action='store_true', help='Show all Lamia logs on console (default: only warnings/errors)')
