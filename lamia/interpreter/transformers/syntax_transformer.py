@@ -751,6 +751,13 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         tmp_var = '__lamia_file_result__'
         method = 'run_async' if is_async else 'run'
 
+        # When a return type is present, request the full LamiaResult so we can
+        # write .result_text (raw content) to the file and return .typed_result.
+        if has_inner_type:
+            keywords = list(keywords) + [
+                ast.keyword(arg='_full_result', value=ast.Constant(value=True)),
+            ]
+
         # Step 1 – execute the command
         lamia_call = ast.Call(
             func=ast.Attribute(
@@ -770,16 +777,15 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             lineno=1, col_offset=0,
         )
 
-        # Step 2 – determine content expression
+        # Step 2 – content: with _full_result=True the result is a LamiaResult;
+        # write .result_text (raw content e.g. HTML) to the file.
         if has_inner_type:
-            # Typed: __lamia_file_result__.result_text
             content_expr = ast.Attribute(
                 value=ast.Name(id=tmp_var, ctx=ast.Load()),
                 attr='result_text',
                 ctx=ast.Load(),
             )
         else:
-            # Untyped: str(__lamia_file_result__)
             content_expr = ast.Call(
                 func=ast.Name(id='str', ctx=ast.Load()),
                 args=[ast.Name(id=tmp_var, ctx=ast.Load())],
@@ -821,8 +827,16 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
         write_stmt = ast.Expr(value=file_write_call)
 
-        # Step 5 – return
-        return_stmt = ast.Return(value=ast.Name(id=tmp_var, ctx=ast.Load()))
+        # Step 5 – return the result (typed_result when full LamiaResult was requested)
+        if has_inner_type:
+            return_value = ast.Attribute(
+                value=ast.Name(id=tmp_var, ctx=ast.Load()),
+                attr='typed_result',
+                ctx=ast.Load(),
+            )
+        else:
+            return_value = ast.Name(id=tmp_var, ctx=ast.Load())
+        return_stmt = ast.Return(value=return_value)
 
         return [assign_stmt, write_stmt, return_stmt]
 
@@ -846,8 +860,9 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         keywords: List[ast.keyword] = []
         if inner_rt_node is not None:
             keywords.append(ast.keyword(arg='return_type', value=inner_rt_node))
+            keywords.append(ast.keyword(arg='_full_result', value=ast.Constant(value=True)))
 
-        # Step 1 – __lamia_file_result__ = lamia.run(command, return_type=...)
+        # Step 1 – __lamia_file_result__ = lamia.run(command, return_type=..., _full_result=True)
         lamia_call = ast.Call(
             func=ast.Attribute(
                 value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
@@ -863,7 +878,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             lineno=1, col_offset=0,
         )
 
-        # Step 2 – content expression
+        # Step 2 – content expression: .result_text gives us the raw content (e.g. HTML)
         if inner_rt_node is not None:
             content_expr = ast.Attribute(
                 value=ast.Name(id=tmp_var, ctx=ast.Load()),

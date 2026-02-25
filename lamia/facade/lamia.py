@@ -132,6 +132,7 @@ class Lamia:
         return_type: Optional[Type[BaseType]] = None,
         *,
         models: Optional[List[ModelWithRetries]] = None,
+        _full_result: bool = False,
     ) -> Union[Any, LamiaResult]:
         """
         Run a command synchronously.
@@ -140,6 +141,7 @@ class Lamia:
             command: The command to execute
             models: The models to use, if not provided, the default models will be used
             return_type: The expected return type for validation (optional)
+            _full_result: If True, return LamiaResult with both raw text and typed result
         
         Returns:
             If return_type is None: Plain result (Any) for direct usage
@@ -159,6 +161,7 @@ class Lamia:
                 command,
                 return_type,
                 models=models,
+                _full_result=_full_result,
             )
         )
 

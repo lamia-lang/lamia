@@ -216,6 +216,13 @@ def generate_page() -> File(HTML, "output.html"):
         assert "output.html" in result
         assert "return_type" in result
         assert "__lamia_file_result__" in result
+        # Typed: _full_result=True so lamia.run returns LamiaResult
+        assert "_full_result=True" in result
+        # File content comes from .result_text (raw content, not model repr)
+        assert "__lamia_file_result__.result_text" in result
+        assert "str(__lamia_file_result__)" not in result
+        # Return value is the typed_result, not the LamiaResult wrapper
+        assert "__lamia_file_result__.typed_result" in result
 
     def test_function_untyped_file_write(self):
         """def func() -> File('path'): generates write without return_type."""
@@ -268,6 +275,8 @@ __LAMIA_WEB_RT__(File(HTML, "page.html"), web.get_text(".content"))
         assert "page.html" in result
         assert "return_type" in result
         assert "__lamia_file_result__" in result
+        assert "_full_result=True" in result
+        assert "__lamia_file_result__.result_text" in result
 
     def test_web_expression_untyped_file_write(self):
         """__LAMIA_WEB_RT__(File('path'), web.call()) generates write without validation."""
@@ -292,6 +301,8 @@ __LAMIA_FILE_WRITE__("Generate HTML about cats", File(HTML, "output.html"))
         assert "FileActionType.WRITE" in result
         assert "output.html" in result
         assert "__lamia_file_result__" in result
+        assert "_full_result=True" in result
+        assert "__lamia_file_result__.result_text" in result
 
     def test_web_function_with_file_return_type(self):
         """def func() -> File(HTML, 'path'): return web.get_text(...) generates file write."""
@@ -305,6 +316,9 @@ def scrape_to_file() -> File(HTML, "scraped.html"):
         assert "FileActionType.WRITE" in result
         assert "scraped.html" in result
         assert "WebCommand" in result
+        assert "_full_result=True" in result
+        assert "__lamia_file_result__.result_text" in result
+        assert "__lamia_file_result__.typed_result" in result
 
 
 # =============================================================================

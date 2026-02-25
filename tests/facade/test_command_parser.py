@@ -5,7 +5,7 @@ import pytest
 from lamia import Lamia
 from lamia.facade.command_parser import CommandParser
 from lamia.facade.result_types import LamiaResult
-from lamia.interpreter.commands import LLMCommand, FileCommand, FileActionType
+from lamia.interpreter.commands import LLMCommand, FileCommand, FileActionType, WebCommand, WebActionType
 
 
 def test_parses_llm_command_by_default():
@@ -16,11 +16,12 @@ def test_parses_llm_command_by_default():
     assert parser.return_type is None
 
 
-def test_url_is_llm_command_by_default():
+def test_url_is_web_command():
     parser = CommandParser("https://example.com")
 
-    assert isinstance(parser.parsed_command, LLMCommand)
-    assert parser.parsed_command.prompt == "https://example.com"
+    assert isinstance(parser.parsed_command, WebCommand)
+    assert parser.parsed_command.action == WebActionType.NAVIGATE
+    assert parser.parsed_command.url == "https://example.com"
 
 
 def test_parses_file_command_from_file_url():
@@ -140,8 +141,8 @@ class TestLamiaCommandParsingIntegration:
         assert isinstance(command, FileCommand)
         assert command.action == FileActionType.READ
 
-    def test_url_string_parsing_is_llm(self, lamia):
-        """URL strings are LLM prompts unless transformed into explicit WebCommand."""
+    def test_url_string_parsing_is_web(self, lamia):
+        """URL strings are parsed as WebCommand NAVIGATE."""
         mock_result = MagicMock()
         mock_result.typed_result = "page content"
         lamia._engine.execute = AsyncMock(return_value=mock_result)
@@ -150,8 +151,8 @@ class TestLamiaCommandParsingIntegration:
 
         lamia._engine.execute.assert_called_once()
         command = lamia._engine.execute.call_args[0][0]
-        assert isinstance(command, LLMCommand)
-        assert command.prompt == "https://example.com"
+        assert isinstance(command, WebCommand)
+        assert command.action == WebActionType.NAVIGATE
 
     def test_llm_command_parsing(self, lamia):
         """Test that LLM commands are parsed and dispatched correctly."""

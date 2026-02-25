@@ -262,7 +262,7 @@ class TestLamiaLifecycle:
 
     @pytest.mark.asyncio
     async def test_run_async_with_return_type(self):
-        """Test run_async with return_type returns LamiaResult."""
+        """Test run_async with return_type returns typed_result directly."""
         from pydantic import BaseModel
         from lamia.types import JSON
 
@@ -281,14 +281,10 @@ class TestLamiaLifecycle:
             MockEngine.return_value = mock_engine
 
             lamia = Lamia()
-            # JSON[MyModel] is a typical usage pattern for return_type
             result = await lamia.run_async("generate something", return_type=JSON[MyModel, False])
 
-            # With return_type, should return LamiaResult
-            assert isinstance(result, LamiaResult)
-            assert result.result_text == "test response"
-            assert isinstance(result.typed_result, MyModel)
-            assert result.typed_result.value == "parsed"
+            assert isinstance(result, MyModel)
+            assert result.value == "parsed"
 
     @pytest.mark.asyncio
     async def test_run_async_without_return_type(self):
