@@ -251,4 +251,29 @@ async def test_html_social_media_feed_structure():
     validator = HTMLStructureValidator(model=dict, strict=False)
     result = await validator.validate(social_feed_html)
     
-    assert isinstance(result.is_valid, bool), "Complex social media feed HTML should be handled" 
+    assert isinstance(result.is_valid, bool), "Complex social media feed HTML should be handled"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+async def test_raw_text_has_fences_stripped(strict):
+    """When an LLM wraps the response in ```html fences, raw_text should be clean."""
+    class SimpleModel(BaseModel):
+        body: Any
+
+    fenced = "```html\n<html><body><p>hello</p></body></html>\n```"
+    validator = HTMLStructureValidator(model=SimpleModel, strict=strict)
+    result = await validator.validate(fenced)
+    assert result.is_valid is True
+    assert "```" not in result.raw_text
+
+
+@pytest.mark.asyncio
+async def test_raw_text_clean_for_file_write():
+    """raw_text (used by File() writes) should not contain markdown fences."""
+    fenced = "```html\n<html><body><h1>Title</h1></body></html>\n```"
+    validator = HTMLStructureValidator(model=None, strict=False)
+    result = await validator.validate(fenced)
+    assert result.is_valid is True
+    assert result.raw_text.startswith("<html>")
+    assert result.raw_text.endswith("</html>")

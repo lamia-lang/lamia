@@ -365,6 +365,77 @@ class TestBaseValidatorValidationDispatch:
 
         assert result.raw_text == "original response text"
 
+    async def test_raw_text_strips_markdown_fences(self):
+        """raw_text should have markdown code fences removed."""
+
+        class TestValidator(BaseValidator):
+            @property
+            def name(self) -> str:
+                return "test"
+
+            @property
+            def initial_hint(self) -> str:
+                return "Test hint"
+
+            async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
+            async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
+        validator = TestValidator()
+
+        fenced = "```html\n<html><body>hello</body></html>\n```"
+        result = await validator.validate(fenced)
+        assert result.raw_text == "<html><body>hello</body></html>"
+
+    async def test_raw_text_strips_bare_fences(self):
+        """raw_text should strip fences even without a language tag."""
+
+        class TestValidator(BaseValidator):
+            @property
+            def name(self) -> str:
+                return "test"
+
+            @property
+            def initial_hint(self) -> str:
+                return "Test hint"
+
+            async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
+            async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
+        validator = TestValidator()
+
+        fenced = "```\n<html><body>hello</body></html>\n```"
+        result = await validator.validate(fenced)
+        assert result.raw_text == "<html><body>hello</body></html>"
+
+    async def test_raw_text_preserves_unfenced_content(self):
+        """raw_text should leave content without fences unchanged (just stripped)."""
+
+        class TestValidator(BaseValidator):
+            @property
+            def name(self) -> str:
+                return "test"
+
+            @property
+            def initial_hint(self) -> str:
+                return "Test hint"
+
+            async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
+            async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+                return ValidationResult(is_valid=True)
+
+        validator = TestValidator()
+
+        result = await validator.validate("  <html><body>hello</body></html>  ")
+        assert result.raw_text == "<html><body>hello</body></html>"
+
     async def test_validate_sets_execution_context(self):
         """Test that validate() sets execution_context on the result."""
 
@@ -672,6 +743,32 @@ class TestBaseValidatorGetRetryHint:
         hint = validator.get_retry_hint()
 
         assert hint == "Initial hint"
+
+
+class TestStripMarkdownFences:
+    """Test BaseValidator.strip_markdown_fences static method."""
+
+    def test_strips_html_fences(self):
+        assert BaseValidator.strip_markdown_fences("```html\n<html></html>\n```") == "<html></html>"
+
+    def test_strips_bare_fences(self):
+        assert BaseValidator.strip_markdown_fences("```\ncontent\n```") == "content"
+
+    def test_strips_json_fences(self):
+        assert BaseValidator.strip_markdown_fences('```json\n{"a":1}\n```') == '{"a":1}'
+
+    def test_no_op_without_fences(self):
+        assert BaseValidator.strip_markdown_fences("<html></html>") == "<html></html>"
+
+    def test_no_op_for_partial_fences(self):
+        text = "Here is the result:\n```html\n<html></html>\n```\nDone!"
+        assert BaseValidator.strip_markdown_fences(text) == text
+
+    def test_preserves_inner_fences(self):
+        text = "```markdown\n# Title\n```python\ncode()\n```\n```"
+        result = BaseValidator.strip_markdown_fences(text)
+        assert "# Title" in result
+        assert "```python" in result
 
 
 class TestBaseValidatorAbstractMethods:

@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Union
 from dataclasses import dataclass
@@ -54,6 +55,14 @@ class BaseValidator(ABC):
         if not (has_validate or (has_strict and has_perm)):
             raise TypeError("Must implement either validate() or both validate_strict and validate_permissive.")
 
+    _FENCE_RE = re.compile(r'^```\w*\s*\n?([\s\S]*?)\n?\s*```\s*$')
+
+    @staticmethod
+    def strip_markdown_fences(text: str) -> str:
+        """Strip markdown code fences (```lang ... ```) that LLMs commonly wrap around responses."""
+        m = BaseValidator._FENCE_RE.match(text)
+        return m.group(1).strip() if m else text
+
     async def validate(self, response: str, execution_context: Optional[TrackingContext] = None, **kwargs) -> ValidationResult:
         """Validate response and track intermediate attempts if validation_manager is available.
         
@@ -72,7 +81,7 @@ class BaseValidator(ABC):
         else:
             result = await self.validate_permissive(response, **kwargs)
 
-        result.raw_text = response
+        result.raw_text = self.strip_markdown_fences(response.strip()) if isinstance(response, str) else response
         result.execution_context = execution_context
         
         # Track intermediate validation attempt if manager is available

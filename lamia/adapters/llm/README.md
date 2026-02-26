@@ -13,6 +13,9 @@ This directory contains adapters for integrating various Large Language Models (
 
 All adapters must subclass `BaseLLMAdapter` from `base.py` and implement the following async methods:
 
+- `name(cls)`: Return the provider name (e.g., 'openai', 'anthropic', 'ollama'). This method is used to identify the provider in the config.yaml file. For example, if you want to add an adapter for Mistral, you would return 'mistral', Then in the config.yaml file you can use 'mistral:<model_name>' in the model_chain section.
+- `env_var_names(cls)`: Return a list of environment variable names to try, in order of precedence. You will usually use this for defining the API key environment variable names. You can return an empty list if no API key is required.
+- `is_remote(cls)`: Return True if this adapter makes network calls, False for local.
 - `initialize(self)`: Prepare resources (e.g., open API session, load model).
 - `generate(self, prompt, ...)`: Generate a response from the model.
 - `close(self)`: Clean up resources.
@@ -154,4 +157,4 @@ models:
 
 ## Questions?
 
-Open an issue or check the main project README for more details. 
+Open an issue. 
