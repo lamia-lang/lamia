@@ -323,6 +323,16 @@ class TestLLMExpressionSyntax:
         path = _write_hu(tmp_dir, '"Generate HTML about cats" -> HTML')
         executor.execute_file(path)
 
+    def test_html_assigned(self, executor, tmp_dir):
+        """result = "prompt" -> HTML  assigns raw HTML text to variable."""
+        path = _write_hu(tmp_dir, '''
+result = "Generate HTML about cats" -> HTML
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert "<html>" in g["result"]
+        assert "<h1>Cats</h1>" in g["result"]
+
     def test_html_model(self, executor, tmp_dir):
         path = _write_hu(tmp_dir, '''
 class CatModel(BaseModel):
@@ -332,6 +342,20 @@ class CatModel(BaseModel):
 "Generate HTML about cats" -> HTML[CatModel]
 ''')
         executor.execute_file(path)
+
+    def test_html_model_assigned(self, executor, tmp_dir):
+        """result = "prompt" -> HTML[Model]  assigns parsed model to variable."""
+        path = _write_hu(tmp_dir, '''
+class CatModel(BaseModel):
+    h1: str
+    p: str
+
+result = "Generate HTML about cats" -> HTML[CatModel]
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert g["result"].h1 == "Cats"
+        assert g["result"].p == "Cats are great"
 
     def test_file_write(self, executor, tmp_dir):
         out = os.path.join(tmp_dir, "llm_expr.html")
@@ -432,6 +456,15 @@ class TestWebExpressionSyntax:
         path = _write_hu(tmp_dir, f'"{html_server}" -> HTML')
         executor.execute_file(path)
 
+    def test_html_assigned(self, executor, html_server, tmp_dir):
+        """result = "url" -> HTML  assigns raw HTML text to variable."""
+        path = _write_hu(tmp_dir, f'''
+result = "{html_server}" -> HTML
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert "<h1>Hello</h1>" in g["result"]
+
     def test_html_model(self, executor, html_server, tmp_dir):
         path = _write_hu(tmp_dir, f'''
 class PageModel(BaseModel):
@@ -441,6 +474,20 @@ class PageModel(BaseModel):
 "{html_server}" -> HTML[PageModel]
 ''')
         executor.execute_file(path)
+
+    def test_html_model_assigned(self, executor, html_server, tmp_dir):
+        """result = "url" -> HTML[Model]  assigns parsed model to variable."""
+        path = _write_hu(tmp_dir, f'''
+class PageModel(BaseModel):
+    h1: str
+    p: str
+
+result = "{html_server}" -> HTML[PageModel]
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert g["result"].h1 == "Hello"
+        assert g["result"].p == "World"
 
     def test_file_write(self, executor, html_server, tmp_dir):
         out = os.path.join(tmp_dir, "web_expr.html")

@@ -5,7 +5,7 @@ Handles preprocessing of:
 - with session("name") -> Type: syntax
 - web.method(args) -> Type expressions
 - "prompt" -> File(...) expressions
-- "prompt" -> Type standalone expressions (shorthand for a typed LLM function)
+- [var =] "prompt" -> Type expressions (with optional assignment)
 """
 
 import re
@@ -48,8 +48,8 @@ class WithReturnTypePreprocessor:
         # Process "prompt" -> File(...) expressions
         processed_code = self._process_file_write_expressions(processed_code)
 
-        # Process "prompt" -> Type shorthand (must run AFTER file writes)
-        processed_code = self._process_standalone_typed_prompts(processed_code)
+        # Process [var =] "prompt" -> Type expressions (must run AFTER file writes)
+        processed_code = self._process_typed_prompt_expressions(processed_code)
 
         return processed_code, return_types
     
@@ -114,40 +114,39 @@ class WithReturnTypePreprocessor:
 
         return re.sub(file_write_pattern, replace_file_write, source_code)
 
-    def _process_standalone_typed_prompts(self, source_code: str) -> str:
-        """Process standalone ``"prompt" -> Type`` shorthand.
+    def _process_typed_prompt_expressions(self, source_code: str) -> str:
+        """Process ``"prompt" -> Type`` and ``var = "prompt" -> Type`` expressions.
 
-        Rewrites each match into a synthetic function definition so the
-        LLM command detector and syntax transformer can handle it like
-        any other typed LLM function::
+        Rewrites to a ``__LAMIA_TYPED_EXPR__`` marker that the AST transformer
+        converts into ``lamia.run("prompt", return_type=Type)``::
 
-            "return html" -> HTML
+            "generate html" -> HTML
+            →  __LAMIA_TYPED_EXPR__(HTML, "generate html")
 
-        becomes::
-
-            def __lamia_typed_prompt_0() -> HTML:
-                "return html"
+            result = "generate html" -> HTML
+            →  result = __LAMIA_TYPED_EXPR__(HTML, "generate html")
 
         Must run **after** ``_process_file_write_expressions`` so that
         ``"prompt" -> File(...)`` is not consumed here.
         """
         typed_prompt_pattern = (
             r'^(\s*)'                              # indent
+            r'(?:(\w+)\s*=\s*)?'                   # optional: variable =
             + _QUOTED_STRING +
             r'\s*->\s*'                            # arrow
             r'([A-Za-z_]\w*(?:\[[^\]]+\])?)'      # TypeName or TypeName[Inner]
             r'\s*$'                                # end of line
         )
 
-        counter = [0]
-
         def replace_typed_prompt(match: re.Match) -> str:
             indent = match.group(1)
-            string_lit = match.group(2)
-            type_name = match.group(3)
-            idx = counter[0]
-            counter[0] += 1
-            return f"{indent}def __LAMIA_TYPED_PROMPT_{idx}() -> {type_name}:\n{indent}    {string_lit}"
+            variable = match.group(2)
+            string_lit = match.group(3)
+            type_name = match.group(4)
+            marker = f"__LAMIA_TYPED_EXPR__({type_name}, {string_lit})"
+            if variable:
+                return f"{indent}{variable} = {marker}"
+            return f"{indent}{marker}"
 
         return re.sub(typed_prompt_pattern, replace_typed_prompt, source_code, flags=re.MULTILINE)
 

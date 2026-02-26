@@ -135,7 +135,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         return self.generic_visit(node)
     
     def visit_Call(self, node):
-        """Transform web method calls directly into WebCommand objects, wrapped in lamia.run()."""
+        """Transform web method calls and typed expression markers into lamia.run() calls."""
         # Check if this is a web.method_name() call
         if self._is_web_call(node):
             # Transform to WebCommand (_transform_web_call handles starred arguments internally)
@@ -151,9 +151,33 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 args=[web_command],
                 keywords=[]
             )
+
+        # Check if this is a __LAMIA_TYPED_EXPR__(Type, "prompt") marker
+        if self._is_typed_expr_marker(node):
+            return self._transform_typed_expr(node)
         
-        # Not a web call, continue normal processing
+        # Not a recognized call, continue normal processing
         return self.generic_visit(node)
+
+    def _is_typed_expr_marker(self, node) -> bool:
+        """Check if call is a __LAMIA_TYPED_EXPR__(Type, "prompt") marker."""
+        return (isinstance(node.func, ast.Name)
+                and node.func.id == '__LAMIA_TYPED_EXPR__'
+                and len(node.args) == 2)
+
+    def _transform_typed_expr(self, node):
+        """Transform __LAMIA_TYPED_EXPR__(Type, "prompt") into lamia.run("prompt", return_type=Type)."""
+        return_type_node = node.args[0]
+        command_node = node.args[1]
+        return ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                attr='run',
+                ctx=ast.Load()
+            ),
+            args=[command_node],
+            keywords=[ast.keyword(arg='return_type', value=return_type_node)]
+        )
     
     def _transform_function(self, node, is_async: bool):
         """Transform function based on whether it's async or sync."""

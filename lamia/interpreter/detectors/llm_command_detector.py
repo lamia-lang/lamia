@@ -87,6 +87,36 @@ class LLMCommandDetector(ast.NodeVisitor):
         """Handle async function definitions that might contain string LLM commands."""
         self._process_function(node, is_async=True)
         self.generic_visit(node)
+
+    def visit_Expr(self, node):
+        """Detect __LAMIA_TYPED_EXPR__ markers in expression statements."""
+        self._check_typed_expr_marker(node.value)
+        self.generic_visit(node)
+
+    def visit_Assign(self, node):
+        """Detect __LAMIA_TYPED_EXPR__ markers in assignments."""
+        self._check_typed_expr_marker(node.value)
+        self.generic_visit(node)
+
+    def _check_typed_expr_marker(self, value_node):
+        """Extract LLM command info from ``__LAMIA_TYPED_EXPR__(Type, "prompt")``."""
+        if not (isinstance(value_node, ast.Call)
+                and isinstance(value_node.func, ast.Name)
+                and value_node.func.id == '__LAMIA_TYPED_EXPR__'
+                and len(value_node.args) == 2):
+            return
+        command = self._extract_string_value(value_node.args[1])
+        if command is None:
+            return
+        return_type = self._parse_type_node(value_node.args[0])
+        name = f"__LAMIA_TYPED_EXPR_{len(self.llm_functions)}"
+        self.llm_functions[name] = LLMFunctionInfo(
+            command=command,
+            return_type=return_type,
+            parameters=[],
+            is_async=False,
+            node=value_node,
+        )
     
     def _process_function(self, node, is_async: bool):
         """Process both sync and async function definitions."""
