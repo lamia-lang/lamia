@@ -353,6 +353,9 @@ def main():
                     if logger.level <= logging.DEBUG:
                         traceback.print_exc()
                     _graceful_shutdown(lamia, 1)
+                except MissingAPIKeysError as e:
+                    logger.error(f"❌ {e}")
+                    _graceful_shutdown(lamia, 1)
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
@@ -361,7 +364,8 @@ def main():
                         logger.error(f"❌ Error processing hybrid syntax file: {e}")
                     else:
                         logger.error(f"❌ Runtime error: {e}")
-                    traceback.print_exc()
+                    if logger.level <= logging.DEBUG:
+                        traceback.print_exc()
                     _graceful_shutdown(lamia, 1)
             else:
                 # Regular Python file — inject Lamia builtins so types like
@@ -369,11 +373,15 @@ def main():
                 try:
                     runpy.run_path(prompt_file, run_name="__main__")
                     _graceful_shutdown(lamia, 0)
+                except MissingAPIKeysError as e:
+                    logger.error(f"❌ {e}")
+                    _graceful_shutdown(lamia, 1)
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
                     logger.error(f"❌ Error executing script: {e}")
-                    traceback.print_exc()
+                    if logger.level <= logging.DEBUG:
+                        traceback.print_exc()
                     _graceful_shutdown(lamia, 1)
         else:
             # Interactive mode - needs async

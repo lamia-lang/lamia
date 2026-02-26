@@ -377,6 +377,22 @@ class CatModel(BaseModel):
         with open(out) as f:
             assert "<h1>Cats</h1>" in f.read()
 
+    def test_file_write_typed_assigned(self, executor, tmp_dir):
+        """result = "prompt" -> File(HTML[M], "path")  writes file + assigns model."""
+        out = os.path.join(tmp_dir, "llm_expr_assign.html")
+        path = _write_hu(tmp_dir, f'''
+class CatModel(BaseModel):
+    h1: str
+    p: str
+
+result = "Generate HTML about cats" -> File(HTML[CatModel], "{out}")
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        with open(out) as f:
+            assert "<h1>Cats</h1>" in f.read()
+        assert g["result"].h1 == "Cats"
+
 
 # ===========================================================================
 # C. WEB FUNCTION SYNTAX — def f() -> Type: "url"  (needs Chrome)

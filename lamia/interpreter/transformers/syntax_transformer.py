@@ -134,6 +134,43 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         # Not a web expression, continue normal processing
         return self.generic_visit(node)
     
+    def visit_Assign(self, node):
+        """Handle assignments where RHS is a __LAMIA_FILE_WRITE__ marker."""
+        if (isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == '__LAMIA_FILE_WRITE__'
+                and len(node.value.args) == 2):
+            return self._transform_file_write_assignment(node)
+        return self.generic_visit(node)
+
+    def _transform_file_write_assignment(self, node):
+        """Transform ``var = __LAMIA_FILE_WRITE__("prompt", File(...))``."""
+        prompt_node = node.value.args[0]
+        file_node = node.value.args[1]
+        inner_rt_node, path, append, encoding = self._extract_file_info_from_ast(file_node)
+
+        stmts = self._build_file_write_statements(
+            prompt_node, inner_rt_node, path, append, encoding,
+        )
+
+        tmp_var = '__lamia_file_result__'
+        if inner_rt_node is not None:
+            result_value = ast.Attribute(
+                value=ast.Name(id=tmp_var, ctx=ast.Load()),
+                attr='typed_result',
+                ctx=ast.Load(),
+            )
+        else:
+            result_value = ast.Name(id=tmp_var, ctx=ast.Load())
+
+        user_assign = ast.Assign(
+            targets=node.targets,
+            value=result_value,
+            lineno=1, col_offset=0,
+        )
+        stmts.append(user_assign)
+        return stmts
+
     def visit_Call(self, node):
         """Transform web method calls and typed expression markers into lamia.run() calls."""
         # Check if this is a web.method_name() call

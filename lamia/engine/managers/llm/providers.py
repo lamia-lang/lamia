@@ -1,5 +1,6 @@
 """Provider registry for LLM adapters."""
 
+import logging
 from typing import Dict, Type, Set, Optional
 import importlib
 import importlib.util
@@ -8,6 +9,8 @@ import os
 from pathlib import Path
 
 from lamia.adapters.llm.base import BaseLLMAdapter
+
+logger = logging.getLogger(__name__)
 from lamia.adapters.llm.openai_adapter import OpenAIAdapter
 from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter
 from lamia.adapters.llm.local.ollama_adapter import OllamaAdapter
@@ -82,7 +85,8 @@ class ProviderRegistry:
                                 except (NotImplementedError, AttributeError):
                                     continue
                                     
-                except Exception:
+                except Exception as e:
+                    logger.warning("Failed to load user adapter from %s: %s", file_path, e)
                     continue
     
     def get_adapter_class(self, provider_name: str) -> Type[BaseLLMAdapter]:

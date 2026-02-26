@@ -61,6 +61,7 @@ class Lamia:
         - web_config: Web automation configuration
         - providers: Provider-specific model settings
         """
+        load_env_files()
         config_provider = build_config_from_dict(config)
         instance = cls.__new__(cls)
         instance._engine = LamiaEngine(config_provider)
