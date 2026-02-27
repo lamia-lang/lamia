@@ -321,6 +321,79 @@ def scrape_to_file() -> File(HTML, "scraped.html"):
         assert "__lamia_file_result__.typed_result" in result
 
 
+class TestInlineVariableSubstitution:
+    """Test {variable} substitution in inline arrow expressions."""
+
+    def setup_method(self):
+        self.transformer = HybridSyntaxTransformer()
+
+    def test_inline_arrow_with_variable_produces_format_call(self):
+        """'prompt {var}' -> Type produces .format(var=str(var))."""
+        source = '__LAMIA_TYPED_EXPR__(HTML, "Write about {topic}")'
+        result = self.transformer.transform_code(source)
+
+        assert "lamia.run" in result
+        assert ".format" in result
+        assert "topic" in result
+
+    def test_inline_arrow_without_placeholders_no_format(self):
+        """'prompt' -> Type with no {var} does not produce .format()."""
+        source = '__LAMIA_TYPED_EXPR__(HTML, "Write about cats")'
+        result = self.transformer.transform_code(source)
+
+        assert "lamia.run" in result
+        assert ".format" not in result
+
+    def test_inline_arrow_skips_file_context_placeholder(self):
+        """{@filename} is left for runtime file-context injection, not .format()."""
+        source = '__LAMIA_TYPED_EXPR__(HTML, "Summarize {@resume.pdf}")'
+        result = self.transformer.transform_code(source)
+
+        assert "lamia.run" in result
+        assert ".format" not in result
+
+    def test_inline_arrow_mixed_variable_and_file_context(self):
+        """{var} is substituted, {@file} is left alone."""
+        source = '__LAMIA_TYPED_EXPR__(HTML, "About {topic} using {@resume.pdf}")'
+        result = self.transformer.transform_code(source)
+
+        assert ".format" in result
+        assert "topic" in result
+        assert "resume" not in result.split(".format")[1] or "@resume" not in result.split(".format")[1]
+
+    def test_inline_arrow_multiple_variables(self):
+        source = '__LAMIA_TYPED_EXPR__(HTML, "Compare {stock_a} vs {stock_b}")'
+        result = self.transformer.transform_code(source)
+
+        assert ".format" in result
+        assert "stock_a" in result
+        assert "stock_b" in result
+
+    def test_inline_arrow_duplicate_variable_only_one_kwarg(self):
+        source = '__LAMIA_TYPED_EXPR__(HTML, "{x} and {x} again")'
+        result = self.transformer.transform_code(source)
+
+        assert ".format" in result
+        format_part = result[result.index(".format"):]
+        assert format_part.count("x=str(x)") == 1
+
+    def test_file_write_expression_with_variable_produces_format_call(self):
+        """__LAMIA_FILE_WRITE__("prompt {var}", File(...)) produces .format()."""
+        source = '__LAMIA_FILE_WRITE__("Write about {topic}", File(HTML, "out.html"))'
+        result = self.transformer.transform_code(source)
+
+        assert "lamia.run" in result
+        assert ".format" in result
+        assert "topic" in result
+
+    def test_file_write_expression_without_variable_no_format(self):
+        source = '__LAMIA_FILE_WRITE__("Write about cats", File(HTML, "out.html"))'
+        result = self.transformer.transform_code(source)
+
+        assert "lamia.run" in result
+        assert ".format" not in result
+
+
 # =============================================================================
 # WEB METHOD MAPPING COMPLETENESS AND TRANSFORMATION TESTS
 # =============================================================================

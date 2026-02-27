@@ -27,76 +27,28 @@ cd lamia
 pip install -e .
 ```
 
-## Dependencies
-
-Lamia comes with several optional dependencies for different features:
-
-### Core Dependencies
-These are installed automatically:
-- `pydantic>=2.0.0` - For data validation
-- `pyyaml>=6.0.0` - For YAML configuration
-- `python-dotenv>=0.19.0` - For environment variable management
-
-### LLM Dependencies
-For language model integration:
-```bash
-pip install openai>=1.12.0      # For OpenAI GPT models
-pip install anthropic>=0.18.1   # For Anthropic Claude models
-pip install aiohttp>=3.9.0      # For async HTTP (Ollama)
-```
-
-### Web Automation Dependencies
-For web scraping and automation:
-```bash
-pip install playwright          # For browser automation
-pip install selenium            # Alternative browser automation
-pip install beautifulsoup4>=4.12.0  # For HTML parsing
-```
-
-### File Processing Dependencies
-For advanced file operations:
-```bash
-pip install boto3               # For AWS S3 integration
-pip install google-cloud-storage  # For Google Cloud Storage
-```
-
 ## Verification
 
 Verify your installation by running:
 
-```bash
-python -c "import lamia; print(lamia.__version__)"
-```
-
-Or use the CLI:
 
 ```bash
-lamia --version
+lamia -h
 ```
 
 ## Configuration
 
-After installation, create a basic configuration file:
+After installation, create a basic configuration file with
 
-```yaml
-# config.yaml
-engine:
-  default_timeout: 30
-  retry_attempts: 3
-
-validation:
-  strict_mode: true
-
-llm:
-  default_provider: "openai"
-  openai:
-    api_key: "${OPENAI_API_KEY}"
-    model: "gpt-3.5-turbo"
+```bash
+lamia init
 ```
+
+or copy an existing config.yaml file to your project directory.
 
 ## Environment Variables
 
-Set up your environment variables for API access:
+lamia init will ask you to install the LLM API keys. But you can set up your environment variables with the following command:
 
 ```bash
 export OPENAI_API_KEY="your-openai-api-key"

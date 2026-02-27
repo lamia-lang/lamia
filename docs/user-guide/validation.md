@@ -1,6 +1,6 @@
 # Validation
 
-Lamia validates LLM responses automatically when you specify return types. Validators ensure outputs meet format and quality requirements before your code uses them.
+Lamia validates LLM/Web/File responses automatically when you specify return types. Validators ensure outputs meet format and quality requirements before your code uses them.
 
 ## Built-in Validators
 
@@ -15,12 +15,11 @@ Lamia validates LLM responses automatically when you specify return types. Valid
 | `Markdown` | Valid Markdown |
 | `CSV` | Valid CSV |
 
-### Structure Validators
+### File Structure Validators
 
 Validate file format AND match a Pydantic model schema:
 
 ```python
-from pydantic import BaseModel
 
 class UserProfile(BaseModel):
     name: str
@@ -31,52 +30,15 @@ class UserProfile(BaseModel):
 def get_user() -> JSON[UserProfile]:
     "Generate a user profile"
 
-# From Python
+```
+
+Lamia's validation can be used in python code as well with:
+
+```python
 result = lamia.run("Generate a user profile", JSON[UserProfile])
 ```
 
 Available structure validators: `JSON[Model]`, `YAML[Model]`, `XML[Model]`, `HTML[Model]`, `Markdown[Model]`, `CSV[Model]`
-
-### Other Validators
-
-| Type | Description |
-|------|-------------|
-| `ObjectValidator` | Validates response matches a requested type |
-| `RegexValidator` | Matches a regex pattern |
-| `LengthValidator` | Checks response length bounds |
-| `AtomicTypeValidator` | Validates atomic types (int, float, bool, string) |
-| `FunctionalValidator` | Custom validation logic via a function |
-
-## Configuration
-
-### From config.yaml
-
-```yaml
-validation:
-  enabled: true
-  validators:
-    - type: "html"
-      strict: true
-    - type: "json"
-      strict: false
-    - type: "regex"
-      pattern: "^\\d{4}-\\d{2}-\\d{2}$"
-    - type: "length"
-      max_length: 1000
-```
-
-### From Python
-
-```python
-lamia = Lamia(
-    ...,
-    validators=[
-        {"type": "html"},
-        {"type": "json", "strict": False},
-        {"type": "regex", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
-    ]
-)
-```
 
 ## Strict vs Permissive Mode
 
@@ -85,62 +47,58 @@ Each validator supports a `strict` flag (default: `true`):
 - **`strict: true`**: Only accepts pure, valid output (no extra text around it)
 - **`strict: false`**: Accepts output that contains a valid block within a longer response
 
-```yaml
-validators:
-  - type: "json"
-    strict: false  # Extracts JSON from within explanatory text
-```
+When you want to be explicit about validation mode you can define file structure validators with `JSON[Model, True/False]`, `YAML[Model, True/False]`, `XML[Model, True/False]`, `HTML[Model, True/False]`, `Markdown[Model, True/False]`, `CSV[Model, True/False]`
 
-## Combining Validators
+Here is what strictness does for each case:
 
-Validators are applied in sequence. The response must pass all of them:
+| Syntax                 | Model   | Strict | What happens                                              |
+| ---------------------- | ------- | ------ | --------------------------------------------------------- |
+| `HTML`                 | None    | True   | Plain HTML validation (well-formedness only), strict mode |
+| `HTML[MyModel]`        | MyModel | False  | Structure validation against model, non-strict (default!) |
+| `HTML[MyModel, True]`  | MyModel | True   | Structure validation against model, strict mode. Strict nesting is enforced           |
+| `HTML[MyModel, False]` | MyModel | False  | Structure validation against model, explicitly non-strict. Any level of nesting |
 
-```yaml
-validation:
-  enabled: true
-  validators:
-    - type: "html"
-    - type: "length"
-      max_length: 1000
-```
 
-## Ordered Fields (CSV, JSON, etc.)
+## File Structure Validation
 
-For formats where field order matters, use `__ordered_fields__`:
+We will consider examples with HTML files, but the same principles apply to other file types.
+
+## HTML Structure Validation for HTML generation
+
+The following Lamia code will generate an HTML file with the structure defined in the `HtmlStructure` model and save it to the `output.html` file.
 
 ```python
-from collections import OrderedDict
-from pydantic import BaseModel
+class Body(BaseModel):
+    h1: str
+    p: str
+    p: str
 
-class Report(BaseModel):
+class HtmlStructure(BaseModel):
     title: str
-    description: str
-    # These fields must appear in this order in the output
-    __ordered_fields__ = OrderedDict([
-        ("col1", int),
-        ("col2", str),
-    ])
+    body: Body
+
+"Generate a blog post about the benefits of using AI" -> File(HTML[HtmlStructure, True], "output.html") # The True in HTML[HtmlStructure, True] flag means no additional nestings are allowed, the document should have the same nestings as defined in the model
 ```
 
-## Atomic Types
+When tried with Claude Sonnet 4, the output was 
 
-Validate that LLM output is a single value:
-
-```yaml
-validators:
-  - type: "atomic_type"
-    atomic_type: "integer"  # or "float", "bool", "string"
+```html
+<html>
+<title>The Transformative Benefits of Using AI in Modern Life</title>
+<body>
+  <h1>The Transformative Benefits of Using AI in Modern Life</h1>
+  <p>Artificial Intelligence has revolutionized how we work, learn, and solve problems in today's digital age. From automating repetitive tasks to providing intelligent insights from vast amounts of data, AI empowers individuals and organizations to achieve more with less effort. It enhances decision-making through predictive analytics, personalizes user experiences across platforms, and accelerates innovation in fields ranging from healthcare to education. By augmenting human capabilities rather than replacing them, AI serves as a powerful tool that frees us to focus on creative and strategic work while handling the mundane. As AI technology continues to evolve, its accessibility and applications expand, making it an indispensable asset for anyone looking to stay competitive and efficient in an increasingly complex world.</p>
+</body>
+</html>
 ```
 
-```python
-from lamia.validation.validators import AtomicTypeValidator
+This example script shows how you can use Lamia to generate HTML files with a desired structure all the time.
 
-lamia = Lamia(..., validators=[AtomicTypeValidator(atomic_type="integer")])
-```
+## HTML Structure Validation for HTML parsing
 
-## HTML Structure Validation
+You can use HTML structure validation to parse HTML files to Pydantic models and use the model as you wish in your code. If the HTML structure is not as expected, the validation will fail and the rest of the code will not be executed. Validation makes sure that you extract the right data. When validation stops working, that might be a sign that the HTML structure has changed and you need to update the model.
 
-Validate HTML matches a specific tag structure:
+Here is an example of simple web parsing with Lamia:
 
 ```python
 class Body(BaseModel):
@@ -150,42 +108,31 @@ class HtmlStructure(BaseModel):
     title: str
     body: Body
 
-# From config
-# validators:
-#   - type: "html_structure"
-#     model: HtmlStructure
-
-# From Python
-from lamia.validation.validators import HTMLStructureValidator
-lamia = Lamia(..., validators=[HTMLStructureValidator(model=HtmlStructure)])
+website_content = "https://example.com" -> HTML[HtmlStructure]
+if website_content.body.h1 == website_content.title:
+    print("Example.com website header is the same as the title: h1: {website_content.body.h1}, title: {website_content.title}")
 ```
 
-## Validation Results
+If you open the page source of the https://example.com, you will see, at the time of writing this, the HTML structure is like this:
+```html
+<html>
+    <head>
+        <title>Example.com</title>
+    </head>
+    <body>
+      <div>
+        <h1>Example.com</h1>
+      </div>
+    </body>
+    ...
+</html> ```
 
-All validators return a `ValidationResult`:
+As you can see, as expected, the title is nested inside the <head> tag. Additionally, the <h1> tag is not nested inside the <body> tag. But the validation will succeed because the HTML structure is valid and we use `HTML[HtmlStructure]` in non-strict mode, which is why validation passes.
 
-| Field | Description |
-|-------|-------------|
-| `is_valid` | Whether validation passed |
-| `error_message` | Error description if failed |
-| `hint` | Suggestion for fixing the response |
-| `validated_text` | Extracted/cleaned valid content |
-| `result_type` | Parsed object (e.g., Pydantic model instance) |
+For parsing, usually the non-strict mode will be used. Otherwise, extensive Pydantic nested models might be needed to parse the HTML structure.
 
-## Contract Checking
-
-Lamia automatically validates custom validator implementations at load time:
-
-```yaml
-validation:
-  enable_contract_checking: true   # Default: true
-  strict_contract_checking: false  # Reject validators that fail checks
-```
+This is a useful, but simple example. Of course, in many real-world scenarios you will want to validate or extract complex HTML structures and using nested types to define them might be exhausting. That is why Lamia provides multiple additional ways to validate and extract data from the HTML structure. For example, you can use selectors to extract data from the HTML structure.
 
 ## Selector Usage with Validators
 
 For details on using selectors within file type validators, see the [Selector Usage Guide](../validation/selector-usage-guide.md).
-
-## Creating Custom Validators
-
-For implementing your own validators, see the [Validation Module Developer Guide](https://github.com/lamia-lang/lamia/blob/main/lamia/validation/README.md).

@@ -149,8 +149,9 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         file_node = node.value.args[1]
         inner_rt_node, path, append, encoding = self._extract_file_info_from_ast(file_node)
 
+        command_ast = self._apply_inline_variable_substitution(prompt_node)
         stmts = self._build_file_write_statements(
-            prompt_node, inner_rt_node, path, append, encoding,
+            command_ast, inner_rt_node, path, append, encoding,
         )
 
         tmp_var = '__lamia_file_result__'
@@ -206,6 +207,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         """Transform __LAMIA_TYPED_EXPR__(Type, "prompt") into lamia.run("prompt", return_type=Type)."""
         return_type_node = node.args[0]
         command_node = node.args[1]
+        command_node = self._apply_inline_variable_substitution(command_node)
         return ast.Call(
             func=ast.Attribute(
                 value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
@@ -214,6 +216,43 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             ),
             args=[command_node],
             keywords=[ast.keyword(arg='return_type', value=return_type_node)]
+        )
+
+    def _apply_inline_variable_substitution(self, command_node: ast.AST) -> ast.AST:
+        """Wrap a string constant in .format(var=var) if it contains {variable} placeholders.
+
+        Skips file-context placeholders like {@filename}.
+        """
+        if not isinstance(command_node, ast.Constant) or not isinstance(command_node.value, str):
+            return command_node
+
+        placeholders = [
+            name for name in re.findall(r'\{(\w+)\}', command_node.value)
+            if not name.startswith('@')
+        ]
+        if not placeholders:
+            return command_node
+
+        format_kwargs = [
+            ast.keyword(
+                arg=name,
+                value=ast.Call(
+                    func=ast.Name(id='str', ctx=ast.Load()),
+                    args=[ast.Name(id=name, ctx=ast.Load())],
+                    keywords=[],
+                ),
+            )
+            for name in dict.fromkeys(placeholders)
+        ]
+
+        return ast.Call(
+            func=ast.Attribute(
+                value=command_node,
+                attr='format',
+                ctx=ast.Load(),
+            ),
+            args=[],
+            keywords=format_kwargs,
         )
     
     def _transform_function(self, node, is_async: bool):
@@ -300,8 +339,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
         inner_rt_node, path, append, encoding = self._extract_file_info_from_ast(file_node)
 
-        # The command is the string literal itself
-        command_ast = prompt_node
+        command_ast = self._apply_inline_variable_substitution(prompt_node)
 
         return self._build_file_write_statements(
             command_ast, inner_rt_node, path, append, encoding,

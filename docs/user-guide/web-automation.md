@@ -74,7 +74,6 @@ web.wait_for("Loading spinner", "hidden")
 
 1. Lamia detects the selector is natural language (not CSS/XPath)
 2. AI analyzes the page and returns the matching CSS selector
-3. Results are cached in `.lamia_cache/selectors/` for reuse
 
 ### Writing Good AI Selectors
 

@@ -1,14 +1,14 @@
 # .hu File Syntax
 
-Lamia `.hu` files use a hybrid Python syntax that lets you write LLM commands, file operations, and web actions as regular function definitions. Run them with:
+Lamia `.hu` and `.lm` files use a hybrid Python syntax that lets you write LLM commands, file operations, and web actions as regular function definitions. Lamia syntax can be combined with normal Python code. So you get the power of Python combined with human-friendly syntax for LLM commands and other operations needed for daily tasks by non-technical users. You can run Lamia scripts with:
 
 ```bash
 lamia your_script.hu
 ```
 
-## Command Types
+## The execution flow
 
-Lamia detects the command type automatically based on the string content:
+Lamia detects its own syntax and executes through its engine, the rest of the code is executed as normal Python code. Here are some function definitions that will be executed by Lamia:
 
 ```python
 # LLM command — plain text goes to the AI
@@ -24,22 +24,103 @@ def fetch_data() -> JSON:
     "https://api.example.com/data"
 ```
 
+Users must be careful, because unlike Python, Lamia functions must skip return statements. See the example below:
+
+```python
+# The return statement makes this a Python function which returns the string "Write a short story about a robot discovering emotions"
+def generate_story():
+   return  "Write a short story about a robot discovering emotions"
+
+# This function is a Lamia function which sends the string "Write a short story about a robot discovering emotions" to the AI.
+def generate_story():
+   "Write a short story about a robot discovering emotions"
+
+```
+
+Lamia uses `->` syntax to return data. In Python `->` is used to define the return type of the function. In Lamia it is used to actually return a value or stream data.
+
 ## Return Types
 
-Specify return types for automatic validation:
+Without return types, Lamia feels incomplete. Return type markers are more than markers, they are extractors and validators at runtime. Here is an example of how to use return types:
 
 ```python
 def get_data() -> JSON:
-    "./users.json"            # Must be valid JSON
+    "./users.json"   # Must be valid JSON - otherwise the function will fail
 
 def generate_page() -> HTML:
-    "Create a login form"     # Must be valid HTML
+    "Create a login form"   # Must be valid HTML - otherwise the function will fail
 
-def plain_text():
-    "Write a summary"         # No validation, returns text
+def plain_text() -> TEXT:
+    "Write a summary"   # No validation, just extraction
 ```
 
 Available types: `HTML`, `JSON`, `YAML`, `XML`, `Markdown`, `CSV`, `TEXT`
+
+## Simplified Syntax
+
+For one-line functions, defining functions seems like overkill sometimes. That is why Lamia provides a simplified syntax. The functions we wrote above can be shortened to:
+
+```python
+"./users.json" -> JSON:
+
+"Create a login form" -> HTML:
+
+"Write a summary" -> TEXT:
+```
+
+But for these executions we won't be able to catch the result of the function. We need to assign the result to a variable.
+
+```python
+data = "./users.json" -> JSON:
+
+page = "Create a login form" -> HTML:
+
+summary = "Write a summary" -> TEXT:
+```
+
+But if we are not interested in catching the values and we want to save the execution result to a file, we can use the `-> File(...)` syntax.
+
+```python
+"./users.json" -> File(JSON, "users.json"):
+
+"Create a login form" -> File(HTML, "login.html"):
+
+"Write a summary" -> File(TEXT, "summary.txt"):
+```
+
+### Model Selection
+
+Instead of simplified syntax, we need function definitions if we want to execute the function later, execute many times in different parts of the script, etc.
+
+There is however a very important reason to use function definitions: model selection. All LLM commands in Lamia scripts use the global model chain coming from the config.yaml file mostly. But for some LLM commands users might need to use different models and even model chains. Here are examples of how to use model selection:
+
+```python
+def analyze(models="openai:gpt-4"):
+    "Analyze the data"
+
+def with_fallback(models=["openai:gpt-4", "anthropic:sonnet-4"]):
+    "Generate a report with model fallback"
+
+# Same as above but gpt-4 will be retried twice before falling back to sonnet-4
+def with_fallback(models=["openai:gpt-4", 'openai:gpt-4', "anthropic:sonnet-4"]):
+    "Generate a report with model fallback"
+```
+
+## Variable substitution
+
+Variable substitution is a feature that allows you to use variables in your LLM prompts, web actions and file operations. Example:
+
+```python
+def stock_data(ticker: str = "AAPL") -> File(CSV[StockQuote], "stocks.csv", append=True):
+    "extract the stock quote data https://finance.yahoo.com/quote/{ticker}"
+
+for ticker in ["AAPL", "NVDA", "GOOG"]:
+    stock_data(ticker)
+
+# Or with simpler syntax
+for ticker in ["AAPL", "NVDA", "GOOG"]:
+    "extract the stock quote data https://finance.yahoo.com/quote/{ticker}" -> File(CSV[StockQuote], "stocks.csv", append=True)
+```
 
 ## File Operations
 
@@ -58,16 +139,16 @@ def read_logs():
     "/var/log/application.log"
 ```
 
-Or the `file` action API:
+In addition, Lamia's `file` action API can be used:
 
 ```python
-content = file.read("/path/to/file.txt")
+content = file.append("/path/to/file.txt")
 content = file.read("data.csv", encoding="latin-1")
 ```
 
 ### Writing to Files
 
-Use `-> File(...)` to generate content and save it:
+As we have seen, the `-> File(...)` syntax can be used to save the execution result to a file. For complex file operations:
 
 ```python
 # With type validation
@@ -87,32 +168,10 @@ def generate_latin() -> File("output.txt", encoding="latin-1"):
     "Generate text with special characters"
 ```
 
-Expression-level file writes (no function wrapper needed):
-
-```python
-"Generate HTML about cats" -> File(HTML, "output.html")
-
-web.get_text(".content") -> File(HTML, "scraped.html")
-```
-
-Or the `file` action API:
-
-```python
-file.write("/path/to/file.txt", "Hello, World!")
-file.append("/var/log/app.log", "New log entry\n")
-```
-
-| Syntax | Description |
-|--------|-------------|
-| `-> File("path")` | Write untyped content |
-| `-> File(Type, "path")` | Write with type validation |
-| `-> File(Type, "path", append=True)` | Append instead of overwrite |
-| `-> File("path", encoding="...")` | Custom encoding |
-| `-> File(Type[Model], "path")` | Parametric type validation |
-
 ## File Context (`with files()`)
 
 Reference local files in LLM prompts using `{@filename}` syntax:
+
 
 ```python
 with files("~/Documents/"):
@@ -143,6 +202,12 @@ with files("~/Documents/", "~/projects/"):
 ```
 
 For full details see the [File Context Reference](files-context.md).
+
+## Imports
+
+Lamia avoids explicit imports. All Lamia types and interfaces are available without any import statements. But if you mix it with Python code, you will import Python dependencies as usual.
+
+Because of implicit imports, IDEs will show warnings on some Lamia commands. They need to be ignored if the syntax is correct.
 
 ## Session Management
 
@@ -199,19 +264,9 @@ def generate_report(data: dict, style: str):
     "Create a {style} report based on: {data}"
 ```
 
-### Model Selection
+## Advanced: Async and Parallel Execution
 
-```python
-def analyze(models="openai:gpt-4"):
-    "Analyze the data"
-
-def with_fallback(models=["openai:gpt-4", "anthropic:claude-3-haiku-20240307"]):
-    "Generate a report with model fallback"
-```
-
-## Async and Parallel Execution
-
-Functions become async automatically:
+Functions can be defined as async and executed in parallel:
 
 ```python
 import asyncio
@@ -222,33 +277,4 @@ async def main():
         read_config(),
         fetch_webpage()
     )
-```
-
-## Complete Example
-
-```python
-from lamia.types import JSON, HTML
-
-# Read data
-def load_users() -> JSON:
-    "./users.json"
-
-# Generate content with AI
-def create_report():
-    '''
-    Generate a user activity report including:
-    - Engagement metrics
-    - Most active features
-    - Recommendations
-    '''
-
-# Write AI output to file
-def generate_dashboard() -> File(HTML, "dashboard.html"):
-    "Create an admin dashboard with user statistics"
-
-# Full workflow
-async def main():
-    users = await load_users()
-    report = await create_report()
-    dashboard = await generate_dashboard()
 ```

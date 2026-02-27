@@ -58,6 +58,7 @@ class MockServerLLMAdapter(BaseLLMAdapter):
     def __init__(self, base_url: str):
         self._base_url = base_url
         self._session: Optional[aiohttp.ClientSession] = None
+        self.captured_prompts: list[str] = []
 
     @classmethod
     def name(cls) -> str:
@@ -75,6 +76,7 @@ class MockServerLLMAdapter(BaseLLMAdapter):
         self._session = aiohttp.ClientSession()
 
     async def generate(self, prompt: str, model: LLMModel) -> LLMResponse:
+        self.captured_prompts.append(prompt)
         assert self._session is not None
         url = f"{self._base_url}/v1/chat/completions"
         payload = {
@@ -173,7 +175,15 @@ def llm_server():
 
 
 @pytest.fixture(scope="module")
-def lamia_instance(llm_server):
+def mock_adapter(llm_server):
+    adapter = MockServerLLMAdapter(llm_server)
+    EventLoopManager.run_coroutine(adapter.async_initialize())
+    yield adapter
+    EventLoopManager.run_coroutine(adapter.close())
+
+
+@pytest.fixture(scope="module")
+def lamia_instance(mock_adapter):
     """Real Lamia with a real adapter that makes real HTTP calls to mock LLM server.
 
     The only patch: ``LLMManager.create_adapter_from_config`` returns our
@@ -185,9 +195,6 @@ def lamia_instance(llm_server):
         web_config={"browser_options": {"headless": True}},
     )
 
-    mock_adapter = MockServerLLMAdapter(llm_server)
-    EventLoopManager.run_coroutine(mock_adapter.async_initialize())
-
     llm_mgr = lamia._engine.manager_factory.get_manager(CommandType.LLM)
 
     async def _create_adapter(model: LLMModel, with_retries: bool = True) -> BaseLLMAdapter:
@@ -197,14 +204,11 @@ def lamia_instance(llm_server):
 
     yield lamia
 
-    EventLoopManager.run_coroutine(mock_adapter.close())
     try:
         EventLoopManager.run_coroutine(lamia._engine.cleanup())
     except Exception:
         pass
     EventLoopManager.shutdown()
-    # Prevent Lamia.__del__ from re-creating the event loop during
-    # interpreter shutdown (which spawns a daemon thread that can't be joined).
     lamia._engine = None  # type: ignore[assignment]
 
 
@@ -580,6 +584,70 @@ result = write_about("cats")
         g: dict = {}
         executor.execute_file(path, g)
         assert "<html>" in g["result"]
+
+    def test_parameter_substitution_in_function_call(self, executor, mock_adapter, tmp_dir):
+        """def f(topic) -> HTML: "Write about {topic}" — param resolved from caller."""
+        mock_adapter.captured_prompts.clear()
+        path = _write_hu(tmp_dir, '''
+def write_about(topic: str) -> HTML:
+    "Write about {topic}"
+
+result = write_about("cats")
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert "<html>" in g["result"]
+        assert any("cats" in p and "{topic}" not in p for p in mock_adapter.captured_prompts), (
+            f"Expected 'cats' substituted in prompt, got: {mock_adapter.captured_prompts}"
+        )
+
+    def test_inline_arrow_variable_substitution(self, executor, mock_adapter, tmp_dir):
+        """'Write about {topic}' -> HTML — variable resolved from enclosing scope."""
+        mock_adapter.captured_prompts.clear()
+        path = _write_hu(tmp_dir, '''
+topic = "cats"
+result = "Write about {topic}" -> HTML
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert "<html>" in g["result"]
+        assert any("cats" in p and "{topic}" not in p for p in mock_adapter.captured_prompts), (
+            f"Expected 'cats' substituted in prompt, got: {mock_adapter.captured_prompts}"
+        )
+
+    def test_inline_arrow_variable_substitution_in_loop(self, executor, mock_adapter, tmp_dir):
+        """for loop with inline arrow — variable changes each iteration."""
+        mock_adapter.captured_prompts.clear()
+        path = _write_hu(tmp_dir, '''
+results = []
+for topic in ["cats", "dogs"]:
+    result = "Write about {topic}" -> HTML
+    results.append(result)
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert len(g["results"]) == 2
+        prompts_text = " ".join(mock_adapter.captured_prompts)
+        assert "cats" in prompts_text, f"Expected 'cats' in prompts, got: {mock_adapter.captured_prompts}"
+        assert "dogs" in prompts_text, f"Expected 'dogs' in prompts, got: {mock_adapter.captured_prompts}"
+        assert "{topic}" not in prompts_text, (
+            f"Variable {{topic}} was not substituted: {mock_adapter.captured_prompts}"
+        )
+
+    def test_inline_arrow_file_write_variable_substitution(self, executor, mock_adapter, tmp_dir):
+        """'prompt {var}' -> File(HTML, path) — variable substituted before LLM call."""
+        mock_adapter.captured_prompts.clear()
+        out = os.path.join(tmp_dir, "var_sub_file.html")
+        path = _write_hu(tmp_dir, f'''
+topic = "cats"
+"Write about {{topic}}" -> File(HTML, "{out}")
+''')
+        executor.execute_file(path)
+        assert any("cats" in p and "{topic}" not in p for p in mock_adapter.captured_prompts), (
+            f"Expected 'cats' substituted in prompt, got: {mock_adapter.captured_prompts}"
+        )
+        with open(out) as f:
+            assert "<html>" in f.read()
 
     def test_string_path_routed_as_llm_not_file_read(self, executor, tmp_dir):
         """``def f() -> JSON: "./config.json"`` → sent to LLM, not file system.

@@ -2,15 +2,12 @@
 
 This guide explains when and how to use `json_schema_extra` selectors with different file type validators.
 
-## 🎯 **When to Use Selectors**
-
-### **✅ RECOMMENDED - Document Structure Validators**
+## When to Use Selectors
 
 Use selectors when field names don't directly map to document elements:
 
 #### **HTML Structure Validator**
 ```python
-from pydantic import BaseModel, Field
 
 class UserProfile(BaseModel):
     name: str = Field(json_schema_extra={'selector': '.profile-name'})
@@ -153,62 +150,25 @@ class SmartExtraction(BaseModel):
 - **Natural language**: Converts descriptions to selectors
 - **No prefix needed**: No `ai:` prefix required - automatic detection
 
----
-
-## 📋 **Best Practices**
-
-### **1. Use Meaningful Field Names**
-```python
-# ✅ Good
-class Product(BaseModel):
-    product_name: str = Field(json_schema_extra={'selector': '.title'})
-    
-# ❌ Avoid
-class Product(BaseModel):
-    field1: str = Field(json_schema_extra={'selector': '.title'})
-```
-
-### **2. Provide Fallback Selectors**
-```python
-class RobustExtraction(BaseModel):
-    title: str = Field(json_schema_extra={'selectors': [
-        'h1.main-title',    # Specific selector first
-        'h1',               # Generic fallback
-        '.title',           # Class fallback
-        '[data-title]'      # Attribute fallback
-    ]})
-```
-
-### **3. Combine with Aliases When Needed**
-```python
-class FlexibleModel(BaseModel):
-    user_name: str = Field(
-        alias='name',  # For JSON key mapping
-        json_schema_extra={'selector': '.user-display-name'}  # For HTML element finding
-    )
-```
-
----
-
-## 🚨 **Common Mistakes**
+## Common Mistakes
 
 ### **1. Using Selectors with JSON**
 ```python
-# ❌ Wrong - triggers warning
+# Wrong - triggers warning
 class JSONModel(BaseModel):
     name: str = Field(json_schema_extra={'selector': 'user_name'})
 
-# ✅ Correct - use alias
+# Correct - use alias
 class JSONModel(BaseModel):
     name: str = Field(alias='user_name')
 ```
 
 ### **2. Forgetting Fallbacks for Fragile Selectors**
 ```python
-# ❌ Fragile - breaks if CSS changes
+# Fragile - breaks if CSS changes
 title: str = Field(json_schema_extra={'selector': 'div.header-container > h1.main-title-text'})
 
-# ✅ Robust - multiple fallbacks
+# Robust - multiple fallbacks
 title: str = Field(json_schema_extra={'selectors': [
     'div.header-container > h1.main-title-text',
     'h1.main-title-text', 
@@ -222,7 +182,7 @@ Always test your selectors with real data to ensure they work correctly!
 
 ---
 
-## 🎯 **Summary**
+## Summary
 
 - **Use selectors**: HTML, XML, YAML, CSV, Markdown validators
 - **Don't use selectors**: JSON validators (use aliases instead)  
