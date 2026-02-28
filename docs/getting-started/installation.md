@@ -62,10 +62,6 @@ OPENAI_API_KEY=your-openai-api-key
 ANTHROPIC_API_KEY=your-anthropic-api-key
 ```
 
-## Next Steps
-
-Now that Lamia is installed, head over to the [Quick Start Guide](quickstart.md) to begin using it in your projects.
-
 ## Troubleshooting
 
 ### Common Issues

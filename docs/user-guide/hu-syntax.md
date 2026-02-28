@@ -29,7 +29,7 @@ Users must be careful, because unlike Python, Lamia functions must skip return s
 ```python
 # The return statement makes this a Python function which returns the string "Write a short story about a robot discovering emotions"
 def generate_story():
-   return  "Write a short story about a robot discovering emotions"
+   return "Write a short story about a robot discovering emotions"
 
 # This function is a Lamia function which sends the string "Write a short story about a robot discovering emotions" to the AI.
 def generate_story():
