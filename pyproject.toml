@@ -9,7 +9,7 @@ description = "Human language meets Python. Write AI-powered scripts in plain En
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.10"
-keywords = ["llm", "ai", "automation", "web-scraping", "validation", "pydantic", "openai", "anthropic", "ollama"]
+keywords = ["lamia", "llm", "ai", "automation", "web-scraping", "validation", "pydantic", "openai", "anthropic", "ollama"]
 authors = [
     {name = "Sergey Sargsyan"}
 ]
@@ -26,11 +26,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
-[project.urls]
-Homepage = "https://github.com/lamia-lang/lamia"
-Documentation = "https://lamia-lang.github.io/lamia/"
-Repository = "https://github.com/lamia-lang/lamia"
-Issues = "https://github.com/lamia-lang/lamia/issues"
 dependencies = [
     # Core dependencies
     "python-dotenv>=0.19.0",
@@ -71,6 +66,12 @@ docs = [
 
 [project.scripts]
 lamia = "lamia.cli.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/lamia-lang/lamia"
+Documentation = "https://lamia-lang.github.io/lamia/"
+Repository = "https://github.com/lamia-lang/lamia"
+Issues = "https://github.com/lamia-lang/lamia/issues"
 
 [tool.setuptools.packages.find]
 include = ["lamia*"]
