@@ -16,7 +16,7 @@
         <link rel="prev" href="../validation/">
       
       
-        <link rel="next" href="../cli/">
+        <link rel="next" href="../../validation/selector-usage-guide/">
       
       
         
@@ -323,7 +323,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../examples/basic/" class="md-tabs__link">
+        <a href="../../examples/basic.md" class="md-tabs__link">
           
   
   
@@ -496,7 +496,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../getting-started/quickstart.md" class="md-nav__link">
         
   
   
@@ -799,17 +799,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#model-ordering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Model Ordering
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#search-strategies" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -821,43 +810,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pass-rates" class="md-nav__link">
+  <a href="#advanced-usage-through-python-with-pass-rates" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pass Rates
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#script-evaluation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Script Evaluation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#using-with-existing-lamia-instance" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Using with Existing Lamia Instance
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#evaluation-results" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Evaluation Results
+        Advanced usage through Python with pass rates
       
     </span>
   </a>
@@ -891,7 +847,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cli/" class="md-nav__link">
+      <a href="../cli.md" class="md-nav__link">
         
   
   
@@ -1097,7 +1053,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../examples/basic/" class="md-nav__link">
+      <a href="../../examples/basic.md" class="md-nav__link">
         
   
   
@@ -1163,17 +1119,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#model-ordering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Model Ordering
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#search-strategies" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1185,43 +1130,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#pass-rates" class="md-nav__link">
+  <a href="#advanced-usage-through-python-with-pass-rates" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pass Rates
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#script-evaluation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Script Evaluation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#using-with-existing-lamia-instance" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Using with Existing Lamia Instance
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#evaluation-results" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Evaluation Results
+        Advanced usage through Python with pass rates
       
     </span>
   </a>
@@ -1310,51 +1222,8 @@
 <h1 id="model-evaluation">Model Evaluation<a class="headerlink" href="#model-evaluation" title="Permanent link">&para;</a></h1>
 <p>The evaluation module helps you find the most cost-effective model that meets your validation requirements. It tests models from most expensive to least expensive, finding the cheapest one that achieves your desired pass rate.</p>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">lamia.eval.evaluator</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelEvaluator</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">lamia.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">JSON</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">evaluator</span> <span class="o">=</span> <span class="n">ModelEvaluator</span><span class="p">()</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate_prompt</span><span class="p">(</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Generate a user profile with name and age&quot;</span><span class="p">,</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        <span class="n">return_type</span><span class="o">=</span><span class="n">JSON</span><span class="p">,</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="n">max_model</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4o&quot;</span><span class="p">,</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="n">required_pass_rate_percent</span><span class="o">=</span><span class="mf">100.0</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="p">)</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Best model: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">best_model</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Success: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">success</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">total_cost</span><span class="p">:</span>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total cost: $</span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">total_cost</span><span class="o">.</span><span class="n">total_cost_usd</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>lamia<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>&lt;your_script.hu&gt;
 </span></code></pre></div>
-<h2 id="model-ordering">Model Ordering<a class="headerlink" href="#model-ordering" title="Permanent link">&para;</a></h2>
-<p>Models are automatically ordered from most to least expensive:</p>
-<table>
-<thead>
-<tr>
-<th>Provider</th>
-<th>Ordering</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>OpenAI</strong></td>
-<td>Uses live API + config fallback (gpt-4o → gpt-4o-mini → gpt-3.5-turbo)</td>
-</tr>
-<tr>
-<td><strong>Anthropic</strong></td>
-<td>Uses config data (claude-4 → claude-3-opus → claude-3.5-sonnet → claude-3.5-haiku)</td>
-</tr>
-<tr>
-<td><strong>Ollama</strong></td>
-<td>Queries local installation, orders by parameter count (70b → 8b → 3b)</td>
-</tr>
-</tbody>
-</table>
 <h2 id="search-strategies">Search Strategies<a class="headerlink" href="#search-strategies" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1370,18 +1239,13 @@
 </tr>
 <tr>
 <td><code>step_back</code></td>
-<td>Two-step-back, one-step-forward approach</td>
+<td>Tests from cheapest up to most expensive model</td>
 </tr>
 </tbody>
 </table>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate_prompt</span><span class="p">(</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Create a landing page&quot;</span><span class="p">,</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">return_type</span><span class="o">=</span><span class="n">HTML</span><span class="p">,</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">max_model</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4o&quot;</span><span class="p">,</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;step_back&quot;</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
-</span></code></pre></div>
-<h2 id="pass-rates">Pass Rates<a class="headerlink" href="#pass-rates" title="Permanent link">&para;</a></h2>
+<p>With both strategies, the eval extracts all LLM prompts from the script and evaluates them one by one.
+The evaluation stops on the first prompt where no model in the range succeeds. But if at least one model passes for a prompt, it moves on to the next prompt.</p>
+<h2 id="advanced-usage-through-python-with-pass-rates">Advanced usage through Python with pass rates<a class="headerlink" href="#advanced-usage-through-python-with-pass-rates" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
@@ -1404,45 +1268,12 @@
 </tr>
 </tbody>
 </table>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate_prompt</span><span class="p">(</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Generate creative content&quot;</span><span class="p">,</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">return_type</span><span class="o">=</span><span class="n">Markdown</span><span class="p">,</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">max_model</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4o&quot;</span><span class="p">,</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">required_pass_rate_percent</span><span class="o">=</span><span class="mf">90.0</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="p">)</span>
-</span></code></pre></div>
-<h2 id="script-evaluation">Script Evaluation<a class="headerlink" href="#script-evaluation" title="Permanent link">&para;</a></h2>
-<p>Evaluate entire workflows, not just single prompts:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">my_workflow</span><span class="p">(</span><span class="n">lamia</span><span class="p">):</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">user_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lamia</span><span class="o">.</span><span class="n">run_async</span><span class="p">(</span><span class="s2">&quot;Create user profile&quot;</span><span class="p">,</span> <span class="n">JSON</span><span class="p">)</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">report</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lamia</span><span class="o">.</span><span class="n">run_async</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Create report for: </span><span class="si">{</span><span class="n">user_data</span><span class="o">.</span><span class="n">result_text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">HTML</span><span class="p">)</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="k">return</span> <span class="n">report</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate_script</span><span class="p">(</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">script_func</span><span class="o">=</span><span class="n">my_workflow</span><span class="p">,</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">max_model</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4o&quot;</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="p">)</span>
-</span></code></pre></div>
-<h2 id="using-with-existing-lamia-instance">Using with Existing Lamia Instance<a class="headerlink" href="#using-with-existing-lamia-instance" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">lamia</span><span class="w"> </span><span class="kn">import</span> <span class="n">Lamia</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">lamia</span> <span class="o">=</span> <span class="n">Lamia</span><span class="p">((</span><span class="s2">&quot;openai:gpt-4o&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">evaluator</span> <span class="o">=</span> <span class="n">ModelEvaluator</span><span class="p">(</span><span class="n">lamia_instance</span><span class="o">=</span><span class="n">lamia</span><span class="p">)</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate_prompt</span><span class="p">(</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Generate documentation&quot;</span><span class="p">,</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="n">return_type</span><span class="o">=</span><span class="n">Markdown</span><span class="p">,</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="n">max_model</span><span class="o">=</span><span class="s2">&quot;anthropic:claude-3-opus-20240229&quot;</span>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="p">)</span>
-</span></code></pre></div>
-<h2 id="evaluation-results">Evaluation Results<a class="headerlink" href="#evaluation-results" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">result</span><span class="o">.</span><span class="n">best_model</span>           <span class="c1"># &quot;openai:gpt-4o-mini&quot;</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">result</span><span class="o">.</span><span class="n">success</span>              <span class="c1"># True if any model worked</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">result</span><span class="o">.</span><span class="n">validation_pass_rate</span> <span class="c1"># 100.0 for successful evaluations</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">result</span><span class="o">.</span><span class="n">attempts</span>             <span class="c1"># Details of each model attempt</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">result</span><span class="o">.</span><span class="n">cost</span>                 <span class="c1"># Cost of the best model</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">result</span><span class="o">.</span><span class="n">total_cost</span>           <span class="c1"># Total cost across all attempts</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">result</span><span class="o">.</span><span class="n">error_message</span>        <span class="c1"># Error if evaluation failed</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate_prompt</span><span class="p">(</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;My prompt&quot;</span><span class="p">,</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">return_type</span><span class="o">=</span><span class="n">Markdown</span><span class="p">[</span><span class="n">MyRepresentationType</span><span class="p">],</span> <span class="c1"># MyType is a pydantic model</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">max_model</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4o&quot;</span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">required_pass_rate_percent</span><span class="o">=</span><span class="mf">90.0</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <table>
@@ -1463,7 +1294,7 @@
 </tr>
 <tr>
 <td>"Validation failed for all models"</td>
-<td>Simplify prompt, allow higher max_model, or check return_type</td>
+<td>Simplify prompt, allow higher max_model, or check return_type, give more hints with the return_type, see the <a href="../validation/">validation documentation</a> on how to do this</td>
 </tr>
 </tbody>
 </table>

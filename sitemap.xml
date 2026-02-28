@@ -2,54 +2,42 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://lamia-lang.github.io/lamia/</loc>
-         <lastmod>2026-02-25</lastmod>
-    </url>
-    <url>
-         <loc>https://lamia-lang.github.io/lamia/examples/basic/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/getting-started/configuration/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/getting-started/installation/</loc>
-         <lastmod>2026-02-25</lastmod>
-    </url>
-    <url>
-         <loc>https://lamia-lang.github.io/lamia/getting-started/quickstart/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/reference/SUMMARY/</loc>
-         <lastmod>2026-02-25</lastmod>
-    </url>
-    <url>
-         <loc>https://lamia-lang.github.io/lamia/user-guide/cli/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/evaluation/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/files-context/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/hu-syntax/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/validation/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/web-automation/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/validation/selector-usage-guide/</loc>
-         <lastmod>2026-02-25</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
 </urlset>
