@@ -111,6 +111,18 @@ class BaseValidator(ABC):
         """Initial hint for the LLM prompt, to be aggregated if multiple validators are used."""
         pass
 
+    def prepare_content_for_write(self, existing_content: str, new_content: str) -> str:
+        """Return the full final file content for an append operation.
+
+        Subclasses override to implement format-specific behaviour:
+        - DocumentStructureValidator returns *new_content* only (overwrite).
+        - CSVStructureValidator strips duplicate headers using the model.
+        - MarkdownStructureValidator concatenates (true append).
+
+        The default concatenates existing and new (plain text append).
+        """
+        return existing_content + new_content
+
     def get_retry_hint(self, error: Optional[Exception] = None, retry_hint: Optional[str] = None) -> str:        
         if not self.generate_hints:
             return None

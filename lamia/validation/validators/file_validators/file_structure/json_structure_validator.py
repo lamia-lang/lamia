@@ -25,7 +25,7 @@ class JSONStructureValidator(DocumentStructureValidator):
     @classmethod
     def name(cls) -> str:
         return "json_structure"
-    
+
     @classmethod
     def file_type(cls) -> str:
         return "json"

@@ -122,6 +122,17 @@ class CSVStructureValidator(DocumentStructureValidator):
     def file_type(cls) -> str:
         return "csv"
 
+    def prepare_content_for_write(self, existing_content: str, new_content: str) -> str:
+        if not existing_content or self.model is None:
+            return existing_content + new_content
+        model_fields = self._get_model_fields()
+        expected_header = ",".join(model_fields)
+        first_line = new_content.split("\n", 1)[0].strip()
+        if first_line == expected_header:
+            rest = new_content.split("\n", 1)
+            return existing_content + (rest[1] if len(rest) > 1 else "")
+        return existing_content + new_content
+
     @property
     def initial_hint(self) -> str:
         hint = ""

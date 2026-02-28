@@ -140,6 +140,9 @@ class MarkdownStructureValidator(DocumentStructureValidator):
     def file_type(cls) -> str:
         return "markdown"
 
+    def prepare_content_for_write(self, existing_content: str, new_content: str) -> str:
+        return existing_content + new_content
+
     # Properties
     @property
     def initial_hint(self) -> str:

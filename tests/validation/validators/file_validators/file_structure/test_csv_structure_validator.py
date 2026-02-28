@@ -118,6 +118,40 @@ class CSVModelWithOrderedFields(BaseModel):
         ("col2", str),
     ])
 
+class TestCSVStructureAppend:
+
+    def test_strips_model_header_when_file_has_content(self) -> None:
+        validator = CSVStructureValidator(model=SimpleModel)
+        existing = "title,value\nTest,123\n"
+        new = "title,value\nFoo,456\n"
+        result = validator.prepare_content_for_write(existing, new)
+        assert result == "title,value\nTest,123\nFoo,456\n"
+
+    def test_keeps_header_on_empty_file(self) -> None:
+        validator = CSVStructureValidator(model=SimpleModel)
+        result = validator.prepare_content_for_write("", "title,value\nTest,123\n")
+        assert result == "title,value\nTest,123\n"
+
+    def test_header_only_new_content_returns_existing(self) -> None:
+        validator = CSVStructureValidator(model=SimpleModel)
+        result = validator.prepare_content_for_write("title,value\nTest,123\n", "title,value")
+        assert result == "title,value\nTest,123\n"
+
+    def test_no_model_plain_concatenation(self) -> None:
+        validator = CSVStructureValidator(model=None)
+        existing = "a,b\n1,2\n"
+        new = "a,b\n3,4\n"
+        result = validator.prepare_content_for_write(existing, new)
+        assert result == "a,b\n1,2\na,b\n3,4\n"
+
+    def test_non_matching_header_plain_concatenation(self) -> None:
+        validator = CSVStructureValidator(model=SimpleModel)
+        existing = "title,value\nTest,123\n"
+        new = "other,cols\nFoo,456\n"
+        result = validator.prepare_content_for_write(existing, new)
+        assert result == "title,value\nTest,123\nother,cols\nFoo,456\n"
+
+
 def test_csv_order_validation_in_extract_payload():
     """Test that CSV validator properly validates field order during extraction"""
     validator = CSVStructureValidator(model=CSVModelWithOrderedFields, strict=True, generate_hints=True)

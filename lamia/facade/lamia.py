@@ -118,7 +118,7 @@ class Lamia:
 
         if _full_result:
             return LamiaResult(
-                result_text=response.raw_text,
+                result_text=response.validated_text or response.raw_text or "",
                 typed_result=response.typed_result if return_type is not None else None,
                 tracking_context=response.execution_context,
             )

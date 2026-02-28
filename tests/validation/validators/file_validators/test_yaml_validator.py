@@ -15,6 +15,12 @@ async def test_yaml_validator(strict):
     assert result.is_valid is False 
 
 # test_yaml_validator.py
+def test_yaml_overwrites_on_append():
+    validator = YAMLValidator()
+    result = validator.prepare_content_for_write("old: 1\n", "new: 2\n")
+    assert result == "new: 2\n"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
 async def test_yaml_duplicate_keys_rejected(strict):

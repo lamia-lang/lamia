@@ -17,14 +17,19 @@ from lamia.validation.base import BaseValidator, ValidationResult
 class MockValidator(BaseValidator):
     """Mock validator for testing."""
 
-    def __init__(self, validation_result: ValidationResult):
+    def __init__(
+        self,
+        validation_result: ValidationResult,
+        validator_name: str = "mock_validator",
+    ):
         self._validation_result = validation_result
+        self._name = validator_name
         self.validated_content: List[str] = []
         super().__init__()
 
     @property
     def name(self) -> str:
-        return "mock_validator"
+        return self._name
 
     @property
     def initial_hint(self) -> str:
@@ -296,6 +301,36 @@ class TestFSManagerAppend:
             result = await self.fs_manager.execute(cmd, validator)
             assert result is expected
             assert validator.validated_content == ["base+extra"]
+
+    async def test_append_delegates_to_prepare_content_for_write(self) -> None:
+        """FSManager delegates full content assembly to the validator."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "data.txt")
+            with open(path, "w") as f:
+                f.write("existing\n")
+            expected = ValidationResult(is_valid=True)
+            validator = MockValidator(expected)
+            validator.prepare_content_for_write = lambda existing, new: existing + new.upper()  # type: ignore[assignment]
+            cmd = _make_command(FileActionType.APPEND, path, content="hello")
+            await self.fs_manager.execute(cmd, validator)
+            with open(path, "r") as f:
+                content = f.read()
+            assert content == "existing\nHELLO"
+
+    async def test_append_overwrite_semantics_via_validator(self) -> None:
+        """A validator returning only new_content causes overwrite."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "data.json")
+            with open(path, "w") as f:
+                f.write('{"old": true}')
+            expected = ValidationResult(is_valid=True)
+            validator = MockValidator(expected)
+            validator.prepare_content_for_write = lambda existing, new: new  # type: ignore[assignment]
+            cmd = _make_command(FileActionType.APPEND, path, content='{"new": true}')
+            await self.fs_manager.execute(cmd, validator)
+            with open(path, "r") as f:
+                content = f.read()
+            assert content == '{"new": true}'
 
 
 # ---------------------------------------------------------------------------

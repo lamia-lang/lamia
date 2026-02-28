@@ -12,4 +12,10 @@ async def test_html_validator(strict):
     result = await validator.validate(valid_html)
     assert result.is_valid is True
     result = await validator.validate(invalid_html)
-    assert result.is_valid is False 
+    assert result.is_valid is False
+
+
+def test_html_overwrites_on_append():
+    validator = HTMLValidator()
+    result = validator.prepare_content_for_write("<old/>", "<new/>")
+    assert result == "<new/>"

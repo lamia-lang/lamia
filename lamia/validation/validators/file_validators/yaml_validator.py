@@ -11,6 +11,9 @@ class YAMLValidator(BaseValidator):
     def name(cls) -> str:
         return "yaml"
 
+    def prepare_content_for_write(self, existing_content: str, new_content: str) -> str:
+        return self._delegate.prepare_content_for_write(existing_content, new_content)
+
     @property
     def initial_hint(self) -> str:
         return self._delegate.initial_hint

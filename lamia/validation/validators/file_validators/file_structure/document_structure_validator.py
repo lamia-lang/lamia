@@ -192,6 +192,10 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 parse_error=e,
             ) from e
 
+    def prepare_content_for_write(self, existing_content: str, new_content: str) -> str:
+        """Structured documents (HTML, JSON, XML, YAML) overwrite by default."""
+        return new_content
+
     @classmethod
     @abstractmethod
     def name(cls) -> str:

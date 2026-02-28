@@ -56,6 +56,7 @@ class FSManager(Manager[FileCommand]):
     ) -> ValidationResult:
         if command.content is None:
             raise ValueError("FileCommand.content is required for APPEND action")
+
         existing_content = ""
         try:
             with open(command.path, "r", encoding=command.encoding) as f:
@@ -63,19 +64,20 @@ class FSManager(Manager[FileCommand]):
         except FileNotFoundError:
             existing_content = ""
 
-        full_content = existing_content + command.content
         if validator is not None:
-            validation_result = await validator.validate(full_content)
+            final_content = validator.prepare_content_for_write(existing_content, command.content)
+            validation_result = await validator.validate(final_content)
             if not validation_result.is_valid:
                 return validation_result
         else:
+            final_content = existing_content + command.content
             validation_result = ValidationResult(
                 is_valid=True, typed_result=command.content, error_message=None
             )
 
         self._ensure_parent_dirs(command.path)
-        with open(command.path, "a", encoding=command.encoding) as f:
-            f.write(command.content)
+        with open(command.path, "w", encoding=command.encoding) as f:
+            f.write(final_content)
         return validation_result
 
     def _ensure_parent_dirs(self, path: str) -> None:
