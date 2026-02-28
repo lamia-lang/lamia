@@ -1,15 +1,15 @@
 <div align="center">
-  <img src="assets/lamia.png" alt="Lamia" width="240">
   <h1>Lamia</h1>
   <p><strong>Write AI-powered scripts in plain English.</strong></p>
+  <img src="assets/lamia.png" alt="Lamia" width="360">
 </div>
 
 ---
 
-Lamia extends Python with human-readable syntax for AI commands, web automation, and file operations. Write what you want in plain English -- Lamia handles the LLM calls, validates the output, and returns structured data.
+Lamia extends Python with human-readable syntax for AI commands, web automation, and file operations. Write what you want in plain English - Lamia handles the LLM calls, validates the output, and returns structured data.
 
-- Write AI prompts as Python functions -- no SDK boilerplate
-- Built-in validators: get your expected results in HTML, JSON, CSV, XML, Markdown formats back -- guaranteed
+- Write AI prompts as Python functions - no SDK boilerplate
+- Built-in validators: get your expected results in HTML, JSON, CSV, XML, Markdown formats back - guaranteed
 - Web automation with automatic data extraction into Pydantic models
 - Multi-model support: OpenAI, Anthropic, Ollama (and extensible)
 - Model evaluation to find the cheapest model that still passes validation
@@ -35,7 +35,7 @@ config = "./config.json" -> JSON[OnlyTheConfigsWeNeed]
 quote = "https://finance.yahoo.com/quote/AAPL" -> HTML[StockQuote]
 ```
 
-A real-world example -- extract stock quotes from Yahoo Finance into a CSV:
+A real-world example - extract stock quotes from Yahoo Finance into a CSV:
 
 ```python
 class StockQuote(BaseModel):
