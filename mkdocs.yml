@@ -87,7 +87,6 @@ nav:
   - Home: index.md
   - Getting Started:
     - Installation: getting-started/installation.md
-    - Quick Start: getting-started/quickstart.md
     - Configuration: getting-started/configuration.md
   - User Guide:
     - .hu File Syntax: user-guide/hu-syntax.md
@@ -95,12 +94,9 @@ nav:
     - Web Automation: user-guide/web-automation.md
     - Validation: user-guide/validation.md
     - Model Evaluation: user-guide/evaluation.md
-    - CLI Usage: user-guide/cli.md
   - Reference:
     - Selector Usage Guide: validation/selector-usage-guide.md
     - API Reference: reference/
-  - Examples:
-    - Basic Usage: examples/basic.md
 
 markdown_extensions:
   - pymdownx.highlight:

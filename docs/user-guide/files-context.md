@@ -519,13 +519,8 @@ pip install PyPDF2 python-docx
 
 ## See Also
 
-- [Session Context](../adapters/web/README.md#session-persistence)
-- [Web Actions](../actions/web.py)
-- [Error Handling](../errors.py)
-
-
-
-
+- [Web Automation](web-automation.md)
+- [Validation](validation.md)
 
 
 

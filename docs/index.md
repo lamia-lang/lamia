@@ -8,16 +8,14 @@ Get started with Lamia in just a few steps:
 
 1. **Installation**
    ```bash
-   pip install lamia
+   pip install lamia-lang
    ```
 
 ## Navigation
 
 - **[Getting Started](getting-started/installation.md)**: Installation and setup instructions
-- **[User Guide](user-guide/cli.md)**: Detailed usage guides and tutorials  
+- **[User Guide](user-guide/hu-syntax.md)**: `.hu` file syntax, web automation, validation
 - **[API Reference](reference/)**: Complete API documentation
-- **[Examples](examples/basic.md)**: Code examples and use cases
-- **[Development](development/contributing.md)**: Contributing and development information
 
 ## Community and Support
 

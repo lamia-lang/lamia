@@ -4,7 +4,7 @@ This guide will help you install Lamia and set up your development environment.
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - pip (Python package installer)
 
 ## Installation Methods
@@ -14,7 +14,7 @@ This guide will help you install Lamia and set up your development environment.
 Install Lamia directly from PyPI:
 
 ```bash
-pip install lamia
+pip install lamia-lang
 ```
 
 ### Development Installation
@@ -69,7 +69,7 @@ ANTHROPIC_API_KEY=your-anthropic-api-key
 #### Import Error
 If you encounter import errors, ensure you have the correct Python version:
 ```bash
-python --version  # Should be 3.8+
+python --version  # Should be 3.10+
 ```
 
 #### Permission Error
@@ -77,7 +77,7 @@ On some systems, you might need to use `sudo` or install in a virtual environmen
 ```bash
 python -m venv lamia-env
 source lamia-env/bin/activate  # On Windows: lamia-env\Scripts\activate
-pip install lamia
+pip install lamia-lang
 ```
 
 #### Dependency Conflicts
@@ -85,7 +85,7 @@ If you have dependency conflicts, try creating a fresh virtual environment:
 ```bash
 python -m venv fresh-env
 source fresh-env/bin/activate
-pip install lamia
+pip install lamia-lang
 ```
 
 For more help, check our [GitHub Issues](https://github.com/lamia-lang/lamia/issues) or create a new issue.

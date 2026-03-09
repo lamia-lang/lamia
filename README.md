@@ -17,7 +17,7 @@ Lamia extends Python with human-readable syntax for AI commands, web automation,
 ## Installation
 
 ```bash
-pip install .
+pip install lamia-lang
 ```
 
 ## Quick Start
