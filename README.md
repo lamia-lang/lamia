@@ -1,7 +1,7 @@
 <div align="center">
   <h1>Lamia</h1>
   <p><strong>Write AI-powered scripts in plain English.</strong></p>
-  <img src="assets/lamia.png" alt="Lamia" width="360">
+  <img src="assets/lamia_banner.png" alt="Lamia" width="360">
 </div>
 
 ---
@@ -22,7 +22,7 @@ pip install lamia-lang
 
 ## Quick Start
 
-Create a `.hu` file and run it with `lamia your_script.hu`:
+Create a `.lm` file and run it with `lamia your_script.lm`:
 
 ```python
 # Ask AI and create a login from using our model
@@ -191,7 +191,7 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
 
 | Module | Description |
 |--------|-------------|
-| **[Hybrid Syntax](lamia/interpreter/README.md)** | `.hu` file syntax: LLM commands, file operations, web actions, sessions, `-> File(...)` write syntax |
+| **[Hybrid Syntax](lamia/interpreter/README.md)** | `.lm` file syntax: LLM commands, file operations, web actions, sessions, `-> File(...)` write syntax |
 | **[Validation](lamia/validation/README.md)** | Validators for HTML, JSON, YAML, XML, Markdown, CSV, Pydantic models |
 | **[Web Adapters](lamia/adapters/web/README.md)** | Browser automation (Selenium, Playwright) and HTTP clients |
 | **[LLM Adapters](lamia/adapters/llm/README.md)** | Implementing new LLM provider adapters |
