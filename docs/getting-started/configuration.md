@@ -102,10 +102,10 @@ You can use different configuration profiles for different environments:
 ### Usage with Profiles
 ```bash
 # Development
-lamia run workflow.hu --config config-dev.yaml
+lamia run workflow.lm --config config-dev.yaml
 
 # Production  
-lamia run workflow.hu --config config-prod.yaml
+lamia run workflow.lm --config config-prod.yaml
 ```
 
 

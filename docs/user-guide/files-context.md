@@ -43,7 +43,7 @@ Files are resolved using **multiple strategies** (similar to Cursor):
 ### Basic Example
 
 ```python
-# linkedin_automation.hu
+# linkedin_automation.lm
 
 with files("~/Documents/"):
     def extract_name(models="openai:gpt-4"):
@@ -374,7 +374,7 @@ The context automatically skips:
 ## Real-World Example: LinkedIn Easy Apply
 
 ```python
-# linkedin_automation.hu
+# linkedin_automation.lm
 
 with files("~/Documents/"):
     with session("linkedin", "https://linkedin.com/feed"):

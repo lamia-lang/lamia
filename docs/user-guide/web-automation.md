@@ -4,7 +4,7 @@ Lamia provides browser automation and HTTP client operations for web-based tasks
 
 ## Web Actions
 
-Use the `web` object in `.hu` files:
+Use the `web` object in `.lm` files:
 
 ```python
 # Navigation

@@ -26,7 +26,7 @@ class UserProfile(BaseModel):
     age: int
     email: str
 
-# In .hu files — validates JSON structure matches the model
+# In .lm files — validates JSON structure matches the model
 def get_user() -> JSON[UserProfile]:
     "Generate a user profile"
 

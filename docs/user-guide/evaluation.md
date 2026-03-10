@@ -5,7 +5,7 @@ The evaluation module helps you find the most cost-effective model that meets yo
 ## Quick Start
 
 ```bash
-lamia eval <your_script.hu>
+lamia eval <your_script.lm>
 ```
 
 
