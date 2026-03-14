@@ -287,8 +287,8 @@ __LAMIA_WEB_RT__(File("raw.txt"), web.get_text(".content"))
 
         assert "FileCommand" in result
         assert "raw.txt" in result
-        # No return_type keyword for untyped file writes
-        assert "str(__lamia_file_result__)" in result
+        # Untyped file writes still use result_text for raw content
+        assert "__lamia_file_result__.result_text" in result
 
     def test_file_write_expression(self):
         """__LAMIA_FILE_WRITE__('prompt', File(...)) generates file write code."""

@@ -162,7 +162,11 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 ctx=ast.Load(),
             )
         else:
-            result_value = ast.Name(id=tmp_var, ctx=ast.Load())
+            result_value = ast.Attribute(
+                value=ast.Name(id=tmp_var, ctx=ast.Load()),
+                attr='result_text',
+                ctx=ast.Load(),
+            )
 
         user_assign = ast.Assign(
             targets=node.targets,
@@ -955,13 +959,15 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         tmp_var = '__lamia_file_result__'
         method = 'run'
 
-        # Keywords for the main command call
-        keywords: List[ast.keyword] = []
+        # Keywords for the main command call — always use _full_result so we
+        # can access result_text for file content regardless of inner type.
+        keywords: List[ast.keyword] = [
+            ast.keyword(arg='_full_result', value=ast.Constant(value=True)),
+        ]
         if inner_rt_node is not None:
-            keywords.append(ast.keyword(arg='return_type', value=inner_rt_node))
-            keywords.append(ast.keyword(arg='_full_result', value=ast.Constant(value=True)))
+            keywords.insert(0, ast.keyword(arg='return_type', value=inner_rt_node))
 
-        # Step 1 – __lamia_file_result__ = lamia.run(command, return_type=..., _full_result=True)
+        # Step 1 – __lamia_file_result__ = lamia.run(command, [return_type=...,] _full_result=True)
         lamia_call = ast.Call(
             func=ast.Attribute(
                 value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
@@ -977,19 +983,12 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             lineno=1, col_offset=0,
         )
 
-        # Step 2 – content expression: .result_text gives us the raw content (e.g. HTML)
-        if inner_rt_node is not None:
-            content_expr = ast.Attribute(
-                value=ast.Name(id=tmp_var, ctx=ast.Load()),
-                attr='result_text',
-                ctx=ast.Load(),
-            )
-        else:
-            content_expr = ast.Call(
-                func=ast.Name(id='str', ctx=ast.Load()),
-                args=[ast.Name(id=tmp_var, ctx=ast.Load())],
-                keywords=[],
-            )
+        # Step 2 – content expression: .result_text gives us the raw content
+        content_expr = ast.Attribute(
+            value=ast.Name(id=tmp_var, ctx=ast.Load()),
+            attr='result_text',
+            ctx=ast.Load(),
+        )
 
         # Step 3 – FileCommand
         action_name = 'APPEND' if append else 'WRITE'

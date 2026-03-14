@@ -1,4 +1,4 @@
-"""AST analyzer for detecting used action namespaces in .hu files."""
+"""AST analyzer for detecting used action namespaces in .lm files."""
 
 import ast
 import asyncio

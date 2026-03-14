@@ -6,6 +6,8 @@ Handles preprocessing of:
 - web.method(args) -> Type expressions
 - "prompt" -> File(...) expressions
 - [var =] "prompt" -> Type expressions (with optional assignment)
+- [var =] callable(...) -> Type expressions (function calls piped to a type)
+- [var =] callable(...) -> File(...) expressions (function calls piped to file output)
 """
 
 import re
@@ -45,11 +47,18 @@ class WithReturnTypePreprocessor:
         # Process web.method() -> Type expressions
         processed_code = self._process_web_expressions(processed_code)
         
-        # Process "prompt" -> File(...) expressions
+        # Process "prompt" -> File(...) expressions (string-literal only)
         processed_code = self._process_file_write_expressions(processed_code)
+
+        # Process [var =] expr -> File(...) where expr is NOT a string literal
+        processed_code = self._process_callable_file_write_expressions(processed_code)
 
         # Process [var =] "prompt" -> Type expressions (must run AFTER file writes)
         processed_code = self._process_typed_prompt_expressions(processed_code)
+
+        # Process [var =] expr -> Type where expr is NOT a string literal.
+        # Must run LAST — catches any remaining -> Type patterns left by the above passes.
+        processed_code = self._process_callable_typed_expressions(processed_code)
 
         return processed_code, return_types
     
@@ -114,6 +123,50 @@ class WithReturnTypePreprocessor:
 
         return re.sub(file_write_pattern, replace_file_write, source_code)
 
+    def _process_callable_file_write_expressions(self, source_code: str) -> str:
+        """Catch-all for ``[var =] expr -> File(...)`` not handled by the string-literal pass.
+
+        Handles function calls and assignments::
+
+            developer(specs=specs) -> File(str, "src/app.py")
+            code = developer(specs=specs) -> File(str, "src/app.py")
+            result = "prompt" -> File(HTML, "out.html")   # assignment case also caught here
+        """
+        _ALREADY = ('__LAMIA_FILE_WRITE__', '__LAMIA_TYPED_EXPR__', '__LAMIA_WEB_RT__')
+        _FILE_RE = re.compile(r'\s*->\s*(File\([^\n]+\))\s*$')
+
+        lines = source_code.split('\n')
+        result: list[str] = []
+        for line in lines:
+            stripped = line.rstrip()
+            lstripped = stripped.lstrip()
+
+            if (lstripped.startswith('def ')
+                    or stripped.endswith(':')
+                    or any(m in stripped for m in _ALREADY)):
+                result.append(line)
+                continue
+
+            m = _FILE_RE.search(stripped)
+            if not m:
+                result.append(line)
+                continue
+
+            file_call = m.group(1)
+            before = stripped[:m.start()].rstrip()
+            indent = stripped[:len(stripped) - len(lstripped)]
+            expr = before.lstrip()
+
+            assign_match = re.match(r'(\w+)\s*=\s*(.*)', expr, re.DOTALL)
+            if assign_match:
+                var = assign_match.group(1)
+                call = assign_match.group(2).strip()
+                result.append(f"{indent}{var} = __LAMIA_FILE_WRITE__({call}, {file_call})")
+            else:
+                result.append(f"{indent}__LAMIA_FILE_WRITE__({expr}, {file_call})")
+
+        return '\n'.join(result)
+
     def _process_typed_prompt_expressions(self, source_code: str) -> str:
         """Process ``"prompt" -> Type`` and ``var = "prompt" -> Type`` expressions.
 
@@ -149,6 +202,55 @@ class WithReturnTypePreprocessor:
             return f"{indent}{marker}"
 
         return re.sub(typed_prompt_pattern, replace_typed_prompt, source_code, flags=re.MULTILINE)
+
+    def _process_callable_typed_expressions(self, source_code: str) -> str:
+        """Process ``expr -> Type`` where *expr* is NOT a string literal.
+
+        Catches patterns that the string-literal pass did not consume, e.g.
+        function calls from ``.hu`` files::
+
+            greet(name="Alice") -> HTML
+            result = greet(name="Alice") -> HTML[Model]
+
+        Rewrites to ``__LAMIA_TYPED_EXPR__`` markers identical to the string-
+        literal case so the AST transformer handles them uniformly.
+        """
+        _ARROW_TYPE_RE = re.compile(
+            r'\s*->\s*([A-Za-z_]\w*(?:\[[^\]]+\])?)\s*$'
+        )
+        _ALREADY_PROCESSED = ('__LAMIA_TYPED_EXPR__', '__LAMIA_FILE_WRITE__', '__LAMIA_WEB_RT__')
+
+        lines = source_code.split('\n')
+        result: list[str] = []
+        for line in lines:
+            stripped = line.rstrip()
+            lstripped = stripped.lstrip()
+
+            if (lstripped.startswith('def ')
+                    or stripped.endswith(':')
+                    or any(m in stripped for m in _ALREADY_PROCESSED)):
+                result.append(line)
+                continue
+
+            m = _ARROW_TYPE_RE.search(stripped)
+            if not m:
+                result.append(line)
+                continue
+
+            type_name = m.group(1)
+            before = stripped[:m.start()].rstrip()
+            indent = stripped[:len(stripped) - len(lstripped)]
+            expr = before.lstrip()
+
+            assign_match = re.match(r'(\w+)\s*=\s*(.*)', expr, re.DOTALL)
+            if assign_match:
+                var = assign_match.group(1)
+                call = assign_match.group(2).strip()
+                result.append(f"{indent}{var} = __LAMIA_TYPED_EXPR__({type_name}, {call})")
+            else:
+                result.append(f"{indent}__LAMIA_TYPED_EXPR__({type_name}, {expr})")
+
+        return '\n'.join(result)
 
     def _generate_unique_key(self, content: str) -> str:
         """Generate a unique key for content."""

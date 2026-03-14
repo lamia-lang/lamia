@@ -1,5 +1,5 @@
 """
-Caching utility for hybrid syntax files (.lm, .hu, etc. -> .py).
+Caching utility for hybrid syntax files (.lm -> .py).
 """
 
 import os

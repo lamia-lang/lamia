@@ -345,14 +345,20 @@ class TestAllSelectorsFailedHandlerScriptContext:
         """Set up test fixtures."""
         self.handler = AllSelectorsFailedHandler(None, "https://example.com", "<html></html>")
     
+    def test_get_script_context_with_lm_file(self):
+        """Test script context detection with .lm file."""
+        with patch('sys.argv', ['playground/test_script.lm']):
+            context = self.handler._get_script_context()
+            assert context == "playground__test_script"
+
     def test_get_script_context_with_hu_file(self):
-        """Test script context detection with .hu file."""
+        """Test script context detection with .hu file (legacy support)."""
         with patch('sys.argv', ['playground/test_script.hu']):
             context = self.handler._get_script_context()
             assert context == "playground__test_script"
-    
-    def test_get_script_context_with_non_hu_file(self):
-        """Test script context detection with non-.hu file."""
+
+    def test_get_script_context_with_non_hybrid_file(self):
+        """Test script context detection with non-hybrid file."""
         with patch('sys.argv', ['test_script.py']):
             context = self.handler._get_script_context()
             assert context == "unknown_script"

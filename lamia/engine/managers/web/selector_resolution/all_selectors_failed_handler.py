@@ -365,7 +365,7 @@ Please provide your suggestions now:
       if len(sys.argv) > 0 and sys.argv[0]:
           script_path = sys.argv[0]
       
-      if script_path and script_path.endswith('.hu'):
+      if script_path and (script_path.endswith('.lm') or script_path.endswith('.hu')):
           path = Path(script_path)
           script_folder = path.parent.name if path.parent.name else 'root'
           script_name = path.stem

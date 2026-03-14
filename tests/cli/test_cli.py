@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from lamia.cli import main
-from lamia.cli.cli import HYBRID_EXTENSIONS, interactive_mode
+from lamia.cli.cli import HUMAN_EXTENSIONS, HYBRID_EXTENSIONS, interactive_mode
 from lamia.cli.eval_cli import (
     _extract_llm_prompts,
     _print_attempt_results,
@@ -43,10 +43,15 @@ class TestCLIConstants:
 
     def test_hybrid_extensions(self):
         """Test hybrid file extensions constant."""
-        assert HYBRID_EXTENSIONS == {".hu", ".lm"}
+        assert HYBRID_EXTENSIONS == {".lm"}
         assert isinstance(HYBRID_EXTENSIONS, set)
-        assert ".hu" in HYBRID_EXTENSIONS
         assert ".lm" in HYBRID_EXTENSIONS
+
+    def test_human_extensions(self):
+        """Test human file extensions constant."""
+        assert HUMAN_EXTENSIONS == {".hu"}
+        assert isinstance(HUMAN_EXTENSIONS, set)
+        assert ".hu" in HUMAN_EXTENSIONS
 
 
 class TestCLILifecycle:
@@ -389,7 +394,7 @@ class TestCLIConstantsImmutability:
         """Test that HYBRID_EXTENSIONS is treated as immutable."""
         original = HYBRID_EXTENSIONS.copy()
 
-        assert HYBRID_EXTENSIONS == {".hu", ".lm"}
+        assert HYBRID_EXTENSIONS == {".lm"}
         assert HYBRID_EXTENSIONS == original
 
     def test_logger_configuration(self):
@@ -643,13 +648,13 @@ class TestHandleEvalIntegration:
         sys.argv = self.original_argv
 
     def test_missing_script_exits(self):
-        sys.argv = ["lamia", "eval", "nonexistent.hu"]
+        sys.argv = ["lamia", "eval", "nonexistent.lm"]
         with pytest.raises(SystemExit) as exc_info:
             handle_eval()
         assert exc_info.value.code == 1
 
     def test_no_llm_prompts_exits(self, tmp_path):
-        script = tmp_path / "empty.hu"
+        script = tmp_path / "empty.lm"
         script.write_text("x = 1 + 2\n")
         sys.argv = ["lamia", "eval", str(script)]
         with pytest.raises(SystemExit) as exc_info:
@@ -658,7 +663,7 @@ class TestHandleEvalIntegration:
 
     def test_full_interactive_flow(self, tmp_path, capsys):
         """Simulate the full interactive flow with mocked evaluation."""
-        script = tmp_path / "test.hu"
+        script = tmp_path / "test.lm"
         script.write_text('def greet():\n    "Say hello"\n')
         sys.argv = ["lamia", "eval", str(script)]
 

@@ -287,3 +287,120 @@ class TestTypedPromptExpressionPreprocessor:
 
         assert processed == source
         assert "__LAMIA_TYPED_EXPR__" not in processed
+
+
+class TestCallableTypedExpressionPreprocessor:
+    """Tests for callable -> Type preprocessing (function calls, not string literals)."""
+
+    def setup_method(self):
+        self.preprocessor = WithReturnTypePreprocessor()
+
+    def test_function_call_piped_to_type(self):
+        source = "greet(name=\"Alice\") -> HTML"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert '__LAMIA_TYPED_EXPR__(HTML, greet(name="Alice"))' in processed
+
+    def test_assigned_function_call_piped_to_type(self):
+        source = 'result = greet(name="Alice") -> HTML'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert 'result = __LAMIA_TYPED_EXPR__(HTML, greet(name="Alice"))' in processed
+
+    def test_no_args_function_call(self):
+        source = "hello() -> HTML"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "__LAMIA_TYPED_EXPR__(HTML, hello())" in processed
+
+    def test_assigned_no_args(self):
+        source = "result = hello() -> JSON"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "result = __LAMIA_TYPED_EXPR__(JSON, hello())" in processed
+
+    def test_parametric_type(self):
+        source = 'greet(name="Alice") -> HTML[MyModel]'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert '__LAMIA_TYPED_EXPR__(HTML[MyModel], greet(name="Alice"))' in processed
+
+    def test_indentation_preserved(self):
+        source = '    result = greet(name="Alice") -> HTML'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert '    result = __LAMIA_TYPED_EXPR__(HTML, greet(name="Alice"))' in processed
+
+    def test_def_line_not_consumed(self):
+        """Function definitions must not be rewritten."""
+        source = "def foo() -> str:"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert processed == source
+        assert "__LAMIA_TYPED_EXPR__" not in processed
+
+    def test_already_processed_markers_not_touched(self):
+        source = '__LAMIA_TYPED_EXPR__(HTML, "some prompt")'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert processed.count("__LAMIA_TYPED_EXPR__") == 1
+
+    def test_string_literal_handled_by_earlier_pass(self):
+        """String literal -> Type is handled first; callable pass skips it."""
+        source = '"prompt" -> HTML'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "__LAMIA_TYPED_EXPR__(HTML, " in processed
+        assert processed.count("__LAMIA_TYPED_EXPR__") == 1
+
+
+class TestCallableFileWritePreprocessor:
+    """Tests for [var =] expr -> File(...) preprocessing."""
+
+    def setup_method(self):
+        self.preprocessor = WithReturnTypePreprocessor()
+
+    def test_function_call_piped_to_file(self):
+        source = 'developer(specs=s) -> File(str, "src/app.py")'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert '__LAMIA_FILE_WRITE__(developer(specs=s), File(str, "src/app.py"))' in processed
+
+    def test_assigned_function_call_piped_to_file(self):
+        source = 'code = developer(specs=s) -> File(str, "src/app.py")'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert 'code = __LAMIA_FILE_WRITE__(developer(specs=s), File(str, "src/app.py"))' in processed
+
+    def test_assigned_string_literal_to_file(self):
+        """Assignment case: var = "string" -> File(...) missed by string-literal pass."""
+        source = 'result = "Generate text" -> File(str, "out.txt")'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert 'result = __LAMIA_FILE_WRITE__("Generate text", File(str, "out.txt"))' in processed
+
+    def test_typed_file_with_function_call(self):
+        source = 'developer(task=t) -> File(HTML, "output.html")'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert '__LAMIA_FILE_WRITE__(developer(task=t), File(HTML, "output.html"))' in processed
+
+    def test_indentation_preserved(self):
+        source = '    code = developer(t=t) -> File(str, "src/x.py")'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert '    code = __LAMIA_FILE_WRITE__(developer(t=t), File(str, "src/x.py"))' in processed
+
+    def test_string_literal_file_write_handled_by_earlier_pass(self):
+        """Standalone string -> File(...) is handled first; callable pass skips it."""
+        source = '"Generate text" -> File(str, "out.txt")'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "__LAMIA_FILE_WRITE__" in processed
+        assert processed.count("__LAMIA_FILE_WRITE__") == 1
+
+    def test_def_line_not_consumed(self):
+        source = "def foo() -> File:"
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "__LAMIA_FILE_WRITE__" not in processed

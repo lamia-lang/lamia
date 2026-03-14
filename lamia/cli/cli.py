@@ -1,3 +1,4 @@
+from ast import Pass
 import asyncio
 import signal
 import sys
@@ -25,8 +26,11 @@ from .eval_cli import handle_eval
 from .cli_styling import setup_cli_logging
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.hybrid_executor import HybridExecutor
-# Hybrid syntax file extensions that should be processed
-HYBRID_EXTENSIONS = {'.hu', '.lm'}
+from lamia.interpreter.human.parser import parse_hu_file
+from lamia.interpreter.human.executor import HuCallable
+
+HYBRID_EXTENSIONS = {'.lm'}
+HUMAN_EXTENSIONS = {'.hu'}
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +203,7 @@ def main():
             # TODO: create_minimal_config is kept for programmatic/test use;
             #       the wizard path above is the primary init flow.
 
-            print("\nDone! Run 'lamia <file.hu>' or 'lamia' for interactive mode.")
+            print("\nDone! Run 'lamia <file.lm>' or 'lamia' for interactive mode.")
             return
         return
     elif len(sys.argv) > 1 and sys.argv[1] == "eval":
@@ -327,8 +331,10 @@ def main():
             # File execution - no async needed
             file_ext = os.path.splitext(prompt_file)[1].lower()
             
-            if file_ext in HYBRID_EXTENSIONS:
-                # Process hybrid syntax file with lazy loading enabled
+            if file_ext in HUMAN_EXTENSIONS:
+                # TODO: Support .hu files from the cli
+                pass
+            elif file_ext in HYBRID_EXTENSIONS:
                 try:
                     executor = HybridExecutor(lamia)
                     executor.execute_file(prompt_file, enable_lazy_dependency_loading=True)
