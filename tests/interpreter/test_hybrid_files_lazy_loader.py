@@ -140,6 +140,7 @@ class MyClass:
 
         assert "func1" in loader.function_registry
         assert "func2" in loader.function_registry
+        assert "MyClass" in loader.function_registry
         assert "method" not in loader.function_registry
 
     def test_catalog_python_file_syntax_error(self, temp_dir):
@@ -163,6 +164,79 @@ class MyClass:
         loader._catalog_python_file(py_file2, Path(temp_dir))
 
         assert loader.function_registry["duplicate"] == str(py_file1.resolve())
+
+
+class TestLazyLoaderClassCataloging:
+
+    def test_catalog_classes_from_python_file(self, temp_dir):
+        py_file = Path(temp_dir) / "models.py"
+        py_file.write_text('''
+class Task:
+    pass
+
+class Implementation:
+    pass
+
+def helper():
+    pass
+''')
+        loader = LazyLoader()
+        loader._catalog_python_file(py_file, Path(temp_dir))
+
+        assert "Task" in loader.function_registry
+        assert "Implementation" in loader.function_registry
+        assert "helper" in loader.function_registry
+
+    def test_catalog_classes_from_lm_file(self, temp_dir, mock_lamia_instance):
+        lm_file = Path(temp_dir) / "models.lm"
+        lm_file.write_text('''
+class TaskBreakdown(BaseModel):
+    tasks: list[str]
+    risks: list[str]
+
+class Implementation(BaseModel):
+    files: list[str]
+''')
+        loader = LazyLoader(lamia_instance=mock_lamia_instance)
+        loader._catalog_lm_file(lm_file)
+
+        assert "TaskBreakdown" in loader.function_registry
+        assert "Implementation" in loader.function_registry
+
+    def test_load_class_from_python_file(self, temp_dir):
+        py_file = Path(temp_dir) / "models.py"
+        py_file.write_text('''
+class MyModel:
+    def __init__(self, name):
+        self.name = name
+''')
+        loader = LazyLoader()
+        loader.scan_directory_for_functions(temp_dir)
+
+        execution_globals = {}
+        success = loader.load_function_file("MyModel", execution_globals)
+
+        assert success is True
+        assert "MyModel" in execution_globals
+        obj = execution_globals["MyModel"]("test")
+        assert obj.name == "test"
+
+    def test_lazy_load_class_on_missing_key(self, mock_lamia_instance, temp_dir):
+        py_file = Path(temp_dir) / "models.py"
+        py_file.write_text('''
+class MyModel:
+    def __init__(self, value):
+        self.value = value
+''')
+        globals_dict = create_lazy_loading_globals(
+            mock_lamia_instance,
+            file_path=str(py_file),
+        )
+
+        result = globals_dict["MyModel"]
+        assert callable(result)
+        obj = result(42)
+        assert obj.value == 42
 
 
 class TestLazyLoaderFunctionLoading:

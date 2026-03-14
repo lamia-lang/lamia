@@ -48,7 +48,7 @@ class LazyLoader:
             self._catalog_lm_file(lm_file)
 
     def _catalog_python_file(self, py_file: Path, base_path: Path) -> None:
-        """Catalog functions in a Python file."""
+        """Catalog functions and classes in a Python file."""
         try:
             resolved_path = py_file.resolve()
 
@@ -56,18 +56,18 @@ class LazyLoader:
                 node = ast.parse(file.read(), filename=str(py_file))
 
             for n in node.body:
-                if isinstance(n, ast.FunctionDef):
-                    func_name = n.name
-                    if func_name in self.function_registry:
-                        logger.warning(f"Function name conflict: '{func_name}' found in both '{self.function_registry[func_name]}' and '{resolved_path}'. Using first occurrence.")
+                if isinstance(n, (ast.FunctionDef, ast.ClassDef)):
+                    name = n.name
+                    if name in self.function_registry:
+                        logger.warning(f"Name conflict: '{name}' found in both '{self.function_registry[name]}' and '{resolved_path}'. Using first occurrence.")
                     else:
-                        self.function_registry[func_name] = str(resolved_path)
+                        self.function_registry[name] = str(resolved_path)
 
         except Exception as e:
             logger.warning(f"Could not parse Python file {py_file}: {e}")
 
     def _catalog_lm_file(self, lm_file: Path) -> None:
-        """Catalog functions in a .lm file."""
+        """Catalog functions and classes in a .lm file."""
         try:
             resolved_path = lm_file.resolve()
 
@@ -77,10 +77,21 @@ class LazyLoader:
             if self._parser:
                 parsed_info = self._parser.parse(content)
                 for func_name in parsed_info.get('llm_functions', {}):
-                    if func_name in self.function_registry:
-                        logger.warning(f"Function name conflict: '{func_name}' found in both '{self.function_registry[func_name]}' and '{resolved_path}'. Using first occurrence.")
-                    else:
+                    if func_name not in self.function_registry:
                         self.function_registry[func_name] = str(resolved_path)
+
+                # Preprocess hybrid syntax so ast.parse succeeds, then
+                # catalog class and function definitions not already found
+                # by the LLM detector (e.g. Pydantic models, helper funcs).
+                try:
+                    preprocessed, _ = self._parser._preprocessor.preprocess(content)
+                    tree = ast.parse(preprocessed)
+                    for n in tree.body:
+                        if isinstance(n, (ast.FunctionDef, ast.ClassDef)):
+                            if n.name not in self.function_registry:
+                                self.function_registry[n.name] = str(resolved_path)
+                except SyntaxError:
+                    pass
 
         except Exception as e:
             logger.warning(f"Could not parse .lm file {lm_file}: {e}")
@@ -165,7 +176,11 @@ class LazyLoader:
             executor = HybridExecutor(self.lamia)
 
             temp_globals = execution_globals.copy()
-            executor.execute_file(str(lm_file), globals_dict=temp_globals, enable_lazy_dependency_loading=True)
+            # Disable lazy loading for nested loads: execute_file replaces
+            # globals_dict with a new LazyGlobals object when enabled, so
+            # class/function definitions would go into the new dict while
+            # temp_globals still points to the old one.
+            executor.execute_file(str(lm_file), globals_dict=temp_globals)
 
             for name, obj in temp_globals.items():
                 if callable(obj) and not name.startswith('_'):

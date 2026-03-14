@@ -68,11 +68,13 @@ ai_response = lamia.run(
 
 ### Using Lamia Claude Pro or Max Subscription
 
-Currently, Lamia supports only 3 LLM providers: OpenAI, Anthropic, and Ollama (local models). But you can easily extend it to support other providers by creating a new adapter by extending the `BaseLLMAdapter` class and placing it in the `extensions/adapters/llm` directory in the root of the project.
+Currently, Lamia supports only 3 LLM providers: OpenAI, Anthropic, and Ollama (local models). But you can easily extend it to support other providers by creating a new adapter by extending the `BaseLLMAdapter` class and placing it in the `extensions/adapters` directory in the root of the project.
 
 For more information see the Implementing a New Adapter section of the [Lamia LLM Adapters](lamia/adapters/llm/README.md) documentation.
 
-Here is a ready to use adapter for Claude Pro or Max subscription. Just place it in the `extensions/adapters/llm` directory in the root of the project. IMPORTANT: Using this llm adapter might result your account being banned by Anthropic.  This is just to show you what can be an example having own (not supported by Lamia) llm adapter.
+Here is a ready to use adapter for Claude Pro or Max subscription. Just place it in the `extensions/adapters/llm` directory in the root of the project. 
+
+IMPORTANT: Using this llm adapter might result your account being banned by Anthropic.  This is just to show you what can be an example having own (not supported by Lamia) llm adapter.
 
 
 and add the following to your config.yaml file:
