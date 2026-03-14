@@ -16,7 +16,7 @@
         <link rel="prev" href="../../getting-started/configuration/">
       
       
-        <link rel="next" href="../files-context/">
+        <link rel="next" href="../lm-syntax/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>.hu File Syntax - Lamia Documentation</title>
+        <title>.hu Syntax - Lamia Documentation</title>
       
     
     
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              .hu File Syntax
+              .hu Syntax
             
           </span>
         </div>
@@ -584,7 +584,7 @@
   <span class="md-ellipsis">
     
   
-    .hu File Syntax
+    .hu Syntax
   
 
     
@@ -602,7 +602,7 @@
   <span class="md-ellipsis">
     
   
-    .hu File Syntax
+    .hu Syntax
   
 
     
@@ -628,10 +628,32 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-execution-flow" class="md-nav__link">
+  <a href="#quick-example" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The execution flow
+        Quick example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parameter-placeholders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameter placeholders
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-context-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File context references
       
     </span>
   </a>
@@ -642,7 +664,7 @@
   <a href="#return-types" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Return Types
+        Return types
       
     </span>
   </a>
@@ -650,38 +672,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#simplified-syntax" class="md-nav__link">
+  <a href="#calling-conventions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Simplified Syntax
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Simplified Syntax">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#model-selection" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Model Selection
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#variable-substitution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Variable substitution
+        Calling conventions
       
     </span>
   </a>
@@ -689,49 +683,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#file-operations" class="md-nav__link">
+  <a href="#standalone-execution" class="md-nav__link">
     <span class="md-ellipsis">
       
-        File Operations
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="File Operations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#reading-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reading Files
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#writing-to-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Writing to Files
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#file-context-with-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        File Context (with files())
+        Standalone execution
       
     </span>
   </a>
@@ -739,71 +694,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#imports" class="md-nav__link">
+  <a href="#comparison-with-lm-files" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Imports
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#session-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Session Management
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#web-actions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Web Actions
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#parameters-and-models" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Parameters and Models
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Parameters and Models">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#parameter-substitution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Parameter Substitution
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#advanced-async-and-parallel-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Advanced: Async and Parallel Execution
+        Comparison with .lm files
       
     </span>
   </a>
@@ -814,6 +708,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lm-syntax/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    .lm Syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1082,10 +1004,32 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-execution-flow" class="md-nav__link">
+  <a href="#quick-example" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The execution flow
+        Quick example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parameter-placeholders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameter placeholders
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-context-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File context references
       
     </span>
   </a>
@@ -1096,7 +1040,7 @@
   <a href="#return-types" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Return Types
+        Return types
       
     </span>
   </a>
@@ -1104,38 +1048,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#simplified-syntax" class="md-nav__link">
+  <a href="#calling-conventions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Simplified Syntax
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Simplified Syntax">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#model-selection" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Model Selection
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#variable-substitution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Variable substitution
+        Calling conventions
       
     </span>
   </a>
@@ -1143,49 +1059,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#file-operations" class="md-nav__link">
+  <a href="#standalone-execution" class="md-nav__link">
     <span class="md-ellipsis">
       
-        File Operations
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="File Operations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#reading-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reading Files
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#writing-to-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Writing to Files
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#file-context-with-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        File Context (with files())
+        Standalone execution
       
     </span>
   </a>
@@ -1193,71 +1070,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#imports" class="md-nav__link">
+  <a href="#comparison-with-lm-files" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Imports
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#session-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Session Management
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#web-actions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Web Actions
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#parameters-and-models" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Parameters and Models
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Parameters and Models">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#parameter-substitution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Parameter Substitution
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#advanced-async-and-parallel-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Advanced: Async and Parallel Execution
+        Comparison with .lm files
       
     </span>
   </a>
@@ -1333,201 +1149,115 @@
 
 
 <h1 id="hu-file-syntax">.hu File Syntax<a class="headerlink" href="#hu-file-syntax" title="Permanent link">&para;</a></h1>
-<p>Lamia <code>.hu</code> and <code>.lm</code> files use a hybrid Python syntax that lets you write LLM commands, file operations, and web actions as regular function definitions. Lamia syntax can be combined with normal Python code. So you get the power of Python combined with human-friendly syntax for LLM commands and other operations needed for daily tasks by non-technical users. You can run Lamia scripts with:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>lamia<span class="w"> </span>your_script.hu
+<p><code>.hu</code> (human) files are plain-text prompt templates. They contain <strong>no Python</strong> -- just the text you want to send to an LLM, with optional parameter placeholders and file-context references.</p>
+<p>Each <code>.hu</code> file is automatically a callable function whose name matches the filename. You call <code>.hu</code> functions from <code>.lm</code> files -- <code>.lm</code> files are the orchestration layer that ties everything together.</p>
+<h2 id="quick-example">Quick example<a class="headerlink" href="#quick-example" title="Permanent link">&para;</a></h2>
+<p><strong>summarize.hu</strong>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Summarize the following article: {@article.txt}
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Focus on {aspect} and keep it under {max_words} words.
+</span></code></pre></div></p>
+<p><strong>pipeline.lm</strong>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">summarize</span><span class="p">(</span><span class="n">aspect</span><span class="o">=</span><span class="s2">&quot;key findings&quot;</span><span class="p">,</span> <span class="n">max_words</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+</span></code></pre></div></p>
+<p>Run with:
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>lamia<span class="w"> </span>pipeline.lm
+</span></code></pre></div></p>
+<h2 id="parameter-placeholders">Parameter placeholders<a class="headerlink" href="#parameter-placeholders" title="Permanent link">&para;</a></h2>
+<p>Use <code>{name}</code> to define parameters. They are auto-detected -- no declaration needed.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Write a {tone} email to {recipient} about {topic}.
 </span></code></pre></div>
-<h2 id="the-execution-flow">The execution flow<a class="headerlink" href="#the-execution-flow" title="Permanent link">&para;</a></h2>
-<p>Lamia detects its own syntax and executes through its engine, the rest of the code is executed as normal Python code. Here are some function definitions that will be executed by Lamia:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># LLM command — plain text goes to the AI</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_story</span><span class="p">():</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="s2">&quot;Write a short story about a robot discovering emotions&quot;</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># File read — paths are read from disk</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_config</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">:</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="s2">&quot;./config.json&quot;</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># Web request — URLs trigger HTTP requests</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">fetch_data</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">:</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="s2">&quot;https://api.example.com/data&quot;</span>
+<p>When called, all parameters must be passed as keyword arguments:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">write_email</span> <span class="o">=</span> <span class="n">draft_email</span><span class="p">(</span><span class="n">tone</span><span class="o">=</span><span class="s2">&quot;formal&quot;</span><span class="p">,</span> <span class="n">recipient</span><span class="o">=</span><span class="s2">&quot;the team&quot;</span><span class="p">,</span> <span class="n">topic</span><span class="o">=</span><span class="s2">&quot;Q3 results&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Users must be careful, because unlike Python, Lamia functions must skip return statements. See the example below:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># The return statement makes this a Python function which returns the string &quot;Write a short story about a robot discovering emotions&quot;</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_story</span><span class="p">():</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>   <span class="k">return</span> <span class="s2">&quot;Write a short story about a robot discovering emotions&quot;</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># This function is a Lamia function which sends the string &quot;Write a short story about a robot discovering emotions&quot; to the AI.</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_story</span><span class="p">():</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>   <span class="s2">&quot;Write a short story about a robot discovering emotions&quot;</span>
+<p>Missing parameters raise an error:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>draft_email() missing required keyword arguments: recipient, tone, topic
+</span></code></pre></div></p>
+<p>To include a literal brace in the text, double it:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>The result is in the format {{key: value}}.
+</span></code></pre></div></p>
+<h2 id="file-context-references">File context references<a class="headerlink" href="#file-context-references" title="Permanent link">&para;</a></h2>
+<p>Use <code>{@filename}</code> to inject the contents of a local file into the prompt. This uses the same file-context resolution as <code>.lm</code> files -- fuzzy matching, absolute paths, and <code>with files()</code> scoping all work.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Review the code in {@main.py} and suggest improvements.
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>Also check {@utils.py} for any issues.
 </span></code></pre></div>
-<p>Lamia uses <code>-&gt;</code> syntax to return data. In Python <code>-&gt;</code> is used to define the return type of the function. In Lamia it is used to actually return a value or stream data.</p>
-<h2 id="return-types">Return Types<a class="headerlink" href="#return-types" title="Permanent link">&para;</a></h2>
-<p>Without return types, Lamia feels incomplete. Return type markers are more than markers, they are extractors and validators at runtime. Here is an example of how to use return types:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_data</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">:</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s2">&quot;./users.json&quot;</span>   <span class="c1"># Must be valid JSON - otherwise the function will fail</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_page</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">HTML</span><span class="p">:</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="s2">&quot;Create a login form&quot;</span>   <span class="c1"># Must be valid HTML - otherwise the function will fail</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">plain_text</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">TEXT</span><span class="p">:</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="s2">&quot;Write a summary&quot;</span>   <span class="c1"># No validation, just extraction</span>
-</span></code></pre></div>
-<p>Available types: <code>HTML</code>, <code>JSON</code>, <code>YAML</code>, <code>XML</code>, <code>Markdown</code>, <code>CSV</code>, <code>TEXT</code></p>
-<h2 id="simplified-syntax">Simplified Syntax<a class="headerlink" href="#simplified-syntax" title="Permanent link">&para;</a></h2>
-<p>For one-line functions, defining functions seems like overkill sometimes. That is why Lamia provides a simplified syntax. The functions we wrote above can be shortened to:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="s2">&quot;./users.json&quot;</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">:</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="s2">&quot;Create a login form&quot;</span> <span class="o">-&gt;</span> <span class="n">HTML</span><span class="p">:</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="s2">&quot;Write a summary&quot;</span> <span class="o">-&gt;</span> <span class="n">TEXT</span><span class="p">:</span>
-</span></code></pre></div>
-<p>But for these executions we won't be able to catch the result of the function. We need to assign the result to a variable.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">data</span> <span class="o">=</span> <span class="s2">&quot;./users.json&quot;</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">:</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">page</span> <span class="o">=</span> <span class="s2">&quot;Create a login form&quot;</span> <span class="o">-&gt;</span> <span class="n">HTML</span><span class="p">:</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">summary</span> <span class="o">=</span> <span class="s2">&quot;Write a summary&quot;</span> <span class="o">-&gt;</span> <span class="n">TEXT</span><span class="p">:</span>
-</span></code></pre></div>
-<p>But if we are not interested in catching the values and we want to save the execution result to a file, we can use the <code>-&gt; File(...)</code> syntax.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="s2">&quot;./users.json&quot;</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">JSON</span><span class="p">,</span> <span class="s2">&quot;users.json&quot;</span><span class="p">):</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="s2">&quot;Create a login form&quot;</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">HTML</span><span class="p">,</span> <span class="s2">&quot;login.html&quot;</span><span class="p">):</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="s2">&quot;Write a summary&quot;</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">TEXT</span><span class="p">,</span> <span class="s2">&quot;summary.txt&quot;</span><span class="p">):</span>
-</span></code></pre></div>
-<h3 id="model-selection">Model Selection<a class="headerlink" href="#model-selection" title="Permanent link">&para;</a></h3>
-<p>Instead of simplified syntax, we need function definitions if we want to execute the function later, execute many times in different parts of the script, etc.</p>
-<p>There is however a very important reason to use function definitions: model selection. All LLM commands in Lamia scripts use the global model chain coming from the config.yaml file mostly. But for some LLM commands users might need to use different models and even model chains. Here are examples of how to use model selection:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">analyze</span><span class="p">(</span><span class="n">models</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4&quot;</span><span class="p">):</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="s2">&quot;Analyze the data&quot;</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_fallback</span><span class="p">(</span><span class="n">models</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;openai:gpt-4&quot;</span><span class="p">,</span> <span class="s2">&quot;anthropic:sonnet-4&quot;</span><span class="p">]):</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="s2">&quot;Generate a report with model fallback&quot;</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Same as above but gpt-4 will be retried twice before falling back to sonnet-4</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_fallback</span><span class="p">(</span><span class="n">models</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;openai:gpt-4&quot;</span><span class="p">,</span> <span class="s1">&#39;openai:gpt-4&#39;</span><span class="p">,</span> <span class="s2">&quot;anthropic:sonnet-4&quot;</span><span class="p">]):</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="s2">&quot;Generate a report with model fallback&quot;</span>
-</span></code></pre></div>
-<h2 id="variable-substitution">Variable substitution<a class="headerlink" href="#variable-substitution" title="Permanent link">&para;</a></h2>
-<p>Variable substitution is a feature that allows you to use variables in your LLM prompts, web actions and file operations. Example:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">stock_data</span><span class="p">(</span><span class="n">ticker</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;AAPL&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">CSV</span><span class="p">[</span><span class="n">StockQuote</span><span class="p">],</span> <span class="s2">&quot;stocks.csv&quot;</span><span class="p">,</span> <span class="n">append</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="s2">&quot;extract the stock quote data https://finance.yahoo.com/quote/</span><span class="si">{ticker}</span><span class="s2">&quot;</span>
+<p>See the <a href="../files-context/">File Context</a> documentation for details on search strategies and error handling.</p>
+<h2 id="return-types">Return types<a class="headerlink" href="#return-types" title="Permanent link">&para;</a></h2>
+<p><code>.hu</code> files are <strong>return-type agnostic</strong>. The return type is specified by the caller in the <code>.lm</code> file using the <code>-&gt;</code> syntax:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Returns validated HTML</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">page</span> <span class="o">=</span> <span class="n">generate_landing_page</span><span class="p">(</span><span class="n">product</span><span class="o">=</span><span class="s2">&quot;Lamia&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="k">for</span> <span class="n">ticker</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;AAPL&quot;</span><span class="p">,</span> <span class="s2">&quot;NVDA&quot;</span><span class="p">,</span> <span class="s2">&quot;GOOG&quot;</span><span class="p">]:</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">stock_data</span><span class="p">(</span><span class="n">ticker</span><span class="p">)</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Returns a Pydantic model extracted from HTML</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">quote</span> <span class="o">=</span> <span class="n">get_stock_data</span><span class="p">(</span><span class="n">ticker</span><span class="o">=</span><span class="s2">&quot;AAPL&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span><span class="p">[</span><span class="n">StockQuote</span><span class="p">]</span>
 </span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># Or with simpler syntax</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="k">for</span> <span class="n">ticker</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;AAPL&quot;</span><span class="p">,</span> <span class="s2">&quot;NVDA&quot;</span><span class="p">,</span> <span class="s2">&quot;GOOG&quot;</span><span class="p">]:</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    <span class="s2">&quot;extract the stock quote data https://finance.yahoo.com/quote/</span><span class="si">{ticker}</span><span class="s2">&quot;</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">CSV</span><span class="p">[</span><span class="n">StockQuote</span><span class="p">],</span> <span class="s2">&quot;stocks.csv&quot;</span><span class="p">,</span> <span class="n">append</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># Writes output to a file</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="n">generate_docs</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">&quot;lamia&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">Markdown</span><span class="p">,</span> <span class="s2">&quot;docs.md&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<h2 id="file-operations">File Operations<a class="headerlink" href="#file-operations" title="Permanent link">&para;</a></h2>
-<h3 id="reading-files">Reading Files<a class="headerlink" href="#reading-files" title="Permanent link">&para;</a></h3>
-<p>Use relative or absolute paths:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_data</span><span class="p">():</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="s2">&quot;./data/input.txt&quot;</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">load_settings</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">:</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="s2">&quot;../config/settings.json&quot;</span>
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
-</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="k">def</span><span class="w"> </span><span class="nf">read_logs</span><span class="p">():</span>
-</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    <span class="s2">&quot;/var/log/application.log&quot;</span>
+<p>If called without a return type, the raw LLM response text is returned.</p>
+<h2 id="calling-conventions">Calling conventions<a class="headerlink" href="#calling-conventions" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>.hu</code> functions are called from <code>.lm</code> files like regular functions</li>
+<li>All parameters must be keyword arguments</li>
+<li><code>.hu</code> files <strong>cannot</strong> call other <code>.hu</code> files -- use <code>.lm</code> files as the glue</li>
+<li>Filename (without <code>.hu</code> extension) must be unique across the project</li>
+</ul>
+<h2 id="standalone-execution">Standalone execution<a class="headerlink" href="#standalone-execution" title="Permanent link">&para;</a></h2>
+<p>You can run a <code>.hu</code> file directly from the CLI:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia<span class="w"> </span>hello.hu
 </span></code></pre></div>
-<p>In addition, Lamia's <code>file</code> action API can be used:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">content</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;/path/to/file.txt&quot;</span><span class="p">)</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">content</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;latin-1&quot;</span><span class="p">)</span>
-</span></code></pre></div>
-<h3 id="writing-to-files">Writing to Files<a class="headerlink" href="#writing-to-files" title="Permanent link">&para;</a></h3>
-<p>As we have seen, the <code>-&gt; File(...)</code> syntax can be used to save the execution result to a file. For complex file operations:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># With type validation</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_page</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">HTML</span><span class="p">,</span> <span class="s2">&quot;output.html&quot;</span><span class="p">):</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="s2">&quot;Generate an HTML page about cats&quot;</span>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="c1"># Without type validation</span>
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_text</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">&quot;output.txt&quot;</span><span class="p">):</span>
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="s2">&quot;Generate some text&quot;</span>
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>
-</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="c1"># Append instead of overwrite</span>
-</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">add_rows</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">CSV</span><span class="p">,</span> <span class="s2">&quot;data.csv&quot;</span><span class="p">,</span> <span class="n">append</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="s2">&quot;Generate additional CSV rows&quot;</span>
-</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>
-</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="c1"># Custom encoding</span>
-</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_latin</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">&quot;output.txt&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;latin-1&quot;</span><span class="p">):</span>
-</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a>    <span class="s2">&quot;Generate text with special characters&quot;</span>
-</span></code></pre></div>
-<h2 id="file-context-with-files">File Context (<code>with files()</code>)<a class="headerlink" href="#file-context-with-files" title="Permanent link">&para;</a></h2>
-<p>Reference local files in LLM prompts using <code>{@filename}</code> syntax:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;~/Documents/&quot;</span><span class="p">):</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">answer_question</span><span class="p">(</span><span class="n">question</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4&quot;</span><span class="p">):</span>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="sd">        Answer: {question}</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="sd">        Use information from {@resume.pdf} and {@cover_letter.txt}</span>
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="sd">        &quot;&quot;&quot;</span>
-</span></code></pre></div>
-<p>Files are resolved using smart search (exact match, content grep, fuzzy matching). PDF and DOCX are automatically extracted to text.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span><span class="nd">@resume</span><span class="o">.</span><span class="n">pdf</span><span class="p">}</span>                     <span class="c1"># Search indexed directories</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="p">{</span><span class="o">@/</span><span class="n">Users</span><span class="o">/</span><span class="n">me</span><span class="o">/</span><span class="n">Documents</span><span class="o">/</span><span class="n">resume</span><span class="o">.</span><span class="n">pdf</span><span class="p">}</span> <span class="c1"># Absolute path</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="p">{</span><span class="nd">@resum</span><span class="o">.</span><span class="n">pdf</span><span class="p">}</span>                      <span class="c1"># Fuzzy match → resume.pdf</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="p">{</span><span class="nd">@config</span><span class="p">}</span>                         <span class="c1"># Finds config.yaml, config.json, etc.</span>
-</span></code></pre></div>
-<p>Multiple directories and nested contexts:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;~/Documents/&quot;</span><span class="p">,</span> <span class="s2">&quot;~/projects/&quot;</span><span class="p">):</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="k">with</span> <span class="n">session</span><span class="p">(</span><span class="s2">&quot;job_application&quot;</span><span class="p">):</span>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>        <span class="k">def</span><span class="w"> </span><span class="nf">fill_form</span><span class="p">(</span><span class="n">models</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4&quot;</span><span class="p">):</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>            <span class="s2">&quot;Fill the form using {@resume.pdf}&quot;</span>
-</span></code></pre></div>
-<p>For full details see the <a href="../files-context/">File Context Reference</a>.</p>
-<h2 id="imports">Imports<a class="headerlink" href="#imports" title="Permanent link">&para;</a></h2>
-<p>Lamia avoids explicit imports. All Lamia types and interfaces are available without any import statements. But if you mix it with Python code, you will import Python dependencies as usual.</p>
-<p>Because of implicit imports, IDEs will show warnings on some Lamia commands. They need to be ignored if the syntax is correct.</p>
-<h2 id="session-management">Session Management<a class="headerlink" href="#session-management" title="Permanent link">&para;</a></h2>
-<p>Use <code>with session()</code> for multi-step workflows that persist across runs:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">login_to_site</span><span class="p">():</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>    <span class="k">with</span> <span class="n">session</span><span class="p">(</span><span class="s2">&quot;login&quot;</span><span class="p">):</span>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>        <span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com/login&quot;</span><span class="p">)</span>
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>        <span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#username&quot;</span><span class="p">,</span> <span class="s2">&quot;your_username&quot;</span><span class="p">)</span>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>        <span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#password&quot;</span><span class="p">,</span> <span class="s2">&quot;your_password&quot;</span><span class="p">)</span>
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>        <span class="n">web</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;#login-button&quot;</span><span class="p">)</span>
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>
-</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>    <span class="c1"># Always runs — session block is skipped if already completed</span>
-</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>    <span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com/dashboard&quot;</span><span class="p">)</span>
-</span></code></pre></div>
-<p><strong>First run</strong>: executes the block, saves session on success.
-<strong>Subsequent runs</strong>: detects valid session, skips the block.</p>
-<p>Sessions are stored in <code>.lamia_sessions/</code>. Clear with <code>rm -rf .lamia_sessions/</code>.</p>
-<h2 id="web-actions">Web Actions<a class="headerlink" href="#web-actions" title="Permanent link">&para;</a></h2>
-<p>Use the <code>web</code> object for browser automation:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com&quot;</span><span class="p">)</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">web</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;#login-button&quot;</span><span class="p">)</span>
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#username&quot;</span><span class="p">,</span> <span class="s2">&quot;user@example.com&quot;</span><span class="p">)</span>
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="n">text</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">&quot;.result&quot;</span><span class="p">)</span>
-</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="n">web</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="s2">&quot;.loading&quot;</span><span class="p">,</span> <span class="s2">&quot;hidden&quot;</span><span class="p">)</span>
-</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="n">web</span><span class="o">.</span><span class="n">screenshot</span><span class="p">(</span><span class="s2">&quot;page.png&quot;</span><span class="p">)</span>
-</span></code></pre></div>
-<p>Scoped elements:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="n">modal</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_element</span><span class="p">(</span><span class="s2">&quot;div.modal&quot;</span><span class="p">)</span>
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="n">modal</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;button.close&quot;</span><span class="p">)</span>
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
-</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="n">fields</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_elements</span><span class="p">(</span><span class="s2">&quot;div.form-field&quot;</span><span class="p">)</span>
-</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
-</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>    <span class="n">label</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">)</span>
-</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>    <span class="n">field</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;answer&quot;</span><span class="p">)</span>
-</span></code></pre></div>
-<h2 id="parameters-and-models">Parameters and Models<a class="headerlink" href="#parameters-and-models" title="Permanent link">&para;</a></h2>
-<h3 id="parameter-substitution">Parameter Substitution<a class="headerlink" href="#parameter-substitution" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_report</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">style</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>    <span class="s2">&quot;Create a </span><span class="si">{style}</span><span class="s2"> report based on: </span><span class="si">{data}</span><span class="s2">&quot;</span>
-</span></code></pre></div>
-<h2 id="advanced-async-and-parallel-execution">Advanced: Async and Parallel Execution<a class="headerlink" href="#advanced-async-and-parallel-execution" title="Permanent link">&para;</a></h2>
-<p>Functions can be defined as async and executed in parallel:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
-</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>    <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
-</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>        <span class="n">get_weather</span><span class="p">(),</span>
-</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>        <span class="n">read_config</span><span class="p">(),</span>
-</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>        <span class="n">fetch_webpage</span><span class="p">()</span>
-</span><span id="__span-19-8"><a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>    <span class="p">)</span>
-</span></code></pre></div>
+<p>This sends the prompt (with no parameters) to the default model and prints the response. Parameterized <code>.hu</code> files require a <code>.lm</code> wrapper to pass arguments.</p>
+<h2 id="comparison-with-lm-files">Comparison with .lm files<a class="headerlink" href="#comparison-with-lm-files" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th><code>.hu</code> files</th>
+<th><code>.lm</code> files</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Content</td>
+<td>Plain text prompt</td>
+<td>Python + Lamia syntax</td>
+</tr>
+<tr>
+<td>Parameters</td>
+<td><code>{name}</code> placeholders</td>
+<td>Python function arguments</td>
+</tr>
+<tr>
+<td>Return type</td>
+<td>Set by caller</td>
+<td>Declared with <code>-&gt; Type</code></td>
+</tr>
+<tr>
+<td>Python code</td>
+<td>Not supported</td>
+<td>Full Python support</td>
+</tr>
+<tr>
+<td>Imports</td>
+<td>Not needed</td>
+<td>Implicit Lamia imports</td>
+</tr>
+<tr>
+<td>Can call <code>.hu</code></td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Can call <code>.lm</code></td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Filename = function</td>
+<td>Yes</td>
+<td>No (uses <code>def</code> names)</td>
+</tr>
+</tbody>
+</table>
 
 
 

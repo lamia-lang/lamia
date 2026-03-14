@@ -2,42 +2,46 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://lamia-lang.github.io/lamia/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/getting-started/configuration/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/getting-started/installation/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/reference/SUMMARY/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/evaluation/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/files-context/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/hu-syntax/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
+    </url>
+    <url>
+         <loc>https://lamia-lang.github.io/lamia/user-guide/lm-syntax/</loc>
+         <lastmod>2026-03-14</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/validation/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/user-guide/web-automation/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
     </url>
     <url>
          <loc>https://lamia-lang.github.io/lamia/validation/selector-usage-guide/</loc>
-         <lastmod>2026-03-10</lastmod>
+         <lastmod>2026-03-14</lastmod>
     </url>
 </urlset>
