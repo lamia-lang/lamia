@@ -70,11 +70,11 @@ ai_response = lamia.run(
 
 Currently, Lamia supports only 3 LLM providers: OpenAI, Anthropic, and Ollama (local models). But you can easily extend it to support other providers by creating a new adapter by extending the `BaseLLMAdapter` class and placing it in the `extensions/adapters` directory in the root of the project.
 
-For more information see the Implementing a New Adapter section of the [Lamia LLM Adapters](lamia/adapters/llm/README.md) documentation.
+For more information see the Implementing a new Adapter section of the [Lamia LLM Adapters](lamia/adapters/llm/README.md) documentation.
 
-Here is a ready to use adapter for Claude Pro or Max subscription. Just place it in the `extensions/adapters/llm` directory in the root of the project. 
+Here is a ready to use adapter for Claude Pro or Max subscriptions. Just place it in the `extensions/adapters/llm` directory in the root of your Lamia project. 
 
-IMPORTANT: Using this llm adapter might result your account being banned by Anthropic.  This is just to show you what can be an example having own (not supported by Lamia) llm adapter.
+IMPORTANT: Using this llm adapter might result your account being banned by Anthropic.  This is just an example showing how you can have your own LLM adapter (not supported by Lamia).
 
 
 and add the following to your config.yaml file:

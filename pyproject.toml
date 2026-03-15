@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=45", "wheel", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "lamia-lang"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Human language meets Python. Write AI-powered scripts in plain English."
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -75,6 +75,9 @@ Issues = "https://github.com/lamia-lang/lamia/issues"
 
 [tool.setuptools.packages.find]
 include = ["lamia*"]
+
+[tool.setuptools_scm]
+version_file = "lamia/_version.py"
 
 [tool.pyright]
 include = ["lamia", "tests", "playground", "examples"]

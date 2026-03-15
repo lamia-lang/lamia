@@ -10,5 +10,3 @@ Available adapters will include:
 - Anthropic (Claude models)
 - And more...
 """
-
-__version__ = "0.1.0"

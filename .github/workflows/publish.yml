@@ -33,6 +33,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -44,6 +47,17 @@ jobs:
 
       - name: Build package
         run: python -m build
+
+      - name: Verify built version matches tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          WHEEL=$(ls dist/*.whl)
+          echo "Tag version: $TAG"
+          echo "Built wheel: $WHEEL"
+          if [[ "$WHEEL" != *"$TAG"* ]]; then
+            echo "ERROR: Wheel version does not match tag $TAG"
+            exit 1
+          fi
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

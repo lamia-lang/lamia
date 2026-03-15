@@ -5,9 +5,14 @@ This package provides a simple way to interact with various LLM providers
 through a consistent interface, with configuration management and a CLI.
 """
 
-__version__ = "0.1.0"
-
+from importlib.metadata import version, PackageNotFoundError
 from dataclasses import dataclass
+
+try:
+    __version__ = version("lamia-lang")
+except PackageNotFoundError:
+    __version__ = "0.0.0-dev"
+
 from typing import Optional, Union, Dict
 from lamia.types import InputType
 
