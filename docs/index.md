@@ -14,7 +14,8 @@ Get started with Lamia in just a few steps:
 ## Navigation
 
 - **[Getting Started](getting-started/installation.md)**: Installation and setup instructions
-- **[User Guide](user-guide/lm-syntax.md)**: `.lm` file syntax, web automation, validation
+- **[Guide to the Hybrid Syntax](user-guide/lm-syntax.md)**: `.lm` file syntax, web automation, validation
+- **[Guide to the for Humans Syntax](user-guide/hu-syntax.md)**: `.hu` file syntax, web automation, validation
 - **[API Reference](reference/)**: Complete API documentation
 
 ## Community and Support

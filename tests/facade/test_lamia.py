@@ -47,8 +47,7 @@ class TestLamiaLifecycle:
             lamia = Lamia()
             result = asyncio.run(lamia.run_async("hello"))
 
-            # Without return_type, run_async returns None (side-effect only)
-            assert result is None
+            assert result == "ok"
             # Engine should have been created with a config provider
             MockEngine.assert_called_once()
 
@@ -65,7 +64,7 @@ class TestLamiaLifecycle:
             lamia = Lamia('openai', 'ollama')
             result = asyncio.run(lamia.run_async("hello"))
 
-            assert result is None
+            assert result == "ok"
             MockEngine.assert_called_once()
 
     def test_from_config_dict(self):
@@ -86,7 +85,7 @@ class TestLamiaLifecycle:
             lamia = Lamia.from_config(config)
             result = asyncio.run(lamia.run_async("hello"))
 
-            assert result is None
+            assert result == "ok"
             MockEngine.assert_called_once()
 
     def test_from_config_file(self, tmp_path):
@@ -117,7 +116,7 @@ class TestLamiaLifecycle:
             lamia = Lamia.from_config(loaded_config)
             result = asyncio.run(lamia.run_async("hello"))
 
-            assert result is None
+            assert result == "ok"
 
     @pytest.mark.asyncio
     async def test_engine_start_error(self):
@@ -207,8 +206,7 @@ class TestLamiaLifecycle:
             dummy_config_provider.override_model_chain_with.assert_called_once_with(override_models)
             dummy_config_provider.reset_model_chain.assert_called_once()
 
-            # Without return_type, result is None (side-effect only)
-            assert result is None
+            assert result == "dummy response"
 
     @pytest.mark.asyncio
     async def test_context_manager_async(self):
@@ -225,7 +223,7 @@ class TestLamiaLifecycle:
             async with Lamia('openai') as lamia:
                 # Non-Python command to trigger engine.execute
                 result = await lamia.run_async("hello world")
-                assert result is None
+                assert result == "ok"
 
             # Cleanup should have been called
             mock_engine.cleanup.assert_awaited_once()
@@ -241,10 +239,9 @@ class TestLamiaLifecycle:
             MockEngine.return_value = mock_engine
 
             lamia = Lamia()
-            # Non-Python command without return_type → None
             response = lamia.run("hello world prompt")
 
-            assert response is None
+            assert response == "response"
 
     @pytest.mark.asyncio
     async def test_engine_execute_error_handling(self):
@@ -303,8 +300,7 @@ class TestLamiaLifecycle:
             lamia = Lamia()
             result = await lamia.run_async("generate something")
 
-            # Without return_type, returns None (side-effect only)
-            assert result is None
+            assert result == "direct result"
 
     def test_get_validation_stats(self):
         """Test get_validation_stats delegates to engine."""
@@ -463,7 +459,7 @@ class TestLamiaLifecycle:
                 return lamia.run("test prompt")
 
             result = asyncio.run(call_sync_from_async())
-            assert result is None
+            assert result == "response"
 
     def test_string_command_delegates_to_process_string_command(self):
         """Test that string commands are processed through process_string_command."""
@@ -494,7 +490,7 @@ class TestLamiaLifecycle:
             execute_call_args = mock_engine.execute.call_args
             assert execute_call_args[0][0] == mock_parsed_command
 
-            assert result is None
+            assert result == "llm response"
 
     def test_python_success_skips_engine_execute(self):
         """Test that successful Python execution skips engine.execute."""
@@ -551,4 +547,4 @@ class TestLamiaLifecycle:
             execute_call_args = mock_engine.execute.call_args
             assert execute_call_args[0][0] == command
 
-            assert result is None
+            assert result == "response"

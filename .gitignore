@@ -36,9 +36,6 @@ env/
 .env.*
 !.env.example
 
-# OAuth / secrets
-.oauth-tokens.json
-
 # Logs
 *.log
 

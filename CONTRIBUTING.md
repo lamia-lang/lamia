@@ -39,8 +39,8 @@ When adding a new feature:
 2. Add user-facing docs to the appropriate `docs/` page
 3. Update `mkdocs.yml` nav if adding a new page
 
-## Code Style
+## Code Style and Testing
 
-- No `hasattr` usage — use typed approaches
-- No local imports — all imports must be global
+- Typed Python code is preferred
 - Add unit tests for new functionality
+- Make sure that all tests pass by running `pytest`
