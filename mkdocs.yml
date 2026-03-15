@@ -7,6 +7,8 @@ repo_name: lamia-lang/lamia
 
 theme:
   name: material
+  logo: assets/lamia_logo.png
+  favicon: assets/lamia_favicon.png
   features:
     - navigation.tabs
     - navigation.sections
@@ -29,7 +31,7 @@ theme:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: blue
+      primary: black
       accent: blue
       toggle:
         icon: material/brightness-7
@@ -38,7 +40,7 @@ theme:
     # Palette toggle for dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: blue
+      primary: black
       accent: blue
       toggle:
         icon: material/brightness-4
@@ -116,6 +118,9 @@ markdown_extensions:
   - md_in_html
   - toc:
       permalink: true
+
+extra_css:
+  - stylesheets/extra.css
 
 extra:
   social:

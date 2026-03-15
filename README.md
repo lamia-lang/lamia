@@ -8,8 +8,9 @@
 
 Lamia extends Python with human-readable syntax for AI commands, web automation, and file operations. Write what you want in plain English - Lamia handles the LLM calls, validates the output, and returns structured data.
 
-- Write AI prompts as Python functions - no SDK boilerplate
-- Built-in validators: get your expected results in HTML, JSON, CSV, XML, Markdown formats back - guaranteed
+How it guarantees results: every command runs through a built-in validator. If the output doesn't match the expected format or schema, Lamia retries automatically across a configurable model chain — escalating to the next model until it passes or the chain is exhausted. You define the contract once; Lamia enforces it on every run.
+
+- Get your expected results in HTML, JSON, CSV, XML, YAML Markdown formats back
 - Web automation with automatic data extraction into Pydantic models
 - Multi-model support: OpenAI, Anthropic, Ollama (and extensible)
 - Model evaluation to find the cheapest model that still passes validation
