@@ -123,7 +123,7 @@ class Lamia:
                 tracking_context=response.execution_context,
             )
         if return_type is None:
-            return None # nothing was asked, reconsider if we need to return the raw_text in any case
+            return response.typed_result or response.raw_text # for no return action both typed_result and raw_text will be None and None will be returned
         else:
             return response.typed_result or response.raw_text
 

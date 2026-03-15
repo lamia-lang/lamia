@@ -1,5 +1,5 @@
 from typing import Type, get_args, get_origin, Literal
-from lamia.types import BaseType, HTML, YAML, JSON, XML, CSV, Markdown, BaseModel
+from lamia.types import BaseType, HTML, YAML, JSON, XML, CSV, Markdown, TEXT, BaseModel
 from lamia.validation.base import BaseValidator
 from lamia.validation.validators.file_validators.xml_validator import XMLValidator
 from lamia.validation.validators.file_validators.csv_validator import CSVValidator
@@ -7,6 +7,7 @@ from lamia.validation.validators.file_validators.markdown_validator import Markd
 from lamia.validation.validators.file_validators.html_validator import HTMLValidator
 from lamia.validation.validators.file_validators.yaml_validator import YAMLValidator
 from lamia.validation.validators.file_validators.json_validator import JSONValidator
+from lamia.validation.validators.file_validators.text_validator import TextValidator
 from lamia.validation.validators.object_validator import ObjectValidator
 from lamia.validation.validators.file_validators.file_structure.html_structure_validator import HTMLStructureValidator
 from lamia.validation.validators.file_validators.file_structure.yaml_structure_validator import YAMLStructureValidator
@@ -74,6 +75,8 @@ def create_validator(validation_type: Type[BaseType], generate_hints: bool = Fal
         return _create_markdown_validator(model, strict, generate_hints)
     elif base_type is BaseModel:
         return _create_object_validator(model, strict, generate_hints)
+    elif base_type is TEXT or base_type is str:
+        return TextValidator(generate_hints=generate_hints)
     else:
         raise ValueError(f"Unsupported validation type: {base_type}")
     

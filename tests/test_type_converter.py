@@ -5,9 +5,10 @@ import pytest
 from typing import Literal, get_args, get_origin
 from pydantic import BaseModel
 from lamia.type_converter import create_validator
-from lamia.types import HTML, YAML, JSON, XML, CSV, Markdown, BaseModel as BaseModelType, BaseType
+from lamia.types import HTML, YAML, JSON, XML, CSV, Markdown, TEXT, BaseModel as BaseModelType, BaseType
 from lamia.validation.base import BaseValidator
 from lamia.validation.validators.file_validators.html_validator import HTMLValidator
+from lamia.validation.validators.file_validators.text_validator import TextValidator
 from lamia.validation.validators.file_validators.yaml_validator import YAMLValidator
 from lamia.validation.validators.file_validators.json_validator import JSONValidator
 from lamia.validation.validators.file_validators.xml_validator import XMLValidator
@@ -75,6 +76,25 @@ class TestBasicTypes:
         """Test Markdown basic type returns MarkdownValidator."""
         validator = create_validator(Markdown)
         assert isinstance(validator, MarkdownValidator)
+        assert isinstance(validator, BaseValidator)
+
+    def test_text_basic_type(self):
+        """Test TEXT basic type returns TextValidator."""
+        validator = create_validator(TEXT)
+        assert isinstance(validator, TextValidator)
+        assert isinstance(validator, BaseValidator)
+
+    def test_str_basic_type(self):
+        """Test str returns TextValidator."""
+        validator = create_validator(str)
+        assert isinstance(validator, TextValidator)
+        assert isinstance(validator, BaseValidator)
+
+    def test_txt_alias(self):
+        """Test TXT is an alias for TEXT and returns TextValidator."""
+        from lamia.types import TXT
+        validator = create_validator(TXT)
+        assert isinstance(validator, TextValidator)
         assert isinstance(validator, BaseValidator)
 
 

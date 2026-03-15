@@ -142,3 +142,21 @@ class Markdown(BaseType[T, S]):
     Use in function return annotations to validate Markdown content.
     """
     pass
+
+
+class TEXT(BaseType[T, S]):
+    """Raw text with no validation.
+
+    The Pythonic alias ``str`` can be used interchangeably::
+
+        result = "summarize this" -> str
+        result = "summarize this" -> TEXT
+
+    ``TXT`` is an additional alias that reads well with ``File()``::
+
+        "summarize this" -> File(TXT, "summary.txt")
+    """
+    pass
+
+
+TXT = TEXT

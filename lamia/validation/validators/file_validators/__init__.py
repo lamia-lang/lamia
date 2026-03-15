@@ -12,6 +12,7 @@ from .yaml_validator import YAMLValidator
 from .xml_validator import XMLValidator
 from .markdown_validator import MarkdownValidator
 from .csv_validator import CSVValidator
+from .text_validator import TextValidator
 
 __all__ = [
     "DocumentStructureValidator",
@@ -27,4 +28,5 @@ __all__ = [
     "XMLValidator",
     "MarkdownValidator",
     "CSVValidator",
+    "TextValidator",
 ] 

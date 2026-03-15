@@ -399,6 +399,65 @@ result = "Generate HTML about cats" -> File(HTML[CatModel], "{out}")
 
 
 # ===========================================================================
+# B2. STR / TEXT / TXT RETURN TYPES
+# ===========================================================================
+
+class TestStrReturnType:
+    """-> str, -> TEXT, and -> TXT return raw LLM text without validation."""
+
+    def test_str_function(self, executor, tmp_dir):
+        """def f() -> str: "prompt"  returns raw LLM text."""
+        path = _write_lm(tmp_dir, '''
+def gen() -> str:
+    "Generate HTML about cats"
+
+result = gen()
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert isinstance(g["result"], str)
+        assert "<h1>Cats</h1>" in g["result"]
+
+    def test_str_expression_assigned(self, executor, tmp_dir):
+        """result = "prompt" -> str  assigns raw text to variable."""
+        path = _write_lm(tmp_dir, '''
+result = "Generate HTML about cats" -> str
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert isinstance(g["result"], str)
+        assert "<h1>Cats</h1>" in g["result"]
+
+    def test_text_expression_assigned(self, executor, tmp_dir):
+        """result = "prompt" -> TEXT  works as alias for str."""
+        path = _write_lm(tmp_dir, '''
+result = "Generate HTML about cats" -> TEXT
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert isinstance(g["result"], str)
+        assert "<h1>Cats</h1>" in g["result"]
+
+    def test_txt_expression_assigned(self, executor, tmp_dir):
+        """result = "prompt" -> TXT  works as alias for str."""
+        path = _write_lm(tmp_dir, '''
+result = "Generate HTML about cats" -> TXT
+''')
+        g: dict = {}
+        executor.execute_file(path, g)
+        assert isinstance(g["result"], str)
+        assert "<h1>Cats</h1>" in g["result"]
+
+    def test_txt_file_write(self, executor, tmp_dir):
+        """'prompt' -> File(TXT, 'path')  writes raw text to file."""
+        out = os.path.join(tmp_dir, "raw.txt")
+        path = _write_lm(tmp_dir, f'"Generate HTML about cats" -> File(TXT, "{out}")')
+        executor.execute_file(path)
+        with open(out) as f:
+            assert "<h1>Cats</h1>" in f.read()
+
+
+# ===========================================================================
 # C. WEB FUNCTION SYNTAX — def f() -> Type: "url"  (needs Chrome)
 # ===========================================================================
 
@@ -562,7 +621,7 @@ result = greet()
         assert g["result"] == "hello"
 
     def test_no_return_type_string_body_is_llm(self, executor, tmp_dir):
-        """``def f(): "prompt"`` → no return type, string body = LLM, returns None."""
+        """``def f(): "prompt"`` → no return type, string body = LLM, returns raw text."""
         path = _write_lm(tmp_dir, '''
 def ask():
     "Tell me a joke"
@@ -571,7 +630,8 @@ result = ask()
 ''')
         g: dict = {}
         executor.execute_file(path, g)
-        assert g["result"] is None
+        assert isinstance(g["result"], str)
+        assert len(g["result"]) > 0
 
     def test_parameter_substitution(self, executor, tmp_dir):
         """``def f(x): "Write about {x}"`` → parameter is substituted into prompt."""
