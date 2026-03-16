@@ -1,0 +1,18 @@
+/* Header: black → dark green gradient so the logo blends in */
+.md-header {
+  background: linear-gradient(135deg, #000000 0%, #0d2b1a 60%, #1a4a28 100%);
+}
+
+/* Navigation tabs bar follows the same gradient */
+.md-tabs {
+  background: linear-gradient(135deg, #0a0a0a 0%, #122a1a 60%, #1a4228 100%);
+}
+
+/* Slightly lighten the search bar so it's visible on dark background */
+.md-search__form {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.md-search__form:hover {
+  background-color: rgba(255, 255, 255, 0.14);
+}
