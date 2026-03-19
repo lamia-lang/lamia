@@ -1,6 +1,7 @@
 """Retry wrapper for LLM adapters."""
 
-from typing import Optional
+from typing import Optional, Type
+from pydantic import BaseModel
 
 from ...llm.base import BaseLLMAdapter
 from ...llm.base import LLMModel, LLMResponse
@@ -57,7 +58,8 @@ class RetryingLLMAdapter(BaseLLMAdapter):
     async def generate(
         self,
         prompt: str,
-        model: Optional[LLMModel] = None
+        model: Optional[LLMModel] = None,
+        response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
         """Execute prompt with retry handling.
         
@@ -69,11 +71,17 @@ class RetryingLLMAdapter(BaseLLMAdapter):
         Args:
             prompt: The input prompt
             model: Optional model override
+            response_model: Optional Pydantic model for structured output
             
         Returns:
             LLMResponse containing the generated text and metadata
         """
-        return await self._retry_handler.execute(self._adapter.generate, prompt, model)
+        return await self._retry_handler.execute(
+            self._adapter.generate,
+            prompt,
+            model=model,
+            response_model=response_model,
+        )
     
     def get_stats(self):
         """Get retry statistics if enabled."""

@@ -100,12 +100,13 @@ working directory, so all commands below use ~ as a stable anchor.
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Type
 
 import aiohttp
 
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from lamia import LLMModel
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,12 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
                 timeout=aiohttp.ClientTimeout(total=600),
             )
 
-    async def generate(self, prompt: str, model: LLMModel) -> LLMResponse:
+    async def generate(
+        self,
+        prompt: str,
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
         if self.session is None:
             await self.async_initialize()
         assert self.session is not None
@@ -157,6 +163,15 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
             payload["max_tokens"] = model.max_tokens
         if model.top_p is not None:
             payload["top_p"] = model.top_p
+        if response_model is not None:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "schema": response_model.model_json_schema(),
+                    "strict": True,
+                },
+            }
 
         url = f"{self.base_url}/v1/chat/completions"
         logger.debug("Requesting %s with model=%s", url, model_name)

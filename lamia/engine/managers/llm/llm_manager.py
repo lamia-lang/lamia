@@ -1,4 +1,5 @@
-from typing import List, Optional, Dict, Any, Set, Tuple
+from typing import List, Optional, Dict, Any, Set, Tuple, Type
+from pydantic import BaseModel
 
 from lamia.adapters.llm.lamia_adapter import LamiaAdapter
 from lamia import LLMModel
@@ -12,6 +13,8 @@ from lamia.errors import MissingAPIKeysError
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import LLMCommand
 from .files_context_manager import get_active_files_context
+from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
+from lamia.validation.validators.object_validator import ObjectValidator
 import logging
 
 logger = logging.getLogger(__name__)
@@ -251,6 +254,40 @@ class LLMManager(Manager):
         # All models failed
         raise ValueError(f"All models failed: {', '.join(failed_models)}")
 
+    @staticmethod
+    def _extract_response_model(validator: Optional[BaseValidator]) -> Optional[Type[BaseModel]]:
+        """Return the Pydantic model for provider-native structured output, if applicable.
+
+        Only JSONStructureValidator and ObjectValidator support provider-native structured
+        output, because the schema validation and extracton can be offloaded directly to the model provider —
+        eliminating Lamia's own extraction. Also, retry loop cycles are greatly reduced. If a schema keyword is enforced by a provider, chances of model returning not valid response is almost 0.
+        Note that Lamia still does the it's own validations because not all json schema constraints are forced by not all model providers and bug might happen in provider responses.
+
+        HTML, XML, YAML, Markdown, CSV, and plain text validators intentionally remain
+        on regular text generation with Lamia-side validation. Reasons:
+        - LLMs produce better HTML, XML, and other structured formats as plain text
+        than when forced to emit them as JSON string values.
+        - No JSON escaping nightmare: figuring out how to represent HTML attributes,
+        self-closing tags, and non-trivial components inside a JSON string is painful
+        and error-prone.
+        - No need to convert the result back from JSON to the target format after the fact.
+        - Requesting HTML (or XML, YAML, Markdown) as a JSON string field would require
+        the model to JSON-escape every quote, newline, and special character inside the
+        markup — recreating the exact escaping problem that structured output is meant
+        to solve, but worse. The result would then need to be unescaped and decoded back
+        into the original format anyway.
+        - Plain text responses are compatible with streaming (HTML, TEXT, Markdown, etc.)
+        if Lamia adds streaming support in the future. Provider-native structured output
+        requires buffering the full response before delivery, making streaming impractical
+        for strict schema assembly.
+
+        """
+        if isinstance(validator, JSONStructureValidator):
+            return validator.model
+        if isinstance(validator, ObjectValidator):
+            return validator.model
+        return None
+
     async def _generate_and_validate(
         self,
         adapter: BaseLLMAdapter,
@@ -276,7 +313,12 @@ class LLMManager(Manager):
             
             logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
             logger.debug(f"Current prompt: {current_prompt}")
-            response = await adapter.generate(current_prompt, model=model)
+            response_model = self._extract_response_model(validator)
+            response = await adapter.generate(
+                current_prompt,
+                model=model,
+                response_model=response_model,
+            )
             logger.info(f"[Lamia][Answer][Attempt {attempts}] Received response from model '{model.name}'")
             logger.debug(f"Response: {response.text}")
             

@@ -1,7 +1,8 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Type
 import aiohttp
 from .base import BaseLLMAdapter, LLMResponse
 from lamia import LLMModel
+from pydantic import BaseModel
 
 # Try to import OpenAI SDK at module level
 try:
@@ -48,7 +49,7 @@ class OpenAIAdapter(BaseLLMAdapter):
         if self._use_sdk:
             # Ensure client is available (patch-friendly)
             if self.client is None:
-                self.client = openai.AsyncOpenAI(api_key=self.api_key)
+                self.client = AsyncOpenAI(api_key=self.api_key)
         else:
             # Ensure aiohttp session is created with patched ClientSession
             if self.session is None:
@@ -63,25 +64,40 @@ class OpenAIAdapter(BaseLLMAdapter):
         self,
         prompt: str,
         model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
         """Generate a response using OpenAI's API."""
+        response_format = None
+        if response_model is not None:
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "schema": response_model.model_json_schema(),
+                    "strict": True,
+                },
+            }
+
         if self._use_sdk:
-            response = await self.client.chat.completions.create(
-                model=model.name,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=model.temperature,
-                max_tokens=model.max_tokens,
-                top_p=model.top_p,
-                top_k=model.top_k,
-                frequency_penalty=model.frequency_penalty,
-                presence_penalty=model.presence_penalty,
-                seed=model.seed,
-            )
+            request_kwargs: Dict[str, Any] = {
+                "model": model.get_model_name_without_provider(),
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": model.temperature,
+                "max_tokens": model.max_tokens,
+                "top_p": model.top_p,
+                "frequency_penalty": model.frequency_penalty,
+                "presence_penalty": model.presence_penalty,
+                "seed": model.seed,
+            }
+            if response_format is not None:
+                request_kwargs["response_format"] = response_format
+
+            response = await self.client.chat.completions.create(**request_kwargs)
             
             return LLMResponse(
                 text=response.choices[0].message.content,
                 raw_response=response,
-                model=self.model,
+                model=model.name,
                 usage={
                     "prompt_tokens": response.usage.prompt_tokens,
                     "completion_tokens": response.usage.completion_tokens,
@@ -91,22 +107,20 @@ class OpenAIAdapter(BaseLLMAdapter):
         else:
             # HTTP fallback
             payload = {
-                "model": self.model,
+                "model": model.get_model_name_without_provider(),
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": model.temperature,
                 "max_tokens": model.max_tokens,
                 "top_p": model.top_p,
-                "top_k": model.top_k,
                 "frequency_penalty": model.frequency_penalty,
                 "presence_penalty": model.presence_penalty,
                 "seed": model.seed,
             }
-            if model.stop_sequences is not None:
-                payload["stop"] = model.stop_sequences
-            payload.update(kwargs)
+            if response_format is not None:
+                payload["response_format"] = response_format
             
             try:
-                async with await self.session.post(self.API_URL, json=payload) as response:
+                async with self.session.post(self.API_URL, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         raise RuntimeError(f"OpenAI API error: {error_text}")
@@ -116,7 +130,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                     return LLMResponse(
                         text=data["choices"][0]["message"]["content"],
                         raw_response=data,
-                        model=self.model,
+                        model=model.name,
                         usage=data.get("usage", {})
                     )
                     

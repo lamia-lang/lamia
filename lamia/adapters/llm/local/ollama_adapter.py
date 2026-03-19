@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Type
 import aiohttp
 import json
 import logging
@@ -10,6 +10,7 @@ import weakref
 import atexit
 from ..base import BaseLLMAdapter, LLMResponse, LLMModel
 from lamia.errors import OllamaNotInstalledError
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,7 @@ class OllamaAdapter(BaseLLMAdapter):
         self,
         prompt: str,
         model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
         """Generate a response using the Ollama model."""
         
@@ -147,6 +149,8 @@ class OllamaAdapter(BaseLLMAdapter):
                 "seed": model.seed,
             }
         }
+        if response_model is not None:
+            payload["format"] = response_model.model_json_schema()
 
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300)) as session: # 5 minutes total timeout, local models on normal computers are slow

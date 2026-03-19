@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Type
 import os
 from pathlib import Path
 
@@ -9,6 +9,7 @@ except ImportError:
     LLAMA_CPP_AVAILABLE = False
 
 from ..base import BaseLLMAdapter, LLMResponse
+from pydantic import BaseModel
 
 class LlamaAdapter(BaseLLMAdapter):
     """Adapter for local LLaMA models using llama.cpp Python bindings."""
@@ -44,15 +45,19 @@ class LlamaAdapter(BaseLLMAdapter):
     async def generate(
         self,
         prompt: str,
-        *,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[list[str]] = None,
+        model: Optional[object] = None,
+        response_model: Optional[Type[BaseModel]] = None,
         **kwargs
     ) -> LLMResponse:
         """Generate a response using local LLaMA model."""
         if not self.model:
             raise RuntimeError("Adapter not initialized. Use 'async with' or call initialize()")
+
+        temperature = kwargs.pop("temperature", 0.7)
+        max_tokens = kwargs.pop("max_tokens", None)
+        stop_sequences = kwargs.pop("stop_sequences", None)
+        # response_model is currently ignored for llama.cpp local adapter.
+        _ = response_model
 
         # Set default max_tokens if not provided
         n_ctx = self.configs.get('n_ctx', 2048)

@@ -1,8 +1,9 @@
-from typing import Optional, Dict, Any, Set
+from typing import Optional, Dict, Any, Set, Type
 import aiohttp
 import json
 from lamia import LLMModel
 from .base import BaseLLMAdapter, LLMResponse
+from pydantic import BaseModel
 
 class LamiaAdapter(BaseLLMAdapter):
     """Lamia API adapter that proxies requests to multiple providers."""
@@ -51,7 +52,13 @@ class LamiaAdapter(BaseLLMAdapter):
         else:
             raise ValueError(f"Unsupported provider by Lamia proxy: {provider}")
 
-    def _build_request_payload(self, prompt: str, model: LLMModel, provider: str) -> Dict[str, Any]:
+    def _build_request_payload(
+        self,
+        prompt: str,
+        model: LLMModel,
+        provider: str,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> Dict[str, Any]:
         """Build request payload according to provider's format."""
         
         base_payload = {
@@ -68,6 +75,13 @@ class LamiaAdapter(BaseLLMAdapter):
             }
             if model.top_p is not None:
                 payload["top_p"] = model.top_p
+            if response_model is not None:
+                payload["tools"] = [{
+                    "name": "structured_response",
+                    "description": "Return structured response",
+                    "input_schema": response_model.model_json_schema(),
+                }]
+                payload["tool_choice"] = {"type": "tool", "name": "structured_response"}
         else:
             # OpenAI format (default)
             payload = {
@@ -85,6 +99,15 @@ class LamiaAdapter(BaseLLMAdapter):
                 payload["presence_penalty"] = model.presence_penalty
             if model.seed is not None:
                 payload["seed"] = model.seed
+            if response_model is not None:
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": response_model.__name__,
+                        "schema": response_model.model_json_schema(),
+                        "strict": True,
+                    },
+                }
             #if model.stop_sequences is not None:
             #    payload["stop"] = model.stop_sequences
         
@@ -96,7 +119,7 @@ class LamiaAdapter(BaseLLMAdapter):
         if provider == "anthropic":
             # Anthropic response format
             if "content" in data and len(data["content"]) > 0:
-                text = data["content"][0]["text"]
+                text = self._extract_anthropic_text(data["content"])
             else:
                 raise RuntimeError("Invalid response format from Anthropic via Lamia")
             
@@ -126,10 +149,21 @@ class LamiaAdapter(BaseLLMAdapter):
             usage=usage
         )
 
+    @staticmethod
+    def _extract_anthropic_text(content_blocks: list[Dict[str, Any]]) -> str:
+        for block in content_blocks:
+            if block.get("type") == "tool_use":
+                return json.dumps(block.get("input", {}))
+        for block in content_blocks:
+            if block.get("type") == "text":
+                return block.get("text", "")
+        raise RuntimeError("Invalid Anthropic response format: expected text or tool_use block")
+
     async def generate(
         self,
         prompt: str,
-        model: LLMModel
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
         """Generate a response using Lamia's API."""
         if not self.session:
@@ -142,7 +176,12 @@ class LamiaAdapter(BaseLLMAdapter):
         
         # Build request payload according to provider's format
         print(f"Building request payload for {provider_name} with model {model.name}")
-        payload = self._build_request_payload(prompt, model, provider_name)
+        payload = self._build_request_payload(
+            prompt,
+            model,
+            provider_name,
+            response_model=response_model,
+        )
         
         try:
             async with self.session.post(endpoint_url, json=payload) as response:

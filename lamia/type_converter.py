@@ -117,4 +117,6 @@ def _create_markdown_validator(model, strict: bool, generate_hints: bool) -> Bas
         return MarkdownValidator(generate_hints=generate_hints)
     
 def _create_object_validator(model, strict: bool, generate_hints: bool) -> BaseValidator:
-    return ObjectValidator(strict=strict, generate_hints=generate_hints)
+    if model is None:
+        raise ValueError("BaseModel validation requires a concrete Pydantic model, e.g. BaseModel[MySchema]")
+    return ObjectValidator(schema=model, strict=strict, generate_hints=generate_hints)

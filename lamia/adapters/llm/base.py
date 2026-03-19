@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type
+from pydantic import BaseModel
 from lamia import LLMModel
 
 @dataclass
@@ -49,7 +50,8 @@ class BaseLLMAdapter(ABC):
     async def generate(
         self,
         prompt: str,
-        model: LLMModel
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
         """Generate a response from the LLM.
         
@@ -58,6 +60,8 @@ class BaseLLMAdapter(ABC):
         Args:
             prompt: The input prompt text
             model: The LLM model configuration
+            response_model: Optional Pydantic model for provider-native
+                structured output when supported
             
         Returns:
             LLMResponse containing the generated text and metadata

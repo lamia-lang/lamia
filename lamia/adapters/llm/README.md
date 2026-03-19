@@ -17,7 +17,7 @@ All adapters must subclass `BaseLLMAdapter` from `base.py` and implement the fol
 - `env_var_names(cls)`: Return a list of environment variable names to try, in order of precedence. You will usually use this for defining the API key environment variable names. You can return an empty list if no API key is required.
 - `is_remote(cls)`: Return True if this adapter makes network calls, False for local.
 - `initialize(self)`: Prepare resources (e.g., open API session, load model).
-- `generate(self, prompt, ...)`: Generate a response from the model.
+- `generate(self, prompt, model, response_model=None)`: Generate a response from the LLM model.
 - `close(self)`: Clean up resources.
 
 See `base.py` for the full interface and docstrings.
@@ -31,6 +31,9 @@ See `base.py` for the full interface and docstrings.
 ```python
 from .base import BaseLLMAdapter, LLMResponse
 import aiohttp
+from typing import Optional, Type
+from pydantic import BaseModel
+from lamia import LLMModel
 
 class MyRemoteAdapter(BaseLLMAdapter):
     API_URL = "https://api.example.com/v1/generate"
@@ -47,15 +50,29 @@ class MyRemoteAdapter(BaseLLMAdapter):
             "Content-Type": "application/json"
         })
 
-    async def generate(self, prompt: str, **kwargs) -> LLMResponse:
-        payload = {"model": self.model, "prompt": prompt, **kwargs}
+    async def generate(
+        self,
+        prompt: str,
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
+        payload = {"model": model.get_model_name_without_provider(), "prompt": prompt}
+        if response_model is not None:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "schema": response_model.model_json_schema(),
+                    "strict": True,
+                },
+            }
         async with self.session.post(self.API_URL, json=payload) as resp:
             data = await resp.json()
             return LLMResponse(
                 text=data["result"],
                 raw_response=data,
                 usage=data.get("usage", {}),
-                model=self.model
+                model=model.name
             )
 
     async def close(self):
@@ -74,6 +91,9 @@ class MyRemoteAdapter(BaseLLMAdapter):
 from .base import BaseLLMAdapter, LLMResponse
 import subprocess
 import aiohttp
+from typing import Optional, Type
+from pydantic import BaseModel
+from lamia import LLMModel
 
 class MyLocalAdapter(BaseLLMAdapter):
     def __init__(self, model_path: str, **engine_config):
@@ -86,9 +106,15 @@ class MyLocalAdapter(BaseLLMAdapter):
         # subprocess.Popen(["my-engine", ...])
         self.session = aiohttp.ClientSession()
 
-    async def generate(self, prompt: str, **kwargs) -> LLMResponse:
+    async def generate(
+        self,
+        prompt: str,
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
         # Example: send prompt to local HTTP server
-        payload = {"model_path": self.model_path, "prompt": prompt, **kwargs}
+        payload = {"model_path": self.model_path, "prompt": prompt}
+        # Local adapters can ignore response_model if unsupported
         async with self.session.post("http://localhost:1234/generate", json=payload) as resp:
             data = await resp.json()
             return LLMResponse(
