@@ -214,8 +214,12 @@ class LLMManager(Manager):
             RuntimeError: If all models in the chain fail
         """
         if validator is not None:
-            initial_hints = validator.initial_hint
-            current_prompt = f"{initial_hints}\n\n{prompt}"
+            response_model = self._extract_response_model(validator)
+            if response_model is None:
+                initial_hints = validator.initial_hint
+                current_prompt = f"{initial_hints}\n\n{prompt}"
+            else:
+                current_prompt = prompt
         else:
             current_prompt = prompt
 

@@ -1,6 +1,5 @@
 from typing import Optional, Dict, Any, Set, Type
 import aiohttp
-import json
 from lamia import LLMModel
 from .base import BaseLLMAdapter, LLMResponse
 from pydantic import BaseModel
@@ -76,12 +75,13 @@ class LamiaAdapter(BaseLLMAdapter):
             if model.top_p is not None:
                 payload["top_p"] = model.top_p
             if response_model is not None:
-                payload["tools"] = [{
-                    "name": "structured_response",
-                    "description": "Return structured response",
-                    "input_schema": response_model.model_json_schema(),
-                }]
-                payload["tool_choice"] = {"type": "tool", "name": "structured_response"}
+                payload["output_config"] = {
+                    "format": {
+                        "type": "json_schema",
+                        "name": response_model.__name__,
+                        "schema": response_model.model_json_schema(),
+                    }
+                }
         else:
             # OpenAI format (default)
             payload = {
@@ -152,12 +152,9 @@ class LamiaAdapter(BaseLLMAdapter):
     @staticmethod
     def _extract_anthropic_text(content_blocks: list[Dict[str, Any]]) -> str:
         for block in content_blocks:
-            if block.get("type") == "tool_use":
-                return json.dumps(block.get("input", {}))
-        for block in content_blocks:
             if block.get("type") == "text":
                 return block.get("text", "")
-        raise RuntimeError("Invalid Anthropic response format: expected text or tool_use block")
+        raise RuntimeError("Invalid Anthropic response format: no text block found")
 
     async def generate(
         self,
