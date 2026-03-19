@@ -75,7 +75,7 @@ class MockServerLLMAdapter(BaseLLMAdapter):
     async def async_initialize(self) -> None:
         self._session = aiohttp.ClientSession()
 
-    async def generate(self, prompt: str, model: LLMModel) -> LLMResponse:
+    async def generate(self, prompt: str, model: LLMModel, response_model=None) -> LLMResponse:
         self.captured_prompts.append(prompt)
         assert self._session is not None
         url = f"{self._base_url}/v1/chat/completions"

@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import os
+from pydantic import BaseModel
 from lamia.engine.managers.llm.llm_manager import LLMManager
 from lamia.engine.config_provider import ConfigProvider
 from lamia.engine.managers.llm.providers import ProviderRegistry
@@ -1129,6 +1130,217 @@ class TestLLMManagerEndToEnd:
             adapter = await manager.create_adapter_from_config(model, with_retries=False)
             assert isinstance(adapter, OllamaAdapter)
             assert adapter.base_url == "http://localhost:11434"
+
+
+class TestExtractResponseModel:
+    """Test _extract_response_model static method."""
+
+    def setup_method(self):
+        config_dict = {}
+        config_provider = ConfigProvider(config_dict)
+        with patch.object(LLMManager, '_check_all_required_api_keys'):
+            self.manager = LLMManager(config_provider)
+
+    def test_returns_model_for_json_structure_validator(self):
+        """JSONStructureValidator should yield its Pydantic model."""
+        from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
+
+        class MySchema(BaseModel):
+            name: str
+
+        validator = Mock(spec=JSONStructureValidator)
+        validator.model = MySchema
+        # isinstance check needs the real class, so patch it
+        with patch('lamia.engine.managers.llm.llm_manager.isinstance', side_effect=lambda obj, cls: cls is JSONStructureValidator):
+            result = LLMManager._extract_response_model(validator)
+        # Use direct call — mock spec means isinstance returns True
+        result = LLMManager._extract_response_model(validator)
+        assert result is MySchema
+
+    def test_returns_model_for_object_validator(self):
+        """ObjectValidator should yield its Pydantic model."""
+        from lamia.validation.validators.object_validator import ObjectValidator
+
+        class MyObj(BaseModel):
+            value: int
+
+        validator = Mock(spec=ObjectValidator)
+        validator.model = MyObj
+        result = LLMManager._extract_response_model(validator)
+        assert result is MyObj
+
+    def test_returns_none_for_text_validator(self):
+        """TextValidator (or any non-JSON/Object validator) returns None."""
+        from lamia.validation.validators.file_validators.text_validator import TextValidator
+
+        validator = Mock(spec=TextValidator)
+        result = LLMManager._extract_response_model(validator)
+        assert result is None
+
+    def test_returns_none_for_none(self):
+        """None validator returns None."""
+        result = LLMManager._extract_response_model(None)
+        assert result is None
+
+    def test_returns_none_for_generic_validator(self):
+        """A plain BaseValidator should return None."""
+        validator = Mock(spec=BaseValidator)
+        result = LLMManager._extract_response_model(validator)
+        assert result is None
+
+
+class TestHintSuppression:
+    """Test that initial_hint is suppressed when structured output is active."""
+
+    def setup_method(self):
+        self.mock_model1 = Mock(spec=LLMModel)
+        self.mock_model1.name = "gpt-4"
+        self.mock_model1.get_provider_name.return_value = "openai"
+        self.mock_model_with_retries1 = Mock(spec=ModelWithRetries)
+        self.mock_model_with_retries1.model = self.mock_model1
+        self.mock_model_with_retries1.retries = 1
+
+        config_dict = {'model_chain': [self.mock_model_with_retries1]}
+        config_provider = ConfigProvider(config_dict)
+
+        with patch.object(LLMManager, '_check_all_required_providers'):
+            with patch.object(LLMManager, '_check_all_required_api_keys'):
+                self.manager = LLMManager(config_provider)
+
+    @pytest.mark.asyncio
+    async def test_hint_suppressed_for_json_structure_validator(self):
+        """When validator yields a response_model, initial_hint must NOT be in the prompt."""
+        from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
+
+        class Schema(BaseModel):
+            x: int
+
+        validator = Mock(spec=JSONStructureValidator)
+        validator.model = Schema
+        validator.initial_hint = "You MUST return JSON matching this schema ..."
+
+        mock_adapter = Mock(spec=BaseLLMAdapter)
+        self.manager._adapter_cache[self.mock_model1] = mock_adapter
+
+        mock_result = ValidationResult(
+            is_valid=True, raw_text="ok", validated_text="ok", execution_context=Mock()
+        )
+        with patch.object(self.manager, '_generate_and_validate', return_value=mock_result) as mock_gen:
+            await self.manager._execute_with_retries("user prompt", validator=validator)
+            call_prompt = mock_gen.call_args.kwargs['prompt']
+            assert "user prompt" in call_prompt
+            assert validator.initial_hint not in call_prompt
+
+    @pytest.mark.asyncio
+    async def test_hint_included_for_text_validator(self):
+        """When validator does NOT yield a response_model, initial_hint must be in the prompt."""
+        from lamia.validation.validators.file_validators.text_validator import TextValidator
+
+        validator = Mock(spec=TextValidator)
+        validator.initial_hint = "Return plain text"
+
+        mock_adapter = Mock(spec=BaseLLMAdapter)
+        self.manager._adapter_cache[self.mock_model1] = mock_adapter
+
+        mock_result = ValidationResult(
+            is_valid=True, raw_text="ok", validated_text="ok", execution_context=Mock()
+        )
+        with patch.object(self.manager, '_generate_and_validate', return_value=mock_result) as mock_gen:
+            await self.manager._execute_with_retries("user prompt", validator=validator)
+            call_prompt = mock_gen.call_args.kwargs['prompt']
+            assert "Return plain text" in call_prompt
+            assert "user prompt" in call_prompt
+
+    @pytest.mark.asyncio
+    async def test_no_hint_when_no_validator(self):
+        """When no validator is provided, prompt is passed through unchanged."""
+        mock_adapter = Mock(spec=BaseLLMAdapter)
+        self.manager._adapter_cache[self.mock_model1] = mock_adapter
+
+        mock_result = ValidationResult(
+            is_valid=True, raw_text="ok", validated_text="ok", execution_context=Mock()
+        )
+        with patch.object(self.manager, '_generate_and_validate', return_value=mock_result) as mock_gen:
+            await self.manager._execute_with_retries("raw prompt")
+            call_prompt = mock_gen.call_args.kwargs['prompt']
+            assert call_prompt == "raw prompt"
+
+
+class TestGenerateAndValidateResponseModel:
+    """Test that _generate_and_validate passes response_model to adapter.generate."""
+
+    def setup_method(self):
+        config_dict = {}
+        config_provider = ConfigProvider(config_dict)
+        with patch.object(LLMManager, '_check_all_required_api_keys'):
+            self.manager = LLMManager(config_provider)
+
+    @pytest.mark.asyncio
+    async def test_passes_response_model_for_json_validator(self):
+        """adapter.generate must receive the Pydantic model when JSONStructureValidator is used."""
+        from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
+
+        class MySchema(BaseModel):
+            name: str
+
+        validator = Mock(spec=JSONStructureValidator)
+        validator.model = MySchema
+
+        mock_adapter = AsyncMock(spec=BaseLLMAdapter)
+        mock_response = Mock(spec=LLMResponse)
+        mock_response.text = '{"name": "test"}'
+        mock_response.usage = {"tokens": 10}
+        mock_response.model = "gpt-4"
+        mock_adapter.generate.return_value = mock_response
+
+        mock_validation = ValidationResult(
+            is_valid=True, raw_text='{"name": "test"}', validated_text='{"name": "test"}',
+            execution_context=Mock()
+        )
+        validator.validate = AsyncMock(return_value=mock_validation)
+
+        mock_model = Mock(spec=LLMModel)
+        mock_model.name = "gpt-4"
+
+        result = await self.manager._generate_and_validate(
+            adapter=mock_adapter, model=mock_model,
+            prompt="test", validator=validator, max_attempts=1
+        )
+
+        assert result == mock_validation
+        call_kwargs = mock_adapter.generate.call_args.kwargs
+        assert call_kwargs['response_model'] is MySchema
+
+    @pytest.mark.asyncio
+    async def test_passes_none_for_text_validator(self):
+        """adapter.generate must receive response_model=None for non-JSON validators."""
+        from lamia.validation.validators.file_validators.text_validator import TextValidator
+
+        validator = Mock(spec=TextValidator)
+
+        mock_adapter = AsyncMock(spec=BaseLLMAdapter)
+        mock_response = Mock(spec=LLMResponse)
+        mock_response.text = "hello"
+        mock_response.usage = {"tokens": 5}
+        mock_response.model = "gpt-4"
+        mock_adapter.generate.return_value = mock_response
+
+        mock_validation = ValidationResult(
+            is_valid=True, raw_text="hello", validated_text="hello",
+            execution_context=Mock()
+        )
+        validator.validate = AsyncMock(return_value=mock_validation)
+
+        mock_model = Mock(spec=LLMModel)
+        mock_model.name = "gpt-4"
+
+        await self.manager._generate_and_validate(
+            adapter=mock_adapter, model=mock_model,
+            prompt="test", validator=validator, max_attempts=1
+        )
+
+        call_kwargs = mock_adapter.generate.call_args.kwargs
+        assert call_kwargs['response_model'] is None
 
 
 def _create_config_provider(model_chain_specs, api_keys=None, providers=None):

@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import aiohttp
+from pydantic import BaseModel
 from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter, ANTHROPIC_AVAILABLE
 from lamia.adapters.llm.base import LLMResponse
 from lamia import LLMModel
@@ -468,3 +469,120 @@ class TestAnthropicAdapterIntegration:
                 
                 # Verify cleanup was called
                 mock_client.close.assert_called_once()
+
+
+class TestAnthropicAdapterStructuredOutput:
+    """Test structured output with response_model."""
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', True)
+    async def test_generate_with_response_model_sdk(self):
+        """SDK path sends output_config when response_model is provided."""
+        with patch('lamia.adapters.llm.anthropic_adapter.AsyncAnthropic') as mock_anthropic:
+            mock_client = AsyncMock()
+            mock_anthropic.return_value = mock_client
+
+            mock_response = Mock()
+            mock_response.content = [Mock(text='{"ticker": "AAPL"}')]
+            mock_response.usage.input_tokens = 10
+            mock_response.usage.output_tokens = 5
+            mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+            adapter = AnthropicAdapter(api_key="test-key")
+
+            class StockQuote(BaseModel):
+                ticker: str
+
+            mock_model = Mock(spec=LLMModel)
+            mock_model.name = "anthropic/claude-3-sonnet"
+            mock_model.temperature = 0.7
+            mock_model.max_tokens = 1000
+            mock_model.top_p = 1.0
+            mock_model.get_model_name_without_provider.return_value = "claude-3-sonnet"
+
+            response = await adapter.generate("Get AAPL", mock_model, response_model=StockQuote)
+
+            assert response.text == '{"ticker": "AAPL"}'
+
+            call_kwargs = mock_client.messages.create.call_args.kwargs
+            assert "output_config" in call_kwargs
+            fmt = call_kwargs["output_config"]["format"]
+            assert fmt["type"] == "json_schema"
+            assert fmt["name"] == "StockQuote"
+            assert "ticker" in fmt["schema"]["properties"]
+            assert "tools" not in call_kwargs
+            assert "tool_choice" not in call_kwargs
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', True)
+    async def test_generate_without_response_model_no_output_config(self):
+        """SDK path should NOT include output_config when response_model is None."""
+        with patch('lamia.adapters.llm.anthropic_adapter.AsyncAnthropic') as mock_anthropic:
+            mock_client = AsyncMock()
+            mock_anthropic.return_value = mock_client
+
+            mock_response = Mock()
+            mock_response.content = [Mock(text="plain text response")]
+            mock_response.usage.input_tokens = 5
+            mock_response.usage.output_tokens = 3
+            mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+            adapter = AnthropicAdapter(api_key="test-key")
+
+            mock_model = Mock(spec=LLMModel)
+            mock_model.name = "anthropic/claude-3-sonnet"
+            mock_model.temperature = 0.7
+            mock_model.max_tokens = 1000
+            mock_model.top_p = 1.0
+            mock_model.get_model_name_without_provider.return_value = "claude-3-sonnet"
+
+            response = await adapter.generate("Hello", mock_model)
+
+            assert response.text == "plain text response"
+            call_kwargs = mock_client.messages.create.call_args.kwargs
+            assert "output_config" not in call_kwargs
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', False)
+    async def test_generate_with_response_model_http(self):
+        """HTTP path sends output_config when response_model is provided."""
+        with patch('aiohttp.ClientSession') as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+
+            mock_http_response = AsyncMock()
+            mock_http_response.status = 200
+            mock_http_response.json = AsyncMock(return_value={
+                "content": [{"text": '{"ticker": "GOOG"}'}],
+                "usage": {"input_tokens": 10, "output_tokens": 5}
+            })
+
+            class MockPostContext:
+                def __init__(self, resp):
+                    self.response = resp
+                async def __aenter__(self):
+                    return self.response
+                async def __aexit__(self, *a):
+                    return None
+
+            mock_session.post.return_value = MockPostContext(mock_http_response)
+
+            adapter = AnthropicAdapter(api_key="test-key")
+
+            class Quote(BaseModel):
+                ticker: str
+
+            mock_model = Mock(spec=LLMModel)
+            mock_model.name = "anthropic/claude-3-haiku"
+            mock_model.temperature = 0.5
+            mock_model.max_tokens = 500
+            mock_model.top_p = 0.9
+            mock_model.get_model_name_without_provider.return_value = "claude-3-haiku"
+
+            response = await adapter.generate("Get GOOG", mock_model, response_model=Quote)
+
+            assert response.text == '{"ticker": "GOOG"}'
+            payload = mock_session.post.call_args.kwargs['json']
+            assert "output_config" in payload
+            assert payload["output_config"]["format"]["type"] == "json_schema"
+            assert "tools" not in payload

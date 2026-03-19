@@ -346,19 +346,13 @@ class TestBaseModelType:
     """Test BaseModel type handling."""
 
     def test_base_model_type(self):
-        """Test BaseModel returns ObjectValidator."""
-        # Note: BaseModel from pydantic doesn't support type parameters
-        # The code checks if base_type is BaseModel, so we test with BaseModel itself
-        # However, ObjectValidator requires a schema parameter, so this will fail
-        # This tests the actual behavior of the code
-        with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        """Test bare BaseModel (no schema) raises ValueError."""
+        with pytest.raises(ValueError, match="BaseModel validation requires a concrete Pydantic model"):
             create_validator(BaseModelType)
 
     def test_base_model_requires_schema(self):
-        """Test that BaseModel type requires schema parameter in ObjectValidator."""
-        # The current implementation has a bug - it doesn't pass model to ObjectValidator
-        # This test documents the current behavior
-        with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        """Test that BaseModel type without a concrete schema raises ValueError."""
+        with pytest.raises(ValueError, match="BaseModel validation requires a concrete Pydantic model"):
             create_validator(BaseModelType)
 
 

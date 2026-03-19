@@ -35,7 +35,7 @@ class MyExtensionAdapter(BaseLLMAdapter):
     def env_var_names(cls) -> list[str]:
         return []  # No API key needed
     
-    async def generate(self, prompt: str, model: LLMModel) -> LLMResponse:
+    async def generate(self, prompt: str, model: LLMModel, response_model=None) -> LLMResponse:
         return LLMResponse(
             text=f"Echo: {prompt}",
             raw_response=None,

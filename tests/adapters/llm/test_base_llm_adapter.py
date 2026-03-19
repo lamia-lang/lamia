@@ -70,7 +70,7 @@ class ConcreteAdapter(BaseLLMAdapter):
     def is_remote(cls) -> bool:
         return True
     
-    async def generate(self, prompt: str, model: LLMModel) -> LLMResponse:
+    async def generate(self, prompt: str, model: LLMModel, response_model=None) -> LLMResponse:
         return LLMResponse(
             text=f"Response to: {prompt}",
             raw_response={"prompt": prompt},
@@ -232,7 +232,7 @@ class TestBaseLLMAdapterAbstractMethods:
             def is_remote(cls) -> bool:
                 return True
             
-            async def generate(self, prompt: str, model: LLMModel) -> LLMResponse:
+            async def generate(self, prompt: str, model: LLMModel, response_model=None) -> LLMResponse:
                 pass
             
             async def close(self) -> None:
@@ -249,7 +249,7 @@ class TestBaseLLMAdapterAbstractMethods:
             def name(cls) -> str:
                 return "bad"
             
-            async def generate(self, prompt: str, model: LLMModel) -> LLMResponse:
+            async def generate(self, prompt: str, model: LLMModel, response_model=None) -> LLMResponse:
                 pass
             
             async def close(self) -> None:
@@ -288,7 +288,7 @@ class TestBaseLLMAdapterAbstractMethods:
             def is_remote(cls) -> bool:
                 return True
             
-            async def generate(self, prompt: str, model: LLMModel) -> LLMResponse:
+            async def generate(self, prompt: str, model: LLMModel, response_model=None) -> LLMResponse:
                 pass
         
         with pytest.raises(TypeError, match="Can't instantiate abstract class.*close"):
@@ -330,7 +330,7 @@ class TestBaseLLMAdapterVariants:
         """Test adapter with complex generation logic."""
         
         class ComplexAdapter(ConcreteAdapter):
-            async def generate(self, prompt: str, model: LLMModel) -> LLMResponse:
+            async def generate(self, prompt: str, model: LLMModel, response_model=None) -> LLMResponse:
                 # Simulate processing
                 processed_prompt = prompt.upper()
                 

@@ -230,7 +230,7 @@ class TestRetryingLLMAdapterOperations:
         result = await wrapper.generate("Test prompt", model=model)
 
         assert result.text == "Generated text"
-        mock_llm_adapter.generate.assert_called_once_with("Test prompt", model)
+        mock_llm_adapter.generate.assert_called_once_with("Test prompt", model=model, response_model=None)
 
     async def test_generate_with_retry(self, mock_llm_adapter, retry_config):
         """Test generation with retry on rate limit."""

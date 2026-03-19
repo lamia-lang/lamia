@@ -226,7 +226,7 @@ class TestLamiaAdapterResponseParsing:
         mock_model.name = "anthropic/claude-3-sonnet"
         
         response_data = {
-            "content": [{"text": "Anthropic response"}],
+            "content": [{"type": "text", "text": "Anthropic response"}],
             "usage": {"input_tokens": 10, "output_tokens": 5}
         }
         
@@ -339,7 +339,7 @@ class TestLamiaAdapterGeneration:
         mock_http_response = AsyncMock()
         mock_http_response.status = 200
         mock_http_response.json = AsyncMock(return_value={
-            "content": [{"text": "Anthropic response"}],
+            "content": [{"type": "text", "text": "Anthropic response"}],
             "usage": {"input_tokens": 10, "output_tokens": 5}
         })
         

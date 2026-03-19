@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 import aiohttp
+from pydantic import BaseModel
 from lamia.adapters.llm.openai_adapter import OpenAIAdapter, OPENAI_AVAILABLE
 from lamia.adapters.llm.base import LLMResponse
 from lamia import LLMModel
@@ -162,18 +163,17 @@ class TestOpenAIAdapterConstants:
         assert OpenAIAdapter.API_URL == "https://api.openai.com/v1/chat/completions"
 
 
-class TestOpenAIAdapterImplementationBugs:
-    """Test cases that expose implementation bugs in OpenAI adapter."""
+class TestOpenAIAdapterGeneration:
+    """Test OpenAI adapter generation."""
     
     @pytest.mark.asyncio
     @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', True)
-    async def test_generate_with_sdk_implementation_bugs(self):
-        """Test generation with SDK - expects to fail due to implementation bugs."""
+    async def test_generate_with_sdk_success(self):
+        """Test successful generation with SDK."""
         with patch('lamia.adapters.llm.openai_adapter.AsyncOpenAI') as mock_openai:
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
             
-            # Mock the response structure
             mock_response = Mock()
             mock_choice = Mock()
             mock_choice.message.content = "Hello! How can I help you?"
@@ -185,9 +185,9 @@ class TestOpenAIAdapterImplementationBugs:
             
             adapter = OpenAIAdapter(api_key="test-key")
             
-            # Mock model
             mock_model = Mock(spec=LLMModel)
             mock_model.name = "gpt-3.5-turbo"
+            mock_model.get_model_name_without_provider = Mock(return_value="gpt-3.5-turbo")
             mock_model.temperature = 0.7
             mock_model.max_tokens = 1000
             mock_model.top_p = 1.0
@@ -196,19 +196,25 @@ class TestOpenAIAdapterImplementationBugs:
             mock_model.presence_penalty = None
             mock_model.seed = None
             
-            # This will fail due to undefined 'self.model' (should be 'model.name')
-            with pytest.raises(AttributeError, match="'OpenAIAdapter' object has no attribute 'model'"):
-                await adapter.generate("Hello", mock_model)
+            response = await adapter.generate("Hello", mock_model)
+            
+            assert isinstance(response, LLMResponse)
+            assert response.text == "Hello! How can I help you?"
+            assert response.model == "gpt-3.5-turbo"
+            assert response.usage == {
+                "prompt_tokens": 10,
+                "completion_tokens": 8,
+                "total_tokens": 18
+            }
     
     @pytest.mark.asyncio
     @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', False)
     @patch('aiohttp.ClientSession')
-    async def test_generate_with_http_implementation_bugs(self, mock_session_class):
-        """Test generation with HTTP - expects to fail due to implementation bugs."""
+    async def test_generate_with_http_success(self, mock_session_class):
+        """Test successful generation with HTTP fallback."""
         mock_session = Mock()
         mock_session_class.return_value = mock_session
         
-        # Mock HTTP response
         mock_http_response = AsyncMock()
         mock_http_response.status = 200
         mock_http_response.json = AsyncMock(return_value={
@@ -216,7 +222,6 @@ class TestOpenAIAdapterImplementationBugs:
             "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
         })
         
-        # Create async context manager mock
         class MockPostContext:
             def __init__(self, response):
                 self.response = response
@@ -232,9 +237,9 @@ class TestOpenAIAdapterImplementationBugs:
         adapter = OpenAIAdapter(api_key="test-key")
         await adapter.async_initialize()
         
-        # Mock model
         mock_model = Mock(spec=LLMModel)
         mock_model.name = "gpt-3.5-turbo"
+        mock_model.get_model_name_without_provider = Mock(return_value="gpt-3.5-turbo")
         mock_model.temperature = 0.5
         mock_model.max_tokens = 500
         mock_model.top_p = 0.9
@@ -242,11 +247,13 @@ class TestOpenAIAdapterImplementationBugs:
         mock_model.frequency_penalty = None
         mock_model.presence_penalty = None
         mock_model.seed = None
-        mock_model.stop_sequences = None
         
-        # This will fail due to multiple implementation bugs
-        with pytest.raises((AttributeError, NameError)):
-            await adapter.generate("Test prompt", mock_model)
+        response = await adapter.generate("Test prompt", mock_model)
+        
+        assert isinstance(response, LLMResponse)
+        assert response.text == "HTTP response text"
+        assert response.model == "gpt-3.5-turbo"
+        assert response.usage == {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
 
 
 class TestOpenAIAdapterGetAvailableModels:
@@ -350,3 +357,87 @@ class TestOpenAIAdapterIntegration:
                 
                 # Verify cleanup was called
                 mock_client.close.assert_called_once()
+
+
+class TestOpenAIAdapterStructuredOutput:
+    """Test structured output with response_model."""
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', True)
+    async def test_generate_with_response_model_sdk(self):
+        """SDK path sends response_format with JSON schema when response_model is provided."""
+        with patch('lamia.adapters.llm.openai_adapter.AsyncOpenAI') as mock_openai:
+            mock_client = AsyncMock()
+            mock_openai.return_value = mock_client
+
+            mock_response = Mock()
+            mock_choice = Mock()
+            mock_choice.message.content = '{"ticker": "AAPL"}'
+            mock_response.choices = [mock_choice]
+            mock_response.usage.prompt_tokens = 10
+            mock_response.usage.completion_tokens = 5
+            mock_response.usage.total_tokens = 15
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+            adapter = OpenAIAdapter(api_key="test-key")
+
+            class StockQuote(BaseModel):
+                ticker: str
+
+            mock_model = Mock(spec=LLMModel)
+            mock_model.name = "gpt-4o"
+            mock_model.get_model_name_without_provider = Mock(return_value="gpt-4o")
+            mock_model.temperature = 0.7
+            mock_model.max_tokens = 1000
+            mock_model.top_p = 1.0
+            mock_model.top_k = None
+            mock_model.frequency_penalty = None
+            mock_model.presence_penalty = None
+            mock_model.seed = None
+
+            response = await adapter.generate("Get AAPL", mock_model, response_model=StockQuote)
+
+            assert response.text == '{"ticker": "AAPL"}'
+            call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+            assert "response_format" in call_kwargs
+            rf = call_kwargs["response_format"]
+            assert rf["type"] == "json_schema"
+            assert rf["json_schema"]["name"] == "StockQuote"
+            assert rf["json_schema"]["strict"] is True
+            assert "ticker" in rf["json_schema"]["schema"]["properties"]
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', True)
+    async def test_generate_without_response_model_no_format(self):
+        """SDK path should NOT include response_format when response_model is None."""
+        with patch('lamia.adapters.llm.openai_adapter.AsyncOpenAI') as mock_openai:
+            mock_client = AsyncMock()
+            mock_openai.return_value = mock_client
+
+            mock_response = Mock()
+            mock_choice = Mock()
+            mock_choice.message.content = "plain text"
+            mock_response.choices = [mock_choice]
+            mock_response.usage.prompt_tokens = 5
+            mock_response.usage.completion_tokens = 3
+            mock_response.usage.total_tokens = 8
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+            adapter = OpenAIAdapter(api_key="test-key")
+
+            mock_model = Mock(spec=LLMModel)
+            mock_model.name = "gpt-4o"
+            mock_model.get_model_name_without_provider = Mock(return_value="gpt-4o")
+            mock_model.temperature = 0.7
+            mock_model.max_tokens = 1000
+            mock_model.top_p = 1.0
+            mock_model.top_k = None
+            mock_model.frequency_penalty = None
+            mock_model.presence_penalty = None
+            mock_model.seed = None
+
+            response = await adapter.generate("Hello", mock_model)
+
+            assert response.text == "plain text"
+            call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+            assert "response_format" not in call_kwargs
