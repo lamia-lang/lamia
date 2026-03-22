@@ -213,16 +213,6 @@ class LLMManager(Manager):
             ExternalOperationError: If external system failures occur
             RuntimeError: If all models in the chain fail
         """
-        if validator is not None:
-            response_model = self._extract_response_model(validator)
-            if response_model is None:
-                initial_hints = validator.initial_hint
-                current_prompt = f"{initial_hints}\n\n{prompt}"
-            else:
-                current_prompt = prompt
-        else:
-            current_prompt = prompt
-
         failed_models = []
         
         for model_and_retries in self.config_provider.get_model_chain():
@@ -234,6 +224,18 @@ class LLMManager(Manager):
             else:
                 adapter = await self.create_adapter_from_config(model)
                 self._adapter_cache[model] = adapter
+
+            # Build prompt per-adapter: suppress schema hint only when the
+            # adapter actually implements provider-native structured output.
+            if validator is not None:
+                response_model = self._extract_response_model(validator)
+                if response_model is not None and adapter.supports_structured_output:
+                    current_prompt = prompt
+                else:
+                    initial_hints = validator.initial_hint
+                    current_prompt = f"{initial_hints}\n\n{prompt}"
+            else:
+                current_prompt = prompt
 
             # Change from INFO to DEBUG for routine operations
             logger.debug(f"Trying model '{model.name}' with {model_and_retries.retries} max attempts")

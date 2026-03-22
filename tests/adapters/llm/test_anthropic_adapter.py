@@ -508,8 +508,9 @@ class TestAnthropicAdapterStructuredOutput:
             assert "output_config" in call_kwargs
             fmt = call_kwargs["output_config"]["format"]
             assert fmt["type"] == "json_schema"
-            assert fmt["name"] == "StockQuote"
+            assert "name" not in fmt
             assert "ticker" in fmt["schema"]["properties"]
+            assert fmt["schema"]["additionalProperties"] is False
             assert "tools" not in call_kwargs
             assert "tool_choice" not in call_kwargs
 

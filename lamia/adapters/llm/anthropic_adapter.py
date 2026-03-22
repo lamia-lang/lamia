@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, Type
 import aiohttp
 
-from .base import BaseLLMAdapter, LLMResponse, LLMModel
+from .base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema
 from pydantic import BaseModel
 
 try:
@@ -28,6 +28,10 @@ class AnthropicAdapter(BaseLLMAdapter):
     
     @classmethod
     def is_remote(cls) -> bool:
+        return True
+
+    @property
+    def supports_structured_output(self) -> bool:
         return True
     
     def __init__(self, api_key: str):
@@ -90,8 +94,7 @@ class AnthropicAdapter(BaseLLMAdapter):
             request_kwargs["output_config"] = {
                 "format": {
                     "type": "json_schema",
-                    "name": response_model.__name__,
-                    "schema": response_model.model_json_schema(),
+                    "schema": make_strict_schema(response_model),
                 }
             }
 
@@ -127,8 +130,7 @@ class AnthropicAdapter(BaseLLMAdapter):
             payload["output_config"] = {
                 "format": {
                     "type": "json_schema",
-                    "name": response_model.__name__,
-                    "schema": response_model.model_json_schema(),
+                    "schema": make_strict_schema(response_model),
                 }
             }
         

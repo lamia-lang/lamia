@@ -4,6 +4,47 @@ from typing import Any, Dict, Optional, Type
 from pydantic import BaseModel
 from lamia import LLMModel
 
+
+def make_strict_schema(model: Type[BaseModel]) -> dict:
+    """Generate a JSON schema with additionalProperties: false on all objects.
+
+    Most LLM providers (Anthropic, OpenAI strict mode) require every object
+    node to explicitly forbid extra keys.  Pydantic's model_json_schema()
+    does not set this, so we patch the tree after generation.  Also inlines
+    any $defs references for maximum provider compatibility.
+    """
+    schema = model.model_json_schema()
+    defs = schema.pop("$defs", {})
+
+    def _patch(node: Any) -> Any:
+        if not isinstance(node, dict):
+            return node
+
+        # Inline $ref before processing
+        if "$ref" in node:
+            ref_name = node["$ref"].rsplit("/", 1)[-1]
+            if ref_name in defs:
+                node = defs[ref_name].copy()
+
+        for key, value in list(node.items()):
+            if isinstance(value, dict):
+                node[key] = _patch(value)
+            elif isinstance(value, list):
+                node[key] = [_patch(item) for item in value]
+
+        if node.get("type") == "object":
+            node["additionalProperties"] = False
+
+        # anyOf / oneOf with object branches (e.g. Optional fields)
+        for combiner in ("anyOf", "oneOf"):
+            if combiner in node:
+                node[combiner] = [_patch(branch) for branch in node[combiner]]
+
+        return node
+
+    return _patch(schema)
+
+
 @dataclass
 class LLMResponse:
     """Container for LLM response data."""
@@ -67,6 +108,17 @@ class BaseLLMAdapter(ABC):
             LLMResponse containing the generated text and metadata
         """
         pass
+
+    @property
+    def supports_structured_output(self) -> bool:
+        """Whether this adapter passes response_model to the provider's API.
+
+        Defaults to False (safe fallback — Lamia includes schema hints in the
+        prompt).  Built-in adapters that implement provider-native structured
+        output override this to True.  Custom adapters should override only
+        after they actually handle the response_model parameter.
+        """
+        return False
 
     @property
     def has_context_memory(self) -> bool:

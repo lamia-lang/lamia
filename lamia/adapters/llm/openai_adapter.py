@@ -1,6 +1,6 @@
 from typing import Optional, Dict, Any, Type
 import aiohttp
-from .base import BaseLLMAdapter, LLMResponse
+from .base import BaseLLMAdapter, LLMResponse, make_strict_schema
 from lamia import LLMModel
 from pydantic import BaseModel
 
@@ -28,6 +28,10 @@ class OpenAIAdapter(BaseLLMAdapter):
     
     @classmethod
     def is_remote(cls) -> bool:
+        return True
+
+    @property
+    def supports_structured_output(self) -> bool:
         return True
     
     def __init__(self, api_key: str):
@@ -73,7 +77,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                 "type": "json_schema",
                 "json_schema": {
                     "name": response_model.__name__,
-                    "schema": response_model.model_json_schema(),
+                    "schema": make_strict_schema(response_model),
                     "strict": True,
                 },
             }

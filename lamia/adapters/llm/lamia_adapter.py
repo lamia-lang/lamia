@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, Set, Type
 import aiohttp
 from lamia import LLMModel
-from .base import BaseLLMAdapter, LLMResponse
+from .base import BaseLLMAdapter, LLMResponse, make_strict_schema
 from pydantic import BaseModel
 
 class LamiaAdapter(BaseLLMAdapter):
@@ -21,6 +21,10 @@ class LamiaAdapter(BaseLLMAdapter):
     
     @classmethod
     def is_remote(cls) -> bool:
+        return True
+
+    @property
+    def supports_structured_output(self) -> bool:
         return True
     
     @classmethod
@@ -78,8 +82,7 @@ class LamiaAdapter(BaseLLMAdapter):
                 payload["output_config"] = {
                     "format": {
                         "type": "json_schema",
-                        "name": response_model.__name__,
-                        "schema": response_model.model_json_schema(),
+                        "schema": make_strict_schema(response_model),
                     }
                 }
         else:
@@ -104,7 +107,7 @@ class LamiaAdapter(BaseLLMAdapter):
                     "type": "json_schema",
                     "json_schema": {
                         "name": response_model.__name__,
-                        "schema": response_model.model_json_schema(),
+                        "schema": make_strict_schema(response_model),
                         "strict": True,
                     },
                 }

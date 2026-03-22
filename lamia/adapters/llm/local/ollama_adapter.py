@@ -8,7 +8,7 @@ import time
 import sys
 import weakref
 import atexit
-from ..base import BaseLLMAdapter, LLMResponse, LLMModel
+from ..base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema
 from lamia.errors import OllamaNotInstalledError
 from pydantic import BaseModel
 
@@ -45,6 +45,10 @@ class OllamaAdapter(BaseLLMAdapter):
     @classmethod
     def is_remote(cls) -> bool:
         return False  # Local model
+
+    @property
+    def supports_structured_output(self) -> bool:
+        return True
 
     @classmethod
     def is_ollama_running(cls, base_url: str = "http://localhost:11434") -> bool:
@@ -150,7 +154,7 @@ class OllamaAdapter(BaseLLMAdapter):
             }
         }
         if response_model is not None:
-            payload["format"] = response_model.model_json_schema()
+            payload["format"] = make_strict_schema(response_model)
 
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300)) as session: # 5 minutes total timeout, local models on normal computers are slow

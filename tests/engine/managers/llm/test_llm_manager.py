@@ -1208,8 +1208,8 @@ class TestHintSuppression:
                 self.manager = LLMManager(config_provider)
 
     @pytest.mark.asyncio
-    async def test_hint_suppressed_for_json_structure_validator(self):
-        """When validator yields a response_model, initial_hint must NOT be in the prompt."""
+    async def test_hint_suppressed_when_adapter_supports_structured_output(self):
+        """Hint suppressed when validator has schema AND adapter supports structured output."""
         from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
 
         class Schema(BaseModel):
@@ -1220,6 +1220,7 @@ class TestHintSuppression:
         validator.initial_hint = "You MUST return JSON matching this schema ..."
 
         mock_adapter = Mock(spec=BaseLLMAdapter)
+        mock_adapter.supports_structured_output = True
         self.manager._adapter_cache[self.mock_model1] = mock_adapter
 
         mock_result = ValidationResult(
@@ -1232,6 +1233,31 @@ class TestHintSuppression:
             assert validator.initial_hint not in call_prompt
 
     @pytest.mark.asyncio
+    async def test_hint_included_when_adapter_does_not_support_structured_output(self):
+        """Hint included even for JSON validator if adapter does not support structured output."""
+        from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
+
+        class Schema(BaseModel):
+            x: int
+
+        validator = Mock(spec=JSONStructureValidator)
+        validator.model = Schema
+        validator.initial_hint = "You MUST return JSON matching this schema ..."
+
+        mock_adapter = Mock(spec=BaseLLMAdapter)
+        mock_adapter.supports_structured_output = False
+        self.manager._adapter_cache[self.mock_model1] = mock_adapter
+
+        mock_result = ValidationResult(
+            is_valid=True, raw_text="ok", validated_text="ok", execution_context=Mock()
+        )
+        with patch.object(self.manager, '_generate_and_validate', return_value=mock_result) as mock_gen:
+            await self.manager._execute_with_retries("user prompt", validator=validator)
+            call_prompt = mock_gen.call_args.kwargs['prompt']
+            assert validator.initial_hint in call_prompt
+            assert "user prompt" in call_prompt
+
+    @pytest.mark.asyncio
     async def test_hint_included_for_text_validator(self):
         """When validator does NOT yield a response_model, initial_hint must be in the prompt."""
         from lamia.validation.validators.file_validators.text_validator import TextValidator
@@ -1240,6 +1266,7 @@ class TestHintSuppression:
         validator.initial_hint = "Return plain text"
 
         mock_adapter = Mock(spec=BaseLLMAdapter)
+        mock_adapter.supports_structured_output = True
         self.manager._adapter_cache[self.mock_model1] = mock_adapter
 
         mock_result = ValidationResult(
