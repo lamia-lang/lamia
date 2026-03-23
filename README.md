@@ -36,7 +36,7 @@ config = "./config.json" -> JSON[OnlyTheConfigsWeNeed]
 quote = "https://finance.yahoo.com/quote/AAPL" -> HTML[StockQuote]
 ```
 
-A real-world example - extract stock quotes from Yahoo Finance into a CSV:
+A minimal real-world example - extract stock quotes from Yahoo Finance into a CSV:
 
 ```python
 class StockQuote(BaseModel):
@@ -50,6 +50,9 @@ class StockQuote(BaseModel):
 for ticker in ["QQQ", "VOO", "VGT"]:
     "extract the stock quote data from https://finance.yahoo.com/quote/{ticker}" -> File(CSV[StockQuote], "stocks.csv", append=True)
 ```
+
+For more real-world examples, you can check the [Lamia Examples](https://github.com/lamia-lang/lamia-examples) repository.
+
 ### Running from Python
 
 Lamia can be used as a Python library as well.
@@ -103,10 +106,10 @@ import logging
 from typing import Optional, Type
 
 import aiohttp
-
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
-from lamia import LLMModel
 from pydantic import BaseModel
+
+from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, make_strict_schema
+from lamia import LLMModel
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +117,7 @@ DEFAULT_BASE_URL = "http://127.0.0.1:3000"
 
 
 class ClaudeMaxAdapter(BaseLLMAdapter):
-    """Adapter for a local claude-max-api proxy (OpenAI-compatible, no streaming)."""
+    """Adapter for anthropic-max-router using the native Anthropic endpoint."""
 
     @classmethod
     def name(cls) -> str:
@@ -127,6 +130,10 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
     @classmethod
     def is_remote(cls) -> bool:
         return False
+
+    @property
+    def supports_structured_output(self) -> bool:
+        return True
 
     def __init__(self, base_url: str = DEFAULT_BASE_URL):
         self.base_url = base_url.rstrip("/")
@@ -154,26 +161,22 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
         payload: dict = {
             "model": model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
+            "max_tokens": model.max_tokens or 64000,
+            "temperature": model.temperature or 0.7,
         }
 
-        if model.temperature is not None:
-            payload["temperature"] = model.temperature
-        if model.max_tokens is not None:
-            payload["max_tokens"] = model.max_tokens
         if model.top_p is not None:
             payload["top_p"] = model.top_p
+
         if response_model is not None:
-            payload["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": response_model.__name__,
-                    "schema": response_model.model_json_schema(),
-                    "strict": True,
-                },
+            payload["output_config"] = {
+                "format": {
+                    "type": "json_schema",
+                    "schema": make_strict_schema(response_model),
+                }
             }
 
-        url = f"{self.base_url}/v1/chat/completions"
+        url = f"{self.base_url}/v1/messages"
         logger.debug("Requesting %s with model=%s", url, model_name)
 
         async with self.session.post(url, json=payload) as response:
@@ -185,15 +188,25 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
 
             data = await response.json()
 
+        content = data.get("content", [])
+        text = ""
+        for block in content:
+            if block.get("type") == "text":
+                text = block["text"]
+                break
+
         usage_data = data.get("usage", {})
 
         return LLMResponse(
-            text=data["choices"][0]["message"]["content"],
+            text=text,
             raw_response=data,
             usage={
-                "prompt_tokens": usage_data.get("prompt_tokens", 0),
-                "completion_tokens": usage_data.get("completion_tokens", 0),
-                "total_tokens": usage_data.get("total_tokens", 0),
+                "input_tokens": usage_data.get("input_tokens", 0),
+                "output_tokens": usage_data.get("output_tokens", 0),
+                "total_tokens": (
+                    usage_data.get("input_tokens", 0)
+                    + usage_data.get("output_tokens", 0)
+                ),
             },
             model=model_name,
         )
@@ -202,6 +215,7 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
         if self.session:
             await self.session.close()
             self.session = None
+
 
 ```
 
