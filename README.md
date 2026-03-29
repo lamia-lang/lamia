@@ -1,5 +1,5 @@
+# Lamia - AI Native language
 <div align="center">
-  <h1>Lamia</h1>
   <p><strong>Write AI-powered scripts in plain English.</strong></p>
   <img src="assets/lamia_banner.png" alt="Lamia" width="360">
 </div>
