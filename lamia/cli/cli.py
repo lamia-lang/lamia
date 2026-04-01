@@ -1,9 +1,10 @@
 from ast import Pass
 import asyncio
+import json
 import signal
 import sys
 import os
-from typing import Optional
+from typing import Any, Optional, cast
 import argparse
 import select
 import yaml
@@ -146,12 +147,85 @@ async def interactive_mode(lamia: Lamia):
             logger.error(traceback.format_exc())
             continue
 
-def _exit_interactive(running_task: 'Optional[asyncio.Task[object]]', lamia: Lamia) -> None:
-    """Cancel any in-flight task and shut down cleanly."""
-    print("\nGoodbye! 👋")
-    if running_task and not running_task.done():
-        running_task.cancel()
-    _graceful_shutdown(lamia)
+async def json_mode(lamia: Lamia) -> None:
+    """Machine-readable JSON-line protocol for IDE integration.
+
+    Reads one JSON object per line from stdin.  Writes one JSON object per
+    line to stdout.  All logging goes to the log file only (console handler
+    is suppressed before this function is called).
+
+    Request  : {"text": "user message"}
+               {"text": "user message", "system": "optional system prompt prefix"}
+    Response : {"type": "response", "text": "...", "model": "...", "tokens": {...}}
+    Error    : {"type": "error", "message": "..."}
+    Ready    : {"type": "ready"}  (sent once after startup)
+    """
+    _json_write({"type": "ready"})
+
+    loop = asyncio.get_event_loop()
+    reader = asyncio.StreamReader()
+    protocol = asyncio.StreamReaderProtocol(reader)
+    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+
+    while True:
+        raw = await reader.readline()
+        if not raw:
+            break
+
+        line = raw.decode("utf-8", errors="replace").strip()
+        if not line:
+            continue
+
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as exc:
+            _json_write({"type": "error", "message": f"Invalid JSON: {exc}"})
+            continue
+
+        if not isinstance(parsed, dict):
+            _json_write({"type": "error", "message": "Expected JSON object"})
+            continue
+
+        request: dict[str, Any] = parsed
+        user_text: str = str(request.get("text", "")).strip()
+        if not user_text:
+            _json_write({"type": "error", "message": "Missing 'text' field"})
+            continue
+
+        system_prefix: str = str(request.get("system", ""))
+        if system_prefix:
+            user_text = system_prefix.rstrip() + "\n\n" + user_text
+
+        try:
+            result = await lamia.run_async(user_text, _full_result=True)
+
+            response: dict[str, Any] = {
+                "type": "response",
+                "text": result.result_text,
+            }
+
+            ctx = result.tracking_context
+            if ctx.data_provider_name:
+                response["model"] = ctx.data_provider_name
+            if ctx.metadata is not None and "usage" in ctx.metadata:
+                usage: dict[str, Any] = cast(dict[str, Any], ctx.metadata["usage"])
+                tokens: dict[str, int] = {}
+                tokens["input"] = int(usage.get("prompt_tokens") or usage.get("input_tokens", 0))
+                tokens["output"] = int(usage.get("completion_tokens") or usage.get("output_tokens", 0))
+                tokens["total"] = int(usage.get("total_tokens", tokens["input"] + tokens["output"]))
+                response["tokens"] = tokens
+
+            _json_write(response)
+
+        except MissingAPIKeysError as exc:
+            _json_write({"type": "error", "message": str(exc)})
+        except (ExternalOperationTransientError,
+                ExternalOperationPermanentError,
+                ExternalOperationRateLimitError) as exc:
+            _json_write({"type": "error", "message": str(exc)})
+        except Exception as exc:
+            logger.error(f"json_mode error: {exc}", exc_info=True)
+            _json_write({"type": "error", "message": str(exc)})
 
 
 def main():
@@ -285,13 +359,22 @@ def main():
         #parser.add_argument('--verbose', '-v', action='store_true', help='Show all Lamia logs on console (default: only warnings/errors)')
         parser.add_argument('--log-file', type=str, help='Custom path for the Lamia log file (default: .lamia/lamia.log)')
         parser.add_argument('--no-cache', action='store_true', help='Disable selector resolution cache (forces fresh resolution)')
+        parser.add_argument('--json', action='store_true', help='Machine-readable JSON-line mode for IDE/tool integration')
         args = parser.parse_args()
+
+    json_flag = getattr(args, 'json', False)
 
     setup_cli_logging(
         level=args.log_level.upper(),
-        verbose=True,
+        verbose=not json_flag,
         log_file=args.log_file,
     )
+
+    if json_flag:
+        lamia_console = logging.getLogger("lamia")
+        for hdlr in lamia_console.handlers[:]:
+            if isinstance(hdlr, logging.StreamHandler) and hdlr.stream in (sys.stderr, sys.stdout):
+                lamia_console.removeHandler(hdlr)
 
     prompt_file = args.filename or args.file
     config_path = args.config
@@ -389,11 +472,15 @@ def main():
                     if logger.level <= logging.DEBUG:
                         traceback.print_exc()
                     _graceful_shutdown(lamia, 1)
+        elif json_flag:
+            async def run_json():
+                await json_mode(lamia)
+
+            asyncio.run(run_json())
         else:
-            # Interactive mode - needs async
             async def run_interactive():
                 await interactive_mode(lamia)
-            
+
             asyncio.run(run_interactive())
             
     except MissingAPIKeysError as e:
@@ -407,6 +494,20 @@ def main():
         sys.exit(1)
     except KeyboardInterrupt:
         _graceful_shutdown(lamia)
+
+
+def _exit_interactive(running_task: 'Optional[asyncio.Task[object]]', lamia: Lamia) -> None:
+    """Cancel any in-flight task and shut down cleanly."""
+    print("\nGoodbye! 👋")
+    if running_task and not running_task.done():
+        running_task.cancel()
+    _graceful_shutdown(lamia)
+
+
+def _json_write(obj: dict[str, Any]) -> None:
+    """Write a single JSON object as one line to stdout and flush."""
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
 
 
 def _install_sigint_handler() -> None:
