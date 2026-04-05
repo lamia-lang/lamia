@@ -4,7 +4,7 @@ import json
 import signal
 import sys
 import os
-from typing import Any, Optional, cast
+from typing import Optional
 import argparse
 import select
 import yaml
@@ -147,6 +147,20 @@ async def interactive_mode(lamia: Lamia):
             logger.error(traceback.format_exc())
             continue
 
+def _exit_interactive(running_task: 'Optional[asyncio.Task[object]]', lamia: Lamia) -> None:
+    """Cancel any in-flight task and shut down cleanly."""
+    print("\nGoodbye! 👋")
+    if running_task and not running_task.done():
+        running_task.cancel()
+    _graceful_shutdown(lamia)
+
+
+def _json_write(obj: dict) -> None:
+    """Write a single JSON object as one line to stdout and flush."""
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
 async def json_mode(lamia: Lamia) -> None:
     """Machine-readable JSON-line protocol for IDE integration.
 
@@ -177,43 +191,39 @@ async def json_mode(lamia: Lamia) -> None:
             continue
 
         try:
-            parsed = json.loads(line)
+            request = json.loads(line)
         except json.JSONDecodeError as exc:
             _json_write({"type": "error", "message": f"Invalid JSON: {exc}"})
             continue
 
-        if not isinstance(parsed, dict):
-            _json_write({"type": "error", "message": "Expected JSON object"})
-            continue
-
-        request: dict[str, Any] = parsed
-        user_text: str = str(request.get("text", "")).strip()
+        user_text = request.get("text", "").strip()
         if not user_text:
             _json_write({"type": "error", "message": "Missing 'text' field"})
             continue
 
-        system_prefix: str = str(request.get("system", ""))
+        system_prefix = request.get("system", "")
         if system_prefix:
             user_text = system_prefix.rstrip() + "\n\n" + user_text
 
         try:
             result = await lamia.run_async(user_text, _full_result=True)
 
-            response: dict[str, Any] = {
+            response: dict = {
                 "type": "response",
                 "text": result.result_text,
             }
 
             ctx = result.tracking_context
-            if ctx.data_provider_name:
-                response["model"] = ctx.data_provider_name
-            if ctx.metadata is not None and "usage" in ctx.metadata:
-                usage: dict[str, Any] = cast(dict[str, Any], ctx.metadata["usage"])
-                tokens: dict[str, int] = {}
-                tokens["input"] = int(usage.get("prompt_tokens") or usage.get("input_tokens", 0))
-                tokens["output"] = int(usage.get("completion_tokens") or usage.get("output_tokens", 0))
-                tokens["total"] = int(usage.get("total_tokens", tokens["input"] + tokens["output"]))
-                response["tokens"] = tokens
+            if ctx:
+                if ctx.data_provider_name:
+                    response["model"] = ctx.data_provider_name
+                if ctx.metadata and "usage" in ctx.metadata:
+                    usage = ctx.metadata["usage"]
+                    tokens: dict = {}
+                    tokens["input"] = usage.get("prompt_tokens") or usage.get("input_tokens", 0)
+                    tokens["output"] = usage.get("completion_tokens") or usage.get("output_tokens", 0)
+                    tokens["total"] = usage.get("total_tokens", tokens["input"] + tokens["output"])
+                    response["tokens"] = tokens
 
             _json_write(response)
 
@@ -228,9 +238,59 @@ async def json_mode(lamia: Lamia) -> None:
             _json_write({"type": "error", "message": str(exc)})
 
 
+def _open_ide(folder: str) -> None:
+    """Open Lamia Studio IDE at *folder*, reading the app path from ~/.lamia/ide-path.txt."""
+    import platform
+    import subprocess
+
+    ide_path_file = os.path.join(os.path.expanduser("~"), ".lamia", "ide-path.txt")
+    ide_path = None
+    if os.path.isfile(ide_path_file):
+        ide_path = open(ide_path_file).read().strip()
+        if not os.path.exists(ide_path):
+            ide_path = None
+
+    if ide_path is None:
+        well_known = [
+            os.path.expanduser("~/Applications/Lamia Studio.app"),
+            "/Applications/Lamia Studio.app",
+        ]
+        for p in well_known:
+            if os.path.exists(p):
+                ide_path = p
+                break
+
+    if ide_path is None:
+        print("Lamia Studio is not installed or could not be found.")
+        print("Download it from: https://github.com/LamiaOrg/lamia-ide/releases")
+        sys.exit(1)
+
+    abs_folder = os.path.abspath(folder)
+    system = platform.system()
+    if system == "Darwin":
+        subprocess.Popen(["open", "-a", ide_path, abs_folder])
+    elif system == "Windows":
+        subprocess.Popen([ide_path, abs_folder])
+    else:
+        subprocess.Popen([ide_path, abs_folder])
+
+
 def main():
     """Main entry point for the Lamia CLI."""
     _install_sigint_handler()
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        from lamia._version import __version__
+        print(f"lamia {__version__}")
+        return
+
+    if len(sys.argv) > 1 and sys.argv[1] == ".":
+        _open_ide(sys.argv[2] if len(sys.argv) > 2 else ".")
+        return
+
+    if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]):
+        _open_ide(sys.argv[1])
+        return
 
     if len(sys.argv) > 1 and sys.argv[1] == "init":
         parser = argparse.ArgumentParser(
@@ -494,20 +554,6 @@ def main():
         sys.exit(1)
     except KeyboardInterrupt:
         _graceful_shutdown(lamia)
-
-
-def _exit_interactive(running_task: 'Optional[asyncio.Task[object]]', lamia: Lamia) -> None:
-    """Cancel any in-flight task and shut down cleanly."""
-    print("\nGoodbye! 👋")
-    if running_task and not running_task.done():
-        running_task.cancel()
-    _graceful_shutdown(lamia)
-
-
-def _json_write(obj: dict[str, Any]) -> None:
-    """Write a single JSON object as one line to stdout and flush."""
-    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
 
 
 def _install_sigint_handler() -> None:
