@@ -1,6 +1,7 @@
 """Tests for the .hu file executor (HuCallable)."""
 
 import pytest
+from unittest.mock import patch, MagicMock
 
 from lamia.interpreter.human.parser import HuFunction
 from lamia.interpreter.human.executor import HuCallable
@@ -47,7 +48,10 @@ class TestHuCallable:
         c = HuCallable(fn)
         assert c(name="Bob", extra="ignored") == "Hi Bob"
 
-    def test_file_context_left_intact(self):
+    @patch("lamia.interpreter.human.executor.get_active_files_context")
+    def test_file_context_left_intact_when_files_context_active(self, mock_ctx):
+        """When a FilesContext is active, {@...} is left for LLMManager to resolve."""
+        mock_ctx.return_value = MagicMock()
         fn = _make_fn(template="Check {@main.py} for {issue}", params=frozenset({"issue"}))
         c = HuCallable(fn)
         result = c(issue="bugs")

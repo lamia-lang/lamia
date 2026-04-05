@@ -2,7 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import dataclass, field
-from typing import Any, List
+from typing import Any, List, Optional
 
 from lamia.facade.lamia import Lamia
 from lamia.facade.result_types import LamiaResult
@@ -28,6 +28,7 @@ class MockValidationResult:
     is_valid: bool
     raw_text: str
     typed_result: Any = None
+    validated_text: Optional[str] = None
     execution_context: TrackingContext = field(default_factory=_create_mock_tracking_context)
 
 
@@ -548,3 +549,65 @@ class TestLamiaLifecycle:
             assert execute_call_args[0][0] == command
 
             assert result == "response"
+
+    @pytest.mark.asyncio
+    async def test_run_async_full_result_returns_lamia_result(self):
+        """Test that _full_result=True returns a LamiaResult with tracking context."""
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = MagicMock()
+            mock_result = MockValidationResult(
+                is_valid=True,
+                raw_text="raw response",
+                validated_text="clean response",
+                typed_result="typed",
+            )
+            mock_engine.execute = AsyncMock(return_value=mock_result)
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia()
+            result = await lamia.run_async("generate something", _full_result=True)
+
+            assert isinstance(result, LamiaResult)
+            assert result.result_text == "clean response"
+            assert result.typed_result is None  # no return_type provided
+
+    @pytest.mark.asyncio
+    async def test_run_async_full_result_falls_back_to_raw_text(self):
+        """Test that _full_result=True uses raw_text when validated_text is None."""
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = MagicMock()
+            mock_result = MockValidationResult(
+                is_valid=True,
+                raw_text="raw response",
+                validated_text=None,
+            )
+            mock_engine.execute = AsyncMock(return_value=mock_result)
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia()
+            result = await lamia.run_async("generate something", _full_result=True)
+
+            assert isinstance(result, LamiaResult)
+            assert result.result_text == "raw response"
+
+    def test_run_full_result_sync(self):
+        """Test that run() with _full_result=True returns a LamiaResult."""
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = MagicMock()
+            mock_result = MockValidationResult(
+                is_valid=True,
+                raw_text="raw",
+                validated_text="clean",
+                typed_result="typed",
+            )
+            mock_engine.execute = AsyncMock(return_value=mock_result)
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia()
+            result = lamia.run("generate something", _full_result=True)
+
+            assert isinstance(result, LamiaResult)
+            assert result.result_text == "clean"

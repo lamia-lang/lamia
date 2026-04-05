@@ -11,6 +11,42 @@ from lamia.errors import AmbiguousFileError, FileReferenceError
 
 logger = logging.getLogger(__name__)
 
+_FILE_REF_RE = re.compile(r'\{@([^}]+)\}')
+
+# ---------------------------------------------------------------------------
+# Source-file context stack
+# ---------------------------------------------------------------------------
+_source_file_stack: List[str] = []
+
+
+def push_source_file(path: str) -> None:
+    _source_file_stack.append(str(Path(path).resolve()))
+
+
+def pop_source_file() -> None:
+    if _source_file_stack:
+        _source_file_stack.pop()
+
+
+def get_current_source_file() -> Optional[str]:
+    return _source_file_stack[-1] if _source_file_stack else None
+
+
+def _has_path_components(query: str) -> bool:
+    """Return True if the query contains path separators or relative markers."""
+    return os.sep in query or '/' in query or query.startswith('..')
+
+
+def _find_project_root(start_path: str) -> Optional[str]:
+    """Walk up from *start_path* looking for a directory containing config.yaml."""
+    current = Path(start_path).resolve()
+    if current.is_file():
+        current = current.parent
+    for directory in [current, *current.parents]:
+        if (directory / "config.yaml").is_file():
+            return str(directory)
+    return None
+
 class FileSearcher:
     """Smart file search with multiple strategies."""
     
@@ -240,70 +276,8 @@ class FilesContext:
         return resolved_path
     
     def read_file_content(self, filepath: str) -> str:
-        """Read file content with appropriate extraction.
-        
-        Args:
-            filepath: Path to the file
-        
-        Returns:
-            Text content of the file
-        """
-        ext = os.path.splitext(filepath)[1].lower()
-        
-        if ext == '.pdf':
-            return self._extract_pdf_text(filepath)
-        elif ext in ['.docx', '.doc']:
-            return self._extract_docx_text(filepath)
-        else:
-            # Plain text file
-            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                return f.read()
-    
-    def _extract_pdf_text(self, filepath: str) -> str:
-        """Extract text from PDF file."""
-        try:
-            import PyPDF2
-            
-            with open(filepath, 'rb') as f:
-                reader = PyPDF2.PdfReader(f)
-                text_parts = []
-                
-                for page_num, page in enumerate(reader.pages):
-                    text = page.extract_text()
-                    if text.strip():
-                        text_parts.append(f"--- Page {page_num + 1} ---\n{text}")
-                
-                if text_parts:
-                    return "\n\n".join(text_parts)
-                else:
-                    return f"[PDF file: {os.path.basename(filepath)} - text extraction returned empty]"
-        
-        except ImportError:
-            logger.warning("PyPDF2 not installed. Install with: pip install PyPDF2")
-            return f"[PDF file: {os.path.basename(filepath)} - PyPDF2 not installed]"
-        except Exception as e:
-            logger.error(f"Failed to extract PDF text: {e}")
-            return f"[PDF file: {os.path.basename(filepath)} - extraction failed: {e}]"
-    
-    def _extract_docx_text(self, filepath: str) -> str:
-        """Extract text from DOCX file."""
-        try:
-            import docx
-            
-            doc = docx.Document(filepath)
-            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-            
-            if paragraphs:
-                return "\n\n".join(paragraphs)
-            else:
-                return f"[DOCX file: {os.path.basename(filepath)} - no text content]"
-        
-        except ImportError:
-            logger.warning("python-docx not installed. Install with: pip install python-docx")
-            return f"[DOCX file: {os.path.basename(filepath)} - python-docx not installed]"
-        except Exception as e:
-            logger.error(f"Failed to extract DOCX text: {e}")
-            return f"[DOCX file: {os.path.basename(filepath)} - extraction failed: {e}]"
+        """Read file content with appropriate extraction."""
+        return read_file_content(filepath)
     
     def inject_file_references(self, prompt: str) -> str:
         """Replace {@filename} references with actual file content.
@@ -360,4 +334,131 @@ def files(*paths: str) -> FilesContext:
     """
     # Create context with _push_to_stack=True
     return FilesContext(*paths, _push_to_stack=True)
+
+
+# ---------------------------------------------------------------------------
+# Module-level file content reader (shared by FilesContext and standalone)
+# ---------------------------------------------------------------------------
+
+def read_file_content(filepath: str) -> str:
+    """Read file content with appropriate extraction for PDF/DOCX."""
+    ext = os.path.splitext(filepath)[1].lower()
+
+    if ext == '.pdf':
+        return _extract_pdf_text(filepath)
+    elif ext in ['.docx', '.doc']:
+        return _extract_docx_text(filepath)
+    else:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            return f.read()
+
+
+def _extract_pdf_text(filepath: str) -> str:
+    try:
+        import PyPDF2
+
+        with open(filepath, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            text_parts = []
+
+            for page_num, page in enumerate(reader.pages):
+                text = page.extract_text()
+                if text.strip():
+                    text_parts.append(f"--- Page {page_num + 1} ---\n{text}")
+
+            if text_parts:
+                return "\n\n".join(text_parts)
+            else:
+                return f"[PDF file: {os.path.basename(filepath)} - text extraction returned empty]"
+
+    except ImportError:
+        logger.warning("PyPDF2 not installed. Install with: pip install PyPDF2")
+        return f"[PDF file: {os.path.basename(filepath)} - PyPDF2 not installed]"
+    except Exception as e:
+        logger.error(f"Failed to extract PDF text: {e}")
+        return f"[PDF file: {os.path.basename(filepath)} - extraction failed: {e}]"
+
+
+def _extract_docx_text(filepath: str) -> str:
+    try:
+        import docx
+
+        doc = docx.Document(filepath)
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+
+        if paragraphs:
+            return "\n\n".join(paragraphs)
+        else:
+            return f"[DOCX file: {os.path.basename(filepath)} - no text content]"
+
+    except ImportError:
+        logger.warning("python-docx not installed. Install with: pip install python-docx")
+        return f"[DOCX file: {os.path.basename(filepath)} - python-docx not installed]"
+    except Exception as e:
+        logger.error(f"Failed to extract DOCX text: {e}")
+        return f"[DOCX file: {os.path.basename(filepath)} - extraction failed: {e}]"
+
+
+# ---------------------------------------------------------------------------
+# Standalone file-reference resolution (no FilesContext required)
+# ---------------------------------------------------------------------------
+
+def _resolve_standalone_reference(query: str, source_path: str) -> str:
+    """Resolve a single {@...} reference without a FilesContext.
+
+    Strategy:
+    1. Absolute path -- use directly.
+    2. Has path components (``/``, ``..``) -- resolve relative to source file.
+    3. Bare filename -- find the project root (walk up to config.yaml) and
+       use the same smart-search logic as ``FilesContext``.
+    """
+    # 1. Absolute path
+    if os.path.isabs(query) and os.path.exists(query):
+        logger.debug(f"Standalone resolved '{query}' as absolute path")
+        return query
+
+    # 2. Relative path with explicit components
+    if _has_path_components(query):
+        source_dir = os.path.dirname(source_path)
+        candidate = os.path.normpath(os.path.join(source_dir, query))
+        if os.path.exists(candidate):
+            logger.debug(f"Standalone resolved '{query}' relative to source: {candidate}")
+            return candidate
+        raise FileReferenceError(query, [])
+
+    # 3. Bare filename -- use project root as context
+    project_root = _find_project_root(source_path)
+    if project_root is None:
+        raise FileReferenceError(query, [])
+
+    ctx = FilesContext(project_root)
+    ctx.indexed_files = ctx._index_files([project_root])
+    ctx.searcher = FileSearcher(ctx.indexed_files)
+    logger.debug(
+        f"Standalone: indexed {len(ctx.indexed_files)} files under project root '{project_root}'"
+    )
+    return ctx.resolve_file_reference(query)
+
+
+def resolve_standalone_file_references(prompt: str, source_path: str) -> str:
+    """Replace {@...} references using path-based resolution.
+
+    Called as a fallback when no ``FilesContext`` is active.
+    """
+    if not _FILE_REF_RE.search(prompt):
+        return prompt
+
+    def replace_ref(match: re.Match) -> str:
+        query = match.group(1).strip()
+        try:
+            filepath = _resolve_standalone_reference(query, source_path)
+            content = read_file_content(filepath)
+            return f"\n\n--- {os.path.basename(filepath)} ---\n{content}\n"
+        except (FileReferenceError, AmbiguousFileError):
+            raise
+        except Exception as e:
+            logger.error(f"Error processing standalone file reference '{query}': {e}")
+            return f"\n[Error loading file: {query} - {e}]\n"
+
+    return _FILE_REF_RE.sub(replace_ref, prompt)
 

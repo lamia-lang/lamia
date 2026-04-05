@@ -14,6 +14,10 @@ and resolved later by the engine's FilesContextManager at execution time.
 import logging
 import re
 
+from lamia.engine.managers.llm.files_context_manager import (
+    get_active_files_context,
+    resolve_standalone_file_references,
+)
 from lamia.interpreter.human.parser import HuFunction
 
 _FILE_CTX_RE = re.compile(r'\{@([^}]+)\}')
@@ -53,4 +57,11 @@ class HuCallable:
         # doesn't choke on them, then restore after substitution.
         escaped = _FILE_CTX_RE.sub(r"{{@\1}}", self._fn.template)
         result = escaped.format(**substitutions)
+
+        # When no FilesContext is active, resolve {@...} relative to this
+        # .hu file now -- by the time LLMManager sees the string the
+        # source path would be lost.
+        if not get_active_files_context() and self._fn.source_path:
+            result = resolve_standalone_file_references(result, self._fn.source_path)
+
         return result

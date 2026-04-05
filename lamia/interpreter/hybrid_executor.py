@@ -8,6 +8,7 @@ parameter handling, and integration with Lamia instances.
 import inspect
 import os
 import logging
+from pathlib import Path
 from typing import Optional, Dict, Any
 from .hybrid_syntax_parser import HybridSyntaxParser
 from .hybrid_file_cache import HybridFileCache
@@ -19,6 +20,7 @@ from .detectors.llm_command_detector import (
     FileWriteReturnType,
 )
 from lamia.adapters.web.session_context import SessionSkipException
+from lamia.engine.managers.llm.files_context_manager import push_source_file, pop_source_file
 from lamia.facade.result_types import LamiaResult
 
 logger = logging.getLogger(__name__)
@@ -204,14 +206,15 @@ class HybridExecutor:
         
         # Execute the transformed code directly
         compiled_code = compile(transformed_code, file_path, 'exec')
+        push_source_file(str(Path(file_path).resolve()))
         try:
             exec(compiled_code, globals_dict)
         except NameError as e:
             if enable_lazy_dependency_loading:
-                # NameError during execution - the lazy loading should have handled it
-                # Re-raise with more context
                 logger.error(f"Function not found even after lazy loading: {e}")
             raise
+        finally:
+            pop_source_file()
     
 
 

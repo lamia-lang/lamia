@@ -12,7 +12,7 @@ from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.errors import MissingAPIKeysError
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import LLMCommand
-from .files_context_manager import get_active_files_context
+from .files_context_manager import get_active_files_context, get_current_source_file, resolve_standalone_file_references
 from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
 from lamia.validation.validators.object_validator import ObjectValidator
 import logging
@@ -71,10 +71,13 @@ class LLMManager(Manager):
         )
 
     def _inject_file_references(self, prompt: str) -> str:
-        """Inject file references from active files context."""
+        """Inject file references from active files context or standalone resolution."""
         context = get_active_files_context()
         if context:
             return context.inject_file_references(prompt)
+        source_file = get_current_source_file()
+        if source_file:
+            return resolve_standalone_file_references(prompt, source_file)
         return prompt
     
     def _get_needed_providers(self) -> Set[str]:
