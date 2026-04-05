@@ -117,6 +117,40 @@ class TestReadFileContent:
         with pytest.raises(FileNotFoundError):
             read_file_content("/does/not/exist.txt")
 
+    def test_pdf_extracted_via_pypdf2(self, tmp_path):
+        pdf_file = tmp_path / "resume.pdf"
+        pdf_file.write_bytes(b"%PDF-fake")
+
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = "John Doe\nAI Engineer"
+        mock_reader = MagicMock()
+        mock_reader.pages = [mock_page]
+
+        with patch("lamia.engine.managers.llm.files_context_manager.PyPDF2") as mock_pypdf2:
+            mock_pypdf2.PdfReader.return_value = mock_reader
+            content = read_file_content(str(pdf_file))
+
+        assert "John Doe" in content
+        assert "Page 1" in content
+
+    def test_pdf_standalone_resolution(self, project_tree):
+        """A .pdf reference is located via project search and content is extracted."""
+        pdf_file = project_tree / "resume.pdf"
+        pdf_file.write_bytes(b"%PDF-fake")
+
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = "Jane Smith"
+        mock_reader = MagicMock()
+        mock_reader.pages = [mock_page]
+
+        source = str(project_tree / "prompts" / "greet.hu")
+        with patch("lamia.engine.managers.llm.files_context_manager.PyPDF2") as mock_pypdf2:
+            mock_pypdf2.PdfReader.return_value = mock_reader
+            result = resolve_standalone_file_references("{@resume.pdf}", source)
+
+        assert "Jane Smith" in result
+        assert "--- resume.pdf ---" in result
+
 
 # ---------------------------------------------------------------------------
 # _resolve_standalone_reference

@@ -7,6 +7,8 @@ from typing import List, Tuple, Optional, Dict
 from difflib import SequenceMatcher, get_close_matches
 import re
 
+import PyPDF2
+
 from lamia.errors import AmbiguousFileError, FileReferenceError
 
 logger = logging.getLogger(__name__)
@@ -354,49 +356,32 @@ def read_file_content(filepath: str) -> str:
 
 
 def _extract_pdf_text(filepath: str) -> str:
-    try:
-        import PyPDF2
+    with open(filepath, 'rb') as f:
+        reader = PyPDF2.PdfReader(f)
+        text_parts = []
 
-        with open(filepath, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
-            text_parts = []
+        for page_num, page in enumerate(reader.pages):
+            text = page.extract_text()
+            if text.strip():
+                text_parts.append(f"--- Page {page_num + 1} ---\n{text}")
 
-            for page_num, page in enumerate(reader.pages):
-                text = page.extract_text()
-                if text.strip():
-                    text_parts.append(f"--- Page {page_num + 1} ---\n{text}")
-
-            if text_parts:
-                return "\n\n".join(text_parts)
-            else:
-                return f"[PDF file: {os.path.basename(filepath)} - text extraction returned empty]"
-
-    except ImportError:
-        logger.warning("PyPDF2 not installed. Install with: pip install PyPDF2")
-        return f"[PDF file: {os.path.basename(filepath)} - PyPDF2 not installed]"
-    except Exception as e:
-        logger.error(f"Failed to extract PDF text: {e}")
-        return f"[PDF file: {os.path.basename(filepath)} - extraction failed: {e}]"
+        if text_parts:
+            return "\n\n".join(text_parts)
+        return f"[PDF file: {os.path.basename(filepath)} - text extraction returned empty]"
 
 
 def _extract_docx_text(filepath: str) -> str:
     try:
         import docx
-
-        doc = docx.Document(filepath)
-        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-
-        if paragraphs:
-            return "\n\n".join(paragraphs)
-        else:
-            return f"[DOCX file: {os.path.basename(filepath)} - no text content]"
-
     except ImportError:
-        logger.warning("python-docx not installed. Install with: pip install python-docx")
-        return f"[DOCX file: {os.path.basename(filepath)} - python-docx not installed]"
-    except Exception as e:
-        logger.error(f"Failed to extract DOCX text: {e}")
-        return f"[DOCX file: {os.path.basename(filepath)} - extraction failed: {e}]"
+        return f"[DOCX file: {os.path.basename(filepath)} - python-docx not installed. Install with: pip install python-docx]"
+
+    document = docx.Document(filepath)
+    paragraphs = [p.text for p in document.paragraphs if p.text.strip()]
+
+    if paragraphs:
+        return "\n\n".join(paragraphs)
+    return f"[DOCX file: {os.path.basename(filepath)} - no text content]"
 
 
 # ---------------------------------------------------------------------------
