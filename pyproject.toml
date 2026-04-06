@@ -78,6 +78,9 @@ Issues = "https://github.com/lamia-lang/lamia/issues"
 [tool.setuptools.packages.find]
 include = ["lamia*"]
 
+[tool.setuptools.package-data]
+lamia = ["../docs/**/*.md"]
+
 [tool.setuptools_scm]
 version_file = "lamia/_version.py"
 

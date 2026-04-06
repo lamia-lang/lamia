@@ -169,11 +169,17 @@ async def json_mode(lamia: Lamia) -> None:
     is suppressed before this function is called).
 
     Request  : {"text": "user message"}
-               {"text": "user message", "system": "optional system prompt prefix"}
+               {"text": "...", "system": "...", "files": ["/path/a.lm", "/path/b.hu"]}
     Response : {"type": "response", "text": "...", "model": "...", "tokens": {...}}
     Error    : {"type": "error", "message": "..."}
     Ready    : {"type": "ready"}  (sent once after startup)
     """
+    from lamia.engine.managers.llm.files_context_manager import files as files_context
+    from lamia.cli.tools import execute_tool, get_tools_system_prompt
+
+    MAX_TOOL_ROUNDS = 5
+    tools_prompt = get_tools_system_prompt()
+
     _json_write({"type": "ready"})
 
     loop = asyncio.get_event_loop()
@@ -203,27 +209,63 @@ async def json_mode(lamia: Lamia) -> None:
 
         system_prefix = request.get("system", "")
         if system_prefix:
-            user_text = system_prefix.rstrip() + "\n\n" + user_text
+            system_prefix = system_prefix.rstrip() + "\n\n" + tools_prompt
+        else:
+            system_prefix = tools_prompt
+
+        prompt = system_prefix + "\n\n" + user_text
+        file_paths = request.get("files", [])
+        cwd = os.getcwd()
 
         try:
-            result = await lamia.run_async(user_text, _full_result=True)
+            final_text = ""
+            model_name = None
+            total_tokens: dict = {}
 
-            response: dict = {
-                "type": "response",
-                "text": result.result_text,
-            }
+            for _round in range(MAX_TOOL_ROUNDS + 1):
+                if file_paths:
+                    with files_context(*file_paths):
+                        result = await lamia.run_async(prompt, _full_result=True)
+                else:
+                    result = await lamia.run_async(prompt, _full_result=True)
 
-            ctx = result.tracking_context
-            if ctx:
-                if ctx.data_provider_name:
-                    response["model"] = ctx.data_provider_name
-                if ctx.metadata and "usage" in ctx.metadata:
+                ctx = result.tracking_context
+                if ctx and ctx.data_provider_name:
+                    model_name = ctx.data_provider_name
+                if ctx and ctx.metadata and "usage" in ctx.metadata:
                     usage = ctx.metadata["usage"]
-                    tokens: dict = {}
-                    tokens["input"] = usage.get("prompt_tokens") or usage.get("input_tokens", 0)
-                    tokens["output"] = usage.get("completion_tokens") or usage.get("output_tokens", 0)
-                    tokens["total"] = usage.get("total_tokens", tokens["input"] + tokens["output"])
-                    response["tokens"] = tokens
+                    inp = usage.get("prompt_tokens") or usage.get("input_tokens", 0)
+                    out = usage.get("completion_tokens") or usage.get("output_tokens", 0)
+                    total_tokens["input"] = total_tokens.get("input", 0) + inp
+                    total_tokens["output"] = total_tokens.get("output", 0) + out
+                    total_tokens["total"] = total_tokens["input"] + total_tokens["output"]
+
+                text = result.result_text or ""
+                tool_call = _extract_tool_call(text)
+
+                if tool_call and _round < MAX_TOOL_ROUNDS:
+                    tool_name = tool_call.get("tool", "")
+                    tool_args = tool_call.get("args", {})
+                    logger.debug(f"Tool call: {tool_name}({tool_args})")
+
+                    _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
+                    tool_result = execute_tool(tool_name, tool_args, cwd)
+
+                    prompt = (
+                        f"{prompt}\n\nAssistant called tool {tool_name}.\n"
+                        f"Tool result:\n{tool_result}\n\n"
+                        f"Continue your response to the user based on this tool result."
+                    )
+                    continue
+
+                final_text = text
+                break
+
+            response: dict = {"type": "response", "text": final_text}
+            if model_name:
+                response["model"] = model_name
+            if total_tokens:
+                response["tokens"] = total_tokens
 
             _json_write(response)
 
@@ -236,6 +278,21 @@ async def json_mode(lamia: Lamia) -> None:
         except Exception as exc:
             logger.error(f"json_mode error: {exc}", exc_info=True)
             _json_write({"type": "error", "message": str(exc)})
+
+
+def _extract_tool_call(text: str) -> Optional[dict]:
+    """Try to extract a tool call JSON from the LLM response text."""
+    for line in text.strip().split("\n"):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+            if "tool" in obj and isinstance(obj.get("tool"), str):
+                return obj
+        except json.JSONDecodeError:
+            continue
+    return None
 
 
 def _open_ide(folder: str) -> None:

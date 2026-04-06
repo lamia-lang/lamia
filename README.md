@@ -231,6 +231,14 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
 | **[Selector Resolution](lamia/engine/managers/web/selector_resolution/README.md)** | CSS/XPath and AI-powered natural language selectors |
 | **[Evaluation](lamia/eval/README.md)** | Model evaluation to find cost-effective models |
 
+## Documentation
+
+Full documentation: **[lamia-lang.github.io/lamia](https://lamia-lang.github.io/lamia/)**
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, doc building, and code style guidelines.
+
+## License
+
+[MIT](LICENSE)
