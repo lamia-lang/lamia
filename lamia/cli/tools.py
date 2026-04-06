@@ -13,10 +13,35 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+TOPIC_TO_FILE = {
+    "lm-syntax": "user-guide/lm-syntax.md",
+    "lm": "user-guide/lm-syntax.md",
+    ".lm": "user-guide/lm-syntax.md",
+    "hu-syntax": "user-guide/hu-syntax.md",
+    "hu": "user-guide/hu-syntax.md",
+    ".hu": "user-guide/hu-syntax.md",
+    "files-context": "user-guide/files-context.md",
+    "files": "user-guide/files-context.md",
+    "file-context": "user-guide/files-context.md",
+    "configuration": "getting-started/configuration.md",
+    "config": "getting-started/configuration.md",
+    "config.yaml": "getting-started/configuration.md",
+    "installation": "getting-started/installation.md",
+    "install": "getting-started/installation.md",
+    "validation": "user-guide/validation.md",
+    "web-automation": "user-guide/web-automation.md",
+    "web": "user-guide/web-automation.md",
+    "evaluation": "user-guide/evaluation.md",
+    "eval": "user-guide/evaluation.md",
+    "selector": "validation/selector-usage-guide.md",
+}
+
+_DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))
+
 TOOL_DEFINITIONS = [
     {
         "name": "get_docs",
-        "description": "Retrieve Lamia language documentation by topic. Topics: lm-syntax, hu-syntax, files-context, configuration, installation, validation, web-automation, evaluation.",
+        "description": f"Retrieve Lamia language documentation by topic. Topics: {_DOCS_TOPICS}.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -74,29 +99,6 @@ TOOL_DEFINITIONS = [
         },
     },
 ]
-
-TOPIC_TO_FILE = {
-    "lm-syntax": "user-guide/lm-syntax.md",
-    "lm": "user-guide/lm-syntax.md",
-    ".lm": "user-guide/lm-syntax.md",
-    "hu-syntax": "user-guide/hu-syntax.md",
-    "hu": "user-guide/hu-syntax.md",
-    ".hu": "user-guide/hu-syntax.md",
-    "files-context": "user-guide/files-context.md",
-    "files": "user-guide/files-context.md",
-    "file-context": "user-guide/files-context.md",
-    "configuration": "getting-started/configuration.md",
-    "config": "getting-started/configuration.md",
-    "config.yaml": "getting-started/configuration.md",
-    "installation": "getting-started/installation.md",
-    "install": "getting-started/installation.md",
-    "validation": "user-guide/validation.md",
-    "web-automation": "user-guide/web-automation.md",
-    "web": "user-guide/web-automation.md",
-    "evaluation": "user-guide/evaluation.md",
-    "eval": "user-guide/evaluation.md",
-    "selector": "validation/selector-usage-guide.md",
-}
 
 
 def _find_docs_dir() -> Optional[Path]:
