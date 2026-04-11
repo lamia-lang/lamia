@@ -69,7 +69,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "list_files",
-        "description": "List files in a directory. Returns file names and types.",
+        "description": "Recursively list files and subdirectories (up to 4 levels deep).",
         "parameters": {
             "type": "object",
             "properties": {
@@ -99,6 +99,21 @@ TOOL_DEFINITIONS = [
         },
     },
 ]
+
+# Module-level accumulator for file writes during a single request.
+# The caller (json_mode) calls reset_file_writes() before the tool loop
+# and get_file_writes() after to include them in the response.
+_file_writes: list = []
+
+
+def reset_file_writes() -> None:
+    """Clear tracked file writes (call before each request's tool loop)."""
+    _file_writes.clear()
+
+
+def get_file_writes() -> list:
+    """Return a copy of file writes accumulated during the current request."""
+    return list(_file_writes)
 
 
 def _find_docs_dir() -> Optional[Path]:
@@ -175,25 +190,39 @@ def _read_file(filepath: str, cwd: str) -> str:
         return f"Error reading file: {exc}"
 
 
+_SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv", ".tox", ".mypy_cache"}
+
+
 def _list_files(directory: str, cwd: str) -> str:
     resolved = Path(directory) if os.path.isabs(directory) else Path(cwd) / directory
     if not resolved.is_dir():
         return f"Directory not found: {resolved}"
 
-    entries = []
-    try:
-        for entry in sorted(resolved.iterdir()):
-            if entry.name.startswith("."):
-                continue
-            kind = "dir" if entry.is_dir() else entry.suffix or "file"
-            entries.append(f"  {entry.name}  ({kind})")
-    except Exception as exc:
-        return f"Error listing directory: {exc}"
+    MAX_DEPTH = 4
+    lines: list = []
 
-    if not entries:
+    def _walk(dir_path: Path, prefix: str, depth: int) -> None:
+        if depth > MAX_DEPTH:
+            return
+        try:
+            children = sorted(dir_path.iterdir())
+        except Exception:
+            return
+        for entry in children:
+            if entry.name.startswith(".") or entry.name in _SKIP_DIRS:
+                continue
+            if entry.is_dir():
+                lines.append(f"{prefix}{entry.name}/")
+                _walk(entry, prefix + "  ", depth + 1)
+            else:
+                lines.append(f"{prefix}{entry.name}")
+
+    _walk(resolved, "  ", 0)
+
+    if not lines:
         return f"Empty directory: {resolved}"
 
-    return f"{resolved}/\n" + "\n".join(entries)
+    return f"{resolved}/\n" + "\n".join(lines)
 
 
 def _write_file(filepath: str, content: str, cwd: str) -> str:
@@ -202,12 +231,29 @@ def _write_file(filepath: str, content: str, cwd: str) -> str:
 
     resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
 
+    original: Optional[str] = None
+    if resolved.is_file():
+        try:
+            original = resolved.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     try:
         resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_text(content, encoding="utf-8")
-        return f"Written: {resolved} ({len(content)} chars)"
     except Exception as exc:
         return f"Error writing file: {exc}"
+
+    entry: dict = {
+        "path": str(resolved),
+        "action": "modify" if original is not None else "create",
+        "content": content,
+    }
+    if original is not None:
+        entry["original"] = original
+    _file_writes.append(entry)
+
+    return f"Written: {resolved} ({len(content)} chars)"
 
 
 def get_tools_system_prompt() -> str:

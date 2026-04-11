@@ -1,6 +1,7 @@
 from ast import Pass
 import asyncio
 import json
+import re
 import signal
 import sys
 import os
@@ -175,9 +176,9 @@ async def json_mode(lamia: Lamia) -> None:
     Ready    : {"type": "ready"}  (sent once after startup)
     """
     from lamia.engine.managers.llm.files_context_manager import files as files_context
-    from lamia.cli.tools import execute_tool, get_tools_system_prompt
+    from lamia.cli.tools import execute_tool, get_tools_system_prompt, reset_file_writes, get_file_writes
 
-    MAX_TOOL_ROUNDS = 5
+    MAX_TOOL_ROUNDS = 50
     tools_prompt = get_tools_system_prompt()
 
     _json_write({"type": "ready"})
@@ -221,6 +222,7 @@ async def json_mode(lamia: Lamia) -> None:
             final_text = ""
             model_name = None
             total_tokens: dict = {}
+            reset_file_writes()
 
             for _round in range(MAX_TOOL_ROUNDS + 1):
                 if file_paths:
@@ -243,14 +245,18 @@ async def json_mode(lamia: Lamia) -> None:
                 text = result.result_text or ""
                 tool_call = _extract_tool_call(text)
 
-                if tool_call and _round < MAX_TOOL_ROUNDS:
-                    tool_name = tool_call.get("tool", "")
-                    tool_args = tool_call.get("args", {})
-                    logger.debug(f"Tool call: {tool_name}({tool_args})")
+                if not tool_call:
+                    final_text = text
+                    break
 
-                    _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
-                    tool_result = execute_tool(tool_name, tool_args, cwd)
+                tool_name = tool_call.get("tool", "")
+                tool_args = tool_call.get("args", {})
+                logger.debug(f"Tool call: {tool_name}({tool_args})")
 
+                _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
+                tool_result = execute_tool(tool_name, tool_args, cwd)
+
+                if _round < MAX_TOOL_ROUNDS:
                     prompt = (
                         f"{prompt}\n\nAssistant called tool {tool_name}.\n"
                         f"Tool result:\n{tool_result}\n\n"
@@ -258,7 +264,7 @@ async def json_mode(lamia: Lamia) -> None:
                     )
                     continue
 
-                final_text = text
+                final_text = _strip_tool_calls(text)
                 break
 
             response: dict = {"type": "response", "text": final_text}
@@ -266,6 +272,9 @@ async def json_mode(lamia: Lamia) -> None:
                 response["model"] = model_name
             if total_tokens:
                 response["tokens"] = total_tokens
+            file_writes = get_file_writes()
+            if file_writes:
+                response["files"] = file_writes
 
             _json_write(response)
 
@@ -281,7 +290,12 @@ async def json_mode(lamia: Lamia) -> None:
 
 
 def _extract_tool_call(text: str) -> Optional[dict]:
-    """Try to extract a tool call JSON from the LLM response text."""
+    """Extract the first tool call from LLM response text.
+
+    Supports two formats:
+    - JSON:  {"tool": "name", "args": {"k": "v"}}
+    - XML:   <invoke ...><tool_name>name</tool_name><parameter name="k">v</parameter></invoke>
+    """
     for line in text.strip().split("\n"):
         line = line.strip()
         if not line.startswith("{"):
@@ -292,7 +306,41 @@ def _extract_tool_call(text: str) -> Optional[dict]:
                 return obj
         except json.JSONDecodeError:
             continue
+
+    invoke_match = re.search(r"<invoke\b[^>]*>(.*?)</invoke>", text, re.DOTALL)
+    if invoke_match:
+        block = invoke_match.group(1)
+        name_match = re.search(r"<tool_name>\s*(\w+)\s*</tool_name>", block)
+        if name_match:
+            args: dict = {}
+            for pm in re.finditer(
+                r'<parameter\s+name="(\w+)">(.*?)</parameter>', block, re.DOTALL
+            ):
+                args[pm.group(1)] = pm.group(2)
+            return {"tool": name_match.group(1), "args": args}
+
     return None
+
+
+def _strip_tool_calls(text: str) -> str:
+    """Remove tool-call JSON and XML blocks from LLM response text."""
+    lines = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("{"):
+            try:
+                obj = json.loads(stripped)
+                if "tool" in obj and isinstance(obj.get("tool"), str):
+                    continue
+            except json.JSONDecodeError:
+                pass
+        lines.append(line)
+    result = "\n".join(lines)
+
+    result = re.sub(r"<function_calls>.*?</function_calls>", "", result, flags=re.DOTALL)
+    result = re.sub(r"<invoke\b[^>]*>.*?</invoke>", "", result, flags=re.DOTALL)
+
+    return result.strip()
 
 
 def _open_ide(folder: str) -> None:
