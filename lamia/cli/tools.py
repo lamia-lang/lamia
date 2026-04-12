@@ -98,6 +98,20 @@ TOOL_DEFINITIONS = [
             "required": ["path", "content"],
         },
     },
+    {
+        "name": "delete_file",
+        "description": "Delete a file at the given path.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "File path to delete",
+                },
+            },
+            "required": ["path"],
+        },
+    },
 ]
 
 # Module-level accumulator for file writes during a single request.
@@ -141,6 +155,8 @@ def execute_tool(name: str, args: dict, cwd: str = ".") -> str:
         return _list_files(args.get("directory", "."), cwd)
     elif name == "write_file":
         return _write_file(args.get("path", ""), args.get("content", ""), cwd)
+    elif name == "delete_file":
+        return _delete_file(args.get("path", ""), cwd)
     else:
         return f"Unknown tool: {name}"
 
@@ -254,6 +270,36 @@ def _write_file(filepath: str, content: str, cwd: str) -> str:
     _file_writes.append(entry)
 
     return f"Written: {resolved} ({len(content)} chars)"
+
+
+def _delete_file(filepath: str, cwd: str) -> str:
+    if not filepath:
+        return "Error: path is required"
+
+    resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
+    if not resolved.is_file():
+        return f"File not found: {resolved}"
+
+    original: Optional[str] = None
+    try:
+        original = resolved.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+    try:
+        resolved.unlink()
+    except Exception as exc:
+        return f"Error deleting file: {exc}"
+
+    entry: dict = {
+        "path": str(resolved),
+        "action": "delete",
+    }
+    if original is not None:
+        entry["original"] = original
+    _file_writes.append(entry)
+
+    return f"Deleted: {resolved}"
 
 
 def get_tools_system_prompt() -> str:
