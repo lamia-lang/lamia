@@ -196,12 +196,16 @@ async def json_mode(lamia: Lamia) -> None:
     _json_write({"type": "ready"})
 
     loop = asyncio.get_event_loop()
-    reader = asyncio.StreamReader()
+    reader = asyncio.StreamReader(limit=10 * 1024 * 1024)
     protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
 
     while True:
-        raw = await reader.readline()
+        try:
+            raw = await reader.readline()
+        except ValueError as exc:
+            _json_write({"type": "error", "message": f"Request too large: {exc}"})
+            continue
         if not raw:
             break
 
@@ -267,7 +271,14 @@ async def json_mode(lamia: Lamia) -> None:
                 tool_call = _extract_tool_call(text)
 
                 if not tool_call:
-                    final_text = text
+                    if _detect_malformed_tool_call(text) and _round < MAX_TOOL_ROUNDS:
+                        logger.debug("Malformed tool call detected, sending correction")
+                        prompt = (
+                            f"{prompt}\n\nAssistant: {text}\n\n"
+                            f"System: {TOOL_FORMAT_CORRECTION}"
+                        )
+                        continue
+                    final_text = _strip_tool_calls(text)
                     break
 
                 tool_name = tool_call.get("tool", "")
@@ -343,6 +354,62 @@ def _extract_tool_call(text: str) -> Optional[dict]:
     return None
 
 
+_MALFORMED_TOOL_PATTERNS = [
+    re.compile(r"<function_calls>", re.IGNORECASE),
+    re.compile(r"<tool_call>", re.IGNORECASE),
+    re.compile(r"<tool_use>", re.IGNORECASE),
+    re.compile(r'<invoke\s+name\s*=\s*["\']', re.IGNORECASE),
+    re.compile(r"```tool", re.IGNORECASE),
+    re.compile(r"```json\s*\n\s*\{\s*\"tool", re.IGNORECASE),
+]
+
+_MALFORMED_JSON_KEYS = [
+    ("name", "input"),       # Anthropic native tool_use
+    ("function", "arguments"),  # OpenAI function_call
+    ("name", "parameters"),  # Generic
+    ("tool_name", "args"),   # Close but wrong key
+    ("tool_name", "parameters"),
+]
+
+
+def _detect_malformed_tool_call(text: str) -> bool:
+    """Detect if the LLM attempted a tool call in an unsupported format.
+
+    Casts a wide net: XML wrappers (function_calls, tool_call, tool_use,
+    invoke-with-name-attr), JSON with wrong keys (name+input, function+arguments),
+    and fenced code blocks containing tool-like JSON.
+    """
+    for pattern in _MALFORMED_TOOL_PATTERNS:
+        if pattern.search(text):
+            return True
+
+    for line in text.strip().split("\n"):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+            if not isinstance(obj, dict):
+                continue
+            for key_a, key_b in _MALFORMED_JSON_KEYS:
+                if key_a in obj and key_b in obj:
+                    return True
+        except json.JSONDecodeError:
+            continue
+
+    return False
+
+
+TOOL_FORMAT_CORRECTION = (
+    "Your tool call was NOT in the correct format and could not be executed. "
+    "Do NOT use XML tags like <function_calls>, <invoke>, <tool_call>, or <tool_use>. "
+    "Do NOT use JSON keys like \"name\"/\"input\" or \"function\"/\"arguments\".\n\n"
+    "You MUST use this EXACT JSON format on its own line:\n"
+    '{"tool": "tool_name", "args": {"param": "value"}}\n\n'
+    "Retry your tool call now using the correct format."
+)
+
+
 def _strip_tool_calls(text: str) -> str:
     """Remove tool-call JSON and XML blocks from LLM response text."""
     lines = []
@@ -351,15 +418,29 @@ def _strip_tool_calls(text: str) -> str:
         if stripped.startswith("{"):
             try:
                 obj = json.loads(stripped)
+                if not isinstance(obj, dict):
+                    lines.append(line)
+                    continue
                 if "tool" in obj and isinstance(obj.get("tool"), str):
                     continue
+                for key_a, key_b in _MALFORMED_JSON_KEYS:
+                    if key_a in obj and key_b in obj:
+                        break
+                else:
+                    lines.append(line)
+                    continue
             except json.JSONDecodeError:
-                pass
-        lines.append(line)
+                lines.append(line)
+                continue
+        else:
+            lines.append(line)
     result = "\n".join(lines)
 
     result = re.sub(r"<function_calls>.*?</function_calls>", "", result, flags=re.DOTALL)
+    result = re.sub(r"<tool_call>.*?</tool_call>", "", result, flags=re.DOTALL)
+    result = re.sub(r"<tool_use>.*?</tool_use>", "", result, flags=re.DOTALL)
     result = re.sub(r"<invoke\b[^>]*>.*?</invoke>", "", result, flags=re.DOTALL)
+    result = re.sub(r"\n{3,}", "\n\n", result)
 
     return result.strip()
 
