@@ -162,6 +162,17 @@ def _json_write(obj: dict) -> None:
     sys.stdout.flush()
 
 
+def _format_history(messages: list[dict]) -> str:
+    """Format pre-compressed conversation messages into a prompt block."""
+    if not messages:
+        return ""
+    parts = []
+    for m in messages:
+        role = m.get("role", "assistant").capitalize()
+        parts.append(f"{role}: {m.get('text', '')}")
+    return "\n\n".join(parts)
+
+
 async def json_mode(lamia: Lamia) -> None:
     """Machine-readable JSON-line protocol for IDE integration.
 
@@ -170,7 +181,8 @@ async def json_mode(lamia: Lamia) -> None:
     is suppressed before this function is called).
 
     Request  : {"text": "user message"}
-               {"text": "...", "system": "...", "files": ["/path/a.lm", "/path/b.hu"]}
+               {"text": "...", "system": "...", "files": ["/path/a.lm", "/path/b.hu"],
+                "messages": [{"role": "user", "text": "..."}, {"role": "assistant", "text": "..."}]}
     Response : {"type": "response", "text": "...", "model": "...", "tokens": {...}}
     Error    : {"type": "error", "message": "..."}
     Ready    : {"type": "ready"}  (sent once after startup)
@@ -214,7 +226,16 @@ async def json_mode(lamia: Lamia) -> None:
         else:
             system_prefix = tools_prompt
 
-        prompt = system_prefix + "\n\n" + user_text
+        raw_messages = request.get("messages", [])
+        if raw_messages:
+            history_block = _format_history(raw_messages)
+            prompt = (
+                f"{system_prefix}\n\n"
+                f"<conversation_history>\n{history_block}\n</conversation_history>\n\n"
+                f"User: {user_text}"
+            )
+        else:
+            prompt = system_prefix + "\n\n" + user_text
         file_paths = request.get("files", [])
         cwd = os.getcwd()
 
