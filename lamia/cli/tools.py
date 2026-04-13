@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from lamia.lint import HuLinter
+
 logger = logging.getLogger(__name__)
 
 TOPIC_TO_FILE = {
@@ -99,6 +101,31 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "patch_file",
+        "description": (
+            "Edit an existing file by replacing old_text with new_text. "
+            "Preferred over write_file for modifications — only express the change, not the whole file."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "File path to edit",
+                },
+                "old_text": {
+                    "type": "string",
+                    "description": "Exact text to find in the file (must match exactly)",
+                },
+                "new_text": {
+                    "type": "string",
+                    "description": "Replacement text",
+                },
+            },
+            "required": ["path", "old_text", "new_text"],
+        },
+    },
+    {
         "name": "delete_file",
         "description": "Delete a file at the given path.",
         "parameters": {
@@ -155,6 +182,13 @@ def execute_tool(name: str, args: dict, cwd: str = ".") -> str:
         return _list_files(args.get("directory", "."), cwd)
     elif name == "write_file":
         return _write_file(args.get("path", ""), args.get("content", ""), cwd)
+    elif name == "patch_file":
+        return _patch_file(
+            args.get("path", ""),
+            args.get("old_text", ""),
+            args.get("new_text", ""),
+            cwd,
+        )
     elif name == "delete_file":
         return _delete_file(args.get("path", ""), cwd)
     else:
@@ -241,19 +275,27 @@ def _list_files(directory: str, cwd: str) -> str:
     return f"{resolved}/\n" + "\n".join(lines)
 
 
-def _write_file(filepath: str, content: str, cwd: str) -> str:
-    if not filepath:
-        return "Error: path is required"
+_hu_linter = HuLinter()
 
-    resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
+_LINTERS = {
+    ".hu": _hu_linter,
+}
 
-    original: Optional[str] = None
-    if resolved.is_file():
-        try:
-            original = resolved.read_text(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
 
+def _lint_feedback(resolved: Path, content: str, original: Optional[str]) -> str:
+    """Post-write lint feedback. Returns empty string if clean or no linter."""
+    linter = _LINTERS.get(resolved.suffix)
+    if not linter:
+        return ""
+    result = linter.lint(content, original)
+    feedback = result.feedback_message()
+    if feedback:
+        logger.debug("Lint feedback for %s: %d issues", resolved, len(result.violations))
+    return feedback
+
+
+def _commit_write(resolved: Path, content: str, original: Optional[str]) -> str:
+    """Write content to disk and track the change."""
     try:
         resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_text(content, encoding="utf-8")
@@ -268,8 +310,89 @@ def _write_file(filepath: str, content: str, cwd: str) -> str:
     if original is not None:
         entry["original"] = original
     _file_writes.append(entry)
+    return ""
 
-    return f"Written: {resolved} ({len(content)} chars)"
+
+def _write_file(filepath: str, content: str, cwd: str) -> str:
+    if not filepath:
+        return "Error: path is required"
+
+    resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
+
+    original: Optional[str] = None
+    if resolved.is_file():
+        try:
+            original = resolved.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+    err = _commit_write(resolved, content, original)
+    if err:
+        return err
+
+    msg = f"Written: {resolved} ({len(content)} chars)"
+    if original is not None:
+        msg += " (Tip: prefer patch_file for edits — it's safer and uses fewer tokens.)"
+
+    feedback = _lint_feedback(resolved, content, original)
+    if feedback:
+        msg += "\n" + feedback
+
+    return msg
+
+
+def _patch_file(filepath: str, old_text: str, new_text: str, cwd: str) -> str:
+    if not filepath:
+        return "Error: path is required"
+    if not old_text:
+        return "Error: old_text is required"
+
+    resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
+    if not resolved.is_file():
+        return f"File not found: {resolved}"
+
+    try:
+        original = resolved.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        return f"Error reading file: {exc}"
+
+    count = original.count(old_text)
+    if count == 0:
+        lines = original.splitlines()
+        search_lower = old_text.strip().lower()
+        near: list[str] = []
+        for i, line in enumerate(lines, 1):
+            if search_lower[:40] in line.lower():
+                near.append(f"  line {i}: {line[:80]}")
+                if len(near) >= 3:
+                    break
+        hint = ""
+        if near:
+            hint = "\nSimilar lines found:\n" + "\n".join(near)
+        return (
+            f"old_text not found in {resolved}. "
+            f"Make sure it matches the file content exactly (whitespace matters).{hint}"
+        )
+
+    if count > 1:
+        return (
+            f"old_text matches {count} locations in {resolved}. "
+            "Provide more surrounding context in old_text to make it unique."
+        )
+
+    patched = original.replace(old_text, new_text, 1)
+
+    err = _commit_write(resolved, patched, original)
+    if err:
+        return err
+
+    msg = f"Patched: {resolved} ({len(old_text)} chars \u2192 {len(new_text)} chars)"
+
+    feedback = _lint_feedback(resolved, patched, original)
+    if feedback:
+        msg += "\n" + feedback
+
+    return msg
 
 
 def _delete_file(filepath: str, cwd: str) -> str:
