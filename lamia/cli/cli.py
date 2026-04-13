@@ -249,6 +249,10 @@ async def json_mode(lamia: Lamia) -> None:
             total_tokens: dict = {}
             reset_file_writes()
 
+            MAX_SAME_FILE_WRITES = 3
+
+            write_counts: dict[str, int] = {}
+
             for _round in range(MAX_TOOL_ROUNDS + 1):
                 if file_paths:
                     with files_context(*file_paths):
@@ -284,6 +288,17 @@ async def json_mode(lamia: Lamia) -> None:
                 tool_name = tool_call.get("tool", "")
                 tool_args = tool_call.get("args", {})
                 logger.debug(f"Tool call: {tool_name}({tool_args})")
+
+                if tool_name in ("write_file", "patch_file"):
+                    target = tool_args.get("path", "")
+                    write_counts[target] = write_counts.get(target, 0) + 1
+                    if write_counts[target] > MAX_SAME_FILE_WRITES:
+                        logger.warning(
+                            "Loop detected: %s written %d times, breaking",
+                            target, write_counts[target],
+                        )
+                        final_text = _strip_tool_calls(text)
+                        break
 
                 _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
                 tool_result = execute_tool(tool_name, tool_args, cwd)
