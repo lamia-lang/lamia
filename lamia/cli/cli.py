@@ -187,7 +187,6 @@ async def json_mode(lamia: Lamia) -> None:
     Error    : {"type": "error", "message": "..."}
     Ready    : {"type": "ready"}  (sent once after startup)
     """
-    from lamia.engine.managers.llm.files_context_manager import files as files_context
     from lamia.cli.tools import execute_tool, get_tools_system_prompt, reset_file_writes, get_file_writes
 
     MAX_TOOL_ROUNDS = 50
@@ -243,6 +242,20 @@ async def json_mode(lamia: Lamia) -> None:
         file_paths = request.get("files", [])
         cwd = os.getcwd()
 
+        # NOTE: reads files locally — if Lamia moves to a remote server,
+        # file contents should be sent in the request JSON instead of paths.
+        if file_paths:
+            file_sections = []
+            for fp in file_paths:
+                try:
+                    with open(fp, "r", encoding="utf-8") as fh:
+                        content = fh.read()
+                    file_sections.append(f"<file path=\"{fp}\">\n{content}\n</file>")
+                except Exception as read_err:
+                    logger.warning("Could not read attached file %s: %s", fp, read_err)
+            if file_sections:
+                prompt = prompt + "\n\n<attached_files>\n" + "\n".join(file_sections) + "\n</attached_files>"
+
         try:
             final_text = ""
             model_name = None
@@ -254,11 +267,7 @@ async def json_mode(lamia: Lamia) -> None:
             write_counts: dict[str, int] = {}
 
             for _round in range(MAX_TOOL_ROUNDS + 1):
-                if file_paths:
-                    with files_context(*file_paths):
-                        result = await lamia.run_async(prompt, _full_result=True)
-                else:
-                    result = await lamia.run_async(prompt, _full_result=True)
+                result = await lamia.run_async(prompt, _full_result=True)
 
                 ctx = result.tracking_context
                 if ctx and ctx.data_provider_name:
