@@ -12,15 +12,12 @@ and resolved later by the engine's FilesContextManager at execution time.
 """
 
 import logging
-import re
 
 from lamia.engine.managers.llm.files_context_manager import (
     get_active_files_context,
     resolve_standalone_file_references,
 )
 from lamia.interpreter.human.parser import HuFunction
-
-_FILE_CTX_RE = re.compile(r'\{@([^}]+)\}')
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +50,14 @@ class HuCallable:
 
         substitutions = {k: str(v) for k, v in kwargs.items() if k in self._fn.params}
 
-        # Temporarily escape {@...} file-context references so .format()
-        # doesn't choke on them, then restore after substitution.
-        escaped = _FILE_CTX_RE.sub(r"{{@\1}}", self._fn.template)
-        result = escaped.format(**substitutions)
+        # Escape ALL braces first so .format() ignores arbitrary
+        # curly-brace content (CSS, JSON, JS, etc.) in the template,
+        # then selectively un-escape only the declared parameter
+        # placeholders so .format() substitutes them.
+        safe = self._fn.template.replace("{", "{{").replace("}", "}}")
+        for param in self._fn.params:
+            safe = safe.replace("{{" + param + "}}", "{" + param + "}")
+        result = safe.format(**substitutions)
 
         # When no FilesContext is active, resolve {@...} relative to this
         # .hu file now -- by the time LLMManager sees the string the

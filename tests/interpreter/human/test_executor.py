@@ -61,7 +61,26 @@ class TestHuCallable:
     def test_literal_braces(self):
         fn = _make_fn(template="Format: {{key: value}}, param: {x}", params=frozenset({"x"}))
         c = HuCallable(fn)
-        assert c(x="42") == "Format: {key: value}, param: 42"
+        assert c(x="42") == "Format: {{key: value}}, param: 42"
+
+    def test_non_param_braces_preserved(self):
+        """Curly braces that aren't declared params (e.g. CSS, JSON) survive intact."""
+        fn = _make_fn(
+            template="body { id } .cls { color: red } param={x}",
+            params=frozenset({"x"}),
+        )
+        c = HuCallable(fn)
+        assert c(x="ok") == "body { id } .cls { color: red } param=ok"
+
+    def test_json_in_template(self):
+        fn = _make_fn(
+            template='Parse this JSON: {"name": "test", "id": 1} for {task}',
+            params=frozenset({"task"}),
+        )
+        c = HuCallable(fn)
+        result = c(task="validation")
+        assert '{"name": "test", "id": 1}' in result
+        assert "validation" in result
 
     def test_name_property(self):
         fn = _make_fn(name="summarize")
