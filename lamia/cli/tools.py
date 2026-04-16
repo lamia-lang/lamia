@@ -229,7 +229,19 @@ def _read_file(filepath: str, cwd: str) -> str:
 
     resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
     if not resolved.is_file():
-        return f"File not found: {resolved}"
+        basename = resolved.name
+        candidates = []
+        search_root = Path(cwd)
+        for match in search_root.rglob(basename):
+            if match.is_file() and not any(p in _SKIP_DIRS for p in match.parts):
+                candidates.append(str(match))
+                if len(candidates) >= 5:
+                    break
+        msg = f"File not found: {resolved}"
+        if candidates:
+            msg += "\n\nDid you mean:\n" + "\n".join(f"  - {c}" for c in candidates)
+        msg += "\n\nUse list_files to explore the directory structure."
+        return msg
 
     try:
         content = resolved.read_text(encoding="utf-8", errors="replace")
