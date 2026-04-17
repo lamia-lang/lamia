@@ -91,3 +91,85 @@ class TestParseHuFile:
 
         with pytest.raises(AttributeError):
             fn.name = "other"
+
+
+class TestParseHuFileOptionalParams:
+
+    def test_optional_param_none_default(self, tmp_path):
+        hu = tmp_path / "task.hu"
+        hu.write_text("Task: {raw_tasks}\nPRD: {prd_content:None}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.params == frozenset({"raw_tasks", "prd_content"})
+        assert fn.defaults == {"prd_content": ""}
+
+    def test_optional_param_text_default(self, tmp_path):
+        hu = tmp_path / "greet.hu"
+        hu.write_text("Hello {name}, role: {role:engineer}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.params == frozenset({"name", "role"})
+        assert fn.defaults == {"role": "engineer"}
+
+    def test_optional_param_multiword_default(self, tmp_path):
+        hu = tmp_path / "report.hu"
+        hu.write_text("Write a report in {style:plain text} format.")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.defaults == {"style": "plain text"}
+
+    def test_required_param_not_in_defaults(self, tmp_path):
+        hu = tmp_path / "req.hu"
+        hu.write_text("{required_param} and {optional_param:default}")
+        fn = parse_hu_file(str(hu))
+
+        assert "required_param" not in fn.defaults
+        assert "optional_param" in fn.defaults
+
+    def test_all_required_params_no_defaults(self, tmp_path):
+        hu = tmp_path / "all_req.hu"
+        hu.write_text("{a} {b} {c}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.defaults == {}
+
+    def test_all_optional_params(self, tmp_path):
+        hu = tmp_path / "all_opt.hu"
+        hu.write_text("{x:1} {y:2} {z:3}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.defaults == {"x": "1", "y": "2", "z": "3"}
+
+    def test_duplicate_param_with_default_deduplicated(self, tmp_path):
+        """First occurrence with :default wins; second occurrence is ignored."""
+        hu = tmp_path / "dup.hu"
+        hu.write_text("{param:first} then {param:second}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.params == frozenset({"param"})
+        assert fn.defaults == {"param": "first"}
+
+    def test_empty_string_default(self, tmp_path):
+        """Empty string after : is a valid default (different from :None)."""
+        hu = tmp_path / "empty_default.hu"
+        hu.write_text("{suffix:}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.defaults == {"suffix": ""}
+
+    def test_none_string_maps_to_empty_string(self, tmp_path):
+        """:None is sugar for empty string default."""
+        hu = tmp_path / "none_default.hu"
+        hu.write_text("{optional:None}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.defaults["optional"] == ""
+
+    def test_mixed_required_and_optional_with_file_context(self, tmp_path):
+        hu = tmp_path / "mixed.hu"
+        hu.write_text("Analyze {@data.csv} with focus={focus} and tone={tone:neutral}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.params == frozenset({"focus", "tone"})
+        assert fn.defaults == {"tone": "neutral"}
+        assert fn.file_contexts == frozenset({"data.csv"})

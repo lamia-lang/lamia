@@ -141,11 +141,20 @@ EXCESSIVE_GROWTH = LintRule(
     description="Content grew disproportionately — make minimal, targeted changes",
 )
 
+TOO_MANY_PARAMS = LintRule(
+    code="HU017",
+    name="too-many-params",
+    description="Too many {param} placeholders — consider using {@file} to include large content",
+)
+
+_TOO_MANY_PARAMS_THRESHOLD = 10
+_PARAM_COUNT_RE = re.compile(r'\{(\w+)(?::[^}]*)?\}')
+
 ALL_RULES = [
     YAML_FRONT_MATTER, MD_HEADER, MD_BOLD, MD_ITALIC, MD_STRIKETHROUGH,
     MD_LINK, MD_IMAGE, MD_CODE_FENCE, MD_BLOCKQUOTE, MD_TABLE,
     MD_HORIZONTAL_RULE, HTML_TAG, EMOJI, MD_INLINE_CODE, MD_TASK_LIST,
-    EXCESSIVE_GROWTH,
+    EXCESSIVE_GROWTH, TOO_MANY_PARAMS,
 ]
 
 
@@ -200,5 +209,20 @@ class HuLinter(BaseLinter):
                     rule=EXCESSIVE_GROWTH, line=0,
                     message=f"Content grew {ratio:.1f}x ({len(original)} -> {len(content)} chars)",
                 ))
+
+        unique_params = set(
+            m.group(1) for m in _PARAM_COUNT_RE.finditer(content)
+            if not m.group(1).startswith("@")
+        )
+        if len(unique_params) > _TOO_MANY_PARAMS_THRESHOLD:
+            violations.append(LintViolation(
+                rule=TOO_MANY_PARAMS, line=0,
+                message=(
+                    f"Found {len(unique_params)} params — if this file "
+                    f"contains large embedded content (JSON, CSS, code), "
+                    f"consider moving it to a separate file and using "
+                    f"{{@filename}} to include it"
+                ),
+            ))
 
         return LintResult(violations=violations)

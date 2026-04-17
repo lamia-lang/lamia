@@ -7,8 +7,19 @@ from lamia.interpreter.human.parser import HuFunction
 from lamia.interpreter.human.executor import HuCallable
 
 
-def _make_fn(name: str = "test", template: str = "", params: frozenset[str] = frozenset()) -> HuFunction:
-    return HuFunction(name=name, template=template, params=params, source_path="/fake/test.hu")
+def _make_fn(
+    name: str = "test",
+    template: str = "",
+    params: frozenset[str] = frozenset(),
+    defaults: dict | None = None,
+) -> HuFunction:
+    return HuFunction(
+        name=name,
+        template=template,
+        params=params,
+        defaults=defaults or {},
+        source_path="/fake/test.hu",
+    )
 
 
 class TestHuCallable:
@@ -98,3 +109,108 @@ class TestHuCallable:
         fn = _make_fn(template="Count: {n}", params=frozenset({"n"}))
         c = HuCallable(fn)
         assert c(n=42) == "Count: 42"
+
+
+class TestHuCallableOptionalParams:
+
+    def test_optional_param_omitted_uses_empty_default(self):
+        fn = _make_fn(
+            template="Task: {raw_tasks}\nPRD: {prd_content:None}",
+            params=frozenset({"raw_tasks", "prd_content"}),
+            defaults={"prd_content": ""},
+        )
+        c = HuCallable(fn)
+        result = c(raw_tasks="do stuff")
+        assert "do stuff" in result
+        assert "PRD: " in result
+
+    def test_optional_param_supplied_overrides_default(self):
+        fn = _make_fn(
+            template="Role: {role:engineer}",
+            params=frozenset({"role"}),
+            defaults={"role": "engineer"},
+        )
+        c = HuCallable(fn)
+        assert c(role="manager") == "Role: manager"
+
+    def test_optional_param_omitted_uses_text_default(self):
+        fn = _make_fn(
+            template="Tone: {tone:neutral}",
+            params=frozenset({"tone"}),
+            defaults={"tone": "neutral"},
+        )
+        c = HuCallable(fn)
+        assert c() == "Tone: neutral"
+
+    def test_required_param_missing_still_raises(self):
+        fn = _make_fn(
+            template="{required} {optional:default}",
+            params=frozenset({"required", "optional"}),
+            defaults={"optional": "default"},
+        )
+        c = HuCallable(fn)
+        with pytest.raises(TypeError, match="required"):
+            c()
+
+    def test_required_param_missing_excludes_optional_from_error(self):
+        """Error message lists only the required missing params, not optional ones."""
+        fn = _make_fn(
+            template="{a} {b:opt}",
+            params=frozenset({"a", "b"}),
+            defaults={"b": "opt"},
+        )
+        c = HuCallable(fn)
+        with pytest.raises(TypeError) as exc_info:
+            c()
+        assert "a" in str(exc_info.value)
+        assert "b" not in str(exc_info.value)
+
+    def test_all_optional_no_args(self):
+        fn = _make_fn(
+            template="{x:1} {y:2}",
+            params=frozenset({"x", "y"}),
+            defaults={"x": "1", "y": "2"},
+        )
+        c = HuCallable(fn)
+        assert c() == "1 2"
+
+    def test_optional_default_colon_syntax_in_template_escaped_correctly(self):
+        """{param:default} in template is still resolved to the substituted value."""
+        fn = _make_fn(
+            template="Hello {name:World}!",
+            params=frozenset({"name"}),
+            defaults={"name": "World"},
+        )
+        c = HuCallable(fn)
+        assert c() == "Hello World!"
+        assert c(name="Alice") == "Hello Alice!"
+
+    def test_optional_default_with_colon_in_value(self):
+        """A default value that itself contains a colon works correctly."""
+        fn = _make_fn(
+            template="Time: {ts:12:00}",
+            params=frozenset({"ts"}),
+            defaults={"ts": "12:00"},
+        )
+        c = HuCallable(fn)
+        assert c() == "Time: 12:00"
+        assert c(ts="09:30") == "Time: 09:30"
+
+    def test_mix_required_optional_all_provided(self):
+        fn = _make_fn(
+            template="{req} and {opt:fallback}",
+            params=frozenset({"req", "opt"}),
+            defaults={"opt": "fallback"},
+        )
+        c = HuCallable(fn)
+        assert c(req="needed", opt="given") == "needed and given"
+
+    def test_optional_param_with_none_default_omitted(self):
+        """:None maps to empty string, resulting in empty substitution."""
+        fn = _make_fn(
+            template="Prefix{suffix:None}end",
+            params=frozenset({"suffix"}),
+            defaults={"suffix": ""},
+        )
+        c = HuCallable(fn)
+        assert c() == "Prefixend"

@@ -12,6 +12,7 @@ and resolved later by the engine's FilesContextManager at execution time.
 """
 
 import logging
+import re
 
 from lamia.engine.managers.llm.files_context_manager import (
     get_active_files_context,
@@ -42,13 +43,16 @@ class HuCallable:
 
     def __call__(self, **kwargs: object) -> str:
         missing = self._fn.params - set(kwargs)
-        if missing:
+        required_missing = missing - set(self._fn.defaults)
+        if required_missing:
             raise TypeError(
                 f"{self._fn.name}() missing required keyword arguments: "
-                f"{', '.join(sorted(missing))}"
+                f"{', '.join(sorted(required_missing))}"
             )
 
         substitutions = {k: str(v) for k, v in kwargs.items() if k in self._fn.params}
+        for p in missing:
+            substitutions[p] = self._fn.defaults.get(p, "")
 
         # Escape ALL braces first so .format() ignores arbitrary
         # curly-brace content (CSS, JSON, JS, etc.) in the template,
@@ -56,7 +60,11 @@ class HuCallable:
         # placeholders so .format() substitutes them.
         safe = self._fn.template.replace("{", "{{").replace("}", "}}")
         for param in self._fn.params:
-            safe = safe.replace("{{" + param + "}}", "{" + param + "}")
+            safe = re.sub(
+                r"\{\{" + re.escape(param) + r"(?::[^}]*)?\}\}",
+                "{" + param + "}",
+                safe,
+            )
         result = safe.format(**substitutions)
 
         # When no FilesContext is active, resolve {@...} relative to this
