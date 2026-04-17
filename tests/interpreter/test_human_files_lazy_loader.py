@@ -76,3 +76,18 @@ class TestHumanFilesLazyLoader:
         loader.scan_directory(str(tmp_path), existing_function_registry={})
 
         assert len(loader.function_registry) == 1
+
+    def test_scan_skips_excluded_directories(self, tmp_path):
+        venv = tmp_path / ".venv" / "templates"
+        venv.mkdir(parents=True)
+        (venv / "hidden.hu").write_text("should be skipped")
+
+        user_dir = tmp_path / "prompts"
+        user_dir.mkdir()
+        (user_dir / "greeting.hu").write_text("Hello {name}!")
+
+        loader = HumanFilesLazyLoader()
+        loader.scan_directory(str(tmp_path), existing_function_registry={})
+
+        assert "greeting" in loader.function_registry
+        assert "hidden" not in loader.function_registry

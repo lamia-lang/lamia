@@ -3,7 +3,7 @@ Lazy loader for .hu (human) files.
 
 Scans for ``.hu`` files in the project directory, registers each by
 filename stem as a callable, and checks for name collisions against
-functions already registered by the hybrid (.lm / .py) lazy loader.
+functions already registered by the hybrid (``.lm``) lazy loader.
 """
 
 import logging
@@ -12,6 +12,7 @@ from typing import Dict, Set
 
 from lamia.interpreter.human.parser import parse_hu_file
 from lamia.interpreter.human.executor import HuCallable
+from lamia.interpreter.hybrid_files_lazy_loader import _is_excluded
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,13 @@ class HumanFilesLazyLoader:
             return
         self._scanned_directories.add(resolved)
 
-        hu_files = base_path.rglob("*.hu") if recursive else base_path.glob("*.hu")
+        if recursive:
+            hu_files = (
+                p for p in base_path.rglob("*.hu")
+                if not _is_excluded(p, base_path)
+            )
+        else:
+            hu_files = base_path.glob("*.hu")
 
         for hu_file in sorted(hu_files):
             func_name = hu_file.stem
