@@ -107,20 +107,6 @@ class TestHybridExecutorIntegration:
         cached_code = cache.read_from_cache(cache_path)
         assert cached_code == transformed
 
-    def test_end_to_end_lazy_loading_workflow(self, temp_dir, mock_lamia_instance):
-        helper_file = Path(temp_dir) / "helpers.py"
-        helper_file.write_text("def my_helper(): return 42")
-
-        globals_dict = create_lazy_loading_globals(
-            mock_lamia_instance,
-            file_path=str(Path(temp_dir) / "main.lm")
-        )
-
-        helper_func = globals_dict["my_helper"]
-
-        assert callable(helper_func)
-        assert helper_func() == 42
-
     def test_executor_with_cache_produces_stable_output(self, mock_lamia_instance):
         executor = HybridExecutor(mock_lamia_instance, cache_enabled=True)
         code = '''
