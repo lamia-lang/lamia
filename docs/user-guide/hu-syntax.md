@@ -56,6 +56,10 @@ Review the code in {@main.py} and suggest improvements.
 Also check {@utils.py} for any issues.
 ```
 
+### Variable file references
+
+Use `{@identifier}` where the identifier matches a parameter name. If the caller provides a value, it is used as the filepath. If not, the name is treated as a literal filename.
+
 See the [File Context](files-context.md) documentation for details on search strategies and error handling.
 
 ## Return types
@@ -97,7 +101,7 @@ This sends the prompt (with no parameters) to the default model and prints the r
 | Feature | `.hu` files | `.lm` files |
 |---------|------------|-------------|
 | Content | Plain text prompt | Python + Lamia syntax |
-| Parameters | `{name}` placeholders | Python function arguments |
+| Parameters | `{name}`, `{@name}` file refs | Python function arguments |
 | Return type | Set by caller | Declared with `-> Type` |
 | Python code | Not supported | Full Python support |
 | Imports | Not needed | Implicit Lamia imports |

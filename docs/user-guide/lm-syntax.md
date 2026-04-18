@@ -192,6 +192,8 @@ Files are resolved using smart search (exact match, content grep, fuzzy matching
 {@config}                         # Finds config.yaml, config.json, etc.
 ```
 
+In `.hu` files, `{@identifier}` can also be a variable: if the caller provides it as a kwarg, the value is used as the filepath. See [.hu Syntax](hu-syntax.md#variable-file-references) for details.
+
 Multiple directories and nested contexts:
 
 ```python

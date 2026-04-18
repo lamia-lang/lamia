@@ -94,6 +94,10 @@ with files("~/Documents/"):
 {@/Users/me/Documents/resume.pdf} # Absolute path (always works)
 ```
 
+### Variable File References
+
+In `.hu` files, `{@identifier}` can refer to a parameter passed by the caller. If the caller provides a kwarg with that name, its value is used as the filepath. If not, the name is treated as a literal filename.
+
 ### Fuzzy Matching
 
 The search is **typo-tolerant**:
