@@ -171,7 +171,7 @@ def create_lazy_loading_globals(lamia_instance, base_globals: Optional[Dict[str,
     search_dir = str(Path(file_path).parent) if file_path else "."
 
     loader = LazyLoader(lamia_instance, search_dir)
-    hu_loader = HumanFilesLazyLoader()
+    hu_loader = HumanFilesLazyLoader(lamia_instance)
 
     class LazyGlobals(dict):
         """A dictionary that attempts lazy loading when keys are not found."""

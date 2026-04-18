@@ -31,8 +31,9 @@ class HuCallable:
         result = summarize(aspect="key findings", max_words=200) -> HTML
     """
 
-    def __init__(self, hu_function: HuFunction) -> None:
+    def __init__(self, hu_function: HuFunction, lamia=None) -> None:
         self._fn = hu_function
+        self._lamia = lamia
 
     @property
     def __name__(self) -> str:
@@ -41,7 +42,13 @@ class HuCallable:
     def __repr__(self) -> str:
         return f"<HuCallable '{self._fn.name}' params={set(self._fn.params)}>"
 
-    def __call__(self, **kwargs: object) -> str:
+    def __call__(self, *, _return_type=None, **kwargs: object):
+        prompt = self._build_prompt(**kwargs)
+        if self._lamia is not None:
+            return self._lamia.run(prompt, return_type=_return_type)
+        return prompt
+
+    def _build_prompt(self, **kwargs: object) -> str:
         missing = self._fn.params - set(kwargs)
         required_missing = missing - set(self._fn.defaults)
         if required_missing:

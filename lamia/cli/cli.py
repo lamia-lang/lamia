@@ -725,13 +725,11 @@ def main():
                 except SyntaxError as e:
                     logger.error(f"❌ Syntax error in hybrid file: {e}")
                     logger.error(f"Line {e.lineno}: {e.text}")
-                    if logger.level <= logging.DEBUG:
-                        traceback.print_exc()
+                    logger.debug(traceback.format_exc())
                     _graceful_shutdown(lamia, 1)
                 except ImportError as e:
                     logger.error(f"❌ Missing dependency: {e}")
-                    if logger.level <= logging.DEBUG:
-                        traceback.print_exc()
+                    logger.debug(traceback.format_exc())
                     _graceful_shutdown(lamia, 1)
                 except MissingAPIKeysError as e:
                     logger.error(f"❌ {e}")
@@ -744,8 +742,7 @@ def main():
                         logger.error(f"❌ Error processing hybrid syntax file: {e}")
                     else:
                         logger.error(f"❌ Runtime error: {e}")
-                    if logger.level <= logging.DEBUG:
-                        traceback.print_exc()
+                    logger.debug(traceback.format_exc())
                     _graceful_shutdown(lamia, 1)
             else:
                 # Regular Python file — inject Lamia builtins so types like
@@ -760,8 +757,7 @@ def main():
                     _graceful_shutdown(lamia)
                 except Exception as e:
                     logger.error(f"❌ Error executing script: {e}")
-                    if logger.level <= logging.DEBUG:
-                        traceback.print_exc()
+                    logger.debug(traceback.format_exc())
                     _graceful_shutdown(lamia, 1)
         elif json_flag:
             async def run_json():
@@ -779,9 +775,8 @@ def main():
         logger.error("Please check your .env file or config.yaml for required API keys.")
         sys.exit(1)
     except Exception as e:
-        traceback.print_exc()
         logger.error(f"❌ Error: {e}")
-        logger.error("Check your config.yaml and logs for details.")
+        logger.debug(traceback.format_exc())
         sys.exit(1)
     except KeyboardInterrupt:
         _graceful_shutdown(lamia)
@@ -827,9 +822,8 @@ def _graceful_shutdown(lamia_instance: 'Optional[Lamia]', exit_code: int = 0) ->
 def _log_external_error(prefix: str, exc: Exception) -> None:
     """Log user-facing external errors without stack traces unless debugging."""
     logger.error(f"{prefix}: {exc}")
-    should_show_trace = logger.level <= logging.DEBUG and not isinstance(exc, ExternalOperationError)
-    if should_show_trace:
-        traceback.print_exc()
+    if not isinstance(exc, ExternalOperationError):
+        logger.debug(traceback.format_exc())
 
 if __name__ == "__main__":
     main() 

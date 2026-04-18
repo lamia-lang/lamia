@@ -741,7 +741,7 @@ class TestHuFromLm:
         with open(hu_path, "w") as f:
             f.write("Say hello to {name} in a friendly way.")
 
-        greet = HuCallable(parse_hu_file(hu_path))
+        greet = HuCallable(parse_hu_file(hu_path), lamia=lamia_instance)
 
         lm_path = _write_lm(tmp_dir, '''
 result = greet(name="Alice") -> HTML

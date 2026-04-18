@@ -20,10 +20,11 @@ logger = logging.getLogger(__name__)
 class HumanFilesLazyLoader:
     """Catalogs and loads ``.hu`` files as callables."""
 
-    def __init__(self) -> None:
+    def __init__(self, lamia=None) -> None:
         self.function_registry: Dict[str, str] = {}
         self._callables: Dict[str, HuCallable] = {}
         self._scanned_directories: Set[str] = set()
+        self._lamia = lamia
 
     def scan_directory(
         self,
@@ -91,7 +92,7 @@ class HumanFilesLazyLoader:
 
         if function_name not in self._callables:
             hu_fn = parse_hu_file(self.function_registry[function_name])
-            self._callables[function_name] = HuCallable(hu_fn)
+            self._callables[function_name] = HuCallable(hu_fn, lamia=self._lamia)
 
         execution_globals[function_name] = self._callables[function_name]
         return True

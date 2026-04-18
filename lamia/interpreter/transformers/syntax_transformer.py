@@ -211,6 +211,13 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         """Transform __LAMIA_TYPED_EXPR__(Type, "prompt") into lamia.run("prompt", return_type=Type)."""
         return_type_node = node.args[0]
         command_node = node.args[1]
+
+        if isinstance(command_node, ast.Call):
+            command_node.keywords.append(
+                ast.keyword(arg='_return_type', value=return_type_node)
+            )
+            return command_node
+
         command_node = self._apply_inline_variable_substitution(command_node)
         return ast.Call(
             func=ast.Attribute(
