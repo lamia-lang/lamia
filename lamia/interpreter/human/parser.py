@@ -10,7 +10,11 @@ Supported placeholder syntax::
     {param}              -- required parameter
     {param:None}         -- optional, empty string when omitted
     {param:default text} -- optional, uses "default text" when omitted
-    {@filename}          -- file context reference (unchanged)
+    {@filename}          -- file context reference (literal path)
+    {@variable}          -- file context via optional parameter; if the
+                            caller provides a kwarg with that name its
+                            value is used as the filepath, otherwise the
+                            name is treated as a literal filename
 """
 
 import re
@@ -57,6 +61,11 @@ def parse_hu_file(file_path: str) -> HuFunction:
             defaults[pname] = "" if default_val == "None" else default_val
 
     file_contexts = frozenset(_FILE_CONTEXT_RE.findall(template))
+
+    for ref in file_contexts:
+        if ref.isidentifier() and ref not in params:
+            params.add(ref)
+            defaults.setdefault(ref, "")
 
     return HuFunction(
         name=name,

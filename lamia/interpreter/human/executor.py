@@ -9,6 +9,11 @@ The caller in the .lm file handles the ``-> Type`` annotation via the
 existing hybrid syntax transformer, so HuCallable only needs to produce
 the final prompt text.  ``{@file}`` references are left in the string
 and resolved later by the engine's FilesContextManager at execution time.
+
+``{@variable}`` references (where *variable* is a valid identifier) are
+optional: if the caller passed a kwarg with that name, its value replaces
+the reference as a filepath (``{@var}`` → ``{@value}``).  If no kwarg is
+provided, the name is treated as a literal filename for search.
 """
 
 import logging
@@ -73,6 +78,15 @@ class HuCallable:
                 safe,
             )
         result = safe.format(**substitutions)
+
+        # {@variable} where variable is a kwarg: replace with {@<value>}
+        # so file resolution uses the caller-provided filepath.
+        def _resolve_var_ref(m):
+            ref = m.group(1)
+            if ref in kwargs:
+                return '{@' + str(kwargs[ref]) + '}'
+            return m.group(0)
+        result = re.sub(r'\{@(\w+)\}', _resolve_var_ref, result)
 
         # When no FilesContext is active, resolve {@...} relative to this
         # .hu file now -- by the time LLMManager sees the string the

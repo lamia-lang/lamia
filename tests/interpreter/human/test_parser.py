@@ -173,3 +173,59 @@ class TestParseHuFileOptionalParams:
         assert fn.params == frozenset({"focus", "tone"})
         assert fn.defaults == {"tone": "neutral"}
         assert fn.file_contexts == frozenset({"data.csv"})
+
+
+class TestParseHuFileVariableFileRefs:
+    """Tests for {@variable} syntax where variable is an identifier."""
+
+    def test_identifier_file_ref_becomes_optional_param(self, tmp_path):
+        hu = tmp_path / "review.hu"
+        hu.write_text("Review this: {@code_file}")
+        fn = parse_hu_file(str(hu))
+
+        assert "code_file" in fn.params
+        assert "code_file" in fn.file_contexts
+        assert "code_file" in fn.defaults
+
+    def test_literal_path_not_param(self, tmp_path):
+        hu = tmp_path / "review.hu"
+        hu.write_text("Review: {@src/main.py}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.params == frozenset()
+        assert "src/main.py" in fn.file_contexts
+
+    def test_mixed_variable_and_literal_refs(self, tmp_path):
+        hu = tmp_path / "review.hu"
+        hu.write_text("Compare {@code_file} with {@../reference.py}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.params == frozenset({"code_file"})
+        assert fn.file_contexts == frozenset({"code_file", "../reference.py"})
+
+    def test_variable_ref_with_text_param(self, tmp_path):
+        hu = tmp_path / "review.hu"
+        hu.write_text("Review {@code_file} for {aspect}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.params == frozenset({"code_file", "aspect"})
+
+    def test_same_name_as_text_param_and_file_ref(self, tmp_path):
+        """When {code_file} (text) and {@code_file} (file) coexist,
+        the text param is already in params so the file ref doesn't
+        add a default — the param stays required."""
+        hu = tmp_path / "review.hu"
+        hu.write_text("File {code_file}: {@code_file}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.params == frozenset({"code_file"})
+        assert "code_file" in fn.file_contexts
+        assert "code_file" not in fn.defaults
+
+    def test_dotted_filename_not_identifier(self, tmp_path):
+        hu = tmp_path / "review.hu"
+        hu.write_text("{@config.yaml}")
+        fn = parse_hu_file(str(hu))
+
+        assert fn.params == frozenset()
+        assert fn.file_contexts == frozenset({"config.yaml"})

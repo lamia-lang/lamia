@@ -1,7 +1,7 @@
 """Tests for the .hu file executor (HuCallable)."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, Mock
 
 from lamia.interpreter.human.parser import HuFunction
 from lamia.interpreter.human.executor import HuCallable
@@ -12,13 +12,14 @@ def _make_fn(
     template: str = "",
     params: frozenset[str] = frozenset(),
     defaults: dict | None = None,
+    source_path: str = "/fake/test.hu",
 ) -> HuFunction:
     return HuFunction(
         name=name,
         template=template,
         params=params,
         defaults=defaults or {},
-        source_path="/fake/test.hu",
+        source_path=source_path,
     )
 
 
@@ -214,3 +215,80 @@ class TestHuCallableOptionalParams:
         )
         c = HuCallable(fn)
         assert c() == "Prefixend"
+
+
+class TestHuCallableAutoLLM:
+
+    def test_without_lamia_returns_prompt(self):
+        fn = _make_fn(template="Hello {name}", params=frozenset({"name"}))
+        c = HuCallable(fn)
+        assert c(name="Alice") == "Hello Alice"
+
+    def test_with_lamia_calls_run(self):
+        fn = _make_fn(template="Hello {name}", params=frozenset({"name"}))
+        mock_lamia = Mock()
+        mock_lamia.run.return_value = "LLM says hi"
+        c = HuCallable(fn, lamia=mock_lamia)
+        result = c(name="Alice")
+        mock_lamia.run.assert_called_once_with("Hello Alice", return_type=None)
+        assert result == "LLM says hi"
+
+    def test_return_type_forwarded(self):
+        fn = _make_fn(template="Hello {name}", params=frozenset({"name"}))
+        mock_lamia = Mock()
+        mock_lamia.run.return_value = "<html>hi</html>"
+        sentinel = object()
+        c = HuCallable(fn, lamia=mock_lamia)
+        c(name="Alice", _return_type=sentinel)
+        mock_lamia.run.assert_called_once_with("Hello Alice", return_type=sentinel)
+
+
+class TestHuCallableVariableFileRefs:
+    """Tests for {@variable} substitution (file resolution disabled via empty source_path)."""
+
+    @staticmethod
+    def _fn(**kw):
+        kw.setdefault("source_path", "")
+        return _make_fn(**kw)
+
+    def test_variable_ref_substituted(self):
+        fn = self._fn(template="Review {@code_file}", params=frozenset({"code_file"}))
+        c = HuCallable(fn)
+        result = c(code_file="src/main.py")
+        assert "{@src/main.py}" in result
+
+    def test_literal_ref_unchanged(self):
+        fn = self._fn(template="Review {@config.yaml}", params=frozenset())
+        c = HuCallable(fn)
+        result = c()
+        assert "{@config.yaml}" in result
+
+    def test_omitted_variable_ref_stays_as_literal(self):
+        fn = self._fn(
+            template="Review {@some_file}",
+            params=frozenset({"some_file"}),
+            defaults={"some_file": ""},
+        )
+        c = HuCallable(fn)
+        result = c()
+        assert "{@some_file}" in result
+
+    def test_variable_ref_with_text_param(self):
+        fn = self._fn(
+            template="Review {@code_file} for {aspect}",
+            params=frozenset({"code_file", "aspect"}),
+        )
+        c = HuCallable(fn)
+        result = c(code_file="app.py", aspect="security")
+        assert "{@app.py}" in result
+        assert "security" in result
+
+    def test_both_text_and_file_ref_same_name(self):
+        fn = self._fn(
+            template="File: {code_file}\nContent: {@code_file}",
+            params=frozenset({"code_file"}),
+        )
+        c = HuCallable(fn)
+        result = c(code_file="src/main.py")
+        assert "File: src/main.py" in result
+        assert "{@src/main.py}" in result
