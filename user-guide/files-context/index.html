@@ -818,6 +818,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#variable-file-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Variable File References
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fuzzy-matching" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1683,6 +1694,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#variable-file-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Variable File References
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fuzzy-matching" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2311,6 +2333,8 @@
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="p">{</span><span class="nd">@path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resume</span><span class="o">.</span><span class="n">pdf</span><span class="p">}</span>            <span class="c1"># Relative path from indexed directory</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="p">{</span><span class="o">@/</span><span class="n">Users</span><span class="o">/</span><span class="n">me</span><span class="o">/</span><span class="n">Documents</span><span class="o">/</span><span class="n">resume</span><span class="o">.</span><span class="n">pdf</span><span class="p">}</span> <span class="c1"># Absolute path (always works)</span>
 </span></code></pre></div>
+<h3 id="variable-file-references">Variable File References<a class="headerlink" href="#variable-file-references" title="Permanent link">&para;</a></h3>
+<p>In <code>.hu</code> files, <code>{@identifier}</code> can refer to a parameter passed by the caller. If the caller provides a kwarg with that name, its value is used as the filepath. If not, the name is treated as a literal filename.</p>
 <h3 id="fuzzy-matching">Fuzzy Matching<a class="headerlink" href="#fuzzy-matching" title="Permanent link">&para;</a></h3>
 <p>The search is <strong>typo-tolerant</strong>:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="nd">@resum</span><span class="o">.</span><span class="n">pdf</span><span class="p">}</span>      <span class="c1"># Finds resume.pdf (fuzzy match)</span>

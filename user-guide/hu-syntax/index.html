@@ -658,6 +658,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="File context references">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#variable-file-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Variable file references
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1034,6 +1051,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="File context references">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#variable-file-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Variable file references
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1181,6 +1215,8 @@
 <div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Review the code in {@main.py} and suggest improvements.
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>Also check {@utils.py} for any issues.
 </span></code></pre></div>
+<h3 id="variable-file-references">Variable file references<a class="headerlink" href="#variable-file-references" title="Permanent link">&para;</a></h3>
+<p>Use <code>{@identifier}</code> where the identifier matches a parameter name. If the caller provides a value, it is used as the filepath. If not, the name is treated as a literal filename.</p>
 <p>See the <a href="../files-context/">File Context</a> documentation for details on search strategies and error handling.</p>
 <h2 id="return-types">Return types<a class="headerlink" href="#return-types" title="Permanent link">&para;</a></h2>
 <p><code>.hu</code> files are <strong>return-type agnostic</strong>. The return type is specified by the caller in the <code>.lm</code> file using the <code>-&gt;</code> syntax:</p>
@@ -1223,7 +1259,7 @@
 </tr>
 <tr>
 <td>Parameters</td>
-<td><code>{name}</code> placeholders</td>
+<td><code>{name}</code>, <code>{@name}</code> file refs</td>
 <td>Python function arguments</td>
 </tr>
 <tr>
