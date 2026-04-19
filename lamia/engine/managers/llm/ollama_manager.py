@@ -2,8 +2,33 @@ import subprocess
 import requests
 import time
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
+
+def _wire_process_logs(process: subprocess.Popen, label: str) -> None:
+    """Forward child process stdout/stderr to Lamia logger."""
+    def _pump(stream, level: int, stream_name: str) -> None:
+        if stream is None:
+            return
+        try:
+            for line in iter(stream.readline, ""):
+                text = line.strip()
+                if text:
+                    logger.log(level, "%s %s: %s", label, stream_name, text)
+        except Exception:
+            pass
+
+    threading.Thread(
+        target=_pump,
+        args=(process.stdout, logging.INFO, "stdout"),
+        daemon=True,
+    ).start()
+    threading.Thread(
+        target=_pump,
+        args=(process.stderr, logging.WARNING, "stderr"),
+        daemon=True,
+    ).start()
 
 class OllamaManager:
     def is_running(self) -> bool:
@@ -43,9 +68,14 @@ class OllamaManager:
         logger.info("Starting Ollama service...")
         try:
             # Start Ollama in the background
-            subprocess.Popen(["ollama", "serve"],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
+            process = subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            _wire_process_logs(process, "ollama serve")
             # Wait for service to start (max 30 seconds)
             for i in range(30):
                 if self.is_running():

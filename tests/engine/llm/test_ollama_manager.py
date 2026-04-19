@@ -82,8 +82,8 @@ def test_start_service_success():
         assert result is True
         mock_popen.assert_called_once_with(
             ["ollama", "serve"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
         )
 
 def test_start_service_timeout():

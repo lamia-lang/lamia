@@ -8,6 +8,7 @@ import time
 import sys
 import weakref
 import atexit
+import threading
 from ..base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema
 from lamia.errors import OllamaNotInstalledError
 from pydantic import BaseModel
@@ -17,6 +18,30 @@ logger = logging.getLogger(__name__)
 
 # Global registry to track instances for cleanup
 _active_instances = weakref.WeakSet()
+
+def _wire_process_logs(process: subprocess.Popen, label: str) -> None:
+    """Forward child process stdout/stderr to Lamia logger."""
+    def _pump(stream, level: int, stream_name: str) -> None:
+        if stream is None:
+            return
+        try:
+            for line in iter(stream.readline, ""):
+                text = line.strip()
+                if text:
+                    logger.log(level, "%s %s: %s", label, stream_name, text)
+        except Exception:
+            pass
+
+    threading.Thread(
+        target=_pump,
+        args=(process.stdout, logging.INFO, "stdout"),
+        daemon=True,
+    ).start()
+    threading.Thread(
+        target=_pump,
+        args=(process.stderr, logging.WARNING, "stderr"),
+        daemon=True,
+    ).start()
 
 def _cleanup_all_instances():
     """Cleanup function called at exit."""
@@ -82,7 +107,14 @@ class OllamaAdapter(BaseLLMAdapter):
         if not cls.is_ollama_installed():
             return False
         try:
-            subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            process = subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            _wire_process_logs(process, "ollama serve")
             for _ in range(10):
                 if cls.is_ollama_running(base_url=base_url):
                     return True
@@ -133,35 +165,42 @@ class OllamaAdapter(BaseLLMAdapter):
     ) -> LLMResponse:
         """Generate a response using the Ollama model."""
         
-        # Ensure model is pulled
         if not self._ensure_ollama_model_pulled(model.get_model_name_without_provider()):
             raise RuntimeError(f"Failed to pull Ollama model: {model.get_model_name_without_provider()}")
 
-        # Prepare request payload
-        payload = {
+        options: Dict[str, Any] = {}
+        if model.temperature is not None:
+            options["temperature"] = model.temperature
+        if model.max_tokens is not None:
+            options["num_predict"] = model.max_tokens
+        if model.top_p is not None:
+            options["top_p"] = model.top_p
+        if model.top_k is not None:
+            options["top_k"] = model.top_k
+        if model.frequency_penalty is not None:
+            options["frequency_penalty"] = model.frequency_penalty
+        if model.presence_penalty is not None:
+            options["presence_penalty"] = model.presence_penalty
+        if model.seed is not None:
+            options["seed"] = model.seed
+
+        payload: Dict[str, Any] = {
             "model": model.get_model_name_without_provider(),
             "prompt": prompt,
             "stream": False,
-            "options": {
-                "temperature": model.temperature,
-                "max_tokens": model.max_tokens,
-                #"stop": model.stop_sequences,
-                "top_p": model.top_p,
-                "top_k": model.top_k,
-                "frequency_penalty": model.frequency_penalty,
-                "presence_penalty": model.presence_penalty,
-                "seed": model.seed,
-            }
         }
+        if options:
+            payload["options"] = options
         if response_model is not None:
             payload["format"] = make_strict_schema(response_model)
 
+        url = f"{self.base_url}/api/generate"
+        timeout = aiohttp.ClientTimeout(total=300, connect=10)
+        logger.debug("Ollama request: model=%s url=%s", payload["model"], url)
+
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300)) as session: # 5 minutes total timeout, local models on normal computers are slow
-                async with session.post(
-                    f"{self.base_url}/api/generate",
-                    json=payload
-                ) as response:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(url, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         raise RuntimeError(
@@ -170,7 +209,6 @@ class OllamaAdapter(BaseLLMAdapter):
                     
                     result = await response.json()
                     
-                    # Extract token counts if available
                     usage = {
                         "prompt_tokens": result.get("prompt_eval_count", 0),
                         "completion_tokens": result.get("eval_count", 0),
@@ -204,7 +242,14 @@ class OllamaAdapter(BaseLLMAdapter):
         if not self.is_ollama_installed():
             raise OllamaNotInstalledError()
         try:
-            self.ollama_process = subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.ollama_process = subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            _wire_process_logs(self.ollama_process, "ollama serve")
             for i in range(30):
                 if self._is_ollama_running():
                     logger.info("Ollama service started successfully")
