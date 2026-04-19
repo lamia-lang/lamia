@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+from lamia.interpreter.commands import WebCommand, WebActionType
 from lamia.lint import HuLinter
 
 logger = logging.getLogger(__name__)
@@ -254,6 +255,96 @@ TOOL_DEFINITIONS = [
             "required": ["pattern"],
         },
     },
+    {
+        "name": "browser_navigate",
+        "description": "Navigate to a URL in the browser. Returns the page title and visible text.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "URL to navigate to",
+                },
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "browser_click",
+        "description": "Click an element on the page. Use CSS selectors or natural language descriptions.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "CSS selector, XPath, or natural language description (e.g. 'Sign in button')",
+                },
+            },
+            "required": ["selector"],
+        },
+    },
+    {
+        "name": "browser_type",
+        "description": "Type text into an input element.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "CSS selector or description of the input field",
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Text to type",
+                },
+            },
+            "required": ["selector", "text"],
+        },
+    },
+    {
+        "name": "browser_get_text",
+        "description": "Get visible text content from the page or a specific element.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "CSS selector to get text from (default: body — entire page)",
+                },
+            },
+        },
+    },
+    {
+        "name": "browser_screenshot",
+        "description": "Take a screenshot of the current page. Returns the file path.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "File path to save screenshot (default: screenshot.png in cwd)",
+                },
+            },
+        },
+    },
+    {
+        "name": "browser_wait",
+        "description": "Wait for an element to appear or become visible.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "CSS selector or description to wait for",
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Timeout in seconds (default: 10)",
+                },
+            },
+            "required": ["selector"],
+        },
+    },
 ]
 
 # Module-level accumulator for file writes during a single request.
@@ -287,7 +378,7 @@ def _find_docs_dir() -> Optional[Path]:
     return None
 
 
-def execute_tool(name: str, args: dict, cwd: str = ".") -> str:
+def execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
     """Execute a tool by name and return the result as a string."""
     if name == "get_docs":
         return _get_docs(args.get("topic", ""))
@@ -318,6 +409,8 @@ def execute_tool(name: str, args: dict, cwd: str = ".") -> str:
         return _grep(args.get("pattern", ""), args.get("directory", "."), args.get("include", ""), cwd)
     elif name == "glob":
         return _glob(args.get("pattern", ""), args.get("directory", "."), cwd)
+    elif name.startswith("browser_"):
+        return _browser_tool(name, args, cwd, lamia)
     else:
         return f"Unknown tool: {name}"
 
@@ -765,6 +858,79 @@ def _glob(pattern: str, directory: str, cwd: str) -> str:
     if len(matches) >= MAX_RESULTS:
         output += f"\n\n... (truncated at {MAX_RESULTS} results)"
     return output
+
+
+# ── Browser tools ────────────────────────────────────────────────────────────
+
+
+def _run_web(command, lamia):
+    """Execute a WebCommand via lamia.run() (sync, handles browser lifecycle)."""
+    if lamia is None:
+        return "Error: browser not available (no lamia instance)"
+    try:
+        return lamia.run(command) or ""
+    except Exception as exc:
+        return f"Browser error: {exc}"
+
+
+def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
+    if name == "browser_navigate":
+        url = args.get("url", "")
+        if not url:
+            return "Error: url is required"
+        _run_web(WebCommand(action=WebActionType.NAVIGATE, url=url), lamia)
+        title = _run_web(WebCommand(action=WebActionType.GET_TEXT, selector="title"), lamia)
+        return f"Navigated to {url}\nPage title: {title}"
+
+    elif name == "browser_click":
+        selector = args.get("selector", "")
+        if not selector:
+            return "Error: selector is required"
+        result = _run_web(WebCommand(action=WebActionType.CLICK, selector=selector), lamia)
+        if isinstance(result, str) and result.startswith("Browser error"):
+            return result
+        return f"Clicked: {selector}"
+
+    elif name == "browser_type":
+        selector = args.get("selector", "")
+        text = args.get("text", "")
+        if not selector:
+            return "Error: selector is required"
+        result = _run_web(WebCommand(action=WebActionType.TYPE, selector=selector, value=text), lamia)
+        if isinstance(result, str) and result.startswith("Browser error"):
+            return result
+        return f"Typed into {selector}"
+
+    elif name == "browser_get_text":
+        selector = args.get("selector", "body")
+        result = _run_web(WebCommand(action=WebActionType.GET_TEXT, selector=selector), lamia)
+        text = str(result) if result else ""
+        if len(text) > 50_000:
+            text = text[:50_000] + f"\n\n... (truncated, total {len(text)} chars)"
+        return text or "(empty)"
+
+    elif name == "browser_screenshot":
+        filepath = args.get("path", "")
+        if not filepath:
+            filepath = str(Path(cwd) / "screenshot.png")
+        elif not os.path.isabs(filepath):
+            filepath = str(Path(cwd) / filepath)
+        result = _run_web(WebCommand(action=WebActionType.SCREENSHOT, value=filepath), lamia)
+        if isinstance(result, str) and result.startswith("Browser error"):
+            return result
+        return f"Screenshot saved: {filepath}"
+
+    elif name == "browser_wait":
+        selector = args.get("selector", "")
+        timeout = args.get("timeout", 10)
+        if not selector:
+            return "Error: selector is required"
+        result = _run_web(WebCommand(action=WebActionType.WAIT, selector=selector, timeout=float(timeout)), lamia)
+        if isinstance(result, str) and result.startswith("Browser error"):
+            return result
+        return f"Element found: {selector}"
+
+    return f"Unknown browser tool: {name}"
 
 
 def get_tools_system_prompt() -> str:

@@ -310,7 +310,7 @@ async def json_mode(lamia: Lamia) -> None:
                         break
 
                 _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
-                tool_result = execute_tool(tool_name, tool_args, cwd)
+                tool_result = execute_tool(tool_name, tool_args, cwd, lamia=lamia)
 
                 if _round < MAX_TOOL_ROUNDS:
                     prompt = (
