@@ -142,6 +142,40 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "find_definition",
+        "description": (
+            "Find where a function, class, or .hu file is defined. "
+            "Returns file path and line number."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "Name of the function, class, or .hu file to find",
+                },
+            },
+            "required": ["symbol"],
+        },
+    },
+    {
+        "name": "find_references",
+        "description": (
+            "Find all files that reference or call a given symbol. "
+            "Returns file paths with line numbers and context."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "Name of the function, class, or variable to search for",
+                },
+            },
+            "required": ["symbol"],
+        },
+    },
+    {
         "name": "copy_file",
         "description": "Copy a file or directory to a new location. Works recursively for directories.",
         "parameters": {
@@ -272,6 +306,10 @@ def execute_tool(name: str, args: dict, cwd: str = ".") -> str:
         )
     elif name == "delete_file":
         return _delete_file(args.get("path", ""), cwd)
+    elif name == "find_definition":
+        return _find_definition(args.get("symbol", ""), cwd)
+    elif name == "find_references":
+        return _find_references(args.get("symbol", ""), cwd)
     elif name == "copy_file":
         return _copy_file(args.get("source", ""), args.get("destination", ""), cwd)
     elif name == "move_file":
@@ -524,6 +562,86 @@ def _delete_file(filepath: str, cwd: str) -> str:
     _file_writes.append(entry)
 
     return f"Deleted: {resolved}"
+
+
+_DEF_RE_TEMPLATE = r'^[ \t]*(?:async\s+)?def\s+{}\s*\('
+_CLASS_RE_TEMPLATE = r'^[ \t]*class\s+{}\s*[\(:]'
+
+
+def _find_definition(symbol: str, cwd: str) -> str:
+    if not symbol:
+        return "Error: symbol is required"
+
+    import re
+    results: list[str] = []
+    search_root = Path(cwd)
+
+    for match in search_root.rglob("*.hu"):
+        if match.stem == symbol and match.is_file():
+            rel = os.path.relpath(str(match), cwd)
+            results.append(f"{rel}:1: .hu file (function '{symbol}')")
+
+    esc = re.escape(symbol)
+    patterns = [
+        re.compile(_DEF_RE_TEMPLATE.format(esc), re.MULTILINE),
+        re.compile(_CLASS_RE_TEMPLATE.format(esc), re.MULTILINE),
+    ]
+
+    for ext in ("*.lm", "*.py"):
+        for fpath in search_root.rglob(ext):
+            if not fpath.is_file() or any(p in fpath.parts for p in _SKIP_DIRS):
+                continue
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for pat in patterns:
+                for m in pat.finditer(text):
+                    lineno = text[:m.start()].count("\n") + 1
+                    line = text[m.start():].split("\n", 1)[0].rstrip()
+                    rel = os.path.relpath(str(fpath), cwd)
+                    results.append(f"{rel}:{lineno}: {line}")
+
+    if not results:
+        return f"No definition found for '{symbol}'"
+    return "\n".join(results)
+
+
+def _find_references(symbol: str, cwd: str) -> str:
+    if not symbol:
+        return "Error: symbol is required"
+
+    import re
+    pat = re.compile(r'(?<![a-zA-Z_])' + re.escape(symbol) + r'(?![a-zA-Z_\d])')
+    MAX_RESULTS = 80
+    results: list[str] = []
+    search_root = Path(cwd)
+
+    for ext in ("*.lm", "*.hu", "*.py"):
+        for fpath in search_root.rglob(ext):
+            if not fpath.is_file() or any(p in fpath.parts for p in _SKIP_DIRS):
+                continue
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for lineno, line in enumerate(text.splitlines(), 1):
+                if pat.search(line):
+                    rel = os.path.relpath(str(fpath), cwd)
+                    results.append(f"{rel}:{lineno}: {line.rstrip()}")
+                    if len(results) >= MAX_RESULTS:
+                        break
+            if len(results) >= MAX_RESULTS:
+                break
+        if len(results) >= MAX_RESULTS:
+            break
+
+    if not results:
+        return f"No references found for '{symbol}'"
+    output = "\n".join(results)
+    if len(results) >= MAX_RESULTS:
+        output += f"\n\n... (truncated at {MAX_RESULTS} results)"
+    return output
 
 
 def _copy_file(source: str, destination: str, cwd: str) -> str:
