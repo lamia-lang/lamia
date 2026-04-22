@@ -45,28 +45,8 @@ web_config:
     user_agent: "Bot/1.0"           # User agent string for HTTP requests
 ```
 
-## Environment Variables
-
-Lamia supports environment variable substitution using the `${VARIABLE_NAME}` syntax:
-
-### Common Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `OPENAI_API_KEY` | OpenAI API key | For OpenAI LLM usage |
-| `ANTHROPIC_API_KEY` | Anthropic API key | For Anthropic LLM usage |
-
 ## Configuration Sections
 
-### Engine Configuration
-
-```yaml
-engine:
-  default_timeout: 30        # Default timeout in seconds
-  max_retries: 3            # Maximum retry attempts
-  log_level: "INFO"         # Logging level (DEBUG, INFO, WARNING, ERROR)
-  parallel_execution: true  # Enable parallel step execution
-```
 
 ### LLM Configuration for advanced users
 
@@ -94,7 +74,6 @@ The most important thing to take away from this for non-advanced LLM users is th
     top_p: 1.0         # Alternative to temperature for sampling
 ```
 
-
 ## Configuration Profiles
 
 You can use different configuration profiles for different environments:
@@ -108,6 +87,15 @@ lamia run workflow.lm --config config-dev.yaml
 lamia run workflow.lm --config config-prod.yaml
 ```
 
+### Engine Configuration
+
+```yaml
+engine:
+  default_timeout: 30        # Default timeout in seconds
+  max_retries: 3            # Maximum retry attempts
+  log_level: "INFO"         # Logging level (DEBUG, INFO, WARNING, ERROR)
+  parallel_execution: true  # Enable parallel step execution
+```
 
 ## Configuration Best Practices
 

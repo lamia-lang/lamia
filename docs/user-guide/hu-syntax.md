@@ -1,6 +1,6 @@
 # .hu File Syntax
 
-`.hu` (human) files are plain-text prompt templates. They contain **no Python** -- just the text you want to send to an LLM, with optional parameter placeholders and file-context references.
+`.hu` (human) files are plain-text prompt templates. They contain just the text you want to send to an LLM, with optional parameter placeholders and file-context references.
 
 Each `.hu` file is automatically a callable function whose name matches the filename. You call `.hu` functions from `.lm` files -- `.lm` files are the orchestration layer that ties everything together.
 

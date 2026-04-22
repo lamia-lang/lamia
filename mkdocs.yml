@@ -91,8 +91,8 @@ nav:
     - Installation: getting-started/installation.md
     - Configuration: getting-started/configuration.md
   - User Guide:
-    - .hu Syntax: user-guide/hu-syntax.md
-    - .lm Syntax: user-guide/lm-syntax.md
+    - .hu file Syntax: user-guide/hu-syntax.md
+    - .lm file Syntax: user-guide/lm-syntax.md
     - File Context: user-guide/files-context.md
     - Web Automation: user-guide/web-automation.md
     - Validation: user-guide/validation.md
