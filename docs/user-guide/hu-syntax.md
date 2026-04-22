@@ -31,15 +31,25 @@ Use `{name}` to define parameters. They are auto-detected -- no declaration need
 Write a {tone} email to {recipient} about {topic}.
 ```
 
-When called, all parameters must be passed as keyword arguments:
+Defaults are inline with `:`:
+
+```
+Write a {tone:friendly} email to {recipient} about {topic:today's update}.
+```
+
+Call with keyword arguments; override only what you need:
 
 ```python
-write_email = draft_email(tone="formal", recipient="the team", topic="Q3 results")
+email = draft_email(recipient="the team")
+# tone -> "friendly", topic -> "today's update"
+email = draft_email(recipient="the team", tone="formal", topic="Q3 results")
 ```
 
-Missing parameters raise an error:
+`{name:None}` means "optional, empty when omitted".
+
+Only missing required parameters raise an error:
 ```
-draft_email() missing required keyword arguments: recipient, tone, topic
+draft_email() missing required keyword arguments: recipient
 ```
 
 To include a literal brace in the text, double it:
