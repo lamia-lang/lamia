@@ -34,20 +34,42 @@ class HybridExecutor:
         self.lamia_var_name = lamia_var_name
         self.parser = HybridSyntaxParser(lamia_var_name)
         self.cache = HybridFileCache(cache_enabled=cache_enabled)
+        self._source_map: Dict[int, int] = {}
+
+    @property
+    def source_map(self) -> Dict[int, int]:
+        """Transformed-line -> original-line map, populated when debug=True."""
+        return self._source_map
     
     def parse(self, source_code: str) -> Dict[str, Any]:
         """Parse hybrid syntax and return information about LLM commands."""
         return self.parser.parse(source_code)
     
-    def transform(self, source_code: str) -> str:
-        """Transform hybrid syntax code into executable Python."""
-        transformed_code = self.parser.transform(source_code)
-        
-        # Add necessary imports to the transformed code
+    def transform(self, source_code: str, debug: bool = False) -> str:
+        """Transform hybrid syntax code into executable Python.
+
+        When *debug* is True the engine also builds a source map
+        (transformed_line -> original_line) accessible via ``self.source_map``.
+        """
+        if debug:
+            transformed_code, self._source_map = self.parser.transform_with_source_map(source_code)
+        else:
+            transformed_code = self.parser.transform(source_code)
+            self._source_map = {}
+
         imports = self._generate_imports(source_code)
         if imports:
+            import_line_count = imports.count('\n') + 2  # +2 for the blank-line separator
+            if debug and self._source_map:
+                shifted_map = {
+                    k + import_line_count: v for k, v in self._source_map.items()
+                }
+                first_source_line = min(shifted_map.values(), default=1)
+                for import_line in range(1, import_line_count + 1):
+                    shifted_map[import_line] = first_source_line
+                self._source_map = shifted_map
             transformed_code = imports + "\n\n" + transformed_code
-        
+
         return transformed_code
     
     def _generate_imports(self, source_code: str) -> str:
