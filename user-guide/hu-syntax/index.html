@@ -27,7 +27,7 @@
     
     
       
-        <title>.hu Syntax - Lamia Documentation</title>
+        <title>.hu file Syntax - Lamia Documentation</title>
       
     
     
@@ -115,7 +115,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              .hu Syntax
+              .hu file Syntax
             
           </span>
         </div>
@@ -584,7 +584,7 @@
   <span class="md-ellipsis">
     
   
-    .hu Syntax
+    .hu file Syntax
   
 
     
@@ -602,7 +602,7 @@
   <span class="md-ellipsis">
     
   
-    .hu Syntax
+    .hu file Syntax
   
 
     
@@ -744,7 +744,7 @@
   <span class="md-ellipsis">
     
   
-    .lm Syntax
+    .lm file Syntax
   
 
     
@@ -1183,7 +1183,7 @@
 
 
 <h1 id="hu-file-syntax">.hu File Syntax<a class="headerlink" href="#hu-file-syntax" title="Permanent link">&para;</a></h1>
-<p><code>.hu</code> (human) files are plain-text prompt templates. They contain <strong>no Python</strong> -- just the text you want to send to an LLM, with optional parameter placeholders and file-context references.</p>
+<p><code>.hu</code> (human) files are plain-text prompt templates. They contain just the text you want to send to an LLM, with optional parameter placeholders and file-context references.</p>
 <p>Each <code>.hu</code> file is automatically a callable function whose name matches the filename. You call <code>.hu</code> functions from <code>.lm</code> files -- <code>.lm</code> files are the orchestration layer that ties everything together.</p>
 <h2 id="quick-example">Quick example<a class="headerlink" href="#quick-example" title="Permanent link">&para;</a></h2>
 <p><strong>summarize.hu</strong>
@@ -1201,33 +1201,39 @@
 <p>Use <code>{name}</code> to define parameters. They are auto-detected -- no declaration needed.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Write a {tone} email to {recipient} about {topic}.
 </span></code></pre></div>
-<p>When called, all parameters must be passed as keyword arguments:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">write_email</span> <span class="o">=</span> <span class="n">draft_email</span><span class="p">(</span><span class="n">tone</span><span class="o">=</span><span class="s2">&quot;formal&quot;</span><span class="p">,</span> <span class="n">recipient</span><span class="o">=</span><span class="s2">&quot;the team&quot;</span><span class="p">,</span> <span class="n">topic</span><span class="o">=</span><span class="s2">&quot;Q3 results&quot;</span><span class="p">)</span>
+<p>Defaults are inline with <code>:</code>:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Write a {tone:friendly} email to {recipient} about {topic:today&#39;s update}.
 </span></code></pre></div>
-<p>Missing parameters raise an error:
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>draft_email() missing required keyword arguments: recipient, tone, topic
+<p>Call with keyword arguments; override only what you need:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">email</span> <span class="o">=</span> <span class="n">draft_email</span><span class="p">(</span><span class="n">recipient</span><span class="o">=</span><span class="s2">&quot;the team&quot;</span><span class="p">)</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># tone -&gt; &quot;friendly&quot;, topic -&gt; &quot;today&#39;s update&quot;</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">email</span> <span class="o">=</span> <span class="n">draft_email</span><span class="p">(</span><span class="n">recipient</span><span class="o">=</span><span class="s2">&quot;the team&quot;</span><span class="p">,</span> <span class="n">tone</span><span class="o">=</span><span class="s2">&quot;formal&quot;</span><span class="p">,</span> <span class="n">topic</span><span class="o">=</span><span class="s2">&quot;Q3 results&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>{name:None}</code> means "optional, empty when omitted".</p>
+<p>Only missing required parameters raise an error:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>draft_email() missing required keyword arguments: recipient
 </span></code></pre></div></p>
 <p>To include a literal brace in the text, double it:
-<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>The result is in the format {{key: value}}.
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>The result is in the format {{key: value}}.
 </span></code></pre></div></p>
 <h2 id="file-context-references">File context references<a class="headerlink" href="#file-context-references" title="Permanent link">&para;</a></h2>
 <p>Use <code>{@filename}</code> to inject the contents of a local file into the prompt. This uses the same file-context resolution as <code>.lm</code> files -- fuzzy matching, absolute paths, and <code>with files()</code> scoping all work.</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Review the code in {@main.py} and suggest improvements.
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>Also check {@utils.py} for any issues.
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>Review the code in {@main.py} and suggest improvements.
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>Also check {@utils.py} for any issues.
 </span></code></pre></div>
 <h3 id="variable-file-references">Variable file references<a class="headerlink" href="#variable-file-references" title="Permanent link">&para;</a></h3>
 <p>Use <code>{@identifier}</code> where the identifier matches a parameter name. If the caller provides a value, it is used as the filepath. If not, the name is treated as a literal filename.</p>
 <p>See the <a href="../files-context/">File Context</a> documentation for details on search strategies and error handling.</p>
 <h2 id="return-types">Return types<a class="headerlink" href="#return-types" title="Permanent link">&para;</a></h2>
 <p><code>.hu</code> files are <strong>return-type agnostic</strong>. The return type is specified by the caller in the <code>.lm</code> file using the <code>-&gt;</code> syntax:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Returns validated HTML</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">page</span> <span class="o">=</span> <span class="n">generate_landing_page</span><span class="p">(</span><span class="n">product</span><span class="o">=</span><span class="s2">&quot;Lamia&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Returns a Pydantic model extracted from HTML</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">quote</span> <span class="o">=</span> <span class="n">get_stock_data</span><span class="p">(</span><span class="n">ticker</span><span class="o">=</span><span class="s2">&quot;AAPL&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span><span class="p">[</span><span class="n">StockQuote</span><span class="p">]</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># Writes output to a file</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="n">generate_docs</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">&quot;lamia&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">Markdown</span><span class="p">,</span> <span class="s2">&quot;docs.md&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Returns validated HTML</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">page</span> <span class="o">=</span> <span class="n">generate_landing_page</span><span class="p">(</span><span class="n">product</span><span class="o">=</span><span class="s2">&quot;Lamia&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Returns a Pydantic model extracted from HTML</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="n">quote</span> <span class="o">=</span> <span class="n">get_stock_data</span><span class="p">(</span><span class="n">ticker</span><span class="o">=</span><span class="s2">&quot;AAPL&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span><span class="p">[</span><span class="n">StockQuote</span><span class="p">]</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># Writes output to a file</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">generate_docs</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">&quot;lamia&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">Markdown</span><span class="p">,</span> <span class="s2">&quot;docs.md&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>If called without a return type, the raw LLM response text is returned.</p>
 <h2 id="calling-conventions">Calling conventions<a class="headerlink" href="#calling-conventions" title="Permanent link">&para;</a></h2>
@@ -1239,7 +1245,7 @@
 </ul>
 <h2 id="standalone-execution">Standalone execution<a class="headerlink" href="#standalone-execution" title="Permanent link">&para;</a></h2>
 <p>You can run a <code>.hu</code> file directly from the CLI:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia<span class="w"> </span>hello.hu
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>lamia<span class="w"> </span>hello.hu
 </span></code></pre></div>
 <p>This sends the prompt (with no parameters) to the default model and prints the response. Parameterized <code>.hu</code> files require a <code>.lm</code> wrapper to pass arguments.</p>
 <h2 id="comparison-with-lm-files">Comparison with .lm files<a class="headerlink" href="#comparison-with-lm-files" title="Permanent link">&para;</a></h2>
