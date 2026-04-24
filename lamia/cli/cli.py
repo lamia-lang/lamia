@@ -523,6 +523,11 @@ def main():
         _open_ide(sys.argv[1])
         return
 
+    if len(sys.argv) > 1 and sys.argv[1] == "debug":
+        from .debug_runner import handle_debug
+        handle_debug()
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] == "init":
         parser = argparse.ArgumentParser(
             description="Lamia CLI",
