@@ -33,8 +33,26 @@ from lamia.interpreter.human.executor import HuCallable
 
 HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
+_CONFIG_NAMES = ("config.yaml", "config.yml")
 
 logger = logging.getLogger(__name__)
+
+
+def _find_config_file(start_path: str | None = None) -> str | None:
+    """Walk up from *start_path* (or CWD) looking for config.yaml / config.yml.
+
+    Returns the absolute path to the first config file found, or ``None``.
+    """
+    from pathlib import Path
+    current = Path(start_path).resolve() if start_path else Path.cwd()
+    if current.is_file():
+        current = current.parent
+    for directory in [current, *current.parents]:
+        for name in _CONFIG_NAMES:
+            candidate = directory / name
+            if candidate.is_file():
+                return str(candidate)
+    return None
 
 async def interactive_mode(lamia: Lamia):
     """Run Lamia in interactive mode, processing user prompts."""
@@ -680,13 +698,21 @@ def main():
         logger.debug(f"Using configuration from: {config_path}")
         with open(config_path, 'r') as f:
             config_dict = yaml.safe_load(f)
-    elif os.path.exists("config.yaml"):
-        logger.debug("Using configuration from: config.yaml")
-        with open("config.yaml", 'r') as f:
-            config_dict = yaml.safe_load(f)
     else:
-        logger.error("Error: --config or a config.yaml file is required for CLI operation. Run 'lamia init' to create a config.yaml.")
-        sys.exit(1)
+        discovered = _find_config_file(prompt_file)
+        if discovered:
+            logger.debug(f"Using configuration from: {discovered}")
+            with open(discovered, 'r') as f:
+                config_dict = yaml.safe_load(f)
+        else:
+            from pathlib import Path
+            search_start = Path(prompt_file).resolve().parent if prompt_file else Path.cwd()
+            logger.error(
+                f"fatal: no config.yaml found (searched upwards from {search_start}).\n"
+                f"Place a config.yaml in your project root, or pass --config <path>.\n"
+                f"Run 'lamia init' to create one."
+            )
+            sys.exit(1)
 
     # Note: Lazy loading is now handled by HybridExecutor for .hu files
     # Python files still need sys.path management for regular execution

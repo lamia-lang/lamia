@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 from difflib import SequenceMatcher, get_close_matches
+from lamia.cli.cli import _find_config_file
 import re
 
 import PyPDF2
@@ -40,13 +41,10 @@ def _has_path_components(query: str) -> bool:
 
 
 def _find_project_root(start_path: str) -> Optional[str]:
-    """Walk up from *start_path* looking for a directory containing config.yaml."""
-    current = Path(start_path).resolve()
-    if current.is_file():
-        current = current.parent
-    for directory in [current, *current.parents]:
-        if (directory / "config.yaml").is_file():
-            return str(directory)
+    """Walk up from *start_path* looking for a directory containing config.yaml/yml."""
+    config = _find_config_file(start_path)
+    if config:
+        return str(Path(config).parent)
     return None
 
 class FileSearcher:
