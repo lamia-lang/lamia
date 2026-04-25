@@ -30,29 +30,12 @@ from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.hybrid_executor import HybridExecutor
 from lamia.interpreter.human.parser import parse_hu_file
 from lamia.interpreter.human.executor import HuCallable
+from lamia.project import find_config_file
 
 HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
-_CONFIG_NAMES = ("config.yaml", "config.yml")
 
 logger = logging.getLogger(__name__)
-
-
-def _find_config_file(start_path: str | None = None) -> str | None:
-    """Walk up from *start_path* (or CWD) looking for config.yaml / config.yml.
-
-    Returns the absolute path to the first config file found, or ``None``.
-    """
-    from pathlib import Path
-    current = Path(start_path).resolve() if start_path else Path.cwd()
-    if current.is_file():
-        current = current.parent
-    for directory in [current, *current.parents]:
-        for name in _CONFIG_NAMES:
-            candidate = directory / name
-            if candidate.is_file():
-                return str(candidate)
-    return None
 
 async def interactive_mode(lamia: Lamia):
     """Run Lamia in interactive mode, processing user prompts."""
@@ -699,7 +682,7 @@ def main():
         with open(config_path, 'r') as f:
             config_dict = yaml.safe_load(f)
     else:
-        discovered = _find_config_file(prompt_file)
+        discovered = find_config_file(prompt_file)
         if discovered:
             logger.debug(f"Using configuration from: {discovered}")
             with open(discovered, 'r') as f:

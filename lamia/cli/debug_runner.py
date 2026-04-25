@@ -229,6 +229,8 @@ class LamiaDebugger:
                 self.paused.set()
             elif cmd == "pause":
                 self.step_mode = "pause"
+            elif cmd == "configurationDone":
+                self.paused.set()
             elif cmd == "setBreakpoints":
                 f = msg.get("file", self.file_path)
                 self.breakpoints[os.path.abspath(f)] = set(msg.get("lines", []))
@@ -375,7 +377,7 @@ class LamiaDebugger:
         from lamia.interpreter.hybrid_executor import HybridExecutor
         original_execute = HybridExecutor.execute_file
         debugger = self
-        initialized = [False]
+        interactive_initialized = [False]
 
         def patched_execute_file(executor_self, file_path, globals_dict=None,
                                  enable_lazy_dependency_loading=False):
@@ -388,24 +390,12 @@ class LamiaDebugger:
                 debugger.line_maps[resolved] = smap
             else:
                 debugger.line_maps[resolved] = _fallback_offset_map(original_source, transformed)
-            fmap = debugger.line_maps[resolved]
 
-            if debugger.json_mode:
-                debugger.io.send({
-                    "type": "event", "event": "output",
-                    "category": "console",
-                    "text": f"[lamia-debug] source map for {os.path.basename(resolved)}: {len(fmap)} entries\n",
-                })
-                if not initialized[0]:
-                    initialized[0] = True
-                    debugger.io.send({"type": "event", "event": "initialized", "protocolVersion": PROTOCOL_VERSION})
-                    debugger.paused.clear()
-                    debugger.paused.wait()
-            else:
-                if not initialized[0]:
-                    initialized[0] = True
-                    print(f"Lamia Debugger — {os.path.basename(debugger.file_path)}")
-                    print("Type 'help' for commands.\n")
+            if not debugger.json_mode and not interactive_initialized[0]:
+                interactive_initialized[0] = True
+                print(f"Lamia Debugger — {os.path.basename(debugger.file_path)}")
+                print("Type 'help' for commands.\n")
+                if not debugger.breakpoints:
                     debugger.step_mode = "stepIn"
 
             old_settrace = sys.gettrace()
@@ -439,6 +429,9 @@ class LamiaDebugger:
             sys.stderr = _DebugOutputStream(self.io, "stderr")
             cmd_thread = threading.Thread(target=self._json_command_loop, daemon=True)
             cmd_thread.start()
+            self.io.send({"type": "event", "event": "initialized", "protocolVersion": PROTOCOL_VERSION})
+            self.paused.clear()
+            self.paused.wait()
 
         exit_code = 0
         try:
@@ -510,6 +503,8 @@ def handle_debug():
     parser.add_argument("--break", "-b", type=int, action="append", dest="breakpoints",
                         default=[], metavar="LINE",
                         help="Set breakpoint at LINE (can repeat)")
+    parser.add_argument("--stop-on-entry", action="store_true",
+                        help="Pause on the first executable line")
     args = parser.parse_args(sys.argv[2:])
 
     if not os.path.isfile(args.file):
@@ -524,5 +519,8 @@ def handle_debug():
         if not args.json:
             for ln in sorted(args.breakpoints):
                 print(f"Breakpoint at line {ln}")
+
+    if args.stop_on_entry:
+        debugger.step_mode = "stepIn"
 
     debugger.run()

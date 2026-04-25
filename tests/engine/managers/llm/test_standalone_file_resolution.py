@@ -10,10 +10,10 @@ from lamia.engine.managers.llm.files_context_manager import (
     get_current_source_file,
     resolve_standalone_file_references,
     read_file_content,
-    _find_project_root,
     _has_path_components,
     _resolve_standalone_reference,
 )
+from lamia.project import find_project_root
 from lamia.errors import AmbiguousFileError, FileReferenceError
 
 
@@ -81,26 +81,26 @@ class TestHasPathComponents:
 
 
 # ---------------------------------------------------------------------------
-# _find_project_root
+# find_project_root
 # ---------------------------------------------------------------------------
 
 class TestFindProjectRoot:
 
     def test_finds_root_from_file(self, project_tree):
         hu_file = str(project_tree / "prompts" / "greet.hu")
-        root = _find_project_root(hu_file)
+        root = find_project_root(hu_file)
         assert root == str(project_tree)
 
     def test_finds_root_from_nested_dir(self, project_tree):
         deep_file = str(project_tree / "deep" / "nested" / "notes.md")
-        root = _find_project_root(deep_file)
+        root = find_project_root(deep_file)
         assert root == str(project_tree)
 
     def test_returns_none_when_no_config(self, tmp_path):
         some_file = tmp_path / "no_project" / "file.txt"
         some_file.parent.mkdir(parents=True)
         some_file.write_text("x")
-        assert _find_project_root(str(some_file)) is None
+        assert find_project_root(str(some_file)) is None
 
 
 # ---------------------------------------------------------------------------

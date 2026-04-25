@@ -5,12 +5,12 @@ import logging
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 from difflib import SequenceMatcher, get_close_matches
-from lamia.cli.cli import _find_config_file
 import re
 
 import PyPDF2
 
 from lamia.errors import AmbiguousFileError, FileReferenceError
+from lamia.project import find_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +40,6 @@ def _has_path_components(query: str) -> bool:
     return os.sep in query or '/' in query or query.startswith('..')
 
 
-def _find_project_root(start_path: str) -> Optional[str]:
-    """Walk up from *start_path* looking for a directory containing config.yaml/yml."""
-    config = _find_config_file(start_path)
-    if config:
-        return str(Path(config).parent)
-    return None
 
 class FileSearcher:
     """Smart file search with multiple strategies."""
@@ -410,7 +404,7 @@ def _resolve_standalone_reference(query: str, source_path: str) -> str:
         raise FileReferenceError(query, [])
 
     # 3. Bare filename -- use project root as context
-    project_root = _find_project_root(source_path)
+    project_root = find_project_root(source_path)
     if project_root is None:
         raise FileReferenceError(query, [])
 
