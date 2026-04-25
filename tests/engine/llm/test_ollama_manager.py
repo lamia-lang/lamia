@@ -75,8 +75,9 @@ def test_start_service_already_running():
 def test_start_service_success():
     manager = OllamaManager()
     with patch.object(manager, 'is_running') as mock_check, \
-         patch('subprocess.Popen') as mock_popen:
-        mock_check.side_effect = [False, True]  # Not running, then running
+         patch('subprocess.Popen') as mock_popen, \
+         patch('lamia.engine.managers.llm.ollama_manager._wire_process_logs'):
+        mock_check.side_effect = [False, True]
         mock_popen.return_value = MagicMock()
         result = manager.start_service()
         assert result is True
@@ -92,6 +93,7 @@ def test_start_service_timeout():
     manager = OllamaManager()
     with patch.object(manager, 'is_running', return_value=False), \
          patch('subprocess.Popen') as mock_popen, \
+         patch('lamia.engine.managers.llm.ollama_manager._wire_process_logs'), \
          patch('time.sleep'):
         mock_popen.return_value = MagicMock()
         result = manager.start_service()
