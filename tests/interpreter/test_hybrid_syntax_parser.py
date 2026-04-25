@@ -159,10 +159,8 @@ class TestHybridSyntaxParserTransformation:
         mock_preprocessor.preprocess.return_value = ("processed_code", {"func": "str"})
         mock_ast.parse.return_value = mock_tree
         mock_session_transformer.transform_sessions.return_value = mock_tree
-        mock_syntax_transformer.transform_code.return_value = "final_transformed_code"
-        
-        # Mock ast.unparse to exist
-        mock_ast.unparse.return_value = "unparsed_code"
+        mock_syntax_transformer.visit.return_value = mock_tree
+        mock_syntax_transformer._ast_to_source.return_value = "final_transformed_code"
         
         # Create parser (will use mocked components)
         parser = HybridSyntaxParser()
@@ -175,7 +173,7 @@ class TestHybridSyntaxParserTransformation:
         mock_ast.parse.assert_called_once_with("processed_code")
         mock_session_transformer_class.assert_called_once_with({"func": "str"})
         mock_session_transformer.transform_sessions.assert_called_once_with(mock_tree)
-        mock_syntax_transformer.transform_code.assert_called_once_with("unparsed_code", {"func": "str"})
+        mock_syntax_transformer._ast_to_source.assert_called_once_with(mock_tree)
         
         assert result == "final_transformed_code"
     
@@ -195,7 +193,8 @@ class TestHybridSyntaxParserTransformation:
         # Configure mock return values - no return types
         mock_preprocessor.preprocess.return_value = ("processed_code", {})
         mock_ast.parse.return_value = mock_tree
-        mock_syntax_transformer.transform_code.return_value = "final_transformed_code"
+        mock_syntax_transformer.visit.return_value = mock_tree
+        mock_syntax_transformer._ast_to_source.return_value = "final_transformed_code"
         
         # Create parser (will use mocked components)
         parser = HybridSyntaxParser()
@@ -207,15 +206,16 @@ class TestHybridSyntaxParserTransformation:
         from unittest.mock import call
         # Should not create SessionWithTransformer instance
         
+        mock_syntax_transformer._ast_to_source.assert_called_once_with(mock_tree)
         assert result == "final_transformed_code"
     
     @patch('lamia.interpreter.hybrid_syntax_parser.ast')
     def test_transform_handles_ast_unparse_fallback(self, mock_ast):
         """Test transformation handles fallback when ast.unparse is not available."""
-        # Setup mocks - simulate older Python without ast.unparse
+        # Setup mocks - parser should not rely on ast.unparse.
         mock_tree = Mock()
         mock_ast.parse.return_value = mock_tree
-        delattr(mock_ast, 'unparse')  # Remove unparse attribute
+        delattr(mock_ast, 'unparse')
         
         # Mock other components
         with patch('lamia.interpreter.hybrid_syntax_parser.WithReturnTypePreprocessor') as mock_preprocessor_class:
@@ -226,13 +226,13 @@ class TestHybridSyntaxParserTransformation:
                 mock_syntax_transformer_class.return_value = mock_syntax_transformer
                 
                 mock_preprocessor.preprocess.return_value = ("processed_code", {})
-                mock_syntax_transformer.transform_code.return_value = "final_code"
+                mock_syntax_transformer.visit.return_value = mock_tree
+                mock_syntax_transformer._ast_to_source.return_value = "final_code"
                 
                 parser = HybridSyntaxParser()
                 result = parser.transform("test code")
                 
-                # Should use processed_code instead of unparsed AST
-                mock_syntax_transformer.transform_code.assert_called_once_with("processed_code", {})
+                mock_syntax_transformer._ast_to_source.assert_called_once_with(mock_tree)
                 assert result == "final_code"
     
     def test_transform_simple_function(self):
@@ -327,7 +327,7 @@ class TestHybridSyntaxParserErrorHandling:
     
     def test_transform_handles_error_in_transformation(self):
         """Test that transform propagates errors from syntax transformation."""
-        with patch.object(self.parser._syntax_transformer, 'transform_code') as mock_transform:
+        with patch.object(self.parser._syntax_transformer, '_ast_to_source') as mock_transform:
             mock_transform.side_effect = RuntimeError("Transformation failed")
             
             with pytest.raises(RuntimeError, match="Transformation failed"):
