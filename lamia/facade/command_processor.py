@@ -44,7 +44,8 @@ def process_string_command(command: str) -> tuple[Command, Optional[LamiaResult]
         # Return dummy command since we have a result already
         return None, python_result
     except SyntaxError as e:
-        logger.debug(f"Syntax error: {e} in command: {command}")
+        cmd_preview = command[:200].replace("\n", "\\n")
+        logger.debug(f"Syntax error: {e} in command preview: {cmd_preview}...")
         pass
     except Exception as e:
         logger.debug(f"Python code execution failed: {e}")

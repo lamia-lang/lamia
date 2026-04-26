@@ -30,7 +30,6 @@ from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.hybrid_executor import HybridExecutor
 from lamia.interpreter.human.parser import parse_hu_file
 from lamia.interpreter.human.executor import HuCallable
-from lamia.project import find_config_file
 
 HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
@@ -282,9 +281,9 @@ async def json_mode(lamia: Lamia) -> None:
                     total_tokens["total"] = total_tokens["input"] + total_tokens["output"]
 
                 text = result.result_text or ""
-                tool_call = _extract_tool_call(text)
+                tool_calls = _extract_tool_calls(text)
 
-                if not tool_call:
+                if not tool_calls:
                     if _detect_malformed_tool_call(text) and _round < MAX_TOOL_ROUNDS:
                         logger.debug("Malformed tool call detected, sending correction")
                         prompt = (
@@ -295,28 +294,39 @@ async def json_mode(lamia: Lamia) -> None:
                     final_text = _strip_tool_calls(text)
                     break
 
-                tool_name = tool_call.get("tool", "")
-                tool_args = tool_call.get("args", {})
-                logger.debug(f"Tool call: {tool_name}({tool_args})")
+                feedback_lines: list[str] = []
+                should_break = False
+                for tool_call in tool_calls:
+                    tool_name = tool_call.get("tool", "")
+                    tool_args = tool_call.get("args", {})
+                    logger.debug(f"Tool call: {tool_name}({tool_args})")
 
-                if tool_name in ("write_file", "patch_file"):
-                    target = tool_args.get("path", "")
-                    write_counts[target] = write_counts.get(target, 0) + 1
-                    if write_counts[target] > MAX_SAME_FILE_WRITES:
-                        logger.warning(
-                            "Loop detected: %s written %d times, breaking",
-                            target, write_counts[target],
-                        )
-                        final_text = _strip_tool_calls(text)
-                        break
+                    if tool_name in ("write_file", "patch_file"):
+                        target = tool_args.get("path", "")
+                        write_counts[target] = write_counts.get(target, 0) + 1
+                        if write_counts[target] > MAX_SAME_FILE_WRITES:
+                            logger.warning(
+                                "Loop detected: %s written %d times, breaking",
+                                target, write_counts[target],
+                            )
+                            final_text = _strip_tool_calls(text)
+                            should_break = True
+                            break
 
-                _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
-                tool_result = execute_tool(tool_name, tool_args, cwd, lamia=lamia)
+                    _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
+                    tool_result = execute_tool(tool_name, tool_args, cwd, lamia=lamia)
+                    feedback_lines.append(
+                        f"Assistant called tool {tool_name}.\nTool result:\n{tool_result}"
+                    )
+
+                if should_break:
+                    break
 
                 if _round < MAX_TOOL_ROUNDS:
+                    feedback_block = "\n\n".join(feedback_lines)
                     prompt = (
-                        f"{prompt}\n\nAssistant called tool {tool_name}.\n"
-                        f"Tool result:\n{tool_result}\n\n"
+                        f"{prompt}\n\nAssistant: {text}\n\n"
+                        f"{feedback_block}\n\n"
                         f"Continue your response to the user based on this tool result."
                     )
                     continue
@@ -346,13 +356,14 @@ async def json_mode(lamia: Lamia) -> None:
             _json_write({"type": "error", "message": str(exc)})
 
 
-def _extract_tool_call(text: str) -> Optional[dict]:
-    """Extract the first tool call from LLM response text.
+def _extract_tool_calls(text: str) -> list[dict]:
+    """Extract all tool calls from LLM response text.
 
     Supports two formats:
     - JSON:  {"tool": "name", "args": {"k": "v"}}
     - XML:   <invoke ...><tool_name>name</tool_name><parameter name="k">v</parameter></invoke>
     """
+    calls: list[dict] = []
     for line in text.strip().split("\n"):
         line = line.strip()
         if not line.startswith("{"):
@@ -360,12 +371,11 @@ def _extract_tool_call(text: str) -> Optional[dict]:
         try:
             obj = json.loads(line)
             if "tool" in obj and isinstance(obj.get("tool"), str):
-                return obj
+                calls.append(obj)
         except json.JSONDecodeError:
             continue
 
-    invoke_match = re.search(r"<invoke\b[^>]*>(.*?)</invoke>", text, re.DOTALL)
-    if invoke_match:
+    for invoke_match in re.finditer(r"<invoke\b[^>]*>(.*?)</invoke>", text, re.DOTALL):
         block = invoke_match.group(1)
         name_match = re.search(r"<tool_name>\s*(\w+)\s*</tool_name>", block)
         if name_match:
@@ -374,9 +384,9 @@ def _extract_tool_call(text: str) -> Optional[dict]:
                 r'<parameter\s+name="(\w+)">(.*?)</parameter>', block, re.DOTALL
             ):
                 args[pm.group(1)] = pm.group(2)
-            return {"tool": name_match.group(1), "args": args}
+            calls.append({"tool": name_match.group(1), "args": args})
 
-    return None
+    return calls
 
 
 _MALFORMED_TOOL_PATTERNS = [
@@ -682,6 +692,7 @@ def main():
         with open(config_path, 'r') as f:
             config_dict = yaml.safe_load(f)
     else:
+        from lamia.project import find_config_file
         discovered = find_config_file(prompt_file)
         if discovered:
             logger.debug(f"Using configuration from: {discovered}")
