@@ -39,6 +39,7 @@ TOPIC_TO_FILE = {
     "evaluation": "user-guide/evaluation.md",
     "eval": "user-guide/evaluation.md",
     "selector": "validation/selector-usage-guide.md",
+    "debugger": "user-guide/debugger.md",
 }
 
 _DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))
