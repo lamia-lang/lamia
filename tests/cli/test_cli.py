@@ -1,6 +1,7 @@
 """Tests for CLI module."""
 
 import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -16,6 +17,8 @@ from lamia.cli.cli import (
     HYBRID_EXTENSIONS,
     interactive_mode,
     _extract_tool_calls,
+    _strip_tool_calls,
+    _build_tool_result_entry,
 )
 from lamia.cli.eval_cli import (
     _extract_llm_prompts,
@@ -796,3 +799,59 @@ And then patch:
         calls = _extract_tool_calls(text)
         assert len(calls) == 1
         assert calls[0]["tool"] == "read_file"
+
+    def test_strip_tool_calls_removes_tool_result_blocks(self):
+        text = """
+Now let me update the file:
+{"tool": "patch_file", "args": {"path": "orchestrator.lm", "old_text": "a", "new_text": "b"}}
+
+<tool_result>
+✓ File updated: orchestrator.lm
+</tool_result>
+
+Done.
+"""
+        cleaned = _strip_tool_calls(text)
+        assert "<tool_result>" not in cleaned
+        assert "File updated: orchestrator.lm" not in cleaned
+        assert "Done." in cleaned
+
+    def test_build_tool_result_entry_includes_tool_and_args(self):
+        entry = _build_tool_result_entry(
+            "write_file",
+            {"path": "orchestrator.lm", "content": "x"},
+            "File written successfully",
+        )
+        assert entry["tool"] == "write_file"
+        assert entry["args"]["path"] == "orchestrator.lm"
+        assert entry["result"] == "File written successfully"
+
+    def test_tool_result_entries_are_json_serializable(self):
+        entries = [
+            _build_tool_result_entry(
+                "write_file",
+                {"path": "orchestrator.lm"},
+                "File written successfully",
+            ),
+            _build_tool_result_entry(
+                "patch_file",
+                {"path": "team/product_manager.hu", "old_text": "a", "new_text": "b"},
+                "File patched successfully",
+            ),
+        ]
+        payload = {"tool_results": entries}
+        encoded = json.dumps(payload)
+        assert '"tool_results"' in encoded
+        assert '"tool": "write_file"' in encoded
+        assert '"tool": "patch_file"' in encoded
+
+    def test_strip_tool_calls_removes_tool_result_block(self):
+        text = """
+<tool_result>
+File written successfully
+</tool_result>
+Final answer.
+"""
+        cleaned = _strip_tool_calls(text)
+        assert "<tool_result>" not in cleaned
+        assert "Final answer." in cleaned

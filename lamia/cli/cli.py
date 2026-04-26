@@ -292,7 +292,7 @@ async def json_mode(lamia: Lamia) -> None:
                     response_to_caller_text = _strip_tool_calls(text)
                     break
 
-                tool_result_lines: list[str] = []
+                tool_result_entries: list[dict[str, object]] = []
                 should_break = False
                 for tool_call in tool_calls:
                     tool_name = tool_call.get("tool", "")
@@ -313,20 +313,28 @@ async def json_mode(lamia: Lamia) -> None:
 
                     _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
                     tool_result = execute_tool(tool_name, tool_args, os.getcwd(), lamia=lamia)
-                    tool_result_lines.append(
-                        f"Assistant called tool {tool_name}.\nTool result:\n{tool_result}"
+                    tool_result_entries.append(
+                        _build_tool_result_entry(tool_name, tool_args, tool_result)
                     )
 
                 if should_break:
                     break
 
                 if _round < MAX_TOOL_ROUNDS:
-                    tool_results_block = "\n\n".join(tool_result_lines)
-                    prompt = (
-                        f"{prompt}\n\n"
-                        f"{tool_results_block}\n\n"
-                        f"Continue your response to the user based on this tool result." if tool_results_block else ""
-                    )
+                    if tool_result_entries:
+                        tool_results_json = json.dumps(
+                            {"tool_results": tool_result_entries},
+                            ensure_ascii=False,
+                        )
+                        prompt = (
+                            f"{prompt}\n\n"
+                            f"Tool results JSON:\n{tool_results_json}\n\n"
+                            f"Continue your response to the user based on these tool results."
+                        )
+                    else:
+                        # Should not happen, but just in case
+                        break
+
                     continue
 
                 response_to_caller_text = _strip_tool_calls(text)
@@ -477,6 +485,15 @@ def _strip_tool_calls(text: str) -> str:
     result = re.sub(r"\n{3,}", "\n\n", result)
 
     return result.strip()
+
+
+def _build_tool_result_entry(tool_name: str, tool_args: dict, tool_result: str) -> dict[str, object]:
+    """Build a single tool result entry for the next LLM round."""
+    return {
+        "tool": tool_name,
+        "args": tool_args,
+        "result": tool_result,
+    }
 
 
 def _open_ide(folder: str) -> None:
