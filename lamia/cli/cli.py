@@ -180,8 +180,7 @@ async def json_mode(lamia: Lamia) -> None:
     line to stdout.  All logging goes to the log file only (console handler
     is suppressed before this function is called).
 
-    Request  : {"text": "user message"}
-               {"text": "...", "system": "...", "files": ["/path/a.lm", "/path/b.hu"],
+    Request  : {"text": "user message"} or advanced {"text": "...", "system": "...", "files": ["/path/a.lm", "/path/b.hu"],
                 "messages": [{"role": "user", "text": "..."}, {"role": "assistant", "text": "..."}]}
     Response : {"type": "response", "text": "...", "model": "...", "tokens": {...}}
     Error    : {"type": "error", "message": "..."}
@@ -240,7 +239,6 @@ async def json_mode(lamia: Lamia) -> None:
         else:
             prompt = system_prefix + "\n\n" + user_text
         file_paths = request.get("files", [])
-        cwd = os.getcwd()
 
         # NOTE: reads files locally — if Lamia moves to a remote server,
         # file contents should be sent in the request JSON instead of paths.
@@ -257,7 +255,7 @@ async def json_mode(lamia: Lamia) -> None:
                 prompt = prompt + "\n\n<attached_files>\n" + "\n".join(file_sections) + "\n</attached_files>"
 
         try:
-            final_text = ""
+            response_to_caller_text = "" # responce of the execution to the m2m callee e.g. to The Lamia IDE
             model_name = None
             total_tokens: dict = {}
             reset_file_writes()
@@ -291,10 +289,10 @@ async def json_mode(lamia: Lamia) -> None:
                             f"System: {TOOL_FORMAT_CORRECTION}"
                         )
                         continue
-                    final_text = _strip_tool_calls(text)
+                    response_to_caller_text = _strip_tool_calls(text)
                     break
 
-                feedback_lines: list[str] = []
+                tool_result_lines: list[str] = []
                 should_break = False
                 for tool_call in tool_calls:
                     tool_name = tool_call.get("tool", "")
@@ -309,13 +307,13 @@ async def json_mode(lamia: Lamia) -> None:
                                 "Loop detected: %s written %d times, breaking",
                                 target, write_counts[target],
                             )
-                            final_text = _strip_tool_calls(text)
+                            response_to_caller_text = _strip_tool_calls(text)
                             should_break = True
                             break
 
                     _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
-                    tool_result = execute_tool(tool_name, tool_args, cwd, lamia=lamia)
-                    feedback_lines.append(
+                    tool_result = execute_tool(tool_name, tool_args, os.getcwd(), lamia=lamia)
+                    tool_result_lines.append(
                         f"Assistant called tool {tool_name}.\nTool result:\n{tool_result}"
                     )
 
@@ -323,18 +321,18 @@ async def json_mode(lamia: Lamia) -> None:
                     break
 
                 if _round < MAX_TOOL_ROUNDS:
-                    feedback_block = "\n\n".join(feedback_lines)
+                    tool_results_block = "\n\n".join(tool_result_lines)
                     prompt = (
                         f"{prompt}\n\n"
-                        f"{feedback_block}\n\n"
-                        f"Continue your response to the user based on this tool result."
+                        f"{tool_results_block}\n\n"
+                        f"Continue your response to the user based on this tool result." if tool_results_block else ""
                     )
                     continue
 
-                final_text = _strip_tool_calls(text)
+                response_to_caller_text = _strip_tool_calls(text)
                 break
 
-            response: dict = {"type": "response", "text": final_text}
+            response: dict = {"type": "response", "text": response_to_caller_text}
             if model_name:
                 response["model"] = model_name
             if total_tokens:
