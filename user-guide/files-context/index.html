@@ -304,6 +304,26 @@
     
     
       <li class="md-tabs__item">
+        <a href="../../advanced/debugger.md" class="md-tabs__link">
+          
+  
+  
+  Advanced
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
         <a href="../../validation/selector-usage-guide/" class="md-tabs__link">
           
   
@@ -1448,7 +1468,7 @@
   <span class="md-ellipsis">
     
   
-    Reference
+    Advanced
   
 
     
@@ -1461,6 +1481,95 @@
         
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Advanced
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/debugger.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lamia Debugger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2264,7 +2373,7 @@
 <p>The <code>files()</code> context manager allows you to reference files in your LLM prompts using the <code>{@filename}</code> syntax. This is perfect for AI-powered form filling, document analysis, and any task where the AI needs access to local files.</p>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;~/Documents/&quot;</span><span class="p">,</span> <span class="s2">&quot;~/projects/&quot;</span><span class="p">):</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">answer_question</span><span class="p">(</span><span class="n">question</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">models</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4&quot;</span><span class="p">):</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">answer_question</span><span class="p">(</span><span class="n">question</span><span class="o">=</span><span class="n">question</span><span class="p">):</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="sd">        Answer: {question}</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
@@ -2273,7 +2382,7 @@
 </span></code></pre></div>
 <h2 id="key-features">Key Features<a class="headerlink" href="#key-features" title="Permanent link">&para;</a></h2>
 <h3 id="smart-file-search">🔍 Smart File Search<a class="headerlink" href="#smart-file-search" title="Permanent link">&para;</a></h3>
-<p>Files are resolved using <strong>multiple strategies</strong> (similar to Cursor):</p>
+<p>Files are resolved using <strong>multiple strategies</strong>:</p>
 <ol>
 <li><strong>Exact filename match</strong> (highest priority)</li>
 <li><strong>Content grep</strong> (searches inside files)</li>
@@ -2289,7 +2398,7 @@
 <h3 id="error-handling">⚠️ Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>AmbiguousFileError</strong>: Multiple files match with similar scores</li>
-<li><strong>FileReferenceError</strong>: File not found (with suggestions)</li>
+<li><strong>FileReferenceError</strong>: File not found</li>
 </ul>
 <hr />
 <h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
