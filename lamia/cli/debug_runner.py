@@ -99,6 +99,8 @@ class LamiaDebugger:
         self.line_maps: dict[str, dict[int, int]] = {}
         self.running = True
         self.paused = threading.Event()
+        self._var_handles: dict[int, object] = {}
+        self._next_var_ref = 2  # 1 is reserved for Locals scope by DAP session
 
         if json_mode:
             self.io = _JsonProtocolIO()
@@ -164,18 +166,98 @@ class LamiaDebugger:
 
     # -- variable / stack inspection ----------------------------------------
 
-    def _collect_variables(self) -> list[dict]:
+    def _is_expandable(self, val) -> bool:
+        if isinstance(val, (dict, list, tuple, set)):
+            return len(val) > 0
+        if hasattr(val, "model_dump"):
+            try:
+                dumped = val.model_dump()
+                return isinstance(dumped, dict) and len(dumped) > 0
+            except Exception:
+                return False
+        try:
+            return len(vars(val)) > 0
+        except Exception:
+            return False
+
+    def _preview_value(self, val) -> str:
+        try:
+            if isinstance(val, dict):
+                return f"dict({len(val)})"
+            if isinstance(val, list):
+                return f"list({len(val)})"
+            if isinstance(val, tuple):
+                return f"tuple({len(val)})"
+            if isinstance(val, set):
+                return f"set({len(val)})"
+            if hasattr(val, "model_dump"):
+                return f"{type(val).__name__}"
+            return repr(val)[:500]
+        except Exception:
+            return "<error>"
+
+    def _store_handle(self, val) -> int:
+        ref = self._next_var_ref
+        self._next_var_ref += 1
+        self._var_handles[ref] = val
+        return ref
+
+    def _make_var(self, name: str, val) -> dict:
+        ref = self._store_handle(val) if self._is_expandable(val) else 0
+        return {
+            "name": name,
+            "value": self._preview_value(val),
+            "type": type(val).__name__,
+            "variablesReference": ref,
+        }
+
+    def _variables_for_value(self, val) -> list[dict]:
+        result: list[dict] = []
+        try:
+            if isinstance(val, dict):
+                for key, child in list(val.items())[:500]:
+                    result.append(self._make_var(str(key), child))
+                return result
+            if isinstance(val, (list, tuple)):
+                for idx, child in enumerate(list(val)[:500]):
+                    result.append(self._make_var(f"[{idx}]", child))
+                return result
+            if isinstance(val, set):
+                for idx, child in enumerate(list(val)[:500]):
+                    result.append(self._make_var(f"[{idx}]", child))
+                return result
+            if hasattr(val, "model_dump"):
+                dumped = val.model_dump()
+                if isinstance(dumped, dict):
+                    for key, child in list(dumped.items())[:500]:
+                        result.append(self._make_var(str(key), child))
+                    return result
+            attrs = vars(val)
+            for key, child in list(attrs.items())[:500]:
+                if str(key).startswith("__") and str(key).endswith("__"):
+                    continue
+                result.append(self._make_var(str(key), child))
+            return result
+        except Exception:
+            return result
+
+    def _collect_variables(self, reference: int = 1) -> list[dict]:
         if self.current_frame is None:
             return []
-        result = []
-        for name, val in self.current_frame.f_locals.items():
-            if name.startswith("__") and name.endswith("__"):
-                continue
-            try:
-                result.append({"name": name, "value": repr(val)[:500], "type": type(val).__name__})
-            except Exception:
-                result.append({"name": name, "value": "<error>", "type": "?"})
-        return result
+        if reference == 1:
+            # Fresh locals request: reset handle map.
+            self._var_handles.clear()
+            self._next_var_ref = 2
+            result = []
+            for name, val in self.current_frame.f_locals.items():
+                if name.startswith("__") and name.endswith("__"):
+                    continue
+                result.append(self._make_var(name, val))
+            return result
+        target = self._var_handles.get(reference)
+        if target is None:
+            return []
+        return self._variables_for_value(target)
 
     def _collect_stack(self) -> list[dict]:
         frames = []
@@ -199,7 +281,12 @@ class LamiaDebugger:
         try:
             merged = {**self.current_frame.f_globals, **self.current_frame.f_locals}
             val = eval(expression, merged)
-            return {"value": repr(val)[:1000], "type": type(val).__name__}
+            ref = self._store_handle(val) if self._is_expandable(val) else 0
+            return {
+                "value": self._preview_value(val),
+                "type": type(val).__name__,
+                "variablesReference": ref,
+            }
         except Exception as e:
             return {"error": str(e)}
 
@@ -239,9 +326,13 @@ class LamiaDebugger:
                     "breakpoints": sorted(self.breakpoints.get(os.path.abspath(f), [])),
                 })
             elif cmd == "getVariables":
+                try:
+                    reference = int(msg.get("reference", 1))
+                except Exception:
+                    reference = 1
                 self.io.send({
                     "type": "response", "command": "getVariables",
-                    "variables": self._collect_variables(),
+                    "variables": self._collect_variables(reference),
                 })
             elif cmd == "getStackTrace":
                 self.io.send({
