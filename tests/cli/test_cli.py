@@ -11,7 +11,12 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from lamia.cli import main
-from lamia.cli.cli import HUMAN_EXTENSIONS, HYBRID_EXTENSIONS, interactive_mode
+from lamia.cli.cli import (
+    HUMAN_EXTENSIONS,
+    HYBRID_EXTENSIONS,
+    interactive_mode,
+    _extract_tool_calls,
+)
 from lamia.cli.eval_cli import (
     _extract_llm_prompts,
     _print_attempt_results,
@@ -746,3 +751,48 @@ def test_cli_file_modes(tmp_path, cli_args):
 def test_import_cli():
     import lamia.cli as cli_mod
     assert cli_mod is not None
+
+
+class TestToolCallExtraction:
+    """Unit tests for batched tool-call extraction."""
+
+    def test_extracts_multiple_json_tool_calls(self):
+        text = """
+Here is what I will do:
+{"tool": "read_file", "args": {"path": "team/product_manager.hu"}}
+And then patch:
+{"tool": "patch_file", "args": {"path": "team/product_manager.hu", "old_text": "a", "new_text": "b"}}
+"""
+        calls = _extract_tool_calls(text)
+        assert len(calls) == 2
+        assert calls[0]["tool"] == "read_file"
+        assert calls[0]["args"]["path"] == "team/product_manager.hu"
+        assert calls[1]["tool"] == "patch_file"
+        assert calls[1]["args"]["path"] == "team/product_manager.hu"
+
+    def test_extracts_multiple_invoke_tool_calls(self):
+        text = """
+<invoke>
+  <tool_name>read_file</tool_name>
+  <parameter name="path">team/product_manager.hu</parameter>
+</invoke>
+<invoke>
+  <tool_name>patch_file</tool_name>
+  <parameter name="path">team/product_manager.hu</parameter>
+  <parameter name="old_text">a</parameter>
+  <parameter name="new_text">b</parameter>
+</invoke>
+"""
+        calls = _extract_tool_calls(text)
+        assert len(calls) == 2
+        assert calls[0]["tool"] == "read_file"
+        assert calls[1]["tool"] == "patch_file"
+
+    def test_ignores_non_tool_json(self):
+        text = """
+{"note": "this is not a tool call"}
+{"tool": "read_file", "args": {"path": "x.hu"}}
+"""
+        calls = _extract_tool_calls(text)
+        assert len(calls) == 1
+        assert calls[0]["tool"] == "read_file"

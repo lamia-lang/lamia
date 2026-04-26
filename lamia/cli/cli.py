@@ -325,7 +325,7 @@ async def json_mode(lamia: Lamia) -> None:
                 if _round < MAX_TOOL_ROUNDS:
                     feedback_block = "\n\n".join(feedback_lines)
                     prompt = (
-                        f"{prompt}\n\nAssistant: {text}\n\n"
+                        f"{prompt}\n\n"
                         f"{feedback_block}\n\n"
                         f"Continue your response to the user based on this tool result."
                     )
@@ -474,6 +474,7 @@ def _strip_tool_calls(text: str) -> str:
     result = re.sub(r"<function_calls>.*?</function_calls>", "", result, flags=re.DOTALL)
     result = re.sub(r"<tool_call>.*?</tool_call>", "", result, flags=re.DOTALL)
     result = re.sub(r"<tool_use>.*?</tool_use>", "", result, flags=re.DOTALL)
+    result = re.sub(r"<tool_result>.*?</tool_result>", "", result, flags=re.DOTALL)
     result = re.sub(r"<invoke\b[^>]*>.*?</invoke>", "", result, flags=re.DOTALL)
     result = re.sub(r"\n{3,}", "\n\n", result)
 
