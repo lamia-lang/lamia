@@ -97,6 +97,8 @@ nav:
     - Web Automation: user-guide/web-automation.md
     - Validation: user-guide/validation.md
     - Model Evaluation: user-guide/evaluation.md
+  - Advanced:
+    - Lamia Debugger: advanced/debugger.md
   - Reference:
     - Selector Usage Guide: validation/selector-usage-guide.md
     - API Reference: reference/

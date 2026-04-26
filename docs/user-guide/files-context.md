@@ -6,7 +6,7 @@ The `files()` context manager allows you to reference files in your LLM prompts 
 
 ```python
 with files("~/Documents/", "~/projects/"):
-    def answer_question(question: str, models="openai:gpt-4"):
+    def answer_question(question=question):
         """
         Answer: {question}
         
@@ -18,7 +18,7 @@ with files("~/Documents/", "~/projects/"):
 
 ### 🔍 Smart File Search
 
-Files are resolved using **multiple strategies** (similar to Cursor):
+Files are resolved using **multiple strategies**:
 
 1. **Exact filename match** (highest priority)
 2. **Content grep** (searches inside files)
@@ -34,7 +34,7 @@ Files are resolved using **multiple strategies** (similar to Cursor):
 ### ⚠️ Error Handling
 
 - **AmbiguousFileError**: Multiple files match with similar scores
-- **FileReferenceError**: File not found (with suggestions)
+- **FileReferenceError**: File not found
 
 ---
 
