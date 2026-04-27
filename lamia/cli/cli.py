@@ -186,7 +186,7 @@ async def json_mode(lamia: Lamia) -> None:
     Error    : {"type": "error", "message": "..."}
     Ready    : {"type": "ready"}  (sent once after startup)
     """
-    from lamia.cli.tools import execute_tool, get_tools_system_prompt, reset_file_writes, get_file_writes
+    from lamia.cli.tools import execute_tool, get_tools_system_prompt, reset_file_writes, get_file_writes, ToolName
 
     MAX_TOOL_ROUNDS = 50
     tools_prompt = get_tools_system_prompt()
@@ -299,7 +299,7 @@ async def json_mode(lamia: Lamia) -> None:
                     tool_args = tool_call.get("args", {})
                     logger.debug(f"Tool call: {tool_name}({tool_args})")
 
-                    if tool_name in ("write_file", "patch_file"):
+                    if tool_name in (ToolName.WRITE_FILE, ToolName.PATCH_FILE):
                         target = tool_args.get("path", "")
                         write_counts[target] = write_counts.get(target, 0) + 1
                         if write_counts[target] > MAX_SAME_FILE_WRITES:

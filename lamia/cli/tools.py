@@ -24,6 +24,27 @@ from lamia.lint import HuLinter, LmLinter
 MAX_READ_CHUNK_CHARS = 100_000
 
 
+class ToolName(str, enum.Enum):
+    GET_DOCS = "get_docs"
+    READ_FILE = "read_file"
+    LIST_FILES = "list_files"
+    WRITE_FILE = "write_file"
+    PATCH_FILE = "patch_file"
+    DELETE_FILE = "delete_file"
+    FIND_DEFINITION = "find_definition"
+    FIND_REFERENCES = "find_references"
+    COPY_FILE = "copy_file"
+    MOVE_FILE = "move_file"
+    GREP = "grep"
+    GLOB = "glob"
+    BROWSER_NAVIGATE = "browser_navigate"
+    BROWSER_CLICK = "browser_click"
+    BROWSER_TYPE = "browser_type"
+    BROWSER_GET_TEXT = "browser_get_text"
+    BROWSER_SCREENSHOT = "browser_screenshot"
+    BROWSER_WAIT = "browser_wait"
+
+
 class FileAction(enum.Enum):
     WRITE = "write"
     PATCH = "patch"
@@ -67,7 +88,7 @@ _DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))
 
 TOOL_DEFINITIONS = [
     {
-        "name": "get_docs",
+        "name": ToolName.GET_DOCS,
         "description": f"Retrieve Lamia language documentation by topic. Topics: {_DOCS_TOPICS}.",
         "parameters": {
             "type": "object",
@@ -81,7 +102,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "read_file",
+        "name": ToolName.READ_FILE,
         "description": (
             f"Read the contents of a file. For large files (>{MAX_READ_CHUNK_CHARS} chars), "
             "returns a chunk and reports the total size. Use 'offset' to "
@@ -107,7 +128,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "list_files",
+        "name": ToolName.LIST_FILES,
         "description": "Recursively list files and subdirectories (up to 4 levels deep).",
         "parameters": {
             "type": "object",
@@ -120,7 +141,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "write_file",
+        "name": ToolName.WRITE_FILE,
         "description": "Create or overwrite a file with the given content.",
         "parameters": {
             "type": "object",
@@ -138,7 +159,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "patch_file",
+        "name": ToolName.PATCH_FILE,
         "description": (
             "Edit an existing file by replacing old_text with new_text. "
             "Preferred over write_file for modifications — only express the change, not the whole file."
@@ -163,7 +184,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "delete_file",
+        "name": ToolName.DELETE_FILE,
         "description": "Delete a file at the given path.",
         "parameters": {
             "type": "object",
@@ -177,7 +198,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "find_definition",
+        "name": ToolName.FIND_DEFINITION,
         "description": (
             "Find where a function, class, or .hu file is defined. "
             "Returns file path and line number."
@@ -194,7 +215,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "find_references",
+        "name": ToolName.FIND_REFERENCES,
         "description": (
             "Find all files that reference or call a given symbol. "
             "Returns file paths with line numbers and context."
@@ -211,7 +232,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "copy_file",
+        "name": ToolName.COPY_FILE,
         "description": "Copy a file or directory to a new location. Works recursively for directories.",
         "parameters": {
             "type": "object",
@@ -229,7 +250,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "move_file",
+        "name": ToolName.MOVE_FILE,
         "description": "Move or rename a file or directory.",
         "parameters": {
             "type": "object",
@@ -247,7 +268,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "grep",
+        "name": ToolName.GREP,
         "description": (
             "Search for a pattern in files. Returns matching lines with file paths and line numbers. "
             "Searches recursively in the given directory."
@@ -272,7 +293,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "glob",
+        "name": ToolName.GLOB,
         "description": "Find files matching a glob pattern. Returns file paths sorted by modification time.",
         "parameters": {
             "type": "object",
@@ -290,7 +311,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "browser_navigate",
+        "name": ToolName.BROWSER_NAVIGATE,
         "description": "Navigate to a URL in the browser. Returns the page title and visible text.",
         "parameters": {
             "type": "object",
@@ -304,7 +325,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "browser_click",
+        "name": ToolName.BROWSER_CLICK,
         "description": "Click an element on the page. Use CSS selectors or natural language descriptions.",
         "parameters": {
             "type": "object",
@@ -318,7 +339,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "browser_type",
+        "name": ToolName.BROWSER_TYPE,
         "description": "Type text into an input element.",
         "parameters": {
             "type": "object",
@@ -336,7 +357,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "browser_get_text",
+        "name": ToolName.BROWSER_GET_TEXT,
         "description": "Get visible text content from the page or a specific element.",
         "parameters": {
             "type": "object",
@@ -349,7 +370,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "browser_screenshot",
+        "name": ToolName.BROWSER_SCREENSHOT,
         "description": "Take a screenshot of the current page. Returns the file path.",
         "parameters": {
             "type": "object",
@@ -362,7 +383,7 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "browser_wait",
+        "name": ToolName.BROWSER_WAIT,
         "description": "Wait for an element to appear or become visible.",
         "parameters": {
             "type": "object",
@@ -414,43 +435,42 @@ def _find_docs_dir() -> Optional[Path]:
 
 def execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
     """Execute a tool by name and return the result as a string."""
-    if name == "get_docs":
+    if name == ToolName.GET_DOCS:
         return _get_docs(args.get("topic", ""))
-    elif name == "read_file":
+    elif name == ToolName.READ_FILE:
         return _read_file(
             args.get("path", ""), cwd,
             offset=int(args.get("offset", 0)),
             chunk_size=int(args.get("chunk_size", 0)),
         )
-    elif name == "list_files":
+    elif name == ToolName.LIST_FILES:
         return _list_files(args.get("directory", "."), cwd)
-    elif name == "write_file":
+    elif name == ToolName.WRITE_FILE:
         return _write_file(args.get("path", ""), args.get("content", ""), cwd)
-    elif name == "patch_file":
+    elif name == ToolName.PATCH_FILE:
         return _patch_file(
             args.get("path", ""),
             args.get("old_text", ""),
             args.get("new_text", ""),
             cwd,
         )
-    elif name == "delete_file":
+    elif name == ToolName.DELETE_FILE:
         return _delete_file(args.get("path", ""), cwd)
-    elif name == "find_definition":
+    elif name == ToolName.FIND_DEFINITION:
         return _find_definition(args.get("symbol", ""), cwd)
-    elif name == "find_references":
+    elif name == ToolName.FIND_REFERENCES:
         return _find_references(args.get("symbol", ""), cwd)
-    elif name == "copy_file":
+    elif name == ToolName.COPY_FILE:
         return _copy_file(args.get("source", ""), args.get("destination", ""), cwd)
-    elif name == "move_file":
+    elif name == ToolName.MOVE_FILE:
         return _move_file(args.get("source", ""), args.get("destination", ""), cwd)
-    elif name == "grep":
+    elif name == ToolName.GREP:
         return _grep(args.get("pattern", ""), args.get("directory", "."), args.get("include", ""), cwd)
-    elif name == "glob":
+    elif name == ToolName.GLOB:
         return _glob(args.get("pattern", ""), args.get("directory", "."), cwd)
     elif name.startswith("browser_"):
         return _browser_tool(name, args, cwd, lamia)
-    else:
-        return f"Unknown tool: {name}"
+    return f"Unknown tool: {name}"
 
 
 def _get_docs(topic: str) -> str:
@@ -1071,7 +1091,7 @@ def _run_web(command, lamia):
 
 
 def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
-    if name == "browser_navigate":
+    if name == ToolName.BROWSER_NAVIGATE:
         url = args.get("url", "")
         if not url:
             return "Error: url is required"
@@ -1079,7 +1099,7 @@ def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
         title = _run_web(WebCommand(action=WebActionType.GET_TEXT, selector="title"), lamia)
         return f"Navigated to {url}\nPage title: {title}"
 
-    elif name == "browser_click":
+    elif name == ToolName.BROWSER_CLICK:
         selector = args.get("selector", "")
         if not selector:
             return "Error: selector is required"
@@ -1088,7 +1108,7 @@ def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
             return result
         return f"Clicked: {selector}"
 
-    elif name == "browser_type":
+    elif name == ToolName.BROWSER_TYPE:
         selector = args.get("selector", "")
         text = args.get("text", "")
         if not selector:
@@ -1098,7 +1118,7 @@ def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
             return result
         return f"Typed into {selector}"
 
-    elif name == "browser_get_text":
+    elif name == ToolName.BROWSER_GET_TEXT:
         selector = args.get("selector", "body")
         result = _run_web(WebCommand(action=WebActionType.GET_TEXT, selector=selector), lamia)
         text = str(result) if result else ""
@@ -1106,7 +1126,7 @@ def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
             text = text[:50_000] + f"\n\n... (truncated, total {len(text)} chars)"
         return text or "(empty)"
 
-    elif name == "browser_screenshot":
+    elif name == ToolName.BROWSER_SCREENSHOT:
         filepath = args.get("path", "")
         if not filepath:
             filepath = str(Path(cwd) / "screenshot.png")
@@ -1117,7 +1137,7 @@ def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
             return result
         return f"Screenshot saved: {filepath}"
 
-    elif name == "browser_wait":
+    elif name == ToolName.BROWSER_WAIT:
         selector = args.get("selector", "")
         timeout = args.get("timeout", 10)
         if not selector:

@@ -20,6 +20,7 @@ from lamia.cli.cli import (
     _strip_tool_calls,
     _build_tool_result_entry,
 )
+from lamia.cli.tools import ToolName
 from lamia.cli.eval_cli import (
     _extract_llm_prompts,
     _print_attempt_results,
@@ -768,9 +769,9 @@ And then patch:
 """
         calls = _extract_tool_calls(text)
         assert len(calls) == 2
-        assert calls[0]["tool"] == "read_file"
+        assert calls[0]["tool"] == ToolName.READ_FILE
         assert calls[0]["args"]["path"] == "team/product_manager.hu"
-        assert calls[1]["tool"] == "patch_file"
+        assert calls[1]["tool"] == ToolName.PATCH_FILE
         assert calls[1]["args"]["path"] == "team/product_manager.hu"
 
     def test_extracts_multiple_invoke_tool_calls(self):
@@ -788,8 +789,8 @@ And then patch:
 """
         calls = _extract_tool_calls(text)
         assert len(calls) == 2
-        assert calls[0]["tool"] == "read_file"
-        assert calls[1]["tool"] == "patch_file"
+        assert calls[0]["tool"] == ToolName.READ_FILE
+        assert calls[1]["tool"] == ToolName.PATCH_FILE
 
     def test_ignores_non_tool_json(self):
         text = """
@@ -798,7 +799,7 @@ And then patch:
 """
         calls = _extract_tool_calls(text)
         assert len(calls) == 1
-        assert calls[0]["tool"] == "read_file"
+        assert calls[0]["tool"] == ToolName.READ_FILE
 
     def test_strip_tool_calls_removes_tool_result_blocks(self):
         text = """
@@ -818,23 +819,23 @@ Done.
 
     def test_build_tool_result_entry_includes_tool_and_args(self):
         entry = _build_tool_result_entry(
-            "write_file",
+            ToolName.WRITE_FILE,
             {"path": "orchestrator.lm", "content": "x"},
             "File written successfully",
         )
-        assert entry["tool"] == "write_file"
+        assert entry["tool"] == ToolName.WRITE_FILE
         assert entry["args"]["path"] == "orchestrator.lm"
         assert entry["result"] == "File written successfully"
 
     def test_tool_result_entries_are_json_serializable(self):
         entries = [
             _build_tool_result_entry(
-                "write_file",
+                ToolName.WRITE_FILE,
                 {"path": "orchestrator.lm"},
                 "File written successfully",
             ),
             _build_tool_result_entry(
-                "patch_file",
+                ToolName.PATCH_FILE,
                 {"path": "team/product_manager.hu", "old_text": "a", "new_text": "b"},
                 "File patched successfully",
             ),
