@@ -6,15 +6,33 @@ write files.  The tool-use loop is driven by the caller (json_mode or
 interactive_mode) — this module only provides the tool definitions and
 execution logic.
 """
+import enum
 import fnmatch
 import os
 import logging
+import re
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from lamia.interpreter.commands import WebCommand, WebActionType
-from lamia.lint import HuLinter
+from lamia.interpreter.human.parser import parse_hu_file
+from lamia.lint import HuLinter, LmLinter
+
+
+class FileAction(enum.Enum):
+    WRITE = "write"
+    PATCH = "patch"
+    DELETE = "delete"
+    MOVE = "move"
+
+
+@dataclass(frozen=True)
+class FileReference:
+    file: str
+    line: int
+    text: str
 
 logger = logging.getLogger(__name__)
 
@@ -467,7 +485,10 @@ def _read_file(filepath: str, cwd: str) -> str:
     try:
         content = resolved.read_text(encoding="utf-8", errors="replace")
         if len(content) > 100_000:
-            return content[:100_000] + f"\n\n... (truncated, total {len(content)} chars)"
+            content = content[:100_000] + f"\n\n... (truncated, total {len(content)} chars)"
+        footer = entity_references_footer(resolved, cwd)
+        if footer:
+            content += footer
         return content
     except Exception as exc:
         return f"Error reading file: {exc}"
@@ -509,22 +530,140 @@ def _list_files(directory: str, cwd: str) -> str:
 
 
 _hu_linter = HuLinter()
+_lm_linter = LmLinter()
 
 _LINTERS = {
     ".hu": _hu_linter,
+    ".lm": _lm_linter,
 }
 
 
-def _lint_feedback(resolved: Path, content: str, original: Optional[str]) -> str:
+def _linter_feedback(resolved: Path, content: str, original: Optional[str], cwd: str = ".") -> str:
     """Post-write lint feedback. Returns empty string if clean or no linter."""
     linter = _LINTERS.get(resolved.suffix)
     if not linter:
         return ""
-    result = linter.lint(content, original)
+    result = linter.lint(content, original, cwd=cwd)
     feedback = result.feedback_message()
     if feedback:
         logger.debug("Lint feedback for %s: %d issues", resolved, len(result.violations))
     return feedback
+
+
+def _external_refs(resolved: Path, cwd: str) -> list[FileReference]:
+    """Return references to resolved's stem from *other* files."""
+    refs = _find_references_raw(resolved.stem, cwd)
+    if refs is None:
+        return []
+    resolved_rel = os.path.relpath(str(resolved), cwd)
+    return [r for r in refs if r.file != resolved_rel]
+
+
+def _read_line_from_file(cwd: str, relpath: str, lineno: int) -> Optional[str]:
+    """Read a single line from a file. Returns None on failure."""
+    full = Path(cwd) / relpath
+    try:
+        lines = full.read_text(encoding="utf-8", errors="replace").splitlines()
+        if 1 <= lineno <= len(lines):
+            return lines[lineno - 1]
+    except OSError:
+        pass
+    return None
+
+
+def _check_caller_params(stem: str, required: frozenset[str], ref: FileReference, cwd: str) -> Optional[str]:
+    """Check if a .lm caller passes all required params. Returns warning or None."""
+    if not ref.file.endswith(".lm"):
+        return None
+    line = _read_line_from_file(cwd, ref.file, ref.line)
+    if line is None:
+        return None
+    marker = stem + "("
+    start = line.find(marker)
+    if start == -1:
+        return None
+    args_start = start + len(marker)
+    args_end = line.find(")", args_start)
+    if args_end == -1:
+        return None
+
+    args = line[args_start:args_end]
+    passed: set[str] = set()
+    for part in args.split(","):
+        part = part.strip()
+        if "=" not in part:
+            continue
+        key = part.split("=", 1)[0].strip()
+        if key.isidentifier():
+            passed.add(key)
+
+    missing = required - passed
+    if not missing:
+        return None
+    return (
+        f"  {ref.file}:{ref.line}: {stem}() missing required params: "
+        f"{', '.join(sorted(missing))}"
+    )
+
+
+def entity_reference_feedback(resolved: Path, cwd: str, action: FileAction) -> str:
+    """Cross-file reference feedback after a file mutation.
+
+    Uses _find_references_raw to locate callers/importers, then for .hu files
+    checks whether callers pass all required params.
+    """
+    if action == FileAction.MOVE and resolved.suffix != ".py":
+        return ""
+    if action != FileAction.MOVE and resolved.suffix not in {".hu", ".lm"}:
+        return ""
+
+    stem = resolved.stem
+    ext_refs = _external_refs(resolved, cwd)
+    if not ext_refs:
+        return ""
+
+    if action == FileAction.DELETE:
+        header = f"USAGE WARNING: The following files still reference '{stem}' which was just deleted:"
+        items = [f"  {r.file}:{r.line}: {r.text}" for r in ext_refs]
+        return header + "\n" + "\n".join(items)
+
+    if action == FileAction.MOVE:
+        header = f"USAGE WARNING: The following files reference '{stem}' at the old location — update them:"
+        items = [f"  {r.file}:{r.line}: {r.text}" for r in ext_refs]
+        return header + "\n" + "\n".join(items)
+
+    if resolved.suffix == ".hu" and action in (FileAction.WRITE, FileAction.PATCH):
+        try:
+            fn = parse_hu_file(str(resolved))
+        except Exception:
+            return ""
+        required = fn.params - set(fn.defaults)
+        if not required:
+            return ""
+
+        warnings: list[str] = []
+        for ref in ext_refs:
+            warning = _check_caller_params(stem, required, ref, cwd)
+            if warning:
+                warnings.append(warning)
+
+        if warnings:
+            header = f"USAGE WARNING: Callers of {stem}() may need updating:"
+            return header + "\n" + "\n".join(warnings)
+
+    return ""
+
+
+def entity_references_footer(resolved: Path, cwd: str) -> str:
+    """'Referenced by' footer for read_file on .hu/.lm files."""
+    if resolved.suffix not in {".hu", ".lm"}:
+        return ""
+    ext_refs = _external_refs(resolved, cwd)
+    if not ext_refs:
+        return ""
+
+    lines = [f"  {r.file}:{r.line}" for r in ext_refs]
+    return "\n---\nReferenced by:\n" + "\n".join(lines)
 
 
 def _commit_write(resolved: Path, content: str, original: Optional[str]) -> str:
@@ -567,9 +706,13 @@ def _write_file(filepath: str, content: str, cwd: str) -> str:
     if original is not None:
         msg += " (Tip: prefer patch_file for edits — it's safer and uses fewer tokens.)"
 
-    feedback = _lint_feedback(resolved, content, original)
-    if feedback:
-        msg += "\n" + feedback
+    lint = _linter_feedback(resolved, content, original, cwd)
+    if lint:
+        msg += "\n" + lint
+
+    refs = entity_reference_feedback(resolved, cwd, FileAction.WRITE)
+    if refs:
+        msg += "\n" + refs
 
     return msg
 
@@ -621,9 +764,13 @@ def _patch_file(filepath: str, old_text: str, new_text: str, cwd: str) -> str:
 
     msg = f"Patched: {resolved} ({len(old_text)} chars \u2192 {len(new_text)} chars)"
 
-    feedback = _lint_feedback(resolved, patched, original)
-    if feedback:
-        msg += "\n" + feedback
+    lint = _linter_feedback(resolved, patched, original, cwd)
+    if lint:
+        msg += "\n" + lint
+
+    refs = entity_reference_feedback(resolved, cwd, FileAction.PATCH)
+    if refs:
+        msg += "\n" + refs
 
     return msg
 
@@ -635,6 +782,8 @@ def _delete_file(filepath: str, cwd: str) -> str:
     resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
     if not resolved.is_file():
         return f"File not found: {resolved}"
+
+    refs = entity_reference_feedback(resolved, cwd, FileAction.DELETE)
 
     original: Optional[str] = None
     try:
@@ -655,7 +804,10 @@ def _delete_file(filepath: str, cwd: str) -> str:
         entry["original"] = original
     _file_writes.append(entry)
 
-    return f"Deleted: {resolved}"
+    msg = f"Deleted: {resolved}"
+    if refs:
+        msg += "\n" + refs
+    return msg
 
 
 _DEF_RE_TEMPLATE = r'^[ \t]*(?:async\s+)?def\s+{}\s*\('
@@ -666,7 +818,6 @@ def _find_definition(symbol: str, cwd: str) -> str:
     if not symbol:
         return "Error: symbol is required"
 
-    import re
     results: list[str] = []
     search_root = Path(cwd)
 
@@ -701,14 +852,13 @@ def _find_definition(symbol: str, cwd: str) -> str:
     return "\n".join(results)
 
 
-def _find_references(symbol: str, cwd: str) -> str:
+def _find_references_raw(symbol: str, cwd: str) -> Optional[list[FileReference]]:
+    """Return structured references for *symbol* under *cwd*, or None if none found."""
     if not symbol:
-        return "Error: symbol is required"
+        return None
 
-    import re
     pat = re.compile(r'(?<![a-zA-Z_])' + re.escape(symbol) + r'(?![a-zA-Z_\d])')
-    MAX_RESULTS = 80
-    results: list[str] = []
+    results: list[FileReference] = []
     search_root = Path(cwd)
 
     for ext in ("*.lm", "*.hu", "*.py"):
@@ -722,19 +872,19 @@ def _find_references(symbol: str, cwd: str) -> str:
             for lineno, line in enumerate(text.splitlines(), 1):
                 if pat.search(line):
                     rel = os.path.relpath(str(fpath), cwd)
-                    results.append(f"{rel}:{lineno}: {line.rstrip()}")
-                    if len(results) >= MAX_RESULTS:
-                        break
-            if len(results) >= MAX_RESULTS:
-                break
-        if len(results) >= MAX_RESULTS:
-            break
+                    results.append(FileReference(file=rel, line=lineno, text=line.rstrip()))
 
-    if not results:
+    return results if results else None
+
+
+def _find_references(symbol: str, cwd: str) -> str:
+    """LLM-facing wrapper around _find_references_raw."""
+    if not symbol:
+        return "Error: symbol is required"
+    refs = _find_references_raw(symbol, cwd)
+    if refs is None:
         return f"No references found for '{symbol}'"
-    output = "\n".join(results)
-    if len(results) >= MAX_RESULTS:
-        output += f"\n\n... (truncated at {MAX_RESULTS} results)"
+    output = "\n".join(f"{r.file}:{r.line}: {r.text}" for r in refs)
     return output
 
 
@@ -758,7 +908,14 @@ def _copy_file(source: str, destination: str, cwd: str) -> str:
             return f"Copied directory: {src} → {dst} ({count} files)"
         else:
             shutil.copy2(str(src), str(dst))
-            return f"Copied: {src} → {dst}"
+            msg = f"Copied: {src} → {dst}"
+            if dst.suffix == ".hu" and src.stem == dst.stem:
+                msg += (
+                    f"\nNOTE: Copied .hu file has the same function name "
+                    f"'{src.stem}' as the source. Rename it to a meaningful "
+                    f"name to avoid ambiguity at runtime."
+                )
+            return msg
     except Exception as exc:
         return f"Error copying: {exc}"
 
@@ -773,10 +930,15 @@ def _move_file(source: str, destination: str, cwd: str) -> str:
     if not src.exists():
         return f"Source not found: {src}"
 
+    refs = entity_reference_feedback(src, cwd, FileAction.MOVE)
+
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src), str(dst))
-        return f"Moved: {src} → {dst}"
+        msg = f"Moved: {src} → {dst}"
+        if refs:
+            msg += "\n" + refs
+        return msg
     except Exception as exc:
         return f"Error moving: {exc}"
 
@@ -785,7 +947,6 @@ def _grep(pattern: str, directory: str, include: str, cwd: str) -> str:
     if not pattern:
         return "Error: pattern is required"
 
-    import re
     search_dir = Path(directory) if os.path.isabs(directory) else Path(cwd) / directory
     if not search_dir.is_dir():
         return f"Directory not found: {search_dir}"

@@ -165,7 +165,7 @@ class HuLinter(BaseLinter):
         super().__init__()
         self.rules = list(ALL_RULES)
 
-    def lint(self, content: str, original: Optional[str] = None) -> LintResult:
+    def lint(self, content: str, original: Optional[str] = None, cwd: Optional[str] = None) -> LintResult:
         violations: list[LintViolation] = []
 
         for rule in self.rules:

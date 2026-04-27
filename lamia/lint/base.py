@@ -63,5 +63,5 @@ class BaseLinter:
     def __init__(self) -> None:
         self.rules = []
 
-    def lint(self, content: str, original: Optional[str] = None) -> LintResult:
+    def lint(self, content: str, original: Optional[str] = None, cwd: Optional[str] = None) -> LintResult:
         raise NotImplementedError
