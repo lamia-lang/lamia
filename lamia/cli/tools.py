@@ -21,6 +21,9 @@ from lamia.interpreter.human.parser import parse_hu_file
 from lamia.lint import HuLinter, LmLinter
 
 
+MAX_READ_CHUNK_CHARS = 100_000
+
+
 class FileAction(enum.Enum):
     WRITE = "write"
     PATCH = "patch"
@@ -79,14 +82,26 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "read_file",
-        "description": "Read the contents of a file at the given path.",
+        "description": (
+            f"Read the contents of a file. For large files (>{MAX_READ_CHUNK_CHARS} chars), "
+            "returns a chunk and reports the total size. Use 'offset' to "
+            "read subsequent chunks."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
                     "description": "Absolute or relative file path to read",
-                }
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Character offset to start reading from. Defaults to 0.",
+                },
+                "chunk_size": {
+                    "type": "integer",
+                    "description": f"Max characters to read. Defaults to and capped at {MAX_READ_CHUNK_CHARS}.",
+                },
             },
             "required": ["path"],
         },
@@ -402,7 +417,11 @@ def execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
     if name == "get_docs":
         return _get_docs(args.get("topic", ""))
     elif name == "read_file":
-        return _read_file(args.get("path", ""), cwd)
+        return _read_file(
+            args.get("path", ""), cwd,
+            offset=int(args.get("offset", 0)),
+            chunk_size=int(args.get("chunk_size", 0)),
+        )
     elif name == "list_files":
         return _list_files(args.get("directory", "."), cwd)
     elif name == "write_file":
@@ -462,7 +481,7 @@ def _get_docs(topic: str) -> str:
         return f"Error reading docs: {exc}"
 
 
-def _read_file(filepath: str, cwd: str) -> str:
+def _read_file(filepath: str, cwd: str, offset: int = 0, chunk_size: int = 0) -> str:
     if not filepath:
         return "Error: path is required"
 
@@ -482,10 +501,26 @@ def _read_file(filepath: str, cwd: str) -> str:
         msg += "\n\nUse list_files to explore the directory structure."
         return msg
 
+    effective_chunk = min(chunk_size, MAX_READ_CHUNK_CHARS) if chunk_size > 0 else MAX_READ_CHUNK_CHARS
+    offset = max(offset, 0)
+
     try:
-        content = resolved.read_text(encoding="utf-8", errors="replace")
-        if len(content) > 100_000:
-            content = content[:100_000] + f"\n\n... (truncated, total {len(content)} chars)"
+        total_chars = resolved.stat().st_size
+        with resolved.open(encoding="utf-8", errors="replace") as f:
+            if offset:
+                f.seek(offset)
+            content = f.read(effective_chunk)
+
+        end_offset = offset + len(content)
+        remaining = total_chars - end_offset
+
+        if remaining > 0:
+            content += (
+                f"\n\n--- CHUNKED READ: returned chars {offset}–{end_offset - 1} "
+                f"of {total_chars} total. "
+                f"Call read_file with offset={end_offset} to continue. ---"
+            )
+
         footer = entity_references_footer(resolved, cwd)
         if footer:
             content += footer
