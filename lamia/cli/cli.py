@@ -162,6 +162,26 @@ def _json_write(obj: dict) -> None:
     sys.stdout.flush()
 
 
+def _friendly_error(raw: str) -> str:
+    """Shorten a raw tool error into a brief UI-friendly message."""
+    if "old_text not found" in raw:
+        return "Text to replace was not found in file"
+    if raw.startswith("File not found"):
+        return "File does not exist"
+    if raw.startswith("Unknown tool"):
+        return raw[:80]
+    if raw.startswith("Error: file not found"):
+        return "File does not exist"
+    msg = raw.split("\n", 1)[0]
+    if msg.startswith("Error: "):
+        msg = msg[7:]
+    if msg.startswith("Error reading file: "):
+        msg = msg[20:]
+    if msg.startswith("Error writing file: "):
+        msg = msg[20:]
+    return msg[:120]
+
+
 def _format_history(messages: list[dict]) -> str:
     """Format pre-compressed conversation messages into a prompt block."""
     if not messages:
@@ -318,11 +338,14 @@ async def json_mode(lamia: Lamia) -> None:
                         "label": tool_progress_label(tool_name, tool_args),
                     })
                     tool_result, tool_success = execute_tool(tool_name, tool_args, os.getcwd(), lamia=lamia)
-                    _json_write({
+                    evt: dict = {
                         "type": "tool_result",
                         "tool": tool_name,
                         "success": tool_success,
-                    })
+                    }
+                    if not tool_success:
+                        evt["error"] = _friendly_error(tool_result)
+                    _json_write(evt)
                     tool_result_entries.append(
                         _build_tool_result_entry(tool_name, tool_args, tool_result)
                     )
@@ -504,6 +527,11 @@ def _build_tool_result_entry(tool_name: str, tool_args: dict, tool_result: str) 
         "args": tool_args,
         "result": tool_result,
     }
+
+
+def _tool_result_success(tool_result: str) -> bool:
+    """Classify tool result status for UI progress rendering."""
+    return not tool_result.startswith("Error:")
 
 
 def _open_ide(folder: str) -> None:
