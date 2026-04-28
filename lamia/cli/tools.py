@@ -463,8 +463,8 @@ def _find_docs_dir() -> Optional[Path]:
     return None
 
 
-def execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
-    """Execute a tool by name and return the result as a string."""
+def execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> tuple[str, bool]:
+    """Execute a tool by name and return (result_text, success)."""
     if name == ToolName.GET_DOCS:
         return _get_docs(args.get("topic", ""))
     elif name == ToolName.READ_FILE:
@@ -501,10 +501,10 @@ def execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
     elif name.startswith("browser_"):
         return _browser_tool(name, args, cwd, lamia)
     else:
-        return f"Unknown tool: {name}"
+        return f"Unknown tool: {name}", False
 
 
-def _get_docs(topic: str) -> str:
+def _get_docs(topic: str) -> tuple[str, bool]:
     topic_lower = topic.strip().lower()
     filename = TOPIC_TO_FILE.get(topic_lower)
 
@@ -516,25 +516,25 @@ def _get_docs(topic: str) -> str:
 
     if not filename:
         available = ", ".join(sorted(set(TOPIC_TO_FILE.values())))
-        return f"Topic '{topic}' not found. Available docs: {available}"
+        return f"Topic '{topic}' not found. Available docs: {available}", False
 
     docs_dir = _find_docs_dir()
     if not docs_dir:
-        return "Documentation files not found in this lamia installation."
+        return "Documentation files not found in this lamia installation.", False
 
     doc_path = docs_dir / filename
     if not doc_path.is_file():
-        return f"Documentation file not found: {filename}"
+        return f"Documentation file not found: {filename}", False
 
     try:
-        return doc_path.read_text(encoding="utf-8")
+        return doc_path.read_text(encoding="utf-8"), True
     except Exception as exc:
-        return f"Error reading docs: {exc}"
+        return f"Error reading docs: {exc}", False
 
 
-def _read_file(filepath: str, cwd: str, offset: int = 0, chunk_size: int = 0) -> str:
+def _read_file(filepath: str, cwd: str, offset: int = 0, chunk_size: int = 0) -> tuple[str, bool]:
     if not filepath:
-        return "Error: path is required"
+        return "Error: path is required", False
 
     resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
     if not resolved.is_file():
@@ -550,7 +550,7 @@ def _read_file(filepath: str, cwd: str, offset: int = 0, chunk_size: int = 0) ->
         if candidates:
             msg += "\n\nDid you mean:\n" + "\n".join(f"  - {c}" for c in candidates)
         msg += "\n\nUse list_files to explore the directory structure."
-        return msg
+        return msg, False
 
     effective_chunk = min(chunk_size, MAX_READ_CHUNK_CHARS) if chunk_size > 0 else MAX_READ_CHUNK_CHARS
     offset = max(offset, 0)
@@ -575,18 +575,18 @@ def _read_file(filepath: str, cwd: str, offset: int = 0, chunk_size: int = 0) ->
         footer = entity_references_footer(resolved, cwd)
         if footer:
             content += footer
-        return content
+        return content, True
     except Exception as exc:
-        return f"Error reading file: {exc}"
+        return f"Error reading file: {exc}", False
 
 
 _SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv", ".tox", ".mypy_cache"}
 
 
-def _list_files(directory: str, cwd: str) -> str:
+def _list_files(directory: str, cwd: str) -> tuple[str, bool]:
     resolved = Path(directory) if os.path.isabs(directory) else Path(cwd) / directory
     if not resolved.is_dir():
-        return f"Directory not found: {resolved}"
+        return f"Directory not found: {resolved}", False
 
     MAX_DEPTH = 4
     lines: list = []
@@ -610,9 +610,9 @@ def _list_files(directory: str, cwd: str) -> str:
     _walk(resolved, "  ", 0)
 
     if not lines:
-        return f"Empty directory: {resolved}"
+        return f"Empty directory: {resolved}", True
 
-    return f"{resolved}/\n" + "\n".join(lines)
+    return f"{resolved}/\n" + "\n".join(lines), True
 
 
 _hu_linter = HuLinter()
@@ -771,9 +771,9 @@ def _commit_write(resolved: Path, content: str, original: Optional[str]) -> str:
     return ""
 
 
-def _write_file(filepath: str, content: str, cwd: str) -> str:
+def _write_file(filepath: str, content: str, cwd: str) -> tuple[str, bool]:
     if not filepath:
-        return "Error: path is required"
+        return "Error: path is required", False
 
     resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
 
@@ -786,7 +786,7 @@ def _write_file(filepath: str, content: str, cwd: str) -> str:
 
     err = _commit_write(resolved, content, original)
     if err:
-        return err
+        return err, False
 
     msg = f"Written: {resolved} ({len(content)} chars)"
     if original is not None:
@@ -800,23 +800,23 @@ def _write_file(filepath: str, content: str, cwd: str) -> str:
     if refs:
         msg += "\n" + refs
 
-    return msg
+    return msg, True
 
 
-def _patch_file(filepath: str, old_text: str, new_text: str, cwd: str) -> str:
+def _patch_file(filepath: str, old_text: str, new_text: str, cwd: str) -> tuple[str, bool]:
     if not filepath:
-        return "Error: path is required"
+        return "Error: path is required", False
     if not old_text:
-        return "Error: old_text is required"
+        return "Error: old_text is required", False
 
     resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
     if not resolved.is_file():
-        return f"File not found: {resolved}"
+        return f"File not found: {resolved}", False
 
     try:
         original = resolved.read_text(encoding="utf-8", errors="replace")
     except Exception as exc:
-        return f"Error reading file: {exc}"
+        return f"Error reading file: {exc}", False
 
     count = original.count(old_text)
     if count == 0:
@@ -834,19 +834,19 @@ def _patch_file(filepath: str, old_text: str, new_text: str, cwd: str) -> str:
         return (
             f"old_text not found in {resolved}. "
             f"Make sure it matches the file content exactly (whitespace matters).{hint}"
-        )
+        ), False
 
     if count > 1:
         return (
             f"old_text matches {count} locations in {resolved}. "
             "Provide more surrounding context in old_text to make it unique."
-        )
+        ), False
 
     patched = original.replace(old_text, new_text, 1)
 
     err = _commit_write(resolved, patched, original)
     if err:
-        return err
+        return err, False
 
     msg = f"Patched: {resolved} ({len(old_text)} chars \u2192 {len(new_text)} chars)"
 
@@ -858,16 +858,16 @@ def _patch_file(filepath: str, old_text: str, new_text: str, cwd: str) -> str:
     if refs:
         msg += "\n" + refs
 
-    return msg
+    return msg, True
 
 
-def _delete_file(filepath: str, cwd: str) -> str:
+def _delete_file(filepath: str, cwd: str) -> tuple[str, bool]:
     if not filepath:
-        return "Error: path is required"
+        return "Error: path is required", False
 
     resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
     if not resolved.is_file():
-        return f"File not found: {resolved}"
+        return f"File not found: {resolved}", False
 
     refs = entity_reference_feedback(resolved, cwd, FileAction.DELETE)
 
@@ -880,7 +880,7 @@ def _delete_file(filepath: str, cwd: str) -> str:
     try:
         resolved.unlink()
     except Exception as exc:
-        return f"Error deleting file: {exc}"
+        return f"Error deleting file: {exc}", False
 
     entry: dict = {
         "path": str(resolved),
@@ -893,16 +893,16 @@ def _delete_file(filepath: str, cwd: str) -> str:
     msg = f"Deleted: {resolved}"
     if refs:
         msg += "\n" + refs
-    return msg
+    return msg, True
 
 
 _DEF_RE_TEMPLATE = r'^[ \t]*(?:async\s+)?def\s+{}\s*\('
 _CLASS_RE_TEMPLATE = r'^[ \t]*class\s+{}\s*[\(:]'
 
 
-def _find_definition(symbol: str, cwd: str) -> str:
+def _find_definition(symbol: str, cwd: str) -> tuple[str, bool]:
     if not symbol:
-        return "Error: symbol is required"
+        return "Error: symbol is required", False
 
     results: list[str] = []
     search_root = Path(cwd)
@@ -934,8 +934,8 @@ def _find_definition(symbol: str, cwd: str) -> str:
                     results.append(f"{rel}:{lineno}: {line}")
 
     if not results:
-        return f"No definition found for '{symbol}'"
-    return "\n".join(results)
+        return f"No definition found for '{symbol}'", False
+    return "\n".join(results), True
 
 
 def _find_references_raw(symbol: str, cwd: str) -> Optional[list[FileReference]]:
@@ -963,26 +963,26 @@ def _find_references_raw(symbol: str, cwd: str) -> Optional[list[FileReference]]
     return results if results else None
 
 
-def _find_references(symbol: str, cwd: str) -> str:
+def _find_references(symbol: str, cwd: str) -> tuple[str, bool]:
     """LLM-facing wrapper around _find_references_raw."""
     if not symbol:
-        return "Error: symbol is required"
+        return "Error: symbol is required", False
     refs = _find_references_raw(symbol, cwd)
     if refs is None:
-        return f"No references found for '{symbol}'"
+        return f"No references found for '{symbol}'", False
     output = "\n".join(f"{r.file}:{r.line}: {r.text}" for r in refs)
-    return output
+    return output, True
 
 
-def _copy_file(source: str, destination: str, cwd: str) -> str:
+def _copy_file(source: str, destination: str, cwd: str) -> tuple[str, bool]:
     if not source or not destination:
-        return "Error: source and destination are required"
+        return "Error: source and destination are required", False
 
     src = Path(source) if os.path.isabs(source) else Path(cwd) / source
     dst = Path(destination) if os.path.isabs(destination) else Path(cwd) / destination
 
     if not src.exists():
-        return f"Source not found: {src}"
+        return f"Source not found: {src}", False
 
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -991,7 +991,7 @@ def _copy_file(source: str, destination: str, cwd: str) -> str:
                 dst = dst / src.name
             shutil.copytree(str(src), str(dst))
             count = sum(1 for _ in dst.rglob("*") if _.is_file())
-            return f"Copied directory: {src} → {dst} ({count} files)"
+            return f"Copied directory: {src} → {dst} ({count} files)", True
         else:
             shutil.copy2(str(src), str(dst))
             msg = f"Copied: {src} → {dst}"
@@ -1001,20 +1001,20 @@ def _copy_file(source: str, destination: str, cwd: str) -> str:
                     f"'{src.stem}' as the source. Rename it to a meaningful "
                     f"name to avoid ambiguity at runtime."
                 )
-            return msg
+            return msg, True
     except Exception as exc:
-        return f"Error copying: {exc}"
+        return f"Error copying: {exc}", False
 
 
-def _move_file(source: str, destination: str, cwd: str) -> str:
+def _move_file(source: str, destination: str, cwd: str) -> tuple[str, bool]:
     if not source or not destination:
-        return "Error: source and destination are required"
+        return "Error: source and destination are required", False
 
     src = Path(source) if os.path.isabs(source) else Path(cwd) / source
     dst = Path(destination) if os.path.isabs(destination) else Path(cwd) / destination
 
     if not src.exists():
-        return f"Source not found: {src}"
+        return f"Source not found: {src}", False
 
     refs = entity_reference_feedback(src, cwd, FileAction.MOVE)
 
@@ -1024,18 +1024,18 @@ def _move_file(source: str, destination: str, cwd: str) -> str:
         msg = f"Moved: {src} → {dst}"
         if refs:
             msg += "\n" + refs
-        return msg
+        return msg, True
     except Exception as exc:
-        return f"Error moving: {exc}"
+        return f"Error moving: {exc}", False
 
 
-def _grep(pattern: str, directory: str, include: str, cwd: str) -> str:
+def _grep(pattern: str, directory: str, include: str, cwd: str) -> tuple[str, bool]:
     if not pattern:
-        return "Error: pattern is required"
+        return "Error: pattern is required", False
 
     search_dir = Path(directory) if os.path.isabs(directory) else Path(cwd) / directory
     if not search_dir.is_dir():
-        return f"Directory not found: {search_dir}"
+        return f"Directory not found: {search_dir}", False
 
     try:
         regex = re.compile(pattern)
@@ -1069,21 +1069,21 @@ def _grep(pattern: str, directory: str, include: str, cwd: str) -> str:
             break
 
     if not results:
-        return f"No matches for '{pattern}' in {search_dir}"
+        return f"No matches for '{pattern}' in {search_dir}", True
 
     output = "\n".join(results)
     if len(results) >= MAX_RESULTS:
         output += f"\n\n... (truncated at {MAX_RESULTS} results)"
-    return output
+    return output, True
 
 
-def _glob(pattern: str, directory: str, cwd: str) -> str:
+def _glob(pattern: str, directory: str, cwd: str) -> tuple[str, bool]:
     if not pattern:
-        return "Error: pattern is required"
+        return "Error: pattern is required", False
 
     search_dir = Path(directory) if os.path.isabs(directory) else Path(cwd) / directory
     if not search_dir.is_dir():
-        return f"Directory not found: {search_dir}"
+        return f"Directory not found: {search_dir}", False
 
     MAX_RESULTS = 200
     matches: list[tuple[float, str]] = []
@@ -1099,19 +1099,19 @@ def _glob(pattern: str, directory: str, cwd: str) -> str:
                 break
 
     if not matches:
-        return f"No files matching '{pattern}' in {search_dir}"
+        return f"No files matching '{pattern}' in {search_dir}", True
 
     matches.sort(key=lambda x: x[0], reverse=True)
     output = "\n".join(p for _, p in matches)
     if len(matches) >= MAX_RESULTS:
         output += f"\n\n... (truncated at {MAX_RESULTS} results)"
-    return output
+    return output, True
 
 
 # ── Browser tools ────────────────────────────────────────────────────────────
 
 
-def _run_web(command, lamia):
+def _run_web(command, lamia) -> str:
     """Execute a WebCommand via lamia.run() (sync, handles browser lifecycle)."""
     if lamia is None:
         return "Error: browser not available (no lamia instance)"
@@ -1121,33 +1121,33 @@ def _run_web(command, lamia):
         return f"Browser error: {exc}"
 
 
-def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
+def _browser_tool(name: str, args: dict, cwd: str, lamia) -> tuple[str, bool]:
     if name == ToolName.BROWSER_NAVIGATE:
         url = args.get("url", "")
         if not url:
-            return "Error: url is required"
+            return "Error: url is required", False
         _run_web(WebCommand(action=WebActionType.NAVIGATE, url=url), lamia)
         title = _run_web(WebCommand(action=WebActionType.GET_TEXT, selector="title"), lamia)
-        return f"Navigated to {url}\nPage title: {title}"
+        return f"Navigated to {url}\nPage title: {title}", True
 
     elif name == ToolName.BROWSER_CLICK:
         selector = args.get("selector", "")
         if not selector:
-            return "Error: selector is required"
+            return "Error: selector is required", False
         result = _run_web(WebCommand(action=WebActionType.CLICK, selector=selector), lamia)
         if isinstance(result, str) and result.startswith("Browser error"):
-            return result
-        return f"Clicked: {selector}"
+            return result, False
+        return f"Clicked: {selector}", True
 
     elif name == ToolName.BROWSER_TYPE:
         selector = args.get("selector", "")
         text = args.get("text", "")
         if not selector:
-            return "Error: selector is required"
+            return "Error: selector is required", False
         result = _run_web(WebCommand(action=WebActionType.TYPE, selector=selector, value=text), lamia)
         if isinstance(result, str) and result.startswith("Browser error"):
-            return result
-        return f"Typed into {selector}"
+            return result, False
+        return f"Typed into {selector}", True
 
     elif name == ToolName.BROWSER_GET_TEXT:
         selector = args.get("selector", "body")
@@ -1155,7 +1155,7 @@ def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
         text = str(result) if result else ""
         if len(text) > 50_000:
             text = text[:50_000] + f"\n\n... (truncated, total {len(text)} chars)"
-        return text or "(empty)"
+        return text or "(empty)", True
 
     elif name == ToolName.BROWSER_SCREENSHOT:
         filepath = args.get("path", "")
@@ -1165,20 +1165,20 @@ def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
             filepath = str(Path(cwd) / filepath)
         result = _run_web(WebCommand(action=WebActionType.SCREENSHOT, value=filepath), lamia)
         if isinstance(result, str) and result.startswith("Browser error"):
-            return result
-        return f"Screenshot saved: {filepath}"
+            return result, False
+        return f"Screenshot saved: {filepath}", True
 
     elif name == ToolName.BROWSER_WAIT:
         selector = args.get("selector", "")
         timeout = args.get("timeout", 10)
         if not selector:
-            return "Error: selector is required"
+            return "Error: selector is required", False
         result = _run_web(WebCommand(action=WebActionType.WAIT, selector=selector, timeout=float(timeout)), lamia)
         if isinstance(result, str) and result.startswith("Browser error"):
-            return result
-        return f"Element found: {selector}"
+            return result, False
+        return f"Element found: {selector}", True
 
-    return f"Unknown browser tool: {name}"
+    return f"Unknown browser tool: {name}", False
 
 
 def get_tools_system_prompt() -> str:

@@ -317,7 +317,12 @@ async def json_mode(lamia: Lamia) -> None:
                         "args": tool_args,
                         "label": tool_progress_label(tool_name, tool_args),
                     })
-                    tool_result = execute_tool(tool_name, tool_args, os.getcwd(), lamia=lamia)
+                    tool_result, tool_success = execute_tool(tool_name, tool_args, os.getcwd(), lamia=lamia)
+                    _json_write({
+                        "type": "tool_result",
+                        "tool": tool_name,
+                        "success": tool_success,
+                    })
                     tool_result_entries.append(
                         _build_tool_result_entry(tool_name, tool_args, tool_result)
                     )
