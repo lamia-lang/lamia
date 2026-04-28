@@ -186,7 +186,7 @@ async def json_mode(lamia: Lamia) -> None:
     Error    : {"type": "error", "message": "..."}
     Ready    : {"type": "ready"}  (sent once after startup)
     """
-    from lamia.cli.tools import execute_tool, get_tools_system_prompt, reset_file_writes, get_file_writes, ToolName
+    from lamia.cli.tools import execute_tool, get_tools_system_prompt, reset_file_writes, get_file_writes, tool_progress_label, ToolName
 
     MAX_TOOL_ROUNDS = 50
     tools_prompt = get_tools_system_prompt()
@@ -311,7 +311,12 @@ async def json_mode(lamia: Lamia) -> None:
                             should_break = True
                             break
 
-                    _json_write({"type": "tool_use", "tool": tool_name, "args": tool_args})
+                    _json_write({
+                        "type": "tool_use",
+                        "tool": tool_name,
+                        "args": tool_args,
+                        "label": tool_progress_label(tool_name, tool_args),
+                    })
                     tool_result = execute_tool(tool_name, tool_args, os.getcwd(), lamia=lamia)
                     tool_result_entries.append(
                         _build_tool_result_entry(tool_name, tool_args, tool_result)

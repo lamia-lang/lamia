@@ -60,6 +60,36 @@ class FileReference:
 
 logger = logging.getLogger(__name__)
 
+TOOL_LABELS: dict[str, tuple[str, str]] = {
+    ToolName.GET_DOCS:           ("Reading docs",        "topic"),
+    ToolName.READ_FILE:          ("Reading file",        "path"),
+    ToolName.LIST_FILES:         ("Listing files",       "directory"),
+    ToolName.WRITE_FILE:         ("Writing file",        "path"),
+    ToolName.PATCH_FILE:         ("Editing file",        "path"),
+    ToolName.DELETE_FILE:        ("Deleting file",       "path"),
+    ToolName.COPY_FILE:          ("Copying",             "source"),
+    ToolName.MOVE_FILE:          ("Moving",              "source"),
+    ToolName.GREP:               ("Searching",           "pattern"),
+    ToolName.GLOB:               ("Finding files",       "pattern"),
+    ToolName.FIND_DEFINITION:    ("Finding definition",  "symbol"),
+    ToolName.FIND_REFERENCES:    ("Finding references",  "symbol"),
+    ToolName.BROWSER_NAVIGATE:   ("Navigating to",       "url"),
+    ToolName.BROWSER_CLICK:      ("Clicking",            "selector"),
+    ToolName.BROWSER_TYPE:       ("Typing into",         "selector"),
+    ToolName.BROWSER_GET_TEXT:   ("Reading page text",   "selector"),
+    ToolName.BROWSER_SCREENSHOT: ("Taking screenshot",   ""),
+    ToolName.BROWSER_WAIT:       ("Waiting for",         "selector"),
+}
+
+
+def tool_progress_label(tool: str, args: dict) -> str:
+    entry = TOOL_LABELS.get(tool)
+    if not entry:
+        return tool.replace("_", " ")
+    verb, arg_key = entry
+    detail = str(args.get(arg_key, "")) if arg_key else ""
+    return f"{verb}: {detail}" if detail else verb
+
 TOPIC_TO_FILE = {
     "lm-syntax": "user-guide/lm-syntax.md",
     "lm": "user-guide/lm-syntax.md",
@@ -470,7 +500,8 @@ def execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
         return _glob(args.get("pattern", ""), args.get("directory", "."), cwd)
     elif name.startswith("browser_"):
         return _browser_tool(name, args, cwd, lamia)
-    return f"Unknown tool: {name}"
+    else:
+        return f"Unknown tool: {name}"
 
 
 def _get_docs(topic: str) -> str:
