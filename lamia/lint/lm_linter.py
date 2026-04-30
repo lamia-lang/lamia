@@ -1,8 +1,11 @@
 """.lm file linter.
 
-.lm files are Python + Lamia syntax. Checks:
-  LMW001 - excessive growth (>2x original)
-  LME002 - missing required params when calling .hu functions
+.lm files are Python + Lamia syntax.
+
+Rule index (code format: LM{severity}{NNN}):
+  LMW001  W  excessive-growth         content grew >2x original
+  LME002  E  missing-required-params  .hu call missing required params
+  LMR003  R  output-format-hint       use -> JSON[Model], not inline schemas
 """
 from __future__ import annotations
 
@@ -19,7 +22,7 @@ EXCESSIVE_GROWTH = LintRule(
     code="LMW001",
     severity=Severity.Warning,
     name="excessive-growth",
-    description="Content grew disproportionately - make minimal, targeted changes",
+    description="Content grew disproportionately -- make minimal, targeted changes",
 )
 
 MISSING_REQUIRED_PARAMS = LintRule(
@@ -27,6 +30,23 @@ MISSING_REQUIRED_PARAMS = LintRule(
     severity=Severity.Error,
     name="missing-required-params",
     description="Call to .hu function is missing required parameters",
+)
+
+OUTPUT_FORMAT_HINT = LintRule(
+    code="LMR003",
+    severity=Severity.Refactor,
+    name="output-format-hint",
+    description=(
+        "Don't embed output schema in comments or strings. "
+        "Define a Pydantic model and use -> Type[Model] return type "
+        "(JSON, HTML, YAML, XML, CSV, Markdown)"
+    ),
+    pattern=re.compile(
+        r"(?:output|response|return|expected)\s+"
+        r"(?:json|format|schema|structure|type)"
+        r"\s*:?\s*:",
+        re.IGNORECASE,
+    ),
 )
 
 _HU_CALL_RE = re.compile(
@@ -69,7 +89,7 @@ class LmLinter(BaseLinter):
 
     def __init__(self) -> None:
         super().__init__()
-        self.rules = [EXCESSIVE_GROWTH, MISSING_REQUIRED_PARAMS]
+        self.rules = [EXCESSIVE_GROWTH, MISSING_REQUIRED_PARAMS, OUTPUT_FORMAT_HINT]
 
     def lint(self, content: str, original: Optional[str] = None, cwd: Optional[str] = None) -> LintResult:
         violations: list[LintViolation] = []
@@ -81,6 +101,14 @@ class LmLinter(BaseLinter):
                     rule=EXCESSIVE_GROWTH, line=0,
                     message=f"Content grew {ratio:.1f}x ({len(original)} -> {len(content)} chars)",
                 ))
+
+        for m in OUTPUT_FORMAT_HINT.pattern.finditer(content):
+            lineno = content[:m.start()].count("\n") + 1
+            violations.append(LintViolation(
+                rule=OUTPUT_FORMAT_HINT, line=lineno,
+                message=OUTPUT_FORMAT_HINT.description,
+                snippet=m.group().strip()[:60],
+            ))
 
         if cwd:
             hu_files = _find_hu_files(cwd)

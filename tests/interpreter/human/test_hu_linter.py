@@ -79,8 +79,41 @@ class TestHUW017TooManyParams:
         assert len(violations) == 1
 
 
+class TestHUR018OutputFormatHint:
+
+    def test_output_json_colon_triggers(self):
+        violations = _violations_for_code("Output JSON:", "HUR018")
+        assert len(violations) == 1
+
+    def test_markdown_bold_output_json_triggers(self):
+        violations = _violations_for_code("**Output JSON:**", "HUR018")
+        assert len(violations) == 1
+
+    def test_response_format_triggers(self):
+        violations = _violations_for_code("Response Format:", "HUR018")
+        assert len(violations) == 1
+
+    def test_return_type_triggers(self):
+        violations = _violations_for_code("Return Type:", "HUR018")
+        assert len(violations) == 1
+
+    def test_case_insensitive(self):
+        violations = _violations_for_code("output json:", "HUR018")
+        assert len(violations) == 1
+
+    def test_normal_prose_no_violation(self):
+        violations = _violations_for_code("Parse the output json and validate it.", "HUR018")
+        assert violations == []
+
+    def test_mentions_pydantic_and_multiple_types(self):
+        violations = _violations_for_code("Output JSON:", "HUR018")
+        msg = violations[0].message
+        assert "Pydantic" in msg
+        assert "HTML" in msg
+        assert "YAML" in msg
+
+
 class TestHuLinterExistingRulesUnaffected:
-    """Smoke tests confirming HU017 addition didn't break existing rules."""
 
     def test_emoji_still_detected(self):
         violations = _violations_for_code("Hello 🎉 world", "HUW013")

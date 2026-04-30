@@ -4,6 +4,26 @@
 {@file} context references.  They should contain NO markdown formatting,
 no YAML front matter, no emojis, no HTML.  Just clean, readable text
 that an LLM can consume without visual decoration.
+
+Rule index (code format: HU{severity}{NNN}):
+  HUE001  E  yaml-front-matter       YAML front matter is not valid in .hu
+  HUW002  W  markdown-header          # headings are formatting
+  HUW003  W  markdown-bold            **bold** / __bold__ is formatting
+  HUW004  W  markdown-italic          *italic* / _italic_ is formatting
+  HUW005  W  markdown-strikethrough   ~~strike~~ is formatting
+  HUW006  W  markdown-link            [text](url) -- use plain URLs
+  HUW007  W  markdown-image           ![alt](url) not useful in prompts
+  HUW008  W  markdown-code-fence      ```lang fences are formatting
+  HUW009  W  markdown-blockquote      > quotes are formatting
+  HUW010  W  markdown-table           | pipe tables | are formatting
+  HUW011  W  markdown-horizontal-rule --- / *** / ___ are formatting
+  HUW012  W  html-tag                 HTML tags don't belong in prompts
+  HUW013  W  emoji                    emojis are decorative
+  HUW014  W  markdown-inline-code     `backtick code` is formatting
+  HUW015  W  markdown-task-list       - [ ] task lists are formatting
+  HUW016  W  excessive-growth         content grew >2x original
+  HUW017  W  too-many-params          >10 {param} placeholders
+  HUR018  R  output-format-hint       use Lamia -> return types, not inline schemas
 """
 from __future__ import annotations
 
@@ -15,7 +35,6 @@ from lamia.lint.base import BaseLinter, LintRule, LintViolation, LintResult, Sev
 _GROWTH_RATIO = 2.0
 
 # ── Rules ───────────────────────────────────────────────────────────────────
-# Code format: HU{severity}{NNN}  (e.g. HUE001 = error, HUW002 = warning)
 
 YAML_FRONT_MATTER = LintRule(
     code="HUE001",
@@ -165,6 +184,23 @@ TOO_MANY_PARAMS = LintRule(
     description="Too many {param} placeholders -- consider using {@file} to include large content",
 )
 
+OUTPUT_FORMAT_HINT = LintRule(
+    code="HUR018",
+    severity=Severity.Refactor,
+    name="output-format-hint",
+    description=(
+        "Don't embed output format instructions in the prompt. "
+        "Lamia has built-in return type validation (JSON, HTML, YAML, XML, CSV, Markdown) "
+        "-- define a Pydantic model and use -> Type[Model] on the call site"
+    ),
+    pattern=re.compile(
+        r"(?:^|\n)\s*\*{0,2}(?:output|response|return|expected)\s+"
+        r"(?:json|format|schema|structure|type)"
+        r"\s*:?\s*\*{0,2}\s*:",
+        re.IGNORECASE,
+    ),
+)
+
 _TOO_MANY_PARAMS_THRESHOLD = 10
 _PARAM_COUNT_RE = re.compile(r'\{(\w+)(?::[^}]*)?\}')
 
@@ -172,7 +208,7 @@ ALL_RULES = [
     YAML_FRONT_MATTER, MD_HEADER, MD_BOLD, MD_ITALIC, MD_STRIKETHROUGH,
     MD_LINK, MD_IMAGE, MD_CODE_FENCE, MD_BLOCKQUOTE, MD_TABLE,
     MD_HORIZONTAL_RULE, HTML_TAG, EMOJI, MD_INLINE_CODE, MD_TASK_LIST,
-    EXCESSIVE_GROWTH, TOO_MANY_PARAMS,
+    EXCESSIVE_GROWTH, TOO_MANY_PARAMS, OUTPUT_FORMAT_HINT,
 ]
 
 

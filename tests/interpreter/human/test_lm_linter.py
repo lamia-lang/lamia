@@ -1,4 +1,4 @@
-"""Tests for LmLinter rules (LMW001, LME002)."""
+"""Tests for LmLinter rules (LMW001, LME002, LMR003)."""
 
 import os
 import tempfile
@@ -99,3 +99,31 @@ class TestLME002MissingRequiredParams:
         violations = _violations_for(content, "LME002", cwd=project_dir)
         assert len(violations) == 1
         assert "context" in violations[0].message
+
+
+class TestLMR003OutputFormatHint:
+
+    def test_output_json_in_comment_triggers(self):
+        content = '# Output JSON:\n# {"field": "value"}\nresult = agent(x=1) -> str'
+        violations = _violations_for(content, "LMR003")
+        assert len(violations) == 1
+
+    def test_response_format_triggers(self):
+        violations = _violations_for("# Response Format:", "LMR003")
+        assert len(violations) == 1
+
+    def test_response_schema_triggers(self):
+        violations = _violations_for("# Response Schema:", "LMR003")
+        assert len(violations) == 1
+
+    def test_normal_code_no_violation(self):
+        content = 'result = agent(prompt=p) -> JSON[MyModel]'
+        violations = _violations_for(content, "LMR003")
+        assert violations == []
+
+    def test_mentions_pydantic_and_multiple_types(self):
+        violations = _violations_for("# Output JSON:", "LMR003")
+        msg = violations[0].message
+        assert "Pydantic" in msg
+        assert "HTML" in msg
+        assert "YAML" in msg
