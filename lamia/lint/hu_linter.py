@@ -10,91 +10,104 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from lamia.lint.base import BaseLinter, LintRule, LintViolation, LintResult
+from lamia.lint.base import BaseLinter, LintRule, LintViolation, LintResult, Severity
 
 _GROWTH_RATIO = 2.0
 
 # ── Rules ───────────────────────────────────────────────────────────────────
+# Code format: HU{severity}{NNN}  (e.g. HUE001 = error, HUW002 = warning)
 
 YAML_FRONT_MATTER = LintRule(
-    code="HU001",
+    code="HUE001",
+    severity=Severity.Error,
     name="yaml-front-matter",
     description="YAML front matter (---...---) is not valid in .hu files",
     pattern=re.compile(r"\A---[ \t]*\n.*?\n---[ \t]*\n", re.DOTALL),
 )
 
 MD_HEADER = LintRule(
-    code="HU002",
+    code="HUW002",
+    severity=Severity.Warning,
     name="markdown-header",
-    description="Markdown headers (# Title) are formatting — .hu files are plain text",
+    description="Markdown headers (# Title) are formatting -- .hu files are plain text",
     pattern=re.compile(r"^#{1,6}\s+\S", re.MULTILINE),
 )
 
 MD_BOLD = LintRule(
-    code="HU003",
+    code="HUW003",
+    severity=Severity.Warning,
     name="markdown-bold",
     description="Markdown bold (**text** or __text__) is formatting",
     pattern=re.compile(r"\*\*[^*\n]+\*\*|__[^_\n]+__"),
 )
 
 MD_ITALIC = LintRule(
-    code="HU004",
+    code="HUW004",
+    severity=Severity.Warning,
     name="markdown-italic",
     description="Markdown italic (*text* or _text_) is formatting",
     pattern=re.compile(r"(?<!\w)\*[^*\n]{2,}\*(?!\w)|(?<!\w)_[^_\n]{2,}_(?!\w)"),
 )
 
 MD_STRIKETHROUGH = LintRule(
-    code="HU005",
+    code="HUW005",
+    severity=Severity.Warning,
     name="markdown-strikethrough",
     description="Markdown strikethrough (~~text~~) is formatting",
     pattern=re.compile(r"~~[^~\n]+~~"),
 )
 
 MD_LINK = LintRule(
-    code="HU006",
+    code="HUW006",
+    severity=Severity.Warning,
     name="markdown-link",
-    description="Markdown links [text](url) are formatting — use plain URLs",
+    description="Markdown links [text](url) are formatting -- use plain URLs",
     pattern=re.compile(r"\[([^\]]+)\]\(([^)]+)\)"),
 )
 
 MD_IMAGE = LintRule(
-    code="HU007",
+    code="HUW007",
+    severity=Severity.Warning,
     name="markdown-image",
     description="Markdown images ![alt](url) are not useful in prompts",
     pattern=re.compile(r"!\[([^\]]*)\]\(([^)]+)\)"),
 )
 
 MD_CODE_FENCE = LintRule(
-    code="HU008",
+    code="HUW008",
+    severity=Severity.Warning,
     name="markdown-code-fence",
     description="Code fences with language tags (```python) are markdown formatting",
     pattern=re.compile(r"^```[a-zA-Z]", re.MULTILINE),
 )
 
 MD_BLOCKQUOTE = LintRule(
-    code="HU009",
+    code="HUW009",
+    severity=Severity.Warning,
     name="markdown-blockquote",
     description="Blockquotes (> text) are markdown formatting",
     pattern=re.compile(r"^>\s+\S", re.MULTILINE),
 )
 
 MD_TABLE = LintRule(
-    code="HU010",
+    code="HUW010",
+    severity=Severity.Warning,
     name="markdown-table",
     description="Markdown tables (| col | col |) are formatting",
     pattern=re.compile(r"^\|.+\|.+\|$", re.MULTILINE),
 )
 
 MD_HORIZONTAL_RULE = LintRule(
-    code="HU011",
+    code="HUW011",
+    severity=Severity.Warning,
     name="markdown-horizontal-rule",
     description="Markdown horizontal rules (--- or ***) are formatting",
     pattern=re.compile(r"^(?:---|\*\*\*|___)\s*$", re.MULTILINE),
 )
 
 HTML_TAG = LintRule(
-    code="HU012",
+    code="HUW012",
+    severity=Severity.Warning,
     name="html-tag",
     description="HTML tags are not appropriate in .hu prompt templates",
     pattern=re.compile(
@@ -105,9 +118,10 @@ HTML_TAG = LintRule(
 )
 
 EMOJI = LintRule(
-    code="HU013",
+    code="HUW013",
+    severity=Severity.Warning,
     name="emoji",
-    description="Emojis are decorative — .hu files should be clean text",
+    description="Emojis are decorative -- .hu files should be clean text",
     pattern=re.compile(
         "["
         "\U0001F300-\U0001F9FF"
@@ -122,29 +136,33 @@ EMOJI = LintRule(
 )
 
 MD_INLINE_CODE = LintRule(
-    code="HU014",
+    code="HUW014",
+    severity=Severity.Warning,
     name="markdown-inline-code",
     description="Inline code (`code`) is markdown formatting",
     pattern=re.compile(r"(?<!`)`(?!`)[^`\n]+`(?!`)"),
 )
 
 MD_TASK_LIST = LintRule(
-    code="HU015",
+    code="HUW015",
+    severity=Severity.Warning,
     name="markdown-task-list",
     description="Markdown task lists (- [ ] / - [x]) are formatting",
     pattern=re.compile(r"^[-*]\s+\[[ xX]\]", re.MULTILINE),
 )
 
 EXCESSIVE_GROWTH = LintRule(
-    code="HU016",
+    code="HUW016",
+    severity=Severity.Warning,
     name="excessive-growth",
-    description="Content grew disproportionately — make minimal, targeted changes",
+    description="Content grew disproportionately -- make minimal, targeted changes",
 )
 
 TOO_MANY_PARAMS = LintRule(
-    code="HU017",
+    code="HUW017",
+    severity=Severity.Warning,
     name="too-many-params",
-    description="Too many {param} placeholders — consider using {@file} to include large content",
+    description="Too many {param} placeholders -- consider using {@file} to include large content",
 )
 
 _TOO_MANY_PARAMS_THRESHOLD = 10

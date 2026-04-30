@@ -163,23 +163,23 @@ def _json_write(obj: dict) -> None:
 
 
 def _friendly_error(raw: str) -> str:
-    """Shorten a raw tool error into a brief UI-friendly message."""
+    """Convert raw tool errors into user-friendly text without truncation."""
     if "old_text not found" in raw:
-        return "Text to replace was not found in file"
+        return "Could not apply the edit because the target text was not found in the file."
     if raw.startswith("File not found"):
         return "File does not exist"
     if raw.startswith("Unknown tool"):
-        return raw[:80]
+        return raw
     if raw.startswith("Error: file not found"):
         return "File does not exist"
-    msg = raw.split("\n", 1)[0]
+    msg = raw
     if msg.startswith("Error: "):
         msg = msg[7:]
     if msg.startswith("Error reading file: "):
         msg = msg[20:]
     if msg.startswith("Error writing file: "):
         msg = msg[20:]
-    return msg[:120]
+    return msg
 
 
 def _format_history(messages: list[dict]) -> str:

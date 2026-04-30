@@ -1,8 +1,8 @@
 """.lm file linter.
 
 .lm files are Python + Lamia syntax. Checks:
-  LM001 - excessive growth (>2x original)
-  LM002 - missing required params when calling .hu functions
+  LMW001 - excessive growth (>2x original)
+  LME002 - missing required params when calling .hu functions
 """
 from __future__ import annotations
 
@@ -11,18 +11,20 @@ from pathlib import Path
 from typing import Optional
 
 from lamia.interpreter.human.parser import parse_hu_file
-from lamia.lint.base import BaseLinter, LintRule, LintViolation, LintResult
+from lamia.lint.base import BaseLinter, LintRule, LintViolation, LintResult, Severity
 
 _GROWTH_RATIO = 2.0
 
 EXCESSIVE_GROWTH = LintRule(
-    code="LM001",
+    code="LMW001",
+    severity=Severity.Warning,
     name="excessive-growth",
-    description="Content grew disproportionately — make minimal, targeted changes",
+    description="Content grew disproportionately - make minimal, targeted changes",
 )
 
 MISSING_REQUIRED_PARAMS = LintRule(
-    code="LM002",
+    code="LME002",
+    severity=Severity.Error,
     name="missing-required-params",
     description="Call to .hu function is missing required parameters",
 )

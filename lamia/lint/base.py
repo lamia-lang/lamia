@@ -7,13 +7,23 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Optional
+
+
+class Severity(Enum):
+    """Lint rule severity — codes appear in rule IDs (e.g. HUE001, LMW002)."""
+    Error = "E"       # must fix
+    Warning = "W"     # should fix
+    Convention = "C"  # convention
+    Refactor = "R"    # refactor suggestion
 
 
 @dataclass(frozen=True)
 class LintRule:
     """A single lint rule."""
     code: str
+    severity: Severity
     name: str
     description: str
     pattern: Optional[re.Pattern] = None
