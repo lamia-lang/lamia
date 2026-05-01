@@ -1,12 +1,11 @@
 """Tests for HuLinter."""
 
-import os
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from lamia.lint.hu_linter import HuLinter, TOO_MANY_PARAMS, _TOO_MANY_PARAMS_THRESHOLD
+from lamia.lint.hu_linter import HuLinter, _TOO_MANY_PARAMS_THRESHOLD
 from lamia.lint.base import Severity
 
 
@@ -319,6 +318,33 @@ class TestHUW022TrailingWhitespace:
 
     def test_no_trailing_no_violation(self):
         violations = _violations_for_code("hello\nworld", "HUW022")
+        assert violations == []
+
+
+# ── HUC028 generic-filename ──────────────────────────────────────────────────
+
+class TestHUC028GenericFilename:
+
+    def test_generic_name_triggers(self):
+        violations = _violations_for_code(
+            "content", "HUC028", filepath="/path/agent.hu",
+        )
+        assert len(violations) == 1
+
+    def test_generic_prompt_triggers(self):
+        violations = _violations_for_code(
+            "content", "HUC028", filepath="/path/prompt.hu",
+        )
+        assert len(violations) == 1
+
+    def test_descriptive_name_no_violation(self):
+        violations = _violations_for_code(
+            "content", "HUC028", filepath="/path/review_code.hu",
+        )
+        assert violations == []
+
+    def test_no_filepath_no_violation(self):
+        violations = _violations_for_code("content", "HUC028")
         assert violations == []
 
 

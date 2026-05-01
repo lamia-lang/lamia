@@ -34,18 +34,19 @@ Rule index (code format: HU{severity}{NNN}, sorted by severity):
   HUC024  C  verbose-param-name       param name is excessively long (>30 chars)
   HUC025  C  filename-naming          .hu filename should be snake_case
   HUC026  C  leading-blank-lines      file starts with blank lines
+  HUC028  C  generic-filename         generic names like agent.hu say nothing
   ── Refactor ──
   HUR018  R  output-format-hint       use Lamia -> return types, not inline schemas
   HUR027  R  long-prompt              prompt is very long (>3000 chars)
 """
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import Optional
 
 from lamia.lint.base import BaseLinter, LintRule, LintViolation, LintResult, Severity
+from lamia.lint.find_usage import find_usage
 
 _GROWTH_RATIO = 2.0
 
@@ -278,6 +279,21 @@ LEADING_BLANK_LINES = LintRule(
     pattern=re.compile(r"\A\s*\n", re.DOTALL),
 )
 
+GENERIC_FILENAME = LintRule(
+    code="HUC028",
+    severity=Severity.Convention,
+    name="generic-filename",
+    description=(
+        ".hu filename '%s' is too generic -- use a role-based name (researcher, reviewer) "
+        "or action-based name (summarize, extract)"
+    ),
+)
+
+_GENERIC_HU_NAMES = {
+    "agent", "prompt", "template", "helper", "util", "utils",
+    "worker", "task", "handler", "processor", "default",
+}
+
 LONG_PROMPT = LintRule(
     code="HUR027",
     severity=Severity.Refactor,
@@ -302,29 +318,19 @@ ALL_RULES = [
     MD_HORIZONTAL_RULE, HTML_TAG, EMOJI, MD_INLINE_CODE, MD_TASK_LIST,
     EXCESSIVE_GROWTH, TOO_MANY_PARAMS, EMPTY_FILE, TRAILING_WHITESPACE,
     PARAM_NAMING, SHORT_PARAM_NAME, VERBOSE_PARAM_NAME,
-    FILENAME_NAMING, LEADING_BLANK_LINES,
+    FILENAME_NAMING, LEADING_BLANK_LINES, GENERIC_FILENAME,
     OUTPUT_FORMAT_HINT, LONG_PROMPT,
 ]
 
 
 def _find_lm_caller_kwargs(hu_stem: str, cwd: str) -> set[str]:
-    """Scan .lm files under cwd for calls to hu_stem() and collect kwarg names."""
-    skip = {"node_modules", "__pycache__", ".git", "venv", ".venv",
-            ".tox", ".mypy_cache", "dist", "build", ".lamia_sessions"}
-    call_re = re.compile(
-        rf'\b{re.escape(hu_stem)}\s*\(([^)]*)\)',
-    )
-    kwarg_re = re.compile(r'(\w+)\s*=')
+    """Collect kwarg names passed to hu_stem(...) in .lm files under cwd."""
+    refs = find_usage(hu_stem, cwd, extensions=("*.lm",))
     kwargs: set[str] = set()
-    root = Path(cwd)
-    for p in root.rglob("*.lm"):
-        if any(part in skip for part in p.parts):
-            continue
-        try:
-            text = p.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for m in call_re.finditer(text):
+    call_re = re.compile(rf"\b{re.escape(hu_stem)}\s*\(([^)]*)\)")
+    kwarg_re = re.compile(r"(\w+)\s*=")
+    for ref in refs:
+        for m in call_re.finditer(ref.text):
             kwargs.update(kwarg_re.findall(m.group(1)))
     return kwargs
 
@@ -474,7 +480,7 @@ class HuLinter(BaseLinter):
                         snippet=m.group(),
                     ))
 
-        # ── Filename naming ─────────────────────────────────────────────
+        # ── Filename checks ─────────────────────────────────────────────
         if filepath:
             stem = Path(filepath).stem
             if not _FILENAME_SNAKE_RE.match(stem):
@@ -483,6 +489,11 @@ class HuLinter(BaseLinter):
                 violations.append(LintViolation(
                     rule=FILENAME_NAMING, line=0,
                     message=FILENAME_NAMING.description % (stem + ".hu", suggested + ".hu"),
+                ))
+            if stem in _GENERIC_HU_NAMES:
+                violations.append(LintViolation(
+                    rule=GENERIC_FILENAME, line=0,
+                    message=GENERIC_FILENAME.description % (stem + ".hu"),
                 ))
 
         # ── Long prompt ─────────────────────────────────────────────────

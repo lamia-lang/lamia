@@ -12,12 +12,12 @@ import os
 import logging
 import re
 import shutil
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from lamia.interpreter.commands import WebCommand, WebActionType
 from lamia.interpreter.human.parser import parse_hu_file
+from lamia.lint.find_usage import UsageReference, find_usage
 from lamia.lint import HuLinter, LmLinter
 
 
@@ -52,11 +52,7 @@ class FileAction(enum.Enum):
     MOVE = "move"
 
 
-@dataclass(frozen=True)
-class FileReference:
-    file: str
-    line: int
-    text: str
+FileReference = UsageReference
 
 logger = logging.getLogger(__name__)
 
@@ -968,26 +964,7 @@ def _find_definition(symbol: str, cwd: str) -> str:
 
 def _find_references_raw(symbol: str, cwd: str) -> Optional[list[FileReference]]:
     """Return structured references for *symbol* under *cwd*, or None if none found."""
-    if not symbol:
-        return None
-
-    pat = re.compile(r'(?<![a-zA-Z_])' + re.escape(symbol) + r'(?![a-zA-Z_\d])')
-    results: list[FileReference] = []
-    search_root = Path(cwd)
-
-    for ext in ("*.lm", "*.hu", "*.py"):
-        for fpath in search_root.rglob(ext):
-            if not fpath.is_file() or any(p in fpath.parts for p in _SKIP_DIRS):
-                continue
-            try:
-                text = fpath.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            for lineno, line in enumerate(text.splitlines(), 1):
-                if pat.search(line):
-                    rel = os.path.relpath(str(fpath), cwd)
-                    results.append(FileReference(file=rel, line=lineno, text=line.rstrip()))
-
+    results = find_usage(symbol, cwd, extensions=("*.lm", "*.hu", "*.py"))
     return results if results else None
 
 

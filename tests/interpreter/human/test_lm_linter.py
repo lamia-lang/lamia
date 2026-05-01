@@ -1,6 +1,5 @@
 """Tests for LmLinter rules."""
 
-import os
 import tempfile
 from pathlib import Path
 
@@ -295,6 +294,59 @@ class TestLMR013LongScript:
         violations = _violations_for(content, "LMR013")
         assert len(violations) == 1
         assert "5001" in violations[0].message
+
+
+# ── LME014 unknown-hu-kwargs ───────────────────────────────────────────────
+
+class TestLME014UnknownHuKwargs:
+
+    def test_unknown_kwarg_triggers(self, project_dir):
+        _write(project_dir, "team/greet.hu", "Hello {name}")
+        content = 'greet(name="Alice", age=30) -> TEXT'
+        violations = _violations_for(content, "LME014", cwd=project_dir)
+        assert len(violations) == 1
+        assert "age" in violations[0].message
+
+    def test_valid_kwargs_no_violation(self, project_dir):
+        _write(project_dir, "team/greet.hu", "Hello {name}, you are {age}")
+        content = 'greet(name="Alice", age=30) -> TEXT'
+        violations = _violations_for(content, "LME014", cwd=project_dir)
+        assert violations == []
+
+    def test_multiple_unknown_kwargs(self, project_dir):
+        _write(project_dir, "team/greet.hu", "Hello {name}")
+        content = 'greet(name="Alice", age=30, city="NYC") -> TEXT'
+        violations = _violations_for(content, "LME014", cwd=project_dir)
+        assert len(violations) == 1
+        assert "age" in violations[0].message
+        assert "city" in violations[0].message
+
+    def test_is_error_severity(self, project_dir):
+        _write(project_dir, "team/greet.hu", "Hello {name}")
+        content = 'greet(name="Alice", typo=1) -> TEXT'
+        violations = _violations_for(content, "LME014", cwd=project_dir)
+        assert violations[0].rule.severity == Severity.Error
+
+
+# ── LMC015 generic-filename ────────────────────────────────────────────────
+
+class TestLMC015GenericFilename:
+
+    def test_generic_name_triggers(self):
+        violations = _violations_for("x = 1", "LMC015", filepath="/path/process.lm")
+        assert len(violations) == 1
+
+    def test_generic_agent_triggers(self):
+        violations = _violations_for("x = 1", "LMC015", filepath="/path/agent.lm")
+        assert len(violations) == 1
+
+    def test_descriptive_name_no_violation(self):
+        violations = _violations_for("x = 1", "LMC015", filepath="/path/review_code.lm")
+        assert violations == []
+
+    def test_orchestrator_no_violation(self):
+        violations = _violations_for("x = 1", "LMC015", filepath="/path/orchestrator.lm")
+        assert violations == []
 
 
 # ── Existing rules still work ───────────────────────────────────────────────

@@ -5,6 +5,7 @@
 Rule index (code format: LM{severity}{NNN}, sorted by severity):
   ── Errors (must fix) ──
   LME002  E  missing-required-params   .hu call missing required params
+  LME014  E  unknown-hu-kwargs         .hu call passes kwargs the .hu file doesn't accept
   ── Warnings (should fix) ──
   LMW001  W  excessive-growth          content grew >2x original
   LMW005  W  tab-indentation           use 4 spaces, not tabs (PEP 8)
@@ -15,6 +16,7 @@ Rule index (code format: LM{severity}{NNN}, sorted by severity):
   LMC009  C  variable-naming           variables should use snake_case
   LMC010  C  filename-naming           .lm filename should be snake_case
   LMC011  C  leading-blank-lines       file starts with blank lines
+  LMC015  C  generic-filename          generic names like process.lm say nothing
   ── Refactor ──
   LMR003  R  output-format-hint        use -> Type[Model], not inline schemas
   LMR012  R  inline-pydantic-model     large projects: extract models to models/
@@ -136,13 +138,35 @@ LONG_SCRIPT = LintRule(
     ),
 )
 
+UNKNOWN_HU_KWARGS = LintRule(
+    code="LME014",
+    severity=Severity.Error,
+    name="unknown-hu-kwargs",
+    description="Call to %s() passes unknown kwargs: %s. Accepted params: %s",
+)
+
+GENERIC_FILENAME = LintRule(
+    code="LMC015",
+    severity=Severity.Convention,
+    name="generic-filename",
+    description=(
+        ".lm filename '%s' is too generic -- use a descriptive name "
+        "that explains what the script does"
+    ),
+)
+
 _LONG_SCRIPT_THRESHOLD = 5000
 
+_GENERIC_LM_NAMES = {
+    "process", "run", "main", "script", "pipeline", "workflow",
+    "agent", "worker", "task", "job", "handler", "manager",
+}
+
 ALL_RULES = [
-    MISSING_REQUIRED_PARAMS,
+    MISSING_REQUIRED_PARAMS, UNKNOWN_HU_KWARGS,
     EXCESSIVE_GROWTH, TAB_INDENTATION, POSITIONAL_HU_ARGS,
     EMPTY_FILE, TRAILING_WHITESPACE,
-    VARIABLE_NAMING, FILENAME_NAMING, LEADING_BLANK_LINES,
+    VARIABLE_NAMING, FILENAME_NAMING, LEADING_BLANK_LINES, GENERIC_FILENAME,
     OUTPUT_FORMAT_HINT, INLINE_PYDANTIC_MODEL, LONG_SCRIPT,
 ]
 
@@ -152,10 +176,6 @@ _HU_CALL_RE = re.compile(
 )
 
 _KWARG_RE = re.compile(r'(\w+)\s*=')
-
-_POSITIONAL_ARG_RE = re.compile(
-    r"""(?:^|[^=])\s*(?:"[^"]*"|'[^']*'|\d+|True|False|None|\w+(?:\.\w+)*)\s*(?:,|\))""",
-)
 
 _ASSIGNMENT_RE = re.compile(
     r'^([A-Za-z_]\w*)\s*=\s*(?!.*class\b)',
@@ -342,7 +362,7 @@ class LmLinter(BaseLinter):
                 message=LONG_SCRIPT.description % len(content),
             ))
 
-        # ── Filename naming ─────────────────────────────────────────────
+        # ── Filename checks ─────────────────────────────────────────────
         if filepath:
             stem = Path(filepath).stem
             if not _FILENAME_SNAKE_RE.match(stem):
@@ -351,6 +371,11 @@ class LmLinter(BaseLinter):
                 violations.append(LintViolation(
                     rule=FILENAME_NAMING, line=0,
                     message=FILENAME_NAMING.description % (stem + ".lm", suggested + ".lm"),
+                ))
+            if stem in _GENERIC_LM_NAMES:
+                violations.append(LintViolation(
+                    rule=GENERIC_FILENAME, line=0,
+                    message=GENERIC_FILENAME.description % (stem + ".lm"),
                 ))
 
         # ── Cross-file checks (require cwd) ─────────────────────────────
@@ -376,6 +401,18 @@ class LmLinter(BaseLinter):
                                 f"Expected: {', '.join(sorted(all_params))}"
                             ),
                             snippet=m.group(0),
+                        ))
+
+                    unknown = passed - all_params
+                    if unknown:
+                        violations.append(LintViolation(
+                            rule=UNKNOWN_HU_KWARGS, line=lineno,
+                            message=UNKNOWN_HU_KWARGS.description % (
+                                func_name,
+                                ', '.join(sorted(unknown)),
+                                ', '.join(sorted(all_params)),
+                            ),
+                            snippet=m.group(0)[:60],
                         ))
 
                 if _has_positional_args(args_text):
