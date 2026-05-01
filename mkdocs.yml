@@ -97,6 +97,10 @@ nav:
     - Web Automation: user-guide/web-automation.md
     - Validation: user-guide/validation.md
     - Model Evaluation: user-guide/evaluation.md
+  - Style Guides:
+    - "LSG-1: .hu Files": style-guides/hu-style.md
+    - "LSG-2: .lm Files": style-guides/lm-style.md
+    - "LSG-3: Project Structure": style-guides/project-structure.md
   - Advanced:
     - Lamia Debugger: advanced/debugger.md
   - Reference:
