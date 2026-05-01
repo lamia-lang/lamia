@@ -172,7 +172,12 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": ToolName.WRITE_FILE.value,
-        "description": "Create or overwrite a file with the given content.",
+        "description": (
+            "Create or overwrite a file with the given content. "
+            "IMPORTANT for .hu files: use PLAIN TEXT only (no markdown -- no **bold**, "
+            "*italic*, # headers, `backticks`, or HTML). "
+            "Parameters use single braces {param}, NOT double {{param}} which makes them literals."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -192,7 +197,9 @@ TOOL_DEFINITIONS = [
         "name": ToolName.PATCH_FILE.value,
         "description": (
             "Edit an existing file by replacing old_text with new_text. "
-            "Preferred over write_file for modifications — only express the change, not the whole file."
+            "Preferred over write_file for modifications -- only express the change, not the whole file. "
+            "IMPORTANT for .hu files: use PLAIN TEXT only (no markdown formatting). "
+            "Parameters use single braces {param}, NOT double {{param}}."
         ),
         "parameters": {
             "type": "object",
@@ -645,7 +652,7 @@ def _linter_feedback(resolved: Path, content: str, original: Optional[str], cwd:
     linter = _LINTERS.get(resolved.suffix)
     if not linter:
         return ""
-    result = linter.lint(content, original, cwd=cwd)
+    result = linter.lint(content, original, cwd=cwd, filepath=str(resolved))
     feedback = result.feedback_message()
     if feedback:
         logger.debug("Lint feedback for %s: %d issues", resolved, len(result.violations))

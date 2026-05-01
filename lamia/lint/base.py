@@ -18,6 +18,19 @@ class Severity(Enum):
     Convention = "C"  # convention
     Refactor = "R"    # refactor suggestion
 
+    @property
+    def order(self) -> int:
+        """Lower = more critical. Used to sort feedback (E first)."""
+        return _SEVERITY_ORDER[self]
+
+
+_SEVERITY_ORDER = {
+    Severity.Error: 0,
+    Severity.Warning: 1,
+    Severity.Convention: 2,
+    Severity.Refactor: 3,
+}
+
 
 @dataclass(frozen=True)
 class LintRule:
@@ -50,12 +63,18 @@ class LintResult:
     def feedback_message(self) -> str:
         """Post-write feedback with line numbers for targeted fixes.
 
+        Violations are sorted by severity (errors first) so the LLM
+        addresses the most critical issues first.
         Returns empty string if no violations.
         """
         if not self.violations:
             return ""
-        lines = [f"LINT ({len(self.violations)} issues):"]
-        for v in self.violations:
+        sorted_violations = sorted(
+            self.violations,
+            key=lambda v: (v.rule.severity.order, v.line),
+        )
+        lines = [f"LINT ({len(sorted_violations)} issues):"]
+        for v in sorted_violations:
             loc = f"line {v.line}" if v.line > 0 else "file"
             lines.append(f"  [{v.rule.code}] {loc}: {v.message}")
         lines.append(
@@ -73,5 +92,11 @@ class BaseLinter:
     def __init__(self) -> None:
         self.rules = []
 
-    def lint(self, content: str, original: Optional[str] = None, cwd: Optional[str] = None) -> LintResult:
+    def lint(
+        self,
+        content: str,
+        original: Optional[str] = None,
+        cwd: Optional[str] = None,
+        filepath: Optional[str] = None,
+    ) -> LintResult:
         raise NotImplementedError

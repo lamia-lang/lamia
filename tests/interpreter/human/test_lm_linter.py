@@ -1,4 +1,4 @@
-"""Tests for LmLinter rules (LMW001, LME002, LMR003)."""
+"""Tests for LmLinter rules."""
 
 import os
 import tempfile
@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from lamia.lint.lm_linter import LmLinter
+from lamia.lint.base import Severity
 
 
 @pytest.fixture
@@ -22,11 +23,14 @@ def _write(base: str, relpath: str, content: str) -> Path:
     return p
 
 
-def _violations_for(content: str, code: str, original: str = None, cwd: str = None) -> list:
+def _violations_for(content: str, code: str, original: str = None,
+                     cwd: str = None, filepath: str = None) -> list:
     linter = LmLinter()
-    result = linter.lint(content, original, cwd=cwd)
+    result = linter.lint(content, original, cwd=cwd, filepath=filepath)
     return [v for v in result.violations if v.rule.code == code]
 
+
+# ── LMW001 excessive-growth ────────────────────────────────────────────────
 
 class TestLMW001ExcessiveGrowth:
 
@@ -48,6 +52,8 @@ class TestLMW001ExcessiveGrowth:
         violations = _violations_for("x" * 100, "LMW001", original="")
         assert violations == []
 
+
+# ── LME002 missing-required-params ──────────────────────────────────────────
 
 class TestLME002MissingRequiredParams:
 
@@ -101,6 +107,8 @@ class TestLME002MissingRequiredParams:
         assert "context" in violations[0].message
 
 
+# ── LMR003 output-format-hint ──────────────────────────────────────────────
+
 class TestLMR003OutputFormatHint:
 
     def test_output_json_in_comment_triggers(self):
@@ -127,3 +135,173 @@ class TestLMR003OutputFormatHint:
         assert "Pydantic" in msg
         assert "HTML" in msg
         assert "YAML" in msg
+
+
+# ── LMW005 tab-indentation ─────────────────────────────────────────────────
+
+class TestLMW005TabIndentation:
+
+    def test_tabs_trigger(self):
+        content = "def foo():\n\treturn 1"
+        violations = _violations_for(content, "LMW005")
+        assert len(violations) == 1
+
+    def test_spaces_no_violation(self):
+        content = "def foo():\n    return 1"
+        violations = _violations_for(content, "LMW005")
+        assert violations == []
+
+    def test_reports_line_count(self):
+        content = "\tx = 1\n\ty = 2\n\tz = 3"
+        violations = _violations_for(content, "LMW005")
+        assert "3" in violations[0].message
+
+
+# ── LMW006 positional-hu-args ──────────────────────────────────────────────
+
+class TestLMW006PositionalHuArgs:
+
+    def test_positional_args_triggers(self, project_dir):
+        _write(project_dir, "team/summarize.hu", "Summarize {aspect}")
+        content = 'result = summarize("key findings") -> HTML'
+        violations = _violations_for(content, "LMW006", cwd=project_dir)
+        assert len(violations) == 1
+
+    def test_keyword_args_no_violation(self, project_dir):
+        _write(project_dir, "team/summarize.hu", "Summarize {aspect}")
+        content = 'result = summarize(aspect="key findings") -> HTML'
+        violations = _violations_for(content, "LMW006", cwd=project_dir)
+        assert violations == []
+
+    def test_non_hu_function_ignored(self, project_dir):
+        content = 'print("hello")'
+        violations = _violations_for(content, "LMW006", cwd=project_dir)
+        assert violations == []
+
+
+# ── LMW007 empty-file ──────────────────────────────────────────────────────
+
+class TestLMW007EmptyFile:
+
+    def test_empty_triggers(self):
+        violations = _violations_for("", "LMW007")
+        assert len(violations) == 1
+
+    def test_whitespace_only_triggers(self):
+        violations = _violations_for("   \n  ", "LMW007")
+        assert len(violations) == 1
+
+    def test_real_content_no_violation(self):
+        violations = _violations_for("x = 1", "LMW007")
+        assert violations == []
+
+
+# ── LMW008 trailing-whitespace ──────────────────────────────────────────────
+
+class TestLMW008TrailingWhitespace:
+
+    def test_trailing_spaces_trigger(self):
+        violations = _violations_for("x = 1   \ny = 2", "LMW008")
+        assert len(violations) == 1
+
+    def test_no_trailing_no_violation(self):
+        violations = _violations_for("x = 1\ny = 2", "LMW008")
+        assert violations == []
+
+
+# ── LMC009 variable-naming ─────────────────────────────────────────────────
+
+class TestLMC009VariableNaming:
+
+    def test_snake_case_no_violation(self):
+        violations = _violations_for("my_var = 1", "LMC009")
+        assert violations == []
+
+    def test_camel_case_triggers(self):
+        violations = _violations_for("myVar = 1", "LMC009")
+        assert len(violations) == 1
+
+    def test_pascal_case_allowed_for_classes(self):
+        """PascalCase is allowed (Pydantic models)."""
+        violations = _violations_for("MyModel = 1", "LMC009")
+        assert violations == []
+
+    def test_private_var_ignored(self):
+        violations = _violations_for("_myPrivateVar = 1", "LMC009")
+        assert violations == []
+
+
+# ── LMC010 filename-naming ─────────────────────────────────────────────────
+
+class TestLMC010FilenameNaming:
+
+    def test_snake_case_no_violation(self):
+        violations = _violations_for("x = 1", "LMC010", filepath="/path/orchestrator.lm")
+        assert violations == []
+
+    def test_pascal_case_triggers(self):
+        violations = _violations_for("x = 1", "LMC010", filepath="/path/MyPipeline.lm")
+        assert len(violations) == 1
+
+    def test_kebab_case_triggers(self):
+        violations = _violations_for("x = 1", "LMC010", filepath="/path/my-pipeline.lm")
+        assert len(violations) == 1
+
+    def test_no_filepath_no_violation(self):
+        violations = _violations_for("x = 1", "LMC010")
+        assert violations == []
+
+
+# ── LMC011 leading-blank-lines ──────────────────────────────────────────────
+
+class TestLMC011LeadingBlankLines:
+
+    def test_leading_blank_triggers(self):
+        violations = _violations_for("\n\nx = 1", "LMC011")
+        assert len(violations) == 1
+
+    def test_no_leading_blank_no_violation(self):
+        violations = _violations_for("x = 1", "LMC011")
+        assert violations == []
+
+
+# ── LMR012 inline-pydantic-model ────────────────────────────────────────────
+
+class TestLMR012InlinePydanticModel:
+
+    def test_few_models_no_violation(self):
+        content = "class A(BaseModel):\n    x: int\n\nclass B(BaseModel):\n    y: str"
+        violations = _violations_for(content, "LMR012")
+        assert violations == []
+
+    def test_many_models_triggers(self):
+        content = "\n".join(
+            f"class M{i}(BaseModel):\n    x: int" for i in range(4)
+        )
+        violations = _violations_for(content, "LMR012")
+        assert len(violations) == 4
+
+
+# ── LMR013 long-script ─────────────────────────────────────────────────────
+
+class TestLMR013LongScript:
+
+    def test_short_script_no_violation(self):
+        violations = _violations_for("x = 1", "LMR013")
+        assert violations == []
+
+    def test_long_script_triggers(self):
+        content = "x" * 5001
+        violations = _violations_for(content, "LMR013")
+        assert len(violations) == 1
+        assert "5001" in violations[0].message
+
+
+# ── Existing rules still work ───────────────────────────────────────────────
+
+class TestLmLinterExistingRulesUnaffected:
+
+    def test_clean_code_no_violations(self):
+        linter = LmLinter()
+        result = linter.lint('result = agent(prompt=p) -> JSON[MyModel]')
+        assert result.clean

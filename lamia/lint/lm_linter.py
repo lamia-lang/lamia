@@ -2,10 +2,23 @@
 
 .lm files are Python + Lamia syntax.
 
-Rule index (code format: LM{severity}{NNN}):
-  LMW001  W  excessive-growth         content grew >2x original
-  LME002  E  missing-required-params  .hu call missing required params
-  LMR003  R  output-format-hint       use -> JSON[Model], not inline schemas
+Rule index (code format: LM{severity}{NNN}, sorted by severity):
+  ── Errors (must fix) ──
+  LME002  E  missing-required-params   .hu call missing required params
+  ── Warnings (should fix) ──
+  LMW001  W  excessive-growth          content grew >2x original
+  LMW005  W  tab-indentation           use 4 spaces, not tabs (PEP 8)
+  LMW006  W  positional-hu-args        .hu calls must use keyword arguments
+  LMW007  W  empty-file                .lm file has no content
+  LMW008  W  trailing-whitespace       trailing whitespace on lines
+  ── Convention ──
+  LMC009  C  variable-naming           variables should use snake_case
+  LMC010  C  filename-naming           .lm filename should be snake_case
+  LMC011  C  leading-blank-lines       file starts with blank lines
+  ── Refactor ──
+  LMR003  R  output-format-hint        use -> Type[Model], not inline schemas
+  LMR012  R  inline-pydantic-model     large projects: extract models to models/
+  LMR013  R  long-script               script is very long (>5000 chars)
 """
 from __future__ import annotations
 
@@ -17,6 +30,8 @@ from lamia.interpreter.human.parser import parse_hu_file
 from lamia.lint.base import BaseLinter, LintRule, LintViolation, LintResult, Severity
 
 _GROWTH_RATIO = 2.0
+
+# ── Rules ───────────────────────────────────────────────────────────────────
 
 EXCESSIVE_GROWTH = LintRule(
     code="LMW001",
@@ -49,12 +64,112 @@ OUTPUT_FORMAT_HINT = LintRule(
     ),
 )
 
+TAB_INDENTATION = LintRule(
+    code="LMW005",
+    severity=Severity.Warning,
+    name="tab-indentation",
+    description="Use 4 spaces for indentation, not tabs (PEP 8)",
+    pattern=re.compile(r"^\t+", re.MULTILINE),
+)
+
+POSITIONAL_HU_ARGS = LintRule(
+    code="LMW006",
+    severity=Severity.Warning,
+    name="positional-hu-args",
+    description="Call to %s() uses positional arguments -- .hu calls require keyword arguments",
+)
+
+EMPTY_FILE = LintRule(
+    code="LMW007",
+    severity=Severity.Warning,
+    name="empty-file",
+    description=".lm file has no meaningful content",
+)
+
+TRAILING_WHITESPACE = LintRule(
+    code="LMW008",
+    severity=Severity.Warning,
+    name="trailing-whitespace",
+    description="Line has trailing whitespace",
+    pattern=re.compile(r"[ \t]+$", re.MULTILINE),
+)
+
+VARIABLE_NAMING = LintRule(
+    code="LMC009",
+    severity=Severity.Convention,
+    name="variable-naming",
+    description="Variable '%s' should use snake_case (PEP 8)",
+)
+
+FILENAME_NAMING = LintRule(
+    code="LMC010",
+    severity=Severity.Convention,
+    name="filename-naming",
+    description=".lm filename '%s' should be snake_case (e.g. '%s')",
+)
+
+LEADING_BLANK_LINES = LintRule(
+    code="LMC011",
+    severity=Severity.Convention,
+    name="leading-blank-lines",
+    description="File starts with blank lines -- code should begin on line 1",
+    pattern=re.compile(r"\A\s*\n"),
+)
+
+INLINE_PYDANTIC_MODEL = LintRule(
+    code="LMR012",
+    severity=Severity.Refactor,
+    name="inline-pydantic-model",
+    description=(
+        "Pydantic model '%s' defined inline -- for larger projects, "
+        "extract shared models to a models/ directory"
+    ),
+)
+
+LONG_SCRIPT = LintRule(
+    code="LMR013",
+    severity=Severity.Refactor,
+    name="long-script",
+    description=(
+        "Script is %d chars -- consider splitting into focused sub-scripts "
+        "or moving orchestration to separate pipeline .lm files"
+    ),
+)
+
+_LONG_SCRIPT_THRESHOLD = 5000
+
+ALL_RULES = [
+    MISSING_REQUIRED_PARAMS,
+    EXCESSIVE_GROWTH, TAB_INDENTATION, POSITIONAL_HU_ARGS,
+    EMPTY_FILE, TRAILING_WHITESPACE,
+    VARIABLE_NAMING, FILENAME_NAMING, LEADING_BLANK_LINES,
+    OUTPUT_FORMAT_HINT, INLINE_PYDANTIC_MODEL, LONG_SCRIPT,
+]
+
 _HU_CALL_RE = re.compile(
     r'(\w+)\s*\(([^)]*)\)\s*(?:->|$)',
     re.MULTILINE,
 )
 
 _KWARG_RE = re.compile(r'(\w+)\s*=')
+
+_POSITIONAL_ARG_RE = re.compile(
+    r"""(?:^|[^=])\s*(?:"[^"]*"|'[^']*'|\d+|True|False|None|\w+(?:\.\w+)*)\s*(?:,|\))""",
+)
+
+_ASSIGNMENT_RE = re.compile(
+    r'^([A-Za-z_]\w*)\s*=\s*(?!.*class\b)',
+    re.MULTILINE,
+)
+
+_SNAKE_CASE_RE = re.compile(r'^[a-z_][a-z0-9_]*$')
+_PASCAL_CASE_RE = re.compile(r'^[A-Z][a-zA-Z0-9]*$')
+_FILENAME_SNAKE_RE = re.compile(r'^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$')
+
+_PYDANTIC_MODEL_RE = re.compile(
+    r'^class\s+(\w+)\s*\(\s*(?:BaseModel|Base)\s*\)',
+    re.MULTILINE,
+)
 
 
 def _extract_call_kwargs(args_text: str) -> set[str]:
@@ -84,16 +199,75 @@ def _parse_hu_params(hu_path: Path) -> tuple[set[str], set[str]]:
         return set(), set()
 
 
+def _has_positional_args(args_text: str) -> bool:
+    """Check if a function call's args string has non-keyword arguments."""
+    args_text = args_text.strip()
+    if not args_text:
+        return False
+    for arg in _split_args(args_text):
+        arg = arg.strip()
+        if not arg:
+            continue
+        if '=' not in arg or arg.startswith('"') or arg.startswith("'"):
+            if not re.match(r'^\w+\s*=', arg):
+                return True
+    return False
+
+
+def _split_args(args_text: str) -> list[str]:
+    """Split function arguments respecting nested parens/brackets/quotes."""
+    args: list[str] = []
+    depth = 0
+    current: list[str] = []
+    in_str: Optional[str] = None
+    for ch in args_text:
+        if in_str:
+            current.append(ch)
+            if ch == in_str:
+                in_str = None
+            continue
+        if ch in ('"', "'"):
+            in_str = ch
+            current.append(ch)
+        elif ch in ('(', '[', '{'):
+            depth += 1
+            current.append(ch)
+        elif ch in (')', ']', '}'):
+            depth -= 1
+            current.append(ch)
+        elif ch == ',' and depth == 0:
+            args.append(''.join(current))
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        args.append(''.join(current))
+    return args
+
+
 class LmLinter(BaseLinter):
     """Linter for .lm (Lamia script) files."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.rules = [EXCESSIVE_GROWTH, MISSING_REQUIRED_PARAMS, OUTPUT_FORMAT_HINT]
+        self.rules = list(ALL_RULES)
 
-    def lint(self, content: str, original: Optional[str] = None, cwd: Optional[str] = None) -> LintResult:
+    def lint(
+        self,
+        content: str,
+        original: Optional[str] = None,
+        cwd: Optional[str] = None,
+        filepath: Optional[str] = None,
+    ) -> LintResult:
         violations: list[LintViolation] = []
 
+        # ── Empty file ──────────────────────────────────────────────────
+        if not content.strip():
+            violations.append(LintViolation(
+                rule=EMPTY_FILE, line=0, message=EMPTY_FILE.description,
+            ))
+
+        # ── Excessive growth ────────────────────────────────────────────
         if original is not None and len(original) > 0:
             ratio = len(content) / len(original)
             if ratio > _GROWTH_RATIO:
@@ -102,14 +276,84 @@ class LmLinter(BaseLinter):
                     message=f"Content grew {ratio:.1f}x ({len(original)} -> {len(content)} chars)",
                 ))
 
-        for m in OUTPUT_FORMAT_HINT.pattern.finditer(content):
-            lineno = content[:m.start()].count("\n") + 1
+        # ── Pattern-based rules ─────────────────────────────────────────
+        if OUTPUT_FORMAT_HINT.pattern:
+            for m in OUTPUT_FORMAT_HINT.pattern.finditer(content):
+                lineno = content[:m.start()].count("\n") + 1
+                violations.append(LintViolation(
+                    rule=OUTPUT_FORMAT_HINT, line=lineno,
+                    message=OUTPUT_FORMAT_HINT.description,
+                    snippet=m.group().strip()[:60],
+                ))
+
+        if TAB_INDENTATION.pattern:
+            tab_lines = list(TAB_INDENTATION.pattern.finditer(content))
+            if tab_lines:
+                first_line = content[:tab_lines[0].start()].count("\n") + 1
+                violations.append(LintViolation(
+                    rule=TAB_INDENTATION, line=first_line,
+                    message=f"{len(tab_lines)} line(s) use tab indentation",
+                ))
+
+        if TRAILING_WHITESPACE.pattern:
+            count = len(list(TRAILING_WHITESPACE.pattern.finditer(content)))
+            if count:
+                violations.append(LintViolation(
+                    rule=TRAILING_WHITESPACE, line=0,
+                    message=f"{count} line(s) have trailing whitespace",
+                ))
+
+        if LEADING_BLANK_LINES.pattern and LEADING_BLANK_LINES.pattern.match(content):
             violations.append(LintViolation(
-                rule=OUTPUT_FORMAT_HINT, line=lineno,
-                message=OUTPUT_FORMAT_HINT.description,
-                snippet=m.group().strip()[:60],
+                rule=LEADING_BLANK_LINES, line=1,
+                message=LEADING_BLANK_LINES.description,
             ))
 
+        # ── Variable naming ─────────────────────────────────────────────
+        for m in _ASSIGNMENT_RE.finditer(content):
+            var_name = m.group(1)
+            if var_name.startswith('_'):
+                continue
+            if _PASCAL_CASE_RE.match(var_name):
+                continue
+            if not _SNAKE_CASE_RE.match(var_name):
+                lineno = content[:m.start()].count("\n") + 1
+                violations.append(LintViolation(
+                    rule=VARIABLE_NAMING, line=lineno,
+                    message=VARIABLE_NAMING.description % var_name,
+                    snippet=m.group()[:60],
+                ))
+
+        # ── Inline Pydantic models ──────────────────────────────────────
+        model_matches = list(_PYDANTIC_MODEL_RE.finditer(content))
+        if len(model_matches) > 2:
+            for m in model_matches:
+                lineno = content[:m.start()].count("\n") + 1
+                violations.append(LintViolation(
+                    rule=INLINE_PYDANTIC_MODEL, line=lineno,
+                    message=INLINE_PYDANTIC_MODEL.description % m.group(1),
+                    snippet=m.group()[:60],
+                ))
+
+        # ── Long script ─────────────────────────────────────────────────
+        if len(content) > _LONG_SCRIPT_THRESHOLD:
+            violations.append(LintViolation(
+                rule=LONG_SCRIPT, line=0,
+                message=LONG_SCRIPT.description % len(content),
+            ))
+
+        # ── Filename naming ─────────────────────────────────────────────
+        if filepath:
+            stem = Path(filepath).stem
+            if not _FILENAME_SNAKE_RE.match(stem):
+                suggested = re.sub(r'(?<=[a-z0-9])([A-Z])', r'_\1', stem)
+                suggested = re.sub(r'[-\s]+', '_', suggested).lower()
+                violations.append(LintViolation(
+                    rule=FILENAME_NAMING, line=0,
+                    message=FILENAME_NAMING.description % (stem + ".lm", suggested + ".lm"),
+                ))
+
+        # ── Cross-file checks (require cwd) ─────────────────────────────
         if cwd:
             hu_files = _find_hu_files(cwd)
             for m in _HU_CALL_RE.finditer(content):
@@ -117,20 +361,28 @@ class LmLinter(BaseLinter):
                 if func_name not in hu_files:
                     continue
                 lineno = content[:m.start()].count("\n") + 1
+                args_text = m.group(2)
+
                 all_params, required = _parse_hu_params(hu_files[func_name])
-                if not all_params:
-                    continue
-                passed = _extract_call_kwargs(m.group(2))
-                missing = required - passed
-                if missing:
+                if all_params:
+                    passed = _extract_call_kwargs(args_text)
+                    missing = required - passed
+                    if missing:
+                        violations.append(LintViolation(
+                            rule=MISSING_REQUIRED_PARAMS, line=lineno,
+                            message=(
+                                f"{func_name}() missing required params: "
+                                f"{', '.join(sorted(missing))}. "
+                                f"Expected: {', '.join(sorted(all_params))}"
+                            ),
+                            snippet=m.group(0),
+                        ))
+
+                if _has_positional_args(args_text):
                     violations.append(LintViolation(
-                        rule=MISSING_REQUIRED_PARAMS, line=lineno,
-                        message=(
-                            f"{func_name}() missing required params: "
-                            f"{', '.join(sorted(missing))}. "
-                            f"Expected: {', '.join(sorted(all_params))}"
-                        ),
-                        snippet=m.group(0),
+                        rule=POSITIONAL_HU_ARGS, line=lineno,
+                        message=POSITIONAL_HU_ARGS.description % func_name,
+                        snippet=m.group(0)[:60],
                     ))
 
         return LintResult(violations=violations)
