@@ -28,6 +28,7 @@ Rule index (code format: HU{severity}{NNN}, sorted by severity):
   HUW017  W  too-many-params          >10 {param} placeholders
   HUW021  W  empty-file               .hu file has no content
   HUW022  W  trailing-whitespace      trailing whitespace on lines
+  HUW029  W  example-output-block    embedded example outputs belong in Lamia types
   ── Convention ──
   HUC020  C  param-naming             params should use snake_case
   HUC023  C  short-param-name         single-char param names are unclear
@@ -123,8 +124,8 @@ MD_CODE_FENCE = LintRule(
     code="HUW008",
     severity=Severity.Warning,
     name="markdown-code-fence",
-    description="Code fences with language tags (```python) are markdown formatting",
-    pattern=re.compile(r"^```[a-zA-Z]", re.MULTILINE),
+    description="Code fences (```) are markdown formatting -- .hu files are plain text",
+    pattern=re.compile(r"^```", re.MULTILINE),
 )
 
 MD_BLOCKQUOTE = LintRule(
@@ -235,13 +236,39 @@ OUTPUT_FORMAT_HINT = LintRule(
         "Lamia has built-in return type validation (JSON, HTML, YAML, XML, CSV, Markdown) "
         "-- define a Pydantic model and use -> Type[Model] on the call site"
     ),
-    pattern=re.compile(
+)
+_OUTPUT_FORMAT_PATTERNS = [
+    # "Output JSON:", "**Response Format:**", "Return Type:", "Expected Schema:"
+    re.compile(
         r"(?:^|\n)\s*\*{0,2}(?:output|response|return|expected)\s+"
         r"(?:json|format|schema|structure|type)"
         r"\s*:?\s*\*{0,2}\s*:",
         re.IGNORECASE,
     ),
-)
+    # "output ... as JSON", "respond with JSON", "return a JSON object"
+    re.compile(
+        r"(?:output|respond|reply|return|produce|generate)\s+.*?\b"
+        r"(?:as|with|in|a)\s+(?:json|yaml|xml|csv)\b",
+        re.IGNORECASE,
+    ),
+    # "Example output:", "Example response:", "Sample output:"
+    re.compile(
+        r"(?:^|\n)\s*\*{0,2}(?:example|sample)\s+"
+        r"(?:output|response|result|json)"
+        r"\s*:?\s*\*{0,2}\s*:",
+        re.IGNORECASE,
+    ),
+    # "Your output should", "your response must", "format your response as"
+    re.compile(
+        r"(?:your|the)\s+(?:output|response)\s+(?:should|must|will|format)",
+        re.IGNORECASE,
+    ),
+    # "Output:" alone at start of line (common LLM pattern)
+    re.compile(
+        r"^(?:\*{2})?Output(?:\s+Format)?(?:\*{2})?:\s*$",
+        re.MULTILINE | re.IGNORECASE,
+    ),
+]
 
 PARAM_NAMING = LintRule(
     code="HUC020",
@@ -294,6 +321,25 @@ _GENERIC_HU_NAMES = {
     "worker", "task", "handler", "processor", "default",
 }
 
+EXAMPLE_OUTPUT_BLOCK = LintRule(
+    code="HUW029",
+    severity=Severity.Warning,
+    name="example-output-block",
+    description=(
+        "Don't embed example outputs in .hu files. "
+        ".hu prompts should be output-agnostic -- Lamia handles output "
+        "format validation via -> Type[Model] on the call site"
+    ),
+)
+# Heuristic: a standalone JSON object/array block (3+ lines with "key": patterns)
+_EXAMPLE_JSON_BLOCK_RE = re.compile(
+    r"^\s*[\[{]\s*$\n"
+    r"(?:.*\n){1,}?"
+    r"^\s*[\]}]\s*$",
+    re.MULTILINE,
+)
+_JSON_KEY_RE = re.compile(r'"[a-z_A-Z][a-z_A-Z0-9]*"\s*:')
+
 LONG_PROMPT = LintRule(
     code="HUR027",
     severity=Severity.Refactor,
@@ -317,6 +363,7 @@ ALL_RULES = [
     MD_LINK, MD_IMAGE, MD_CODE_FENCE, MD_BLOCKQUOTE, MD_TABLE,
     MD_HORIZONTAL_RULE, HTML_TAG, EMOJI, MD_INLINE_CODE, MD_TASK_LIST,
     EXCESSIVE_GROWTH, TOO_MANY_PARAMS, EMPTY_FILE, TRAILING_WHITESPACE,
+    EXAMPLE_OUTPUT_BLOCK,
     PARAM_NAMING, SHORT_PARAM_NAME, VERBOSE_PARAM_NAME,
     FILENAME_NAMING, LEADING_BLANK_LINES, GENERIC_FILENAME,
     OUTPUT_FORMAT_HINT, LONG_PROMPT,
@@ -502,5 +549,26 @@ class HuLinter(BaseLinter):
                 rule=LONG_PROMPT, line=0,
                 message=LONG_PROMPT.description % len(content),
             ))
+
+        # ── Output format hints (multi-pattern) ───────────────────────
+        for pat in _OUTPUT_FORMAT_PATTERNS:
+            for m in pat.finditer(content):
+                lineno = content[:m.start()].count("\n") + 1
+                violations.append(LintViolation(
+                    rule=OUTPUT_FORMAT_HINT, line=lineno,
+                    message=OUTPUT_FORMAT_HINT.description,
+                    snippet=m.group().strip()[:60],
+                ))
+
+        # ── Example output blocks ─────────────────────────────────────
+        for m in _EXAMPLE_JSON_BLOCK_RE.finditer(content):
+            block = m.group()
+            if len(_JSON_KEY_RE.findall(block)) >= 2:
+                lineno = content[:m.start()].count("\n") + 1
+                violations.append(LintViolation(
+                    rule=EXAMPLE_OUTPUT_BLOCK, line=lineno,
+                    message=EXAMPLE_OUTPUT_BLOCK.description,
+                    snippet=block.split("\n")[0].strip()[:60],
+                ))
 
         return LintResult(violations=violations)
