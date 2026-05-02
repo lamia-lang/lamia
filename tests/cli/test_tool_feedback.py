@@ -73,6 +73,21 @@ class TestEntityReferenceFeedbackWritePatch:
         feedback = entity_reference_feedback(hu, project_dir, FileAction.WRITE)
         assert feedback == ""
 
+    def test_write_hu_nested_call_arg_does_not_fake_missing_params(self, project_dir):
+        hu = _write(project_dir, "team/developer.hu", "{specs} {prd_content} {existing_code} {compile_errors}")
+        _write(
+            project_dir,
+            "orchestrator.lm",
+            (
+                "impl = developer(specs=s, prd_content=p, "
+                "existing_code=read_project_files(project_dir), "
+                'compile_errors="(none)") -> JSON[Implementation]'
+            ),
+        )
+
+        feedback = entity_reference_feedback(hu, project_dir, FileAction.WRITE)
+        assert feedback == ""
+
     def test_write_py_no_feedback(self, project_dir):
         py = _write(project_dir, "utils.py", "def foo(): pass")
         feedback = entity_reference_feedback(py, project_dir, FileAction.WRITE)

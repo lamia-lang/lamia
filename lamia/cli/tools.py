@@ -675,7 +675,6 @@ def _linter_feedback(
     Returns (feedback_message, violations).  Callers inspect violations to
     decide blocking policy (e.g. count errors, treat warnings as errors, etc.).
     """
-
     linter = _LINTERS.get(resolved.suffix)
     if not linter:
         return "", []
@@ -707,6 +706,77 @@ def _read_line_from_file(cwd: str, relpath: str, lineno: int) -> Optional[str]:
     return None
 
 
+def _find_matching_rparen(text: str, open_idx: int) -> int:
+    """Return index of matching ')' for '(' at open_idx, or -1."""
+    depth = 1
+    in_str: Optional[str] = None
+    escaped = False
+    for i in range(open_idx + 1, len(text)):
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped = True
+                continue
+            if ch == in_str:
+                in_str = None
+            continue
+
+        if ch in {'"', "'"}:
+            in_str = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _split_top_level_args(args_text: str) -> list[str]:
+    """Split argument list by commas while respecting nesting and strings."""
+    args: list[str] = []
+    current: list[str] = []
+    in_str: Optional[str] = None
+    escaped = False
+    depth = 0
+
+    for ch in args_text:
+        if in_str:
+            current.append(ch)
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped = True
+                continue
+            if ch == in_str:
+                in_str = None
+            continue
+
+        if ch in {'"', "'"}:
+            in_str = ch
+            current.append(ch)
+        elif ch in "([{":
+            depth += 1
+            current.append(ch)
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+            current.append(ch)
+        elif ch == "," and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+
+    tail = "".join(current).strip()
+    if tail:
+        args.append(tail)
+    return args
+
+
 def _check_caller_params(stem: str, required: frozenset[str], ref: FileReference, cwd: str) -> Optional[str]:
     """Check if a .lm caller passes all required params. Returns warning or None."""
     if not ref.file.endswith(".lm"):
@@ -718,14 +788,14 @@ def _check_caller_params(stem: str, required: frozenset[str], ref: FileReference
     start = line.find(marker)
     if start == -1:
         return None
-    args_start = start + len(marker)
-    args_end = line.find(")", args_start)
-    if args_end == -1:
+    open_idx = start + len(stem)
+    args_end = _find_matching_rparen(line, open_idx)
+    if args_end < 0:
         return None
 
-    args = line[args_start:args_end]
+    args = line[open_idx + 1:args_end]
     passed: set[str] = set()
-    for part in args.split(","):
+    for part in _split_top_level_args(args):
         part = part.strip()
         if "=" not in part:
             continue
