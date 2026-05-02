@@ -643,16 +643,40 @@ _LINTERS = {
 }
 
 
-def _linter_feedback(resolved: Path, content: str, original: Optional[str], cwd: str = ".") -> str:
-    """Post-write lint feedback. Returns empty string if clean or no linter."""
+def _blocking_lint_suffix(violations: list) -> str:
+    """Build a blocking suffix if violations warrant it.
+
+    Centralises the policy for what counts as a blocking error so it can be
+    adjusted in one place (e.g. treat warnings as blocking too).
+    """
+    from lamia.lint.base import Severity
+
+    blocking = [v for v in violations if v.rule.severity == Severity.Error]
+    if not blocking:
+        return ""
+    return (
+        f"\n\nThe file was saved, but it has {len(blocking)} ERROR(s) that MUST be "
+        "fixed now with patch_file before you do anything else."
+    )
+
+
+def _linter_feedback(
+    resolved: Path, content: str, original: Optional[str], cwd: str = "."
+) -> tuple[str, list]:
+    """Post-write lint feedback.
+
+    Returns (feedback_message, violations).  Callers inspect violations to
+    decide blocking policy (e.g. count errors, treat warnings as errors, etc.).
+    """
+
     linter = _LINTERS.get(resolved.suffix)
     if not linter:
-        return ""
+        return "", []
     result = linter.lint(content, original, cwd=cwd, filepath=str(resolved))
     feedback = result.feedback_message()
     if feedback:
         logger.debug("Lint feedback for %s: %d issues", resolved, len(result.violations))
-    return feedback
+    return feedback, result.violations
 
 
 def _external_refs(resolved: Path, cwd: str) -> list[FileReference]:
@@ -811,7 +835,7 @@ def _write_file(filepath: str, content: str, cwd: str) -> str:
     if original is not None:
         msg += " (Tip: prefer patch_file for edits — it's safer and uses fewer tokens.)"
 
-    lint = _linter_feedback(resolved, content, original, cwd)
+    lint, violations = _linter_feedback(resolved, content, original, cwd)
     if lint:
         msg += "\n" + lint
 
@@ -819,6 +843,7 @@ def _write_file(filepath: str, content: str, cwd: str) -> str:
     if refs:
         msg += "\n" + refs
 
+    msg += _blocking_lint_suffix(violations)
     return msg
 
 
@@ -874,7 +899,7 @@ def _patch_file(filepath: str, old_text: str, new_text: str, cwd: str) -> str:
 
     msg = f"Patched: {resolved} ({len(old_text)} chars \u2192 {len(new_text)} chars)"
 
-    lint = _linter_feedback(resolved, patched, original, cwd)
+    lint, violations = _linter_feedback(resolved, patched, original, cwd)
     if lint:
         msg += "\n" + lint
 
@@ -882,6 +907,7 @@ def _patch_file(filepath: str, old_text: str, new_text: str, cwd: str) -> str:
     if refs:
         msg += "\n" + refs
 
+    msg += _blocking_lint_suffix(violations)
     return msg
 
 

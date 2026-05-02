@@ -73,14 +73,20 @@ class LintResult:
             self.violations,
             key=lambda v: (v.rule.severity.order, v.line),
         )
-        lines = [f"LINT ({len(sorted_violations)} issues):"]
-        for v in sorted_violations:
-            loc = f"line {v.line}" if v.line > 0 else "file"
-            lines.append(f"  [{v.rule.code}] {loc}: {v.message}")
-        lines.append(
-            "If any of these are intentional (e.g. markdown content that is part "
-            "of the prompt), you can leave them. Otherwise fix with patch_file."
-        )
+        errors = [v for v in sorted_violations if v.rule.severity == Severity.Error]
+        others = [v for v in sorted_violations if v.rule.severity != Severity.Error]
+
+        lines: list[str] = []
+        if errors:
+            lines.append(f"ERRORS ({len(errors)} -- you MUST fix these with patch_file):")
+            for v in errors:
+                loc = f"line {v.line}" if v.line > 0 else "file"
+                lines.append(f"  [{v.rule.code}] {loc}: {v.message}")
+        if others:
+            lines.append(f"WARNINGS ({len(others)} -- fix unless intentional):")
+            for v in others:
+                loc = f"line {v.line}" if v.line > 0 else "file"
+                lines.append(f"  [{v.rule.code}] {loc}: {v.message}")
         return "\n".join(lines)
 
 
