@@ -108,9 +108,20 @@ TOPIC_TO_FILE = {
     "eval": "user-guide/evaluation.md",
     "selector": "validation/selector-usage-guide.md",
     "debugger": "advanced/debugger.md",
+    "hu-style-guide": "style-guides/hu-style.md",
+    "lm-style-guide": "style-guides/lm-style.md",
+    "project-structure": "style-guides/project-structure.md"
 }
 
 _DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))
+
+_HU_FILE_HINT = (
+    "IMPORTANT for .hu files: use PLAIN TEXT only (no markdown -- "
+    "no **bold**, *italic*, # headers, `backticks`, or HTML), "
+    "parameters use single braces {param}, NOT double {{param}} which makes them literals, "
+    "do NOT include output structure information and example outputs (JSON, YAML, code blocks) -- "
+    ".hu files are output agnostic and the caller specifies the return type."
+)
 
 TOOL_DEFINITIONS = [
     {
@@ -169,10 +180,7 @@ TOOL_DEFINITIONS = [
     {
         "name": ToolName.WRITE_FILE.value,
         "description": (
-            "Create or overwrite a file with the given content. "
-            "IMPORTANT for .hu files: use PLAIN TEXT only (no markdown -- no **bold**, "
-            "*italic*, # headers, `backticks`, or HTML). "
-            "Parameters use single braces {param}, NOT double {{param}} which makes them literals."
+            "Create or overwrite a file with the given content. " + _HU_FILE_HINT
         ),
         "parameters": {
             "type": "object",
@@ -194,8 +202,7 @@ TOOL_DEFINITIONS = [
         "description": (
             "Edit an existing file by replacing old_text with new_text. "
             "Preferred over write_file for modifications -- only express the change, not the whole file. "
-            "IMPORTANT for .hu files: use PLAIN TEXT only (no markdown formatting). "
-            "Parameters use single braces {param}, NOT double {{param}}."
+            + _HU_FILE_HINT
         ),
         "parameters": {
             "type": "object",

@@ -339,6 +339,18 @@ _EXAMPLE_JSON_BLOCK_RE = re.compile(
     re.MULTILINE,
 )
 _JSON_KEY_RE = re.compile(r'"[a-z_A-Z][a-z_A-Z0-9]*"\s*:')
+# YAML example blocks: 3+ consecutive lines with unquoted key: value patterns
+_EXAMPLE_YAML_BLOCK_RE = re.compile(
+    r"(?:^[a-z_][a-z_0-9]*:\s+\S.*$\n){3,}",
+    re.MULTILINE,
+)
+# XML example blocks: opening/closing tag pairs spanning multiple lines
+_EXAMPLE_XML_BLOCK_RE = re.compile(
+    r"^\s*<([a-z_][a-z_0-9]*)(?:\s[^>]*)?>.*\n"
+    r"(?:.*\n){1,}?"
+    r"^\s*</\1\s*>",
+    re.MULTILINE | re.IGNORECASE,
+)
 
 LONG_PROMPT = LintRule(
     code="HUR027",
@@ -560,7 +572,7 @@ class HuLinter(BaseLinter):
                     snippet=m.group().strip()[:60],
                 ))
 
-        # ── Example output blocks ─────────────────────────────────────
+        # ── Example output blocks (JSON, YAML, XML) ─────────────────
         for m in _EXAMPLE_JSON_BLOCK_RE.finditer(content):
             block = m.group()
             if len(_JSON_KEY_RE.findall(block)) >= 2:
@@ -570,5 +582,19 @@ class HuLinter(BaseLinter):
                     message=EXAMPLE_OUTPUT_BLOCK.description,
                     snippet=block.split("\n")[0].strip()[:60],
                 ))
+        for m in _EXAMPLE_YAML_BLOCK_RE.finditer(content):
+            lineno = content[:m.start()].count("\n") + 1
+            violations.append(LintViolation(
+                rule=EXAMPLE_OUTPUT_BLOCK, line=lineno,
+                message=EXAMPLE_OUTPUT_BLOCK.description,
+                snippet=m.group().split("\n")[0].strip()[:60],
+            ))
+        for m in _EXAMPLE_XML_BLOCK_RE.finditer(content):
+            lineno = content[:m.start()].count("\n") + 1
+            violations.append(LintViolation(
+                rule=EXAMPLE_OUTPUT_BLOCK, line=lineno,
+                message=EXAMPLE_OUTPUT_BLOCK.description,
+                snippet=m.group().split("\n")[0].strip()[:60],
+            ))
 
         return LintResult(violations=violations)

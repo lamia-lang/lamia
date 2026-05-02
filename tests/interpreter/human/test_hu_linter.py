@@ -895,6 +895,91 @@ class TestHUW029ExampleOutputBlock:
         violations = _violations_for_code(content, "HUW029")
         assert len(violations) >= 2
 
+    # ── YAML example detection ──
+
+    def test_yaml_example_block_triggers(self):
+        """YAML-style key: value blocks should be caught."""
+        content = (
+            "Provide your analysis.\n\n"
+            "status: PASS\n"
+            "score: 8\n"
+            "issues: none\n"
+        )
+        violations = _violations_for_code(content, "HUW029")
+        assert len(violations) >= 1
+
+    def test_yaml_nested_example_triggers(self):
+        """Nested YAML example output."""
+        content = (
+            "Return assessment.\n\n"
+            "status: FAIL\n"
+            "score: 3\n"
+            "issues:\n"
+            "  - severity: HIGH\n"
+            "    description: SQL injection\n"
+            "deployment_ready: false\n"
+        )
+        violations = _violations_for_code(content, "HUW029")
+        assert len(violations) >= 1
+
+    def test_yaml_single_key_no_trigger(self):
+        """A single key: value line is normal prose, not an example."""
+        content = "Priority: high\nDo the task."
+        violations = _violations_for_code(content, "HUW029")
+        assert violations == []
+
+    def test_yaml_two_keys_no_trigger(self):
+        """Only 2 consecutive key: value lines -- not enough for an example."""
+        content = "status: ok\nscore: 5\nSome other text."
+        violations = _violations_for_code(content, "HUW029")
+        assert violations == []
+
+    def test_llm_yaml_config_example(self):
+        """LLMs embed YAML config examples in prompts."""
+        content = (
+            "Generate a config file.\n\n"
+            "name: my_app\n"
+            "version: 1.0\n"
+            "database: postgres\n"
+            "port: 5432\n"
+        )
+        violations = _violations_for_code(content, "HUW029")
+        assert len(violations) >= 1
+
+    # ── XML example detection ──
+
+    def test_xml_example_block_triggers(self):
+        """Multi-line XML example blocks should be caught."""
+        content = (
+            "Return your analysis.\n\n"
+            "<response>\n"
+            "  <status>PASS</status>\n"
+            "  <score>8</score>\n"
+            "</response>\n"
+        )
+        violations = _violations_for_code(content, "HUW029")
+        assert len(violations) >= 1
+
+    def test_xml_nested_example_triggers(self):
+        """Nested XML example output."""
+        content = (
+            "Provide report.\n\n"
+            "<report>\n"
+            "  <summary>All tests pass</summary>\n"
+            "  <issues>\n"
+            "    <issue severity='high'>Memory leak</issue>\n"
+            "  </issues>\n"
+            "</report>\n"
+        )
+        violations = _violations_for_code(content, "HUW029")
+        assert len(violations) >= 1
+
+    def test_single_xml_tag_no_trigger(self):
+        """A single HTML-like tag is caught by HUW012, not HUW029."""
+        content = "Use the <code>example</code> tag."
+        violations = _violations_for_code(content, "HUW029")
+        assert violations == []
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # HUR018 — output-format-hint (expanded patterns)
