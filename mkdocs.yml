@@ -90,6 +90,7 @@ nav:
   - Getting Started:
     - Installation: getting-started/installation.md
     - Configuration: getting-started/configuration.md
+    - Writing scripts with Lamia: getting-started/index.md
   - User Guide:
     - .hu file Syntax: user-guide/hu-syntax.md
     - .lm file Syntax: user-guide/lm-syntax.md
@@ -97,6 +98,8 @@ nav:
     - Web Automation: user-guide/web-automation.md
     - Validation: user-guide/validation.md
     - Model Evaluation: user-guide/evaluation.md
+    - Using Lamia in Python: user-guide/python-library.md
+    - Pydantic Models Guide: user-guide/pydantic-models.md
   - Style Guides:
     - "LSG-1: .hu Files": style-guides/hu-style.md
     - "LSG-2: .lm Files": style-guides/lm-style.md

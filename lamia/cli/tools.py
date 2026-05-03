@@ -88,29 +88,25 @@ def tool_progress_label(tool: str, args: dict) -> str:
 
 TOPIC_TO_FILE = {
     "lm-syntax": "user-guide/lm-syntax.md",
-    "lm": "user-guide/lm-syntax.md",
     ".lm": "user-guide/lm-syntax.md",
     "hu-syntax": "user-guide/hu-syntax.md",
-    "hu": "user-guide/hu-syntax.md",
     ".hu": "user-guide/hu-syntax.md",
     "files-context": "user-guide/files-context.md",
     "files": "user-guide/files-context.md",
-    "file-context": "user-guide/files-context.md",
     "configuration": "getting-started/configuration.md",
-    "config": "getting-started/configuration.md",
     "config.yaml": "getting-started/configuration.md",
     "installation": "getting-started/installation.md",
-    "install": "getting-started/installation.md",
     "validation": "user-guide/validation.md",
     "web-automation": "user-guide/web-automation.md",
-    "web": "user-guide/web-automation.md",
-    "evaluation": "user-guide/evaluation.md",
-    "eval": "user-guide/evaluation.md",
+    "model-evaluation": "user-guide/evaluation.md",
     "selector": "validation/selector-usage-guide.md",
     "debugger": "advanced/debugger.md",
     "hu-style-guide": "style-guides/hu-style.md",
     "lm-style-guide": "style-guides/lm-style.md",
-    "project-structure": "style-guides/project-structure.md"
+    "project-structure": "style-guides/project-structure.md",
+    "getting-started": "getting-started/index.md",
+    "lamia-as-python-library": "user-guide/python-library.md",
+    "pydantic-models": "user-guide/pydantic-models.md",
 }
 
 _DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))
