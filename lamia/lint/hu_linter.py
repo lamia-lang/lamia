@@ -254,8 +254,14 @@ _OUTPUT_FORMAT_PATTERNS = [
     # "Example output:", "Example response:", "Sample output:"
     re.compile(
         r"(?:^|\n)\s*\*{0,2}(?:example|sample)\s+"
-        r"(?:output|response|result|json)"
+        r"(?:output|response|result|format|schema|structure|type|json|yaml|xml|csv|markdown|html|text)"
         r"\s*:?\s*\*{0,2}\s*:",
+        re.IGNORECASE,
+    ),
+    # "Example YAML:", "Sample XML:", "Example CSV:"
+    re.compile(
+        r"(?:^|\n)\s*\*{0,2}(?:example|sample)\s+"
+        r"(?:json|yaml|xml|csv|markdown|html|text)\s*:?\s*\*{0,2}\s*:",
         re.IGNORECASE,
     ),
     # "Your output should", "your response must", "format your response as"
@@ -339,9 +345,9 @@ _EXAMPLE_JSON_BLOCK_RE = re.compile(
     re.MULTILINE,
 )
 _JSON_KEY_RE = re.compile(r'"[a-z_A-Z][a-z_A-Z0-9]*"\s*:')
-# YAML example blocks: 3+ consecutive lines with unquoted key: value patterns
+# YAML-like example blocks: 3+ consecutive key: value lines (top-level or nested)
 _EXAMPLE_YAML_BLOCK_RE = re.compile(
-    r"(?:^[a-z_][a-z_0-9]*:\s+\S.*$\n){3,}",
+    r"(?:^\s*(?:-\s*)?[a-zA-Z_][a-zA-Z_0-9-]*\s*:\s*(?:\S.*)?$\n){3,}",
     re.MULTILINE,
 )
 # XML example blocks: opening/closing tag pairs spanning multiple lines

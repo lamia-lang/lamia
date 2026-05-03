@@ -1054,6 +1054,16 @@ class TestHUR018OutputFormatHint:
         violations = _violations_for_code(content, "HUR018")
         assert len(violations) >= 1
 
+    def test_example_yaml_colon_triggers(self):
+        content = "Example YAML:"
+        violations = _violations_for_code(content, "HUR018")
+        assert len(violations) >= 1
+
+    def test_sample_format_colon_triggers(self):
+        content = "Sample format:"
+        violations = _violations_for_code(content, "HUR018")
+        assert len(violations) >= 1
+
     def test_your_output_should_triggers(self):
         content = "Your output should contain the analysis."
         violations = _violations_for_code(content, "HUR018")
@@ -1612,6 +1622,19 @@ class TestRealWorldLLMGenerated:
         )
         codes = _violation_codes(content)
         assert "HUR018" in codes
+
+    def test_llm_example_yaml_label(self):
+        """LLMs write 'Example YAML:' before structured examples."""
+        content = (
+            "Generate config from {requirements}.\n\n"
+            "Example YAML:\n"
+            "name: app\n"
+            "version: 1.0\n"
+            "port: 8080\n"
+        )
+        codes = _violation_codes(content)
+        assert "HUR018" in codes
+        assert "HUW029" in codes
 
     def test_llm_inline_code_everywhere(self):
         """LLMs wrap everything in backticks."""
