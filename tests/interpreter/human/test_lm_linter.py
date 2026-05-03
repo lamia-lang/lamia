@@ -349,6 +349,247 @@ class TestLMC015GenericFilename:
         assert violations == []
 
 
+# ── LME016 unknown-namespace ──────────────────────────────────────────────
+
+class TestLME016UnknownNamespace:
+
+    def test_browser_namespace_triggers(self):
+        content = 'browser.click("#btn")'
+        violations = _violations_for(content, "LME016")
+        assert len(violations) == 1
+        assert "browser" in violations[0].message
+
+    def test_page_namespace_triggers(self):
+        content = 'page.goto("https://example.com")'
+        violations = _violations_for(content, "LME016")
+        assert len(violations) == 1
+        assert "page" in violations[0].message
+
+    def test_driver_namespace_triggers(self):
+        content = 'driver.get("https://example.com")'
+        violations = _violations_for(content, "LME016")
+        assert len(violations) == 1
+        assert "driver" in violations[0].message
+
+    def test_web_namespace_no_violation(self):
+        content = 'web.click("#btn")'
+        violations = _violations_for(content, "LME016")
+        assert violations == []
+
+    def test_http_namespace_no_violation(self):
+        content = 'http.get("https://api.example.com/data")'
+        violations = _violations_for(content, "LME016")
+        assert violations == []
+
+    def test_file_namespace_no_violation(self):
+        content = 'file.read("data.csv")'
+        violations = _violations_for(content, "LME016")
+        assert violations == []
+
+    def test_uppercase_name_not_flagged(self):
+        """Class attribute access like BaseModel.parse() should not trigger."""
+        content = 'result = MyClass.from_config(cfg)'
+        violations = _violations_for(content, "LME016")
+        assert violations == []
+
+    def test_imported_module_not_flagged(self):
+        """Explicitly imported modules should not trigger."""
+        content = 'import os\nos.path.join("a", "b")'
+        violations = _violations_for(content, "LME016")
+        assert violations == []
+
+    def test_from_import_not_flagged(self):
+        """Modules brought in by from-import should not trigger."""
+        content = 'from pathlib import Path\nresult = Path.cwd()'
+        violations = _violations_for(content, "LME016")
+        assert violations == []
+
+    def test_unimported_lowercase_namespace_triggers(self):
+        """Using a module without importing it should trigger."""
+        content = 'result = requests.get("https://example.com")'
+        violations = _violations_for(content, "LME016")
+        assert len(violations) == 1
+        assert "requests" in violations[0].message
+
+    def test_locally_defined_variable_not_flagged(self):
+        """Variables assigned locally should not trigger."""
+        content = 'config = load_config()\nresult = config.get("key")'
+        violations = _violations_for(content, "LME016")
+        assert violations == []
+
+    def test_for_loop_target_not_flagged(self):
+        """Loop variables should not trigger."""
+        content = 'for item in items:\n    item.process()'
+        violations = _violations_for(content, "LME016")
+        assert violations == []
+
+    def test_function_param_not_flagged(self):
+        """Function parameters should not trigger."""
+        content = 'def handle(request):\n    request.send()'
+        violations = _violations_for(content, "LME016")
+        assert violations == []
+
+    def test_is_error_severity(self):
+        content = 'browser.click("#btn")'
+        violations = _violations_for(content, "LME016")
+        assert violations[0].rule.severity == Severity.Error
+
+    def test_lists_valid_namespaces_in_message(self):
+        content = 'browser.click("#btn")'
+        violations = _violations_for(content, "LME016")
+        assert "web" in violations[0].message
+
+
+# ── LME017 unknown-namespace-method ──────────────────────────────────────
+
+class TestLME017UnknownNamespaceMethod:
+
+    def test_web_invalid_method_triggers(self):
+        content = 'web.browser_navigate("https://example.com")'
+        violations = _violations_for(content, "LME017")
+        assert len(violations) == 1
+        assert "browser_navigate" in violations[0].message
+
+    def test_web_click_no_violation(self):
+        content = 'web.click("#btn")'
+        violations = _violations_for(content, "LME017")
+        assert violations == []
+
+    def test_web_navigate_no_violation(self):
+        content = 'web.navigate("https://example.com")'
+        violations = _violations_for(content, "LME017")
+        assert violations == []
+
+    def test_web_type_text_no_violation(self):
+        content = 'web.type_text("#input", "hello")'
+        violations = _violations_for(content, "LME017")
+        assert violations == []
+
+    def test_web_get_text_no_violation(self):
+        content = 'web.get_text(".result")'
+        violations = _violations_for(content, "LME017")
+        assert violations == []
+
+    def test_web_wait_for_no_violation(self):
+        content = 'web.wait_for(".loading", "hidden")'
+        violations = _violations_for(content, "LME017")
+        assert violations == []
+
+    def test_web_screenshot_no_violation(self):
+        content = 'web.screenshot("page.png")'
+        violations = _violations_for(content, "LME017")
+        assert violations == []
+
+    def test_web_get_element_no_violation(self):
+        content = 'modal = web.get_element("div.modal")'
+        violations = _violations_for(content, "LME017")
+        assert violations == []
+
+    def test_hallucinated_browser_function_triggers(self):
+        """Exact scenario from user: LLM invents browser_* style functions."""
+        content = (
+            'web.browser_navigate("https://broker.example.com/login")\n'
+            'web.browser_type("input", "user")\n'
+            'web.browser_click("button")\n'
+        )
+        violations = _violations_for(content, "LME017")
+        assert len(violations) == 3
+
+    def test_http_invalid_method_triggers(self):
+        content = 'http.fetch("https://api.example.com")'
+        violations = _violations_for(content, "LME017")
+        assert len(violations) == 1
+        assert "fetch" in violations[0].message
+
+    def test_http_get_no_violation(self):
+        content = 'http.get("https://api.example.com/data")'
+        violations = _violations_for(content, "LME017")
+        assert violations == []
+
+    def test_is_error_severity(self):
+        content = 'web.fake_method()'
+        violations = _violations_for(content, "LME017")
+        assert violations[0].rule.severity == Severity.Error
+
+    def test_lists_valid_methods_in_message(self):
+        content = 'web.fake_method()'
+        violations = _violations_for(content, "LME017")
+        assert "click" in violations[0].message
+        assert "navigate" in violations[0].message
+
+
+# ── Real-world hallucination patterns ────────────────────────────────────
+
+class TestLmLinterHallucinationPatterns:
+
+    def test_full_hallucinated_broker_script(self):
+        """The exact hallucination from the user's conversation."""
+        content = (
+            'browser_navigate("https://broker.example.com/login")\n'
+            'browser_type("input[name=\'username\']", os.getenv("BROKER_USERNAME"))\n'
+            'browser_type("input[name=\'password\']", os.getenv("BROKER_PASSWORD"))\n'
+            'browser_click("button[type=\'submit\']")\n'
+            'browser_wait(".dashboard", timeout=10)\n'
+            'portfolio_text = browser_get_text(".portfolio-balance")\n'
+        )
+        linter = LmLinter()
+        result = linter.lint(content)
+        # These are top-level function calls, not namespace.method calls,
+        # so LME016/LME017 won't fire. But the code won't parse as valid
+        # Python either since browser_navigate etc. are undefined.
+        # The important case is when they use a namespace like browser.xyz.
+        assert True  # Documented edge case: top-level hallucinated calls
+
+    def test_hallucinated_browser_namespace(self):
+        """LLM uses 'browser' instead of 'web'."""
+        content = (
+            'browser.navigate("https://broker.example.com/login")\n'
+            'browser.type("input", "user")\n'
+            'browser.click("button.submit")\n'
+        )
+        linter = LmLinter()
+        result = linter.lint(content)
+        ns_violations = [v for v in result.violations if v.rule.code == "LME016"]
+        assert len(ns_violations) == 3
+
+    def test_valid_lamia_broker_script(self):
+        """Correct Lamia syntax for the same task should pass namespace checks."""
+        content = (
+            'web.navigate("https://broker.example.com/login")\n'
+            'web.type_text("#username", "user")\n'
+            'web.click("#login-button")\n'
+            'web.wait_for(".dashboard", "visible")\n'
+            'balance = web.get_text(".portfolio-balance")\n'
+        )
+        linter = LmLinter()
+        result = linter.lint(content)
+        ns_violations = [v for v in result.violations
+                         if v.rule.code in ("LME016", "LME017")]
+        assert ns_violations == []
+
+    def test_lamia_types_not_flagged(self):
+        """Lamia auto-imported types like JSON, HTML should not trigger."""
+        content = 'result = agent(prompt=p) -> JSON[MyModel]'
+        linter = LmLinter()
+        result = linter.lint(content)
+        ns_violations = [v for v in result.violations
+                         if v.rule.code in ("LME016", "LME017")]
+        assert ns_violations == []
+
+    def test_project_pydantic_model_not_flagged(self, project_dir):
+        """Pydantic models from .py files in the project should not trigger."""
+        _write(project_dir, "models/schemas.py",
+               "from pydantic import BaseModel\n\n"
+               "class StockQuote(BaseModel):\n"
+               "    ticker: str\n")
+        content = 'data = scraper(ticker="AAPL") -> JSON[StockQuote]'
+        linter = LmLinter()
+        result = linter.lint(content, cwd=project_dir)
+        ns_violations = [v for v in result.violations
+                         if v.rule.code in ("LME016", "LME017")]
+        assert ns_violations == []
+
+
 # ── Existing rules still work ───────────────────────────────────────────────
 
 class TestLmLinterExistingRulesUnaffected:

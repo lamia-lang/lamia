@@ -6,6 +6,8 @@ Rule index (code format: LM{severity}{NNN}, sorted by severity):
   ── Errors (must fix) ──
   LME002  E  missing-required-params   .hu call missing required params
   LME014  E  unknown-hu-kwargs         .hu call passes kwargs the .hu file doesn't accept
+  LME016  E  unknown-namespace         uses a namespace that is not part of Lamia
+  LME017  E  unknown-namespace-method  calls a method that does not exist on a Lamia namespace
   ── Warnings (should fix) ──
   LMW001  W  excessive-growth          content grew >2x original
   LMW005  W  tab-indentation           use 4 spaces, not tabs (PEP 8)
@@ -24,6 +26,8 @@ Rule index (code format: LM{severity}{NNN}, sorted by severity):
 """
 from __future__ import annotations
 
+import ast
+import inspect
 import re
 from pathlib import Path
 from typing import Optional
@@ -155,6 +159,26 @@ GENERIC_FILENAME = LintRule(
     ),
 )
 
+UNKNOWN_NAMESPACE = LintRule(
+    code="LME016",
+    severity=Severity.Error,
+    name="unknown-namespace",
+    description=(
+        "'%s' is not a Lamia namespace. "
+        "Valid namespaces: %s"
+    ),
+)
+
+UNKNOWN_NAMESPACE_METHOD = LintRule(
+    code="LME017",
+    severity=Severity.Error,
+    name="unknown-namespace-method",
+    description=(
+        "'%s.%s()' does not exist. "
+        "Valid methods on '%s': %s"
+    ),
+)
+
 _LONG_SCRIPT_THRESHOLD = 5000
 
 _GENERIC_LM_NAMES = {
@@ -164,6 +188,7 @@ _GENERIC_LM_NAMES = {
 
 ALL_RULES = [
     MISSING_REQUIRED_PARAMS, UNKNOWN_HU_KWARGS,
+    UNKNOWN_NAMESPACE, UNKNOWN_NAMESPACE_METHOD,
     EXCESSIVE_GROWTH, TAB_INDENTATION, POSITIONAL_HU_ARGS,
     EMPTY_FILE, TRAILING_WHITESPACE,
     VARIABLE_NAMING, FILENAME_NAMING, LEADING_BLANK_LINES, GENERIC_FILENAME,
@@ -263,6 +288,247 @@ def _split_args(args_text: str) -> list[str]:
     if current:
         args.append(''.join(current))
     return args
+
+
+def _build_namespace_registry() -> dict[str, set[str]]:
+    """Dynamically discover valid Lamia namespaces and their public methods.
+
+    Collects methods from two sources so additions are picked up automatically:
+    1. Public methods on the action class (e.g. WebActions.click)
+    2. Enum values on the action-type enum (e.g. WebActionType.NAVIGATE)
+       — the syntax transformer maps web.navigate() to a WebCommand even
+       though WebActions has no navigate() method.
+    """
+    registry: dict[str, set[str]] = {}
+
+    try:
+        from lamia.actions.web import WebActions
+        from lamia.interpreter.commands import WebActionType
+        class_methods = {
+            name for name, _ in inspect.getmembers(
+                WebActions, predicate=inspect.isfunction,
+            )
+            if not name.startswith("_")
+        }
+        enum_methods = {e.value for e in WebActionType}
+        registry["web"] = class_methods | enum_methods
+    except Exception:
+        registry["web"] = set()
+
+    try:
+        from lamia.actions.http import HttpActions
+        registry["http"] = {
+            name for name, _ in inspect.getmembers(
+                HttpActions, predicate=inspect.isfunction,
+            )
+            if not name.startswith("_")
+        }
+    except Exception:
+        registry["http"] = set()
+
+    try:
+        from lamia.actions.file import FileActions
+        from lamia.interpreter.commands import FileActionType
+        class_methods = {
+            name for name, _ in inspect.getmembers(
+                FileActions, predicate=inspect.isfunction,
+            )
+            if not name.startswith("_")
+        }
+        enum_methods = {e.value for e in FileActionType}
+        registry["file"] = class_methods | enum_methods
+    except Exception:
+        registry["file"] = set()
+
+    # Placeholder namespaces that are recognised but not yet implemented
+    for ns in ("db", "email"):
+        if ns not in registry:
+            registry[ns] = set()
+
+    return registry
+
+
+# Computed once at import time; automatically picks up new namespaces/methods.
+_NAMESPACE_REGISTRY: dict[str, set[str]] = _build_namespace_registry()
+
+def _build_lamia_auto_imports() -> set[str]:
+    """Names that Lamia auto-injects into .lm execution globals.
+
+    These never need an explicit import statement.  Built dynamically
+    from the same sources the runtime uses (ast_analyzer / types).
+    """
+    names: set[str] = set()
+
+    # Namespaces: web, http, file, db, email
+    names.update(_NAMESPACE_REGISTRY.keys())
+
+    # Context managers / builtins
+    names.update({"session", "files", "File"})
+
+    # Validation types from lamia.types (JSON, HTML, YAML, …)
+    try:
+        from lamia.types import BaseType
+        import lamia.types as lamia_types
+        for attr_name, attr in vars(lamia_types).items():
+            if isinstance(attr, type) and attr is not BaseType and issubclass(attr, BaseType):
+                names.add(attr_name)
+    except Exception:
+        pass
+
+    # Pydantic / typing essentials the runtime always injects
+    names.update({
+        "BaseModel", "Field", "List", "Dict", "Optional", "Any",
+        "InputType", "TXT",
+    })
+
+    return names
+
+
+_LAMIA_AUTO_IMPORTS: set[str] = _build_lamia_auto_imports()
+
+
+def _extract_explicit_imports(tree: ast.AST) -> set[str]:
+    """Collect all names brought into scope by import / from … import statements."""
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported.add(alias.asname or alias.name)
+    return imported
+
+
+def _extract_local_definitions(tree: ast.AST) -> set[str]:
+    """Collect names defined locally: functions, classes, assignments, for-targets."""
+    defined: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            defined.add(node.name)
+            for arg in node.args.args:
+                defined.add(arg.arg)
+        elif isinstance(node, ast.ClassDef):
+            defined.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    defined.add(target.id)
+        elif isinstance(node, ast.For):
+            if isinstance(node.target, ast.Name):
+                defined.add(node.target.id)
+            elif isinstance(node.target, ast.Tuple):
+                for elt in node.target.elts:
+                    if isinstance(elt, ast.Name):
+                        defined.add(elt.id)
+    return defined
+
+
+def _find_project_pydantic_models(cwd: str) -> set[str]:
+    """Scan *.py files under cwd for Pydantic model class names.
+
+    In Lamia projects, Pydantic models defined in .py files (typically
+    models/) are automatically importable without explicit imports.
+    """
+    skip = {"node_modules", "__pycache__", ".git", "venv", ".venv",
+            ".tox", ".mypy_cache", "dist", "build", ".lamia_sessions"}
+    model_names: set[str] = set()
+    model_re = re.compile(r"^class\s+(\w+)\s*\(.*\bBaseModel\b", re.MULTILINE)
+    root = Path(cwd)
+    for py_file in root.rglob("*.py"):
+        if any(part in skip for part in py_file.parts):
+            continue
+        try:
+            text = py_file.read_text(encoding="utf-8", errors="ignore")
+            for m in model_re.finditer(text):
+                model_names.add(m.group(1))
+        except Exception:
+            continue
+    return model_names
+
+
+def _collect_call_targets(tree: ast.AST) -> set[int]:
+    """Return the set of AST node ids that are the .func of a Call."""
+    targets: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            targets.add(id(node.func))
+    return targets
+
+
+def _check_namespace_usage(
+    content: str,
+    cwd: Optional[str] = None,
+) -> list[LintViolation]:
+    """Parse .lm code and flag unknown namespaces or methods.
+
+    Logic: In .lm files, Lamia namespaces (web, http, file, …) and types
+    (JSON, HTML, …) are auto-imported.  Everything else must be either
+    explicitly imported, defined locally, or be a Pydantic model from the
+    project.  Any namespace-style call (lowercase.method()) that is not
+    covered by any of these sources is flagged.
+    """
+    violations: list[LintViolation] = []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return violations
+
+    explicitly_imported = _extract_explicit_imports(tree)
+    locally_defined = _extract_local_definitions(tree)
+    project_models = _find_project_pydantic_models(cwd) if cwd else set()
+
+    # All names that are "known" and should not be flagged
+    known_names = _LAMIA_AUTO_IMPORTS | explicitly_imported | locally_defined | project_models
+
+    call_targets = _collect_call_targets(tree)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute):
+            continue
+        if not isinstance(node.value, ast.Name):
+            continue
+        if id(node) not in call_targets:
+            continue
+
+        ns_name = node.value.id
+        method_name = node.attr
+        lineno = getattr(node, "lineno", 0)
+
+        # Skip anything that is explicitly imported, locally defined, or
+        # uppercase (class attribute access like BaseModel.parse()).
+        if ns_name in known_names:
+            # Name is known — but if it's a Lamia namespace, also check
+            # that the method exists.
+            if ns_name in _NAMESPACE_REGISTRY:
+                known_methods = _NAMESPACE_REGISTRY[ns_name]
+                if known_methods and method_name not in known_methods:
+                    methods_list = ", ".join(sorted(known_methods))
+                    violations.append(LintViolation(
+                        rule=UNKNOWN_NAMESPACE_METHOD,
+                        line=lineno,
+                        message=UNKNOWN_NAMESPACE_METHOD.description % (
+                            ns_name, method_name, ns_name, methods_list,
+                        ),
+                        snippet=f"{ns_name}.{method_name}()",
+                    ))
+            continue
+
+        if ns_name[0].isupper():
+            continue
+
+        # Name is not imported, not defined, not a Lamia auto-import.
+        # If it looks like it *could* be a Lamia namespace (lowercase,
+        # used as ns.method()), flag it.
+        valid_ns = ", ".join(sorted(_NAMESPACE_REGISTRY.keys()))
+        violations.append(LintViolation(
+            rule=UNKNOWN_NAMESPACE,
+            line=lineno,
+            message=UNKNOWN_NAMESPACE.description % (ns_name, valid_ns),
+            snippet=f"{ns_name}.{method_name}()",
+        ))
+
+    return violations
 
 
 class LmLinter(BaseLinter):
@@ -377,6 +643,9 @@ class LmLinter(BaseLinter):
                     rule=GENERIC_FILENAME, line=0,
                     message=GENERIC_FILENAME.description % (stem + ".lm"),
                 ))
+
+        # ── Namespace / method validation ─────────────────────────────────
+        violations.extend(_check_namespace_usage(content, cwd=cwd))
 
         # ── Cross-file checks (require cwd) ─────────────────────────────
         if cwd:
