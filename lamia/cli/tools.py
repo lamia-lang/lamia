@@ -43,6 +43,7 @@ class ToolName(str, enum.Enum):
     BROWSER_GET_TEXT = "browser_get_text"
     BROWSER_SCREENSHOT = "browser_screenshot"
     BROWSER_WAIT = "browser_wait"
+    LINT_CODE = "lint_code"
 
 
 class FileAction(enum.Enum):
@@ -75,6 +76,7 @@ TOOL_LABELS: dict[str, tuple[str, str]] = {
     ToolName.BROWSER_GET_TEXT:   ("Reading page text",   "selector"),
     ToolName.BROWSER_SCREENSHOT: ("Taking screenshot",   ""),
     ToolName.BROWSER_WAIT:       ("Waiting for",         "selector"),
+    ToolName.LINT_CODE:          ("Linting code",        "file_type"),
 }
 
 
@@ -436,6 +438,28 @@ TOOL_DEFINITIONS = [
             "required": ["selector"],
         },
     },
+    {
+        "name": ToolName.LINT_CODE.value,
+        "description": (
+            "Lint Lamia code without writing to disk. Use this to validate "
+            ".lm or .hu code before presenting it. Returns lint violations "
+            "and feedback. Fix any errors before showing the code to the user."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "The code content to lint",
+                },
+                "file_type": {
+                    "type": "string",
+                    "description": '"lm" for Lamia scripts or "hu" for prompt templates',
+                },
+            },
+            "required": ["content", "file_type"],
+        },
+    },
 ]
 
 # Module-level accumulator for file writes during a single request.
@@ -515,6 +539,10 @@ def _execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
         return _grep(args.get("pattern", ""), args.get("directory", "."), args.get("include", ""), cwd)
     elif name == ToolName.GLOB:
         return _glob(args.get("pattern", ""), args.get("directory", "."), cwd)
+    elif name == ToolName.LINT_CODE:
+        result = lint_code(args.get("content", ""), args.get("file_type", ""), cwd)
+        import json as _json
+        return _json.dumps(result, ensure_ascii=False)
     elif name.startswith("browser_"):
         return _browser_tool(name, args, cwd, lamia)
     else:
@@ -644,6 +672,36 @@ _LINTERS = {
     ".hu": _hu_linter,
     ".lm": _lm_linter,
 }
+
+
+def lint_code(content: str, file_type: str, cwd: str = ".") -> dict:
+    """Lint code content without writing to disk.
+
+    Returns a dict with violations list, blocking flag, and feedback string.
+    Used by the IDE to validate code blocks in LLM chat responses.
+    """
+    from lamia.lint.base import Severity
+
+    linter = _LINTERS.get(f".{file_type}")
+    if not linter:
+        return {"violations": [], "blocking": False, "feedback": ""}
+
+    result = linter.lint(content, cwd=cwd)
+    violations = []
+    for v in result.violations:
+        violations.append({
+            "code": v.rule.code,
+            "line": v.line,
+            "message": v.message,
+            "severity": v.rule.severity.name.lower(),
+        })
+
+    blocking = any(v.rule.severity == Severity.Error for v in result.violations)
+    return {
+        "violations": violations,
+        "blocking": blocking,
+        "feedback": result.feedback_message(),
+    }
 
 
 def _blocking_lint_suffix(violations: list) -> str:

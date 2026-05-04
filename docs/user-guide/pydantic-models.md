@@ -272,17 +272,6 @@ class ArticleSummary(BaseModel):
     snippet: str = Field(description="First code block", json_schema_extra={"selector": "code[0]"})
 ```
 
-### CSV
-
-Map by header names (or indices when needed):
-
-```python
-class SalesRow(BaseModel):
-    product: str = Field(description="Product name", json_schema_extra={"selector": "Product"})
-    quantity: int = Field(description="Units sold", json_schema_extra={"selector": "Quantity"}, ge=0)
-    revenue: float = Field(description="Revenue in USD", json_schema_extra={"selector": "Revenue"}, ge=0)
-```
-
 For a deeper selector reference (fallback chains, AI-assisted selectors, best practices), see the [Selector Usage Guide](../validation/selector-usage-guide.md).
 
 ## Tips for better output
