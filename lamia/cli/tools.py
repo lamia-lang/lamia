@@ -109,6 +109,7 @@ TOPIC_TO_FILE = {
     "getting-started": "getting-started/index.md",
     "lamia-as-python-library": "user-guide/python-library.md",
     "pydantic-models": "user-guide/pydantic-models.md",
+    "custom-llm-adapters": "user-guide/custom-llm-adapters.md",
 }
 
 _DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))
