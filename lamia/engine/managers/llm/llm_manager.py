@@ -216,9 +216,19 @@ class LLMManager(Manager):
             ExternalOperationError: If external system failures occur
             RuntimeError: If all models in the chain fail
         """
+        model_chain = self.config_provider.get_model_chain()
+        if not model_chain:
+            raise ValueError(
+                "No models configured in model_chain. "
+                "Add at least one model to your config.yaml, e.g.:\n"
+                "model_chain:\n"
+                "  - name: \"anthropic:claude-sonnet-4\"\n"
+                "    max_retries: 3"
+            )
+
         failed_models = []
         
-        for model_and_retries in self.config_provider.get_model_chain():
+        for model_and_retries in model_chain:
             model = model_and_retries.model
 
             # Lazily create and cache adapters so we don't re-instantiate them
@@ -260,8 +270,10 @@ class LLMManager(Manager):
             logger.warning(f"Model {model.name} exhausted all retries, trying next fallback")
             failed_models.append(model.name)
                 
-        # All models failed
-        raise ValueError(f"All models failed: {', '.join(failed_models)}")
+        raise ValueError(
+            f"All models in the chain exhausted retries: {', '.join(failed_models)}. "
+            "Check the logs above for validation errors or increase max_retries in config.yaml."
+        )
 
     @staticmethod
     def _extract_response_model(validator: Optional[BaseValidator]) -> Optional[Type[BaseModel]]:

@@ -144,7 +144,8 @@ def _assemble_config_provider(
     model_chain: List[ModelWithRetries],
     api_keys: Optional[dict],
     retry_config: Optional[ExternalOperationRetryConfig],
-    web_config: Optional[Dict[str, Any]]
+    web_config: Optional[Dict[str, Any]],
+    extensions_folder: Optional[str] = None,
 ) -> ConfigProvider:
     """Assemble final ConfigProvider from components.
     
@@ -157,6 +158,8 @@ def _assemble_config_provider(
         "retry_config": retry_config,
         "web_config": web_config or {},
     }
+    if extensions_folder is not None:
+        config_dict["extensions_folder"] = extensions_folder
     return ConfigProvider(config_dict)
 
 
@@ -170,8 +173,9 @@ def build_config_from_dict(config: Dict[str, Any]) -> ConfigProvider:
     retry_config = _parse_retry_config(config.get("retry_config", {}))
     api_keys = config.get("api_keys")
     web_config = config.get("web_config")
+    extensions_folder = config.get("extensions_folder")
     
-    return _assemble_config_provider(model_chain, api_keys, retry_config, web_config)
+    return _assemble_config_provider(model_chain, api_keys, retry_config, web_config, extensions_folder)
 
 
 def build_config_from_models(

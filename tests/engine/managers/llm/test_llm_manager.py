@@ -526,7 +526,7 @@ class TestLLMManagerExecutionWithRetries:
             with patch.object(self.manager, '_generate_and_validate') as mock_generate:
                 mock_generate.return_value = None  # All models fail
                 
-                with pytest.raises(ValueError, match="All models failed"):
+                with pytest.raises(ValueError, match="All models in the chain exhausted retries"):
                     await self.manager._execute_with_retries("Hello")
     
     @pytest.mark.asyncio

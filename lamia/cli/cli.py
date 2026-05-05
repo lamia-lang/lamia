@@ -745,6 +745,7 @@ def main():
         logger.debug(f"Using configuration from: {config_path}")
         with open(config_path, 'r') as f:
             config_dict = yaml.safe_load(f)
+        project_root = os.path.dirname(os.path.abspath(config_path))
     else:
         from lamia.project import find_config_file
         discovered = find_config_file(prompt_file)
@@ -752,6 +753,7 @@ def main():
             logger.debug(f"Using configuration from: {discovered}")
             with open(discovered, 'r') as f:
                 config_dict = yaml.safe_load(f)
+            project_root = os.path.dirname(os.path.abspath(discovered))
         else:
             from pathlib import Path
             search_start = Path(prompt_file).resolve().parent if prompt_file else Path.cwd()
@@ -761,6 +763,10 @@ def main():
                 f"Run 'lamia init' to create one."
             )
             sys.exit(1)
+
+    if config_dict is not None:
+        extensions_rel = config_dict.get('extensions_folder', 'extensions')
+        config_dict['extensions_folder'] = os.path.join(project_root, extensions_rel)
 
     # Note: Lazy loading is now handled by HybridExecutor for .hu files
     # Python files still need sys.path management for regular execution

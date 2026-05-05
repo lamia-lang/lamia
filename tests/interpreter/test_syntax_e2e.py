@@ -721,7 +721,7 @@ def read_config() -> JSON:
 
 result = read_config()
 ''')
-        with pytest.raises(ValueError, match="All models failed"):
+        with pytest.raises(ValueError, match="All models in the chain exhausted retries"):
             executor.execute_file(path)
 
 
