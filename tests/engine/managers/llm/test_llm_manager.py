@@ -22,8 +22,8 @@ def _create_mock_adapter(provider_name: str, is_remote: bool = True):
     mock_adapter_class = MagicMock()
     mock_adapter_class.name.return_value = provider_name
     mock_adapter_class.is_remote.return_value = is_remote
+    mock_adapter_class.env_var_names.return_value = [f"{provider_name.upper()}_API_KEY"]
     
-    # Create mock instance that will be returned when adapter_class() is called
     mock_instance = MagicMock()
     mock_instance.async_initialize = AsyncMock()
     mock_adapter_class.return_value = mock_instance
@@ -1004,7 +1004,7 @@ class TestLLMManagerEndToEnd:
         )
         
         mock_adapter_class, mock_instance = _create_mock_adapter("openai", is_remote=True)
-        with patch('lamia.engine.managers.llm.providers.OpenAIAdapter', mock_adapter_class):
+        with patch('lamia.adapters.llm.openai_adapter.OpenAIAdapter', mock_adapter_class):
             manager = LLMManager(cm)
             model = LLMModel(name="openai:gpt-3.5-turbo")
             result = await manager.create_adapter_from_config(model, with_retries=False)
@@ -1020,7 +1020,7 @@ class TestLLMManagerEndToEnd:
         )
         
         mock_adapter_class, mock_instance = _create_mock_adapter("anthropic", is_remote=True)
-        with patch('lamia.engine.managers.llm.providers.AnthropicAdapter', mock_adapter_class):
+        with patch('lamia.adapters.llm.anthropic_adapter.AnthropicAdapter', mock_adapter_class):
             manager = LLMManager(cm)
             model = LLMModel(name="anthropic:claude-3-opus-20240229")
             result = await manager.create_adapter_from_config(model, with_retries=False)
@@ -1056,8 +1056,8 @@ class TestLLMManagerEndToEnd:
         mock_openai_class, mock_openai_instance = _create_mock_adapter("openai", is_remote=True)
         mock_anthropic_class, mock_anthropic_instance = _create_mock_adapter("anthropic", is_remote=True)
         
-        with patch('lamia.engine.managers.llm.providers.OpenAIAdapter', mock_openai_class):
-            with patch('lamia.engine.managers.llm.providers.AnthropicAdapter', mock_anthropic_class):
+        with patch('lamia.adapters.llm.openai_adapter.OpenAIAdapter', mock_openai_class):
+            with patch('lamia.adapters.llm.anthropic_adapter.AnthropicAdapter', mock_anthropic_class):
                 manager = LLMManager(cm)
                 model = LLMModel(name="anthropic:claude-3-opus-20240229")
                 result = await manager.create_adapter_from_config(model, with_retries=False)
@@ -1090,12 +1090,11 @@ class TestLLMManagerEndToEnd:
         mock_lamia_class, mock_lamia_instance = _create_mock_adapter("lamia", is_remote=True)
         mock_lamia_class.get_supported_providers.return_value = {"openai", "anthropic"}
         
-        with patch('lamia.engine.managers.llm.providers.OpenAIAdapter', mock_openai_class):
+        with patch('lamia.adapters.llm.openai_adapter.OpenAIAdapter', mock_openai_class):
             with patch('lamia.engine.managers.llm.llm_manager.LamiaAdapter', mock_lamia_class):
                 manager = LLMManager(cm)
                 model = LLMModel(name="openai:gpt-3.5-turbo")
                 result = await manager.create_adapter_from_config(model, with_retries=False)
-                # The adapter should have been created using the proxy key from the env variable
                 mock_lamia_class.assert_called_once_with(api_key="env-lamia-key")
                 assert result == mock_lamia_instance
         

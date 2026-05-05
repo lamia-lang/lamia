@@ -11,34 +11,38 @@ from pathlib import Path
 from lamia.adapters.llm.base import BaseLLMAdapter
 
 logger = logging.getLogger(__name__)
-from lamia.adapters.llm.openai_adapter import OpenAIAdapter
-from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter
-from lamia.adapters.llm.local.ollama_adapter import OllamaAdapter
-from lamia.adapters.llm.lamia_adapter import LamiaAdapter
+
+_BUILTIN_ADAPTERS = [
+    ("lamia.adapters.llm.openai_adapter", "OpenAIAdapter", "openai"),
+    ("lamia.adapters.llm.anthropic_adapter", "AnthropicAdapter", "anthropic"),
+    ("lamia.adapters.llm.local.ollama_adapter", "OllamaAdapter", "ollama"),
+    ("lamia.adapters.llm.lamia_adapter", "LamiaAdapter", "lamia"),
+]
 
 
 class ProviderRegistry:
     """Registry for LLM provider adapters that only loads needed adapters."""
     
+    _ALWAYS_LOAD = {"lamia"}
+
     def __init__(self, needed_providers: Optional[Set[str]] = None):
-        # Built-in adapters
-        self._builtin_adapters = [
-            OpenAIAdapter,
-            AnthropicAdapter,
-            OllamaAdapter,
-            LamiaAdapter,
-        ]
-        
-        # Maps for fast access
         self._adapter_map: Dict[str, Type[BaseLLMAdapter]] = {}
+        self._needed_providers = needed_providers
+        self._remote_providers: Set[str] = set()
         
-        # Only load needed adapters
-        self._needed_providers = needed_providers or set()
-        
-        # Build adapter map - map all builtin adapters since it's just class references
-        for adapter_cls in self._builtin_adapters:
-            name = adapter_cls.name()
-            self._adapter_map[name] = adapter_cls
+        for module_path, class_name, provider_name in _BUILTIN_ADAPTERS:
+            if (self._needed_providers is not None
+                    and provider_name not in self._needed_providers
+                    and provider_name not in self._ALWAYS_LOAD):
+                continue
+            try:
+                module = importlib.import_module(module_path)
+                adapter_cls = getattr(module, class_name)
+                self._adapter_map[provider_name] = adapter_cls
+                if adapter_cls.is_remote():
+                    self._remote_providers.add(provider_name)
+            except ImportError as e:
+                logger.debug("Skipping builtin adapter '%s': %s", provider_name, e)
     
     def add_user_adapters(self, search_paths: list[str]):
         """Add user-defined adapters from search paths."""
@@ -66,15 +70,15 @@ class ProviderRegistry:
                                 try:
                                     adapter_name = obj.name()
                                     
-                                    # Only load if needed
-                                    if self._needed_providers and adapter_name not in self._needed_providers:
+                                    if self._needed_providers is not None and adapter_name not in self._needed_providers:
                                         continue
                                     
-                                    # Check for conflicts
                                     if adapter_name in self._adapter_map:
-                                        raise RuntimeError(
-                                            f"User adapter '{adapter_name}' conflicts with existing adapter"
+                                        logger.debug(
+                                            "Skipping duplicate adapter '%s' from %s (already loaded)",
+                                            adapter_name, file_path
                                         )
+                                        continue
                                     
                                     self._adapter_map[adapter_name] = obj
                                     

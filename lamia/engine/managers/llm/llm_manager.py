@@ -220,7 +220,7 @@ class LLMManager(Manager):
         if not model_chain:
             raise ValueError(
                 "No models configured in model_chain. "
-                "Add at least one model to your config.yaml, e.g.:\n"
+                "Add a model to your config.yaml, e.g.:\n"
                 "model_chain:\n"
                 "  - name: \"anthropic:claude-sonnet-4\"\n"
                 "    max_retries: 3"

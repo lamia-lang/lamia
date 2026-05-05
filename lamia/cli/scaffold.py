@@ -64,7 +64,14 @@ PROVIDER_ORDER: tuple[str, ...] = tuple(DEFAULT_MODELS.keys())
 
 # Providers whose env vars are scaffolded in .env templates
 _ENV_SCAFFOLD_PROVIDERS = ("openai", "anthropic", "lamia")
-_PROVIDER_REGISTRY = ProviderRegistry(set(_ENV_SCAFFOLD_PROVIDERS))
+_PROVIDER_REGISTRY: ProviderRegistry = None  # type: ignore[assignment]
+
+
+def _get_provider_registry() -> ProviderRegistry:
+    global _PROVIDER_REGISTRY
+    if _PROVIDER_REGISTRY is None:
+        _PROVIDER_REGISTRY = ProviderRegistry(set(_ENV_SCAFFOLD_PROVIDERS))
+    return _PROVIDER_REGISTRY
 
 
 def create_minimal_config(config_path: str, with_extensions: bool = False, extensions_folder_name: str = "extensions") -> bool:
@@ -111,8 +118,9 @@ def create_env_file(env_path: str) -> bool:
     if os.path.exists(env_path):
         return False  # Already exists
     lines = ["# TODO: Replace the API keys below with your own keys before running the app!"]
+    registry = _get_provider_registry()
     for provider in _ENV_SCAFFOLD_PROVIDERS:
-        env_vars = _PROVIDER_REGISTRY.get_env_var_names(provider)
+        env_vars = registry.get_env_var_names(provider)
         if not env_vars:
             continue
         lines.append(f"{env_vars[0]}=sk-your-{provider}-key-here")
