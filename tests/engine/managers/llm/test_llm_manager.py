@@ -337,7 +337,7 @@ class TestLLMManagerAdapterCreation:
         with patch.object(self.manager, '_resolve_api_key') as mock_resolve:
             mock_resolve.return_value = ("lamia-key", True)  # use_lamia_adapter = True
             
-            with patch('lamia.engine.managers.llm.llm_manager.LamiaAdapter') as mock_lamia_class:
+            with patch('lamia.adapters.llm.lamia_adapter.LamiaAdapter') as mock_lamia_class:
                 mock_lamia_adapter = Mock(spec=BaseLLMAdapter)
                 mock_lamia_class.return_value = mock_lamia_adapter
                 mock_lamia_class.is_remote.return_value = True
@@ -1091,7 +1091,7 @@ class TestLLMManagerEndToEnd:
         mock_lamia_class.get_supported_providers.return_value = {"openai", "anthropic"}
         
         with patch('lamia.adapters.llm.openai_adapter.OpenAIAdapter', mock_openai_class):
-            with patch('lamia.engine.managers.llm.llm_manager.LamiaAdapter', mock_lamia_class):
+            with patch('lamia.adapters.llm.lamia_adapter.LamiaAdapter', mock_lamia_class):
                 manager = LLMManager(cm)
                 model = LLMModel(name="openai:gpt-3.5-turbo")
                 result = await manager.create_adapter_from_config(model, with_retries=False)

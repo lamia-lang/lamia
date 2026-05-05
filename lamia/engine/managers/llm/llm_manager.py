@@ -1,7 +1,6 @@
 from typing import List, Optional, Dict, Any, Set, Tuple, Type
 from pydantic import BaseModel
 
-from lamia.adapters.llm.lamia_adapter import LamiaAdapter
 from lamia import LLMModel
 from lamia.adapters.llm.base import BaseLLMAdapter
 from ...config_provider import ConfigProvider
@@ -40,9 +39,16 @@ class LLMManager(Manager):
         self._check_all_required_providers(needed_providers)
 
         self._adapter_cache = {}
+        self._lamia_supported_providers_cache: Optional[Set[str]] = None
         
         # Check that all required API keys are present
         self._check_all_required_api_keys(needed_providers)
+
+    def _get_lamia_supported_providers(self) -> Set[str]:
+        if self._lamia_supported_providers_cache is None:
+            from lamia.adapters.llm.lamia_adapter import LamiaAdapter
+            self._lamia_supported_providers_cache = set(LamiaAdapter.get_supported_providers())
+        return self._lamia_supported_providers_cache
 
     async def execute(
         self,
@@ -99,7 +105,7 @@ class LLMManager(Manager):
         """
 
         # Priority: lamia key > lamia env key > provider key > provider env key
-        if provider_name in LamiaAdapter.get_supported_providers():
+        if provider_name in self._get_lamia_supported_providers():
             lamia_api_key = self.config_provider.get_api_key("lamia")
             if lamia_api_key:
                 return lamia_api_key, True
@@ -174,6 +180,7 @@ class LLMManager(Manager):
 
         # Get the adapter class
         if use_lamia_adapter:
+            from lamia.adapters.llm.lamia_adapter import LamiaAdapter
             adapter_class = LamiaAdapter
         else:
             adapter_class = self.provider_registry.get_adapter_class(provider_name)

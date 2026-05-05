@@ -8,25 +8,17 @@ from typing import Optional
 
 from lamia.cli.prompts import input_yes_no
 from lamia.cli.scaffold import PROVIDER_ORDER
-from lamia.engine.managers.llm.providers import ProviderRegistry
+from lamia.engine.managers.llm.providers import get_cached_provider_registry
 from lamia.env_loader import get_global_env_path, get_project_env_path
 
 logger = logging.getLogger(__name__)
 
-_PROVIDER_REGISTRY: ProviderRegistry = None  # type: ignore[assignment]
 _PLACEHOLDER_TOKENS = ("your-", "your_", "your ", "replace", "example", "dummy", "test-key")
-
-
-def _get_provider_registry() -> ProviderRegistry:
-    global _PROVIDER_REGISTRY
-    if _PROVIDER_REGISTRY is None:
-        _PROVIDER_REGISTRY = ProviderRegistry(set(PROVIDER_ORDER))
-    return _PROVIDER_REGISTRY
 
 
 def detect_api_key(provider: str, project_dir: str) -> tuple[Optional[str], str, Optional[str]]:
     """Return ``(value, env_var_name, source_label)`` or ``(None, var, None)``."""
-    env_vars = _get_provider_registry().get_env_var_names(provider)
+    env_vars = get_cached_provider_registry(set(PROVIDER_ORDER)).get_env_var_names(provider)
     if not env_vars:
         return None, provider, None
     project_env = get_project_env_path(Path(project_dir))
@@ -90,7 +82,7 @@ def _read_env_var_from_file(env_path: Path, env_var: str) -> Optional[str]:
 
 def _primary_env_var_for_provider(provider: str) -> str:
     """Return the primary env var name from provider adapter metadata."""
-    env_vars = _get_provider_registry().get_env_var_names(provider)
+    env_vars = get_cached_provider_registry(set(PROVIDER_ORDER)).get_env_var_names(provider)
     if not env_vars:
         raise ValueError(f"No env var defined for unknown provider '{provider}' — register an adapter first")
     return env_vars[0]

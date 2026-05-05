@@ -1,7 +1,7 @@
 """Provider registry for LLM adapters."""
 
 import logging
-from typing import Dict, Type, Set, Optional
+from typing import Dict, Type, Set, Optional, FrozenSet
 import importlib
 import importlib.util
 import inspect
@@ -19,6 +19,18 @@ _BUILTIN_ADAPTERS = [
     ("lamia.adapters.llm.lamia_adapter", "LamiaAdapter", "lamia"),
 ]
 
+_registry_cache: Dict[Optional[FrozenSet[str]], "ProviderRegistry"] = {}
+
+
+def get_cached_provider_registry(needed_providers: Optional[Set[str]] = None) -> "ProviderRegistry":
+    """Return a cached ProviderRegistry keyed by needed providers."""
+    cache_key = None if needed_providers is None else frozenset(needed_providers)
+    registry = _registry_cache.get(cache_key)
+    if registry is None:
+        registry = ProviderRegistry(needed_providers)
+        _registry_cache[cache_key] = registry
+    return registry
+
 
 class ProviderRegistry:
     """Registry for LLM provider adapters that only loads needed adapters."""
@@ -27,6 +39,7 @@ class ProviderRegistry:
 
     def __init__(self, needed_providers: Optional[Set[str]] = None):
         self._adapter_map: Dict[str, Type[BaseLLMAdapter]] = {}
+        self._adapter_sources: Dict[str, str] = {}
         self._needed_providers = needed_providers
         self._remote_providers: Set[str] = set()
         
@@ -39,6 +52,7 @@ class ProviderRegistry:
                 module = importlib.import_module(module_path)
                 adapter_cls = getattr(module, class_name)
                 self._adapter_map[provider_name] = adapter_cls
+                self._adapter_sources[provider_name] = module.__file__ or module_path
                 if adapter_cls.is_remote():
                     self._remote_providers.add(provider_name)
             except ImportError as e:
@@ -74,21 +88,26 @@ class ProviderRegistry:
                                         continue
                                     
                                     if adapter_name in self._adapter_map:
-                                        logger.debug(
-                                            "Skipping duplicate adapter '%s' from %s (already loaded)",
-                                            adapter_name, file_path
+                                        existing_source = self._adapter_sources.get(adapter_name, "unknown")
+                                        raise RuntimeError(
+                                            f"Duplicate adapter name '{adapter_name}' found.\n"
+                                            f"  First loaded from: {existing_source}\n"
+                                            f"  Conflict from:     {file_path}\n"
+                                            f"Rename one adapter's name() method to a unique provider name, "
+                                            f"or remove the duplicate file."
                                         )
-                                        continue
                                     
                                     self._adapter_map[adapter_name] = obj
-                                    
-                                    # Add to remote providers if it's remote
+                                    self._adapter_sources[adapter_name] = str(file_path)
+
                                     if obj.is_remote():
                                         self._remote_providers.add(adapter_name)
                                         
                                 except (NotImplementedError, AttributeError):
                                     continue
                                     
+                except RuntimeError:
+                    raise
                 except Exception as e:
                     logger.warning("Failed to load user adapter from %s: %s", file_path, e)
                     continue
