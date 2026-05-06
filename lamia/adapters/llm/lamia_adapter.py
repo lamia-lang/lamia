@@ -1,8 +1,16 @@
 from typing import Optional, Dict, Any, Set, Type
+import asyncio
+import logging
+import os
 import aiohttp
 from lamia import LLMModel
 from .base import BaseLLMAdapter, LLMResponse, make_strict_schema
+from .anthropic_adapter import AnthropicAdapter
+from .openai_adapter import OpenAIAdapter
+from .local.ollama_adapter import OllamaAdapter
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 class LamiaAdapter(BaseLLMAdapter):
     """Lamia API adapter that proxies requests to multiple providers."""
@@ -74,10 +82,11 @@ class LamiaAdapter(BaseLLMAdapter):
             payload = {
                 **base_payload,
                 "max_tokens": model.max_tokens or 1000,
-                "temperature": model.temperature or 0.7,
             }
-            if model.top_p is not None:
+            if model.top_p is not None and model.temperature is None:
                 payload["top_p"] = model.top_p
+            else:
+                payload["temperature"] = model.temperature if model.temperature is not None else 0.7
             if response_model is not None:
                 payload["output_config"] = {
                     "format": {
@@ -204,40 +213,47 @@ class LamiaAdapter(BaseLLMAdapter):
         except aiohttp.ClientError as e:
             raise RuntimeError(f"Failed to communicate with Lamia API: {str(e)}")
 
-    async def get_available_models(self) -> list[str]:
-        """Fetch available models from Lamia API."""
-        if not self.session:
-            raise RuntimeError("Adapter not initialized. Call async_initialize() first.")
-            
-        models_url = f"{self.api_url}/v1/models"
-        try:
-            async with self.session.get(models_url) as response:
-                if response.status == 401:
-                    raise RuntimeError("Invalid Lamia API key")
-                elif response.status != 200:
-                    error_text = await response.text()
-                    raise RuntimeError(f"Lamia API error ({response.status}): {error_text}")
-                
-                data = await response.json()
-                
-                # Parse response according to server's ModelsResponse structure
-                if "data" not in data:
-                    raise RuntimeError("Invalid response format from Lamia API")
-                
-                # Extract model IDs from the response
-                model_ids = []
-                for model in data["data"]:
-                    if "id" in model:
-                        model_ids.append(model["id"])
-                        # Also include aliases if present
-                        if "aliases" in model and model["aliases"]:
-                            model_ids.extend(model["aliases"])
-                
-                return model_ids
-                
-        except aiohttp.ClientError as e:
-            raise RuntimeError(f"Failed to communicate with Lamia API: {str(e)}")
-    
+    @classmethod
+    async def models(cls, api_key: str = "") -> list[dict]:
+        """Aggregate models from all base adapters (anthropic, openai, ollama).
+
+        For remote providers the call is only made when a corresponding API
+        key is available (passed explicitly or found in the environment).
+        Ollama is always attempted since it needs no key.  Failures on
+        individual providers are logged and silently skipped so one
+        unreachable provider does not block the rest.
+        """
+        base_adapters: list[type[BaseLLMAdapter]] = [
+            AnthropicAdapter,
+            OpenAIAdapter,
+            OllamaAdapter,
+        ]
+
+        async def _fetch(adapter_cls: type[BaseLLMAdapter]) -> list[dict]:
+            provider = adapter_cls.name()
+            key = api_key
+            if not key and adapter_cls.is_remote():
+                for env_var in adapter_cls.env_var_names():
+                    key = os.environ.get(env_var, "")
+                    if key:
+                        break
+            if adapter_cls.is_remote() and not key:
+                return []
+            try:
+                models = await adapter_cls.models(api_key=key)
+                for m in models:
+                    m["provider"] = provider
+                return models
+            except Exception as exc:
+                logger.debug("models failed for %s: %s", provider, exc)
+                return []
+
+        results = await asyncio.gather(*[_fetch(a) for a in base_adapters])
+        combined: list[dict] = []
+        for batch in results:
+            combined.extend(batch)
+        return combined
+
     async def close(self) -> None:
         """Cleanup HTTP session."""
         if self.session:

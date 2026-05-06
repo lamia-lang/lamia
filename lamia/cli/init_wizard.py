@@ -48,14 +48,14 @@ def run_init_wizard(project_dir: str, with_extensions: bool = False) -> WizardRe
 
     # Detect Ollama
     ollama_models: list[str] = []
-    adapter = OllamaAdapter()
-    if adapter.is_ollama_installed():
-        if not adapter.is_ollama_running():
+    if OllamaAdapter.is_ollama_installed():
+        if not OllamaAdapter.is_ollama_running():
             print("Starting Ollama service...")
-            started = adapter.start_ollama_service()
+            started = OllamaAdapter.start_ollama_service()
             print("  Ollama service started." if started else "  Could not start Ollama — it may need to be started manually.")
-        if adapter.is_ollama_running():
-            ollama_models = asyncio.run(adapter.get_available_models())
+        if OllamaAdapter.is_ollama_running():
+            models_data = asyncio.run(OllamaAdapter.models())
+            ollama_models = [m["id"] for m in models_data]
         status = f"installed, {len(ollama_models)} models" if ollama_models else "installed"
         provider_list.append(("ollama", status))
     else:

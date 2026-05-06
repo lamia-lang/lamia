@@ -534,6 +534,67 @@ def _tool_result_success(tool_result: str) -> bool:
     return not tool_result.startswith("Error:")
 
 
+def _handle_models_command() -> None:
+    """Handle ``lamia models [--provider <name>]``."""
+    models_parser = argparse.ArgumentParser(
+        description="List available models from LLM providers",
+        prog="lamia models",
+    )
+    models_parser.add_argument(
+        "--provider", "-p",
+        type=str,
+        default=None,
+        help="Only list models for this provider (e.g. anthropic, openai, ollama)",
+    )
+    args = models_parser.parse_args(sys.argv[2:])
+
+    from lamia.engine.managers.llm.providers import ProviderRegistry
+
+    registry = ProviderRegistry()
+
+    provider_filter: Optional[str] = args.provider
+
+    if provider_filter:
+        try:
+            adapter_cls = registry.get_adapter_class(provider_filter)
+        except ValueError:
+            print(f"Unknown provider: {provider_filter}")
+            sys.exit(1)
+        providers_to_query = [(provider_filter, adapter_cls)]
+    else:
+        providers_to_query = [
+            (name, registry.get_adapter_class(name))
+            for name in sorted(registry.get_all_providers())
+            if name != "lamia"
+        ]
+
+    async def _run() -> None:
+        for provider_name, adapter_cls in providers_to_query:
+            api_key = ""
+            if adapter_cls.is_remote():
+                api_key = registry.get_api_key_from_env(provider_name) or ""
+                if not api_key:
+                    print(f"\n{provider_name}: skipped (no API key)")
+                    continue
+
+            try:
+                models = await adapter_cls.models(api_key=api_key)
+            except Exception as exc:
+                print(f"\n{provider_name}: error — {exc}")
+                continue
+
+            if not models:
+                print(f"\n{provider_name}: no models found")
+                continue
+
+            print(f"\n{provider_name} ({len(models)} models):")
+            for m in models:
+                model_id = m.get("id", "unknown")
+                print(f"  {model_id}")
+
+    asyncio.run(_run())
+
+
 def _open_ide(folder: str) -> None:
     """Open Lamia Studio IDE at *folder*, reading the app path from ~/.lamia/ide-path.txt."""
     import platform
@@ -586,6 +647,10 @@ def main():
 
     if len(sys.argv) > 1 and os.path.isdir(sys.argv[1]):
         _open_ide(sys.argv[1])
+        return
+
+    if len(sys.argv) > 1 and sys.argv[1] == "models":
+        _handle_models_command()
         return
 
     if len(sys.argv) > 1 and sys.argv[1] == "debug":

@@ -3,7 +3,7 @@
 import os
 import stat
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 import requests as requests_lib
@@ -25,9 +25,11 @@ def isolated_global_env(tmp_path):
 @pytest.fixture()
 def no_ollama():
     """Prevent the wizard from touching a real Ollama installation."""
-    mock = MagicMock()
-    mock.is_ollama_installed.return_value = False
-    with patch("lamia.cli.init_wizard.OllamaAdapter", return_value=mock):
+    with patch("lamia.cli.init_wizard.OllamaAdapter") as mock_adapter:
+        mock_adapter.is_ollama_installed.return_value = False
+        mock_adapter.is_ollama_running.return_value = False
+        mock_adapter.start_ollama_service.return_value = False
+        mock_adapter.models = AsyncMock(return_value=[])
         yield
 
 

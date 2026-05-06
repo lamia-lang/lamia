@@ -295,6 +295,22 @@ class TestBaseLLMAdapterAbstractMethods:
             BadAdapter()
 
 
+class TestBaseLLMAdapterModels:
+    """Test BaseLLMAdapter models default implementation."""
+
+    @pytest.mark.asyncio
+    async def test_default_list_models_returns_empty(self):
+        """Test that the default models returns an empty list."""
+        result = await ConcreteAdapter.models(api_key="test-key")
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_default_list_models_no_key(self):
+        """Test that the default models works with empty key."""
+        result = await ConcreteAdapter.models()
+        assert result == []
+
+
 class TestBaseLLMAdapterVariants:
     """Test different adapter variants and configurations."""
     

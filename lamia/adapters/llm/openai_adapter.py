@@ -16,6 +16,7 @@ class OpenAIAdapter(BaseLLMAdapter):
     """OpenAI API adapter with SDK support and HTTP fallback."""
     
     API_URL = "https://api.openai.com/v1/chat/completions"
+    MODELS_URL = "https://api.openai.com/v1/models"
     
     @classmethod
     def name(cls) -> str:
@@ -29,6 +30,47 @@ class OpenAIAdapter(BaseLLMAdapter):
     @classmethod
     def is_remote(cls) -> bool:
         return True
+
+    @classmethod
+    async def models(cls, api_key: str = "") -> list[dict]:
+        """Fetch available models from OpenAI's /v1/models endpoint."""
+        if OPENAI_AVAILABLE:
+            client = AsyncOpenAI(api_key=api_key)
+            try:
+                response = await client.models.list()
+                models = []
+                for item in getattr(response, "data", []):
+                    if isinstance(item, dict):
+                        model_dict = dict(item)
+                    elif callable(getattr(item, "model_dump", None)):
+                        model_dict = item.model_dump()
+                    else:
+                        model_dict = {"id": getattr(item, "id", None)}
+                    model_id = model_dict.get("id")
+                    if model_id:
+                        models.append({"id": model_id, **{k: v for k, v in model_dict.items() if k != "id"}})
+                return models
+            except Exception as e:
+                raise RuntimeError(f"Failed to fetch OpenAI models via SDK: {e}")
+            finally:
+                await client.close()
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+        }
+        try:
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.get(cls.MODELS_URL) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise RuntimeError(f"OpenAI API error ({response.status}): {error_text}")
+                    data = await response.json()
+                    return [
+                        {"id": m["id"], **{k: v for k, v in m.items() if k != "id"}}
+                        for m in data.get("data", [])
+                    ]
+        except aiohttp.ClientError as e:
+            raise RuntimeError(f"Failed to fetch OpenAI models: {e}")
 
     @property
     def supports_structured_output(self) -> bool:
@@ -140,23 +182,6 @@ class OpenAIAdapter(BaseLLMAdapter):
                     
             except aiohttp.ClientError as e:
                 raise RuntimeError(f"Failed to communicate with OpenAI API: {str(e)}")
-    
-    async def get_available_models(self) -> list[str]:
-        """Fetch available models from OpenAI API."""
-        if self._use_sdk:
-            # Using OpenAI SDK
-            models = await self.client.models.list()
-            return [model.id for model in models.data]
-        else:
-            # Using HTTP fallback
-            models_url = "https://api.openai.com/v1/models"
-            async with self.session.get(models_url) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise RuntimeError(f"OpenAI API error: {error_text}")
-                
-                data = await response.json()
-                return [model["id"] for model in data["data"]]
     
     async def close(self) -> None:
         """Cleanup any resources used by the adapter."""

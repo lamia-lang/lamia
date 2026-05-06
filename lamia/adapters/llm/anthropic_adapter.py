@@ -15,6 +15,7 @@ class AnthropicAdapter(BaseLLMAdapter):
     """Anthropic API adapter with SDK support and HTTP fallback."""
     
     API_URL = "https://api.anthropic.com/v1/messages"
+    MODELS_URL = "https://api.anthropic.com/v1/models"
     API_VERSION = "2023-06-01"
     
     @classmethod
@@ -29,6 +30,48 @@ class AnthropicAdapter(BaseLLMAdapter):
     @classmethod
     def is_remote(cls) -> bool:
         return True
+
+    @classmethod
+    async def models(cls, api_key: str = "") -> list[dict]:
+        """Fetch available models from Anthropic's /v1/models endpoint."""
+        if ANTHROPIC_AVAILABLE:
+            client = AsyncAnthropic(api_key=api_key)
+            try:
+                response = await client.models.list()
+                models = []
+                for item in getattr(response, "data", []):
+                    if isinstance(item, dict):
+                        model_dict = dict(item)
+                    elif callable(getattr(item, "model_dump", None)):
+                        model_dict = item.model_dump()
+                    else:
+                        model_dict = {"id": getattr(item, "id", None)}
+                    model_id = model_dict.get("id")
+                    if model_id:
+                        models.append({"id": model_id, **{k: v for k, v in model_dict.items() if k != "id"}})
+                return models
+            except Exception as e:
+                raise RuntimeError(f"Failed to fetch Anthropic models via SDK: {e}")
+            finally:
+                await client.close()
+
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": cls.API_VERSION,
+        }
+        try:
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.get(cls.MODELS_URL) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise RuntimeError(f"Anthropic API error ({response.status}): {error_text}")
+                    data = await response.json()
+                    return [
+                        {"id": m["id"], **{k: v for k, v in m.items() if k != "id"}}
+                        for m in data.get("data", [])
+                    ]
+        except aiohttp.ClientError as e:
+            raise RuntimeError(f"Failed to fetch Anthropic models: {e}")
 
     @property
     def supports_structured_output(self) -> bool:
@@ -85,10 +128,14 @@ class AnthropicAdapter(BaseLLMAdapter):
         request_kwargs: Dict[str, Any] = {
             "model": model.get_model_name_without_provider(),
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": model.temperature or 0.7,
             "max_tokens": model.max_tokens or 1000,
-            "top_p": model.top_p or 1.0,
         }
+        # Some Anthropic models reject requests that include both temperature and top_p.
+        # If top_p is explicitly set and temperature is not, send top_p only.
+        if model.top_p is not None and model.temperature is None:
+            request_kwargs["top_p"] = model.top_p
+        else:
+            request_kwargs["temperature"] = model.temperature if model.temperature is not None else 0.7
 
         if response_model is not None:
             request_kwargs["output_config"] = {
@@ -122,9 +169,13 @@ class AnthropicAdapter(BaseLLMAdapter):
             "model": model.get_model_name_without_provider(),
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": model.max_tokens or 1000,
-            "temperature": model.temperature or 0.7,
-            "top_p": model.top_p or 1.0
         }
+        # Some Anthropic models reject requests that include both temperature and top_p.
+        # If top_p is explicitly set and temperature is not, send top_p only.
+        if model.top_p is not None and model.temperature is None:
+            payload["top_p"] = model.top_p
+        else:
+            payload["temperature"] = model.temperature if model.temperature is not None else 0.7
 
         if response_model is not None:
             payload["output_config"] = {

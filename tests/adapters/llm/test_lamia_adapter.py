@@ -171,10 +171,28 @@ class TestLamiaAdapterPayloadBuilding:
             "messages": [{"role": "user", "content": "Hello"}],
             "max_tokens": 2000,
             "temperature": 0.5,
-            "top_p": 0.8
         }
         
         assert payload == expected
+
+    def test_build_request_payload_anthropic_top_p_only(self):
+        """Test Anthropic payload sends top_p when temperature is unset."""
+        adapter = LamiaAdapter(api_key="test-key")
+
+        mock_model = Mock(spec=LLMModel)
+        mock_model.get_model_name_without_provider.return_value = "claude-3-sonnet"
+        mock_model.temperature = None
+        mock_model.max_tokens = 2000
+        mock_model.top_p = 0.8
+
+        payload = adapter._build_request_payload("Hello", mock_model, "anthropic")
+
+        assert payload == {
+            "model": "claude-3-sonnet",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "max_tokens": 2000,
+            "top_p": 0.8,
+        }
     
     def test_build_request_payload_with_defaults(self):
         """Test building request payload with default values."""
@@ -381,7 +399,6 @@ class TestLamiaAdapterGeneration:
                 "messages": [{"role": "user", "content": "Hello"}],
                 "max_tokens": 2000,
                 "temperature": 0.5,
-                "top_p": 0.9
             }
         )
     
@@ -521,153 +538,58 @@ class TestLamiaAdapterErrorHandling:
             await adapter.generate("Hello", mock_model)
 
 
-class TestLamiaAdapterGetAvailableModels:
-    """Test LamiaAdapter get_available_models method."""
-    
+class TestLamiaAdapterModels:
+    """Test LamiaAdapter models classmethod (aggregation)."""
+
     @pytest.mark.asyncio
-    @patch('aiohttp.ClientSession')
-    async def test_get_available_models_success(self, mock_session_class):
-        """Test getting available models successfully."""
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
-        
-        # Mock HTTP response
-        mock_http_response = AsyncMock()
-        mock_http_response.status = 200
-        mock_http_response.json = AsyncMock(return_value={
-            "data": [
-                {"id": "gpt-3.5-turbo", "aliases": ["gpt35"]},
-                {"id": "claude-3-sonnet"},
-                {"id": "gpt-4", "aliases": ["gpt4", "gpt-4-latest"]}
-            ]
-        })
-        
-        # Create async context manager mock
-        class MockGetContext:
-            def __init__(self, response):
-                self.response = response
-            
-            async def __aenter__(self):
-                return self.response
-            
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                return None
-        
-        mock_session.get = Mock(return_value=MockGetContext(mock_http_response))
-        
-        adapter = LamiaAdapter(api_key="test-key", api_url="http://localhost:8080")
-        await adapter.async_initialize()
-        
-        models = await adapter.get_available_models()
-        
-        expected_models = ["gpt-3.5-turbo", "gpt35", "claude-3-sonnet", "gpt-4", "gpt4", "gpt-4-latest"]
-        assert models == expected_models
-        
-        mock_session.get.assert_called_once_with("http://localhost:8080/v1/models")
-    
+    @patch('lamia.adapters.llm.lamia_adapter.os.environ', {"OPENAI_API_KEY": "test-openai", "ANTHROPIC_API_KEY": "test-anthropic"})
+    async def test_list_models_aggregates_providers(self):
+        """Test that models aggregates results from base adapters."""
+        openai_models = [{"id": "gpt-4o"}]
+        anthropic_models = [{"id": "claude-3-sonnet"}]
+        ollama_models = [{"id": "llama3"}]
+
+        with patch('lamia.adapters.llm.openai_adapter.OpenAIAdapter.models', new_callable=AsyncMock, return_value=openai_models), \
+             patch('lamia.adapters.llm.anthropic_adapter.AnthropicAdapter.models', new_callable=AsyncMock, return_value=anthropic_models), \
+             patch('lamia.adapters.llm.local.ollama_adapter.OllamaAdapter.models', new_callable=AsyncMock, return_value=ollama_models):
+
+            models = await LamiaAdapter.models()
+
+        assert len(models) == 3
+        providers = {m["provider"] for m in models}
+        assert providers == {"openai", "anthropic", "ollama"}
+
     @pytest.mark.asyncio
-    @patch('aiohttp.ClientSession')
-    async def test_get_available_models_no_aliases(self, mock_session_class):
-        """Test getting available models without aliases."""
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
-        
-        # Mock HTTP response without aliases
-        mock_http_response = AsyncMock()
-        mock_http_response.status = 200
-        mock_http_response.json = AsyncMock(return_value={
-            "data": [
-                {"id": "gpt-3.5-turbo"},
-                {"id": "claude-3-sonnet"}
-            ]
-        })
-        
-        # Create async context manager mock
-        class MockGetContext:
-            def __init__(self, response):
-                self.response = response
-            
-            async def __aenter__(self):
-                return self.response
-            
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                return None
-        
-        mock_session.get = Mock(return_value=MockGetContext(mock_http_response))
-        
-        adapter = LamiaAdapter(api_key="test-key")
-        await adapter.async_initialize()
-        
-        models = await adapter.get_available_models()
-        
-        assert models == ["gpt-3.5-turbo", "claude-3-sonnet"]
-    
+    @patch('lamia.adapters.llm.lamia_adapter.os.environ', {})
+    async def test_list_models_skips_remote_without_key(self):
+        """Test that remote providers without API keys are skipped."""
+        ollama_models = [{"id": "llama3"}]
+
+        with patch('lamia.adapters.llm.openai_adapter.OpenAIAdapter.models', new_callable=AsyncMock) as mock_openai, \
+             patch('lamia.adapters.llm.anthropic_adapter.AnthropicAdapter.models', new_callable=AsyncMock) as mock_anthropic, \
+             patch('lamia.adapters.llm.local.ollama_adapter.OllamaAdapter.models', new_callable=AsyncMock, return_value=ollama_models):
+
+            models = await LamiaAdapter.models()
+
+        mock_openai.assert_not_called()
+        mock_anthropic.assert_not_called()
+        assert len(models) == 1
+        assert models[0]["id"] == "llama3"
+
     @pytest.mark.asyncio
-    async def test_get_available_models_not_initialized(self):
-        """Test getting models when adapter is not initialized."""
-        adapter = LamiaAdapter(api_key="test-key")
-        
-        with pytest.raises(RuntimeError, match="Adapter not initialized"):
-            await adapter.get_available_models()
-    
-    @pytest.mark.asyncio
-    @patch('aiohttp.ClientSession')
-    async def test_get_available_models_api_error(self, mock_session_class):
-        """Test getting models with API error."""
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
-        
-        # Mock HTTP error response
-        mock_http_response = AsyncMock()
-        mock_http_response.status = 401
-        
-        class MockGetContext:
-            def __init__(self, response):
-                self.response = response
-            
-            async def __aenter__(self):
-                return self.response
-            
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                return None
-        
-        mock_session.get = Mock(return_value=MockGetContext(mock_http_response))
-        
-        adapter = LamiaAdapter(api_key="test-key")
-        await adapter.async_initialize()
-        
-        with pytest.raises(RuntimeError, match="Invalid Lamia API key"):
-            await adapter.get_available_models()
-    
-    @pytest.mark.asyncio
-    @patch('aiohttp.ClientSession')
-    async def test_get_available_models_invalid_response(self, mock_session_class):
-        """Test getting models with invalid response format."""
-        mock_session = AsyncMock()
-        mock_session_class.return_value = mock_session
-        
-        # Mock invalid HTTP response (missing 'data' field)
-        mock_http_response = AsyncMock()
-        mock_http_response.status = 200
-        mock_http_response.json = AsyncMock(return_value={"error": "Invalid format"})
-        
-        class MockGetContext:
-            def __init__(self, response):
-                self.response = response
-            
-            async def __aenter__(self):
-                return self.response
-            
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                return None
-        
-        mock_session.get = Mock(return_value=MockGetContext(mock_http_response))
-        
-        adapter = LamiaAdapter(api_key="test-key")
-        await adapter.async_initialize()
-        
-        with pytest.raises(RuntimeError, match="Invalid response format from Lamia API"):
-            await adapter.get_available_models()
+    @patch('lamia.adapters.llm.lamia_adapter.os.environ', {"OPENAI_API_KEY": "test-key"})
+    async def test_list_models_handles_provider_failure(self):
+        """Test that one provider failing does not block others."""
+        openai_models = [{"id": "gpt-4o"}]
+
+        with patch('lamia.adapters.llm.openai_adapter.OpenAIAdapter.models', new_callable=AsyncMock, return_value=openai_models), \
+             patch('lamia.adapters.llm.anthropic_adapter.AnthropicAdapter.models', new_callable=AsyncMock, side_effect=RuntimeError("API down")), \
+             patch('lamia.adapters.llm.local.ollama_adapter.OllamaAdapter.models', new_callable=AsyncMock, return_value=[]):
+
+            models = await LamiaAdapter.models()
+
+        assert len(models) == 1
+        assert models[0]["id"] == "gpt-4o"
 
 
 class TestLamiaAdapterCleanup:

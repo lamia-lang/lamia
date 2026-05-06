@@ -120,6 +120,19 @@ class BaseLLMAdapter(ABC):
         """
         return False
 
+    @classmethod
+    async def models(cls, api_key: str = "") -> list[dict]:
+        """Fetch available models from this provider.
+
+        Returns a list of dicts with at least an ``id`` key.  Providers
+        that expose richer metadata (created date, owned_by, etc.) may
+        include additional keys.
+
+        The default implementation returns an empty list.  Built-in
+        adapters override this to query the provider's models endpoint.
+        """
+        return []
+
     @property
     def has_context_memory(self) -> bool:
         return False 

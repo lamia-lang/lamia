@@ -71,6 +71,22 @@ class OllamaAdapter(BaseLLMAdapter):
     def is_remote(cls) -> bool:
         return False  # Local model
 
+    @classmethod
+    async def models(cls, api_key: str = "", base_url: str = "http://localhost:11434") -> list[dict]:
+        """Fetch installed models from the local Ollama instance."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{base_url.rstrip('/')}/api/tags") as response:
+                    if response.status != 200:
+                        return []
+                    data = await response.json()
+                    return [
+                        {"id": m["name"], **{k: v for k, v in m.items() if k != "name"}}
+                        for m in data.get("models", [])
+                    ]
+        except aiohttp.ClientError:
+            return []
+
     @property
     def supports_structured_output(self) -> bool:
         return True
@@ -273,37 +289,6 @@ class OllamaAdapter(BaseLLMAdapter):
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to check/pull Ollama model: {str(e)}")
             return False
-
-    async def get_available_models(self) -> List[str]:
-        """Get available model names from local Ollama installation."""
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.base_url}/api/tags") as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        models = data.get("models", [])
-                        return [model["name"] for model in models]
-                    else:
-                        logger.error(f"Failed to fetch Ollama models: {response.status}")
-                        return []
-        except Exception as e:
-            logger.error(f"Error fetching Ollama models: {e}")
-            return []
-    
-    async def get_model_details(self) -> List[Dict[str, Any]]:
-        """Get detailed model information including sizes."""
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.base_url}/api/tags") as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return data.get("models", [])
-                    else:
-                        logger.error(f"Failed to fetch Ollama model details: {response.status}")
-                        return []
-        except Exception as e:
-            logger.error(f"Error fetching Ollama model details: {e}")
-            return []
 
     async def close(self) -> None:
         

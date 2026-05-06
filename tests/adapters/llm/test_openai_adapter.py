@@ -256,73 +256,103 @@ class TestOpenAIAdapterGeneration:
         assert response.usage == {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
 
 
-class TestOpenAIAdapterGetAvailableModels:
-    """Test OpenAI adapter get_available_models method."""
-    
-    @pytest.mark.asyncio
-    @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', True)
-    async def test_get_available_models_with_sdk(self):
-        """Test getting available models with SDK."""
-        with patch('lamia.adapters.llm.openai_adapter.AsyncOpenAI') as mock_openai:
-            mock_client = AsyncMock()
-            mock_openai.return_value = mock_client
-            
-            # Mock models response
-            mock_model1 = Mock()
-            mock_model1.id = "gpt-3.5-turbo"
-            mock_model2 = Mock()
-            mock_model2.id = "gpt-4"
-            
-            mock_models_response = Mock()
-            mock_models_response.data = [mock_model1, mock_model2]
-            
-            mock_client.models.list = AsyncMock(return_value=mock_models_response)
-            
-            adapter = OpenAIAdapter(api_key="test-key")
-            
-            models = await adapter.get_available_models()
-            
-            assert models == ["gpt-3.5-turbo", "gpt-4"]
-            mock_client.models.list.assert_called_once()
-    
+class TestOpenAIAdapterModels:
+    """Test OpenAI adapter models classmethod."""
+
     @pytest.mark.asyncio
     @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', False)
-    @patch('aiohttp.ClientSession')
-    async def test_get_available_models_with_http(self, mock_session_class):
-        """Test getting available models with HTTP."""
-        mock_session = Mock()
-        mock_session_class.return_value = mock_session
-        
-        # Mock HTTP response
-        mock_http_response = AsyncMock()
-        mock_http_response.status = 200
-        mock_http_response.json = AsyncMock(return_value={
+    async def test_list_models_success(self):
+        """Test listing models via HTTP."""
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
             "data": [
                 {"id": "gpt-3.5-turbo"},
                 {"id": "gpt-4"}
             ]
         })
-        
-        # Create async context manager mock
+
         class MockGetContext:
-            def __init__(self, response):
-                self.response = response
-            
+            def __init__(self, resp):
+                self.resp = resp
             async def __aenter__(self):
-                return self.response
-            
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return self.resp
+            async def __aexit__(self, *a):
                 return None
-        
-        mock_session.get.return_value = MockGetContext(mock_http_response)
-        
-        adapter = OpenAIAdapter(api_key="test-key")
-        await adapter.async_initialize()
-        
-        models = await adapter.get_available_models()
-        
-        assert models == ["gpt-3.5-turbo", "gpt-4"]
-        mock_session.get.assert_called_once_with("https://api.openai.com/v1/models")
+
+        mock_session = Mock()
+        mock_session.get = Mock(return_value=MockGetContext(mock_response))
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch('aiohttp.ClientSession', return_value=mock_session):
+            models = await OpenAIAdapter.models(api_key="test-key")
+
+        assert len(models) == 2
+        assert models[0]["id"] == "gpt-3.5-turbo"
+        assert models[1]["id"] == "gpt-4"
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', False)
+    async def test_list_models_api_error(self):
+        """Test models with API error status."""
+        mock_response = AsyncMock()
+        mock_response.status = 401
+        mock_response.text = AsyncMock(return_value="Unauthorized")
+
+        class MockGetContext:
+            def __init__(self, resp):
+                self.resp = resp
+            async def __aenter__(self):
+                return self.resp
+            async def __aexit__(self, *a):
+                return None
+
+        mock_session = Mock()
+        mock_session.get = Mock(return_value=MockGetContext(mock_response))
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch('aiohttp.ClientSession', return_value=mock_session):
+            with pytest.raises(RuntimeError, match="OpenAI API error"):
+                await OpenAIAdapter.models(api_key="bad-key")
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', False)
+    async def test_list_models_network_error(self):
+        """Test models raises on network failure."""
+        mock_session = Mock()
+        mock_session.get = Mock(side_effect=aiohttp.ClientError("Connection refused"))
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch('aiohttp.ClientSession', return_value=mock_session):
+            with pytest.raises(RuntimeError, match="Failed to fetch OpenAI models"):
+                await OpenAIAdapter.models(api_key="test-key")
+
+    def test_models_url_constant(self):
+        """Test that MODELS_URL constant is correct."""
+        assert OpenAIAdapter.MODELS_URL == "https://api.openai.com/v1/models"
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', True)
+    @patch('lamia.adapters.llm.openai_adapter.AsyncOpenAI')
+    async def test_models_uses_sdk_when_available(self, mock_openai_cls):
+        """Test models uses OpenAI SDK path when available."""
+        mock_client = AsyncMock()
+        mock_model = Mock()
+        mock_model.model_dump.return_value = {"id": "gpt-4o", "owned_by": "openai"}
+        mock_response = Mock()
+        mock_response.data = [mock_model]
+        mock_client.models.list = AsyncMock(return_value=mock_response)
+        mock_openai_cls.return_value = mock_client
+
+        models = await OpenAIAdapter.models(api_key="test-key")
+
+        mock_openai_cls.assert_called_once_with(api_key="test-key")
+        mock_client.models.list.assert_called_once()
+        mock_client.close.assert_called_once()
+        assert models == [{"id": "gpt-4o", "owned_by": "openai"}]
 
 
 class TestOpenAIAdapterIntegration:

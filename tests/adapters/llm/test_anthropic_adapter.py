@@ -149,7 +149,6 @@ class TestAnthropicAdapterGeneration:
                 messages=[{"role": "user", "content": "Hello"}],
                 temperature=0.7,
                 max_tokens=1000,
-                top_p=1.0,
             )
             
             # Verify response
@@ -212,7 +211,6 @@ class TestAnthropicAdapterGeneration:
                     "messages": [{"role": "user", "content": "Test prompt"}],
                     "max_tokens": 500,
                     "temperature": 0.5,
-                    "top_p": 0.9
                 }
             )
             
@@ -309,7 +307,6 @@ class TestAnthropicAdapterDefaultValues:
                 messages=[{"role": "user", "content": "Test"}],
                 temperature=0.7,  # default
                 max_tokens=1000,  # default
-                top_p=1.0,  # default
             )
     
     @pytest.mark.asyncio
@@ -358,7 +355,6 @@ class TestAnthropicAdapterDefaultValues:
                 "messages": [{"role": "user", "content": "Test"}],
                 "max_tokens": 1000,  # default
                 "temperature": 0.7,  # default
-                "top_p": 1.0  # default
             }
             mock_session.post.assert_called_once_with(
                 "https://api.anthropic.com/v1/messages",
@@ -419,6 +415,115 @@ class TestAnthropicAdapterEdgeCases:
     def test_api_version_constant(self):
         """Test that API version constant is correct."""
         assert AnthropicAdapter.API_VERSION == "2023-06-01"
+
+
+class TestAnthropicAdapterModels:
+    """Test AnthropicAdapter models classmethod."""
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', False)
+    async def test_list_models_success(self):
+        """Test fetching models from Anthropic API."""
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={
+            "data": [
+                {"id": "claude-3-sonnet-20240229", "type": "model"},
+                {"id": "claude-3-opus-20240229", "type": "model"},
+            ]
+        })
+
+        class MockGetContext:
+            def __init__(self, resp):
+                self.resp = resp
+            async def __aenter__(self):
+                return self.resp
+            async def __aexit__(self, *a):
+                return None
+
+        mock_session = Mock()
+        mock_session.get = Mock(return_value=MockGetContext(mock_response))
+
+        class MockSessionContext:
+            def __init__(self, s):
+                self.s = s
+            async def __aenter__(self):
+                return self.s
+            async def __aexit__(self, *a):
+                return None
+
+        with patch('aiohttp.ClientSession', return_value=MockSessionContext(mock_session).s) as mock_cls:
+            mock_cls.return_value = mock_session
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+
+            models = await AnthropicAdapter.models(api_key="test-key")
+
+        assert len(models) == 2
+        assert models[0]["id"] == "claude-3-sonnet-20240229"
+        assert models[1]["id"] == "claude-3-opus-20240229"
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', False)
+    async def test_list_models_api_error(self):
+        """Test models raises on API error."""
+        mock_response = AsyncMock()
+        mock_response.status = 401
+        mock_response.text = AsyncMock(return_value="Unauthorized")
+
+        class MockGetContext:
+            def __init__(self, resp):
+                self.resp = resp
+            async def __aenter__(self):
+                return self.resp
+            async def __aexit__(self, *a):
+                return None
+
+        mock_session = Mock()
+        mock_session.get = Mock(return_value=MockGetContext(mock_response))
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch('aiohttp.ClientSession', return_value=mock_session):
+            with pytest.raises(RuntimeError, match="Anthropic API error"):
+                await AnthropicAdapter.models(api_key="bad-key")
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', False)
+    async def test_list_models_network_error(self):
+        """Test models raises on network failure."""
+        mock_session = Mock()
+        mock_session.get = Mock(side_effect=aiohttp.ClientError("Connection refused"))
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch('aiohttp.ClientSession', return_value=mock_session):
+            with pytest.raises(RuntimeError, match="Failed to fetch Anthropic models"):
+                await AnthropicAdapter.models(api_key="test-key")
+
+    def test_models_url_constant(self):
+        """Test that MODELS_URL constant is correct."""
+        assert AnthropicAdapter.MODELS_URL == "https://api.anthropic.com/v1/models"
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', True)
+    @patch('lamia.adapters.llm.anthropic_adapter.AsyncAnthropic')
+    async def test_models_uses_sdk_when_available(self, mock_anthropic_cls):
+        """Test models uses Anthropic SDK path when available."""
+        mock_client = AsyncMock()
+        mock_model = Mock()
+        mock_model.model_dump.return_value = {"id": "claude-3-5-sonnet-latest", "type": "model"}
+        mock_response = Mock()
+        mock_response.data = [mock_model]
+        mock_client.models.list = AsyncMock(return_value=mock_response)
+        mock_anthropic_cls.return_value = mock_client
+
+        models = await AnthropicAdapter.models(api_key="test-key")
+
+        mock_anthropic_cls.assert_called_once_with(api_key="test-key")
+        mock_client.models.list.assert_called_once()
+        mock_client.close.assert_called_once()
+        assert models == [{"id": "claude-3-5-sonnet-latest", "type": "model"}]
 
 
 class TestAnthropicAdapterIntegration:
