@@ -157,25 +157,19 @@ class SessionManager:
     
     def load_cookies(self, profile_name: str) -> List[Dict]:
         """Load cookies from file."""
-        print(f"TO DELETE: SessionManager.load_cookies called with profile_name: {profile_name}")
         if not self.enabled or not self.should_save_cookies:
-            print(f"TO DELETE: Not loading cookies - enabled: {self.enabled}, save_cookies: {self.save_cookies}")
             return []
-        
+
         cookies_file = self.get_cookies_file(profile_name)
-        print(f"TO DELETE: Looking for cookies file at: {cookies_file}")
         if not cookies_file.exists():
-            print(f"TO DELETE: Cookies file does not exist: {cookies_file}")
             return []
-        
+
         try:
             with open(cookies_file, 'r') as f:
                 cookies = json.load(f)
-            print(f"TO DELETE: Successfully loaded {len(cookies)} cookies for profile '{profile_name}'")
             logger.info(f"Loaded {len(cookies)} cookies for profile '{profile_name}'")
             return cookies
         except (json.JSONDecodeError, IOError) as e:
-            print(f"TO DELETE: Failed to load cookies for profile '{profile_name}': {e}")
             logger.warning(f"Failed to load cookies for profile '{profile_name}': {e}")
             return []
     

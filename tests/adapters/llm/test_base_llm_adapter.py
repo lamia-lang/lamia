@@ -3,7 +3,7 @@
 import pytest
 from abc import ABC
 from unittest.mock import Mock
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
+from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, sanitize_api_error
 from lamia import LLMModel
 
 
@@ -309,6 +309,60 @@ class TestBaseLLMAdapterModels:
         """Test that the default models works with empty key."""
         result = await ConcreteAdapter.models()
         assert result == []
+
+
+class TestSanitizeApiError:
+    """Test sanitize_api_error redacts credentials from error messages."""
+
+    def test_openai_invalid_key_message(self):
+        msg = "Incorrect API key provided: sk-abc123xyz. You can find your API key at https://platform.openai.com/account/api-keys."
+        result = sanitize_api_error(msg)
+        assert "sk-abc123xyz" not in result
+        assert "[REDACTED]" in result
+
+    def test_bearer_token_redacted(self):
+        msg = "Authorization failed for Bearer sk-supersecret"
+        result = sanitize_api_error(msg)
+        assert "sk-supersecret" not in result
+        assert "[REDACTED]" in result
+
+    def test_x_api_key_with_sk_prefix_redacted(self):
+        msg = "Invalid x-api-key: sk-mySecretKey123"
+        result = sanitize_api_error(msg)
+        assert "sk-mySecretKey123" not in result
+        assert "[REDACTED]" in result
+
+    def test_x_api_key_without_sk_prefix_unchanged(self):
+        msg = "Invalid x-api-key: mysecretkey123"
+        assert sanitize_api_error(msg) == msg
+
+    def test_api_key_query_param_redacted(self):
+        msg = "Request failed: api_key=sk-real-key-value is invalid"
+        result = sanitize_api_error(msg)
+        assert "sk-real-key-value" not in result
+        assert "[REDACTED]" in result
+
+    def test_multiple_keys_in_one_message(self):
+        msg = "Keys: sk-firstkey123 and sk-secondkey456 are both invalid"
+        result = sanitize_api_error(msg)
+        assert "sk-firstkey123" not in result
+        assert "sk-secondkey456" not in result
+        assert result.count("[REDACTED]") == 2
+
+    def test_too_short_sk_prefix_unchanged(self):
+        msg = "Error code sk-bad"
+        assert sanitize_api_error(msg) == msg
+
+    def test_safe_message_unchanged(self):
+        msg = "Connection timeout after 30 seconds"
+        assert sanitize_api_error(msg) == msg
+
+    def test_rate_limit_message_unchanged(self):
+        msg = "Too many requests, rate limit exceeded"
+        assert sanitize_api_error(msg) == msg
+
+    def test_empty_string(self):
+        assert sanitize_api_error("") == ""
 
 
 class TestBaseLLMAdapterVariants:

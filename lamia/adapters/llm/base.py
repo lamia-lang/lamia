@@ -1,8 +1,18 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Type
+import re
 from pydantic import BaseModel
 from lamia import LLMModel
+
+# Matches any token that looks like a secret key: starts with "sk-" followed by
+# at least 6 word characters (alphanumeric + underscore + hyphen).
+_SK_KEY_PATTERN = re.compile(r'\bsk-[\w\-]{6,}')
+
+
+def sanitize_api_error(message: str) -> str:
+    """Replace sk-* secret key tokens in error messages with [REDACTED]."""
+    return _SK_KEY_PATTERN.sub('[REDACTED]', message)
 
 
 def make_strict_schema(model: Type[BaseModel]) -> dict:

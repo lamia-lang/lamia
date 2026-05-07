@@ -1,6 +1,6 @@
 from typing import Optional, Dict, Any, Type
 import aiohttp
-from .base import BaseLLMAdapter, LLMResponse, make_strict_schema
+from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error
 from lamia import LLMModel
 from pydantic import BaseModel
 
@@ -51,7 +51,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                         models.append({"id": model_id, **{k: v for k, v in model_dict.items() if k != "id"}})
                 return models
             except Exception as e:
-                raise RuntimeError(f"Failed to fetch OpenAI models via SDK: {e}")
+                raise RuntimeError(f"Failed to fetch OpenAI models via SDK: {sanitize_api_error(str(e))}")
             finally:
                 await client.close()
 
@@ -63,7 +63,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                 async with session.get(cls.MODELS_URL) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        raise RuntimeError(f"OpenAI API error ({response.status}): {error_text}")
+                        raise RuntimeError(f"OpenAI API error ({response.status}): {sanitize_api_error(error_text)}")
                     data = await response.json()
                     return [
                         {"id": m["id"], **{k: v for k, v in m.items() if k != "id"}}
@@ -169,7 +169,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                 async with self.session.post(self.API_URL, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        raise RuntimeError(f"OpenAI API error: {error_text}")
+                        raise RuntimeError(f"OpenAI API error: {sanitize_api_error(error_text)}")
                         
                     data = await response.json()
                     

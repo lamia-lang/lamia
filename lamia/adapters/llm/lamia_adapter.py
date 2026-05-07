@@ -4,7 +4,7 @@ import logging
 import os
 import aiohttp
 from lamia import LLMModel
-from .base import BaseLLMAdapter, LLMResponse, make_strict_schema
+from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error
 from .anthropic_adapter import AnthropicAdapter
 from .openai_adapter import OpenAIAdapter
 from .local.ollama_adapter import OllamaAdapter
@@ -184,7 +184,6 @@ class LamiaAdapter(BaseLLMAdapter):
         endpoint_url = self._get_endpoint_for_provider(provider_name)
         
         # Build request payload according to provider's format
-        print(f"Building request payload for {provider_name} with model {model.name}")
         payload = self._build_request_payload(
             prompt,
             model,
@@ -198,12 +197,12 @@ class LamiaAdapter(BaseLLMAdapter):
                     raise RuntimeError("Invalid Lamia API key")
                 elif response.status == 400:
                     error_text = await response.text()
-                    raise RuntimeError(f"Lamia API bad request: {error_text}")
+                    raise RuntimeError(f"Lamia API bad request: {sanitize_api_error(error_text)}")
                 elif response.status == 402:
                     raise RuntimeError("Insufficient credits")
                 elif response.status != 200:
                     error_text = await response.text()
-                    raise RuntimeError(f"Lamia API error ({response.status}): {error_text}")
+                    raise RuntimeError(f"Lamia API error ({response.status}): {sanitize_api_error(error_text)}")
                     
                 data = await response.json()
                 
