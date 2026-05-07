@@ -5,9 +5,7 @@ import re
 from pydantic import BaseModel
 from lamia import LLMModel
 
-# Matches any token that looks like a secret key: starts with "sk-" followed by
-# at least 6 word characters (alphanumeric + underscore + hyphen).
-_SK_KEY_PATTERN = re.compile(r'\bsk-[\w\-]{6,}')
+_SK_KEY_PATTERN = re.compile(r'sk-[\w*-]+')
 
 
 def sanitize_api_error(message: str) -> str:

@@ -349,9 +349,23 @@ class TestSanitizeApiError:
         assert "sk-secondkey456" not in result
         assert result.count("[REDACTED]") == 2
 
-    def test_too_short_sk_prefix_unchanged(self):
-        msg = "Error code sk-bad"
-        assert sanitize_api_error(msg) == msg
+    def test_multi_dash_key_redacted(self):
+        msg = "Incorrect API key provided: sk-ant-api03-abcdefghijk."
+        result = sanitize_api_error(msg)
+        assert "sk-ant-api03-abcdefghijk" not in result
+        assert "[REDACTED]" in result
+
+    def test_proj_key_redacted(self):
+        msg = "Invalid key sk-proj-T3BlbkFJabcdefghijk"
+        result = sanitize_api_error(msg)
+        assert "sk-proj-T3BlbkFJabcdefghijk" not in result
+        assert "[REDACTED]" in result
+
+    def test_api_redacted_key_fully_replaced(self):
+        msg = "Incorrect API key provided: sk-dgdfg***************fdsf."
+        result = sanitize_api_error(msg)
+        assert "sk-dgdfg" not in result
+        assert "[REDACTED]" in result
 
     def test_safe_message_unchanged(self):
         msg = "Connection timeout after 30 seconds"
