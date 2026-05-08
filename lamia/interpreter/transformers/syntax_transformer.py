@@ -81,6 +81,10 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     def __init__(self, lamia_var_name: str = 'lamia'):
         self.lamia_var_name = lamia_var_name
         self.detector = LLMCommandDetector()
+        # Tracks whether the current node being transformed is inside a with files() block.
+        # Set to the capture variable name when transforming a function inside such a block.
+        self._current_files_ctx_var: Optional[str] = None
+        self._files_ctx_counter: int = 0
     
     def transform_code(self, source_code: str, return_types: Dict[str, str] = None) -> str:
         """
@@ -175,6 +179,143 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         )
         stmts.append(user_assign)
         return stmts
+
+    def visit_With(self, node):
+        """Detect ``with files()`` blocks and inject context capture for LLM functions inside."""
+        if not self._is_files_context_manager(node):
+            return self.generic_visit(node)
+
+        new_body: List[ast.stmt] = []
+        for stmt in node.body:
+            is_llm_func = (
+                isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and stmt.name in self.detector.llm_functions
+            )
+            if is_llm_func:
+                ctx_var = f'__lamia_files_ctx_{self._files_ctx_counter}'
+                self._files_ctx_counter += 1
+
+                # __lamia_files_ctx_N = capture_files_context()
+                capture_stmt = ast.Assign(
+                    targets=[ast.Name(id=ctx_var, ctx=ast.Store())],
+                    value=ast.Call(
+                        func=ast.Name(id='capture_files_context', ctx=ast.Load()),
+                        args=[],
+                        keywords=[],
+                    ),
+                    lineno=stmt.lineno,
+                    col_offset=stmt.col_offset,
+                )
+                new_body.append(capture_stmt)
+
+                prev_ctx_var = self._current_files_ctx_var
+                self._current_files_ctx_var = ctx_var
+                transformed = self.visit(stmt)
+                self._current_files_ctx_var = prev_ctx_var
+
+                if isinstance(transformed, list):
+                    new_body.extend(transformed)
+                else:
+                    new_body.append(transformed)
+            else:
+                new_body.append(self.visit(stmt))
+
+        new_node = ast.With(
+            items=node.items,
+            body=new_body,
+            lineno=node.lineno,
+            col_offset=node.col_offset,
+        )
+        ast.fix_missing_locations(new_node)
+        return new_node
+
+    @staticmethod
+    def _is_files_context_manager(node: ast.With) -> bool:
+        """Return True if any item in the With node is a ``files(...)`` call."""
+        for item in node.items:
+            ctx = item.context_expr
+            if (
+                isinstance(ctx, ast.Call)
+                and isinstance(ctx.func, ast.Name)
+                and ctx.func.id == 'files'
+            ):
+                return True
+        return False
+
+    def _build_files_context_wrapped_body(
+        self, original_body: List[ast.stmt], ctx_var: str,
+    ) -> List[ast.stmt]:
+        """Wrap *original_body* so the captured files context is active during execution.
+
+        Generated pattern::
+
+            __lamia_entered_ctx = __lamia_files_ctx_N.__enter__() if __lamia_files_ctx_N is not None else None
+            try:
+                <original_body>
+            finally:
+                if __lamia_entered_ctx is not None:
+                    __lamia_files_ctx_N.__exit__(None, None, None)
+        """
+        entered_var = '__lamia_entered_ctx'
+
+        # __lamia_entered_ctx = ctx.__enter__() if ctx is not None else None
+        assign_enter = ast.Assign(
+            targets=[ast.Name(id=entered_var, ctx=ast.Store())],
+            value=ast.IfExp(
+                test=ast.Compare(
+                    left=ast.Name(id=ctx_var, ctx=ast.Load()),
+                    ops=[ast.IsNot()],
+                    comparators=[ast.Constant(value=None)],
+                ),
+                body=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id=ctx_var, ctx=ast.Load()),
+                        attr='__enter__',
+                        ctx=ast.Load(),
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+                orelse=ast.Constant(value=None),
+            ),
+            lineno=1, col_offset=0,
+        )
+
+        # if __lamia_entered_ctx is not None: ctx.__exit__(None, None, None)
+        exit_if = ast.If(
+            test=ast.Compare(
+                left=ast.Name(id=entered_var, ctx=ast.Load()),
+                ops=[ast.IsNot()],
+                comparators=[ast.Constant(value=None)],
+            ),
+            body=[
+                ast.Expr(value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id=ctx_var, ctx=ast.Load()),
+                        attr='__exit__',
+                        ctx=ast.Load(),
+                    ),
+                    args=[
+                        ast.Constant(value=None),
+                        ast.Constant(value=None),
+                        ast.Constant(value=None),
+                    ],
+                    keywords=[],
+                ))
+            ],
+            orelse=[],
+            lineno=1, col_offset=0,
+        )
+
+        try_stmt = ast.Try(
+            body=original_body,
+            handlers=[],
+            orelse=[],
+            finalbody=[exit_if],
+            lineno=1, col_offset=0,
+        )
+
+        return [assign_enter, try_stmt]
 
     def visit_Call(self, node):
         """Transform web method calls and typed expression markers into lamia.run() calls."""
@@ -722,17 +863,20 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 keywords=keywords
             )
         )
+        body: List[ast.stmt] = [ast.Return(value=lamia_call)]
+        if self._current_files_ctx_var:
+            body = self._build_files_context_wrapped_body(body, self._current_files_ctx_var)
         return ast.AsyncFunctionDef(
             name=node.name,
             args=node.args,
-            body=[ast.Return(value=lamia_call)],
+            body=body,
             decorator_list=node.decorator_list,
             returns=node.returns,
             type_comment=getattr(node, 'type_comment', None),
             lineno=getattr(node, 'lineno', 1),
             col_offset=getattr(node, 'col_offset', 0)
         )
-    
+
     def _build_sync_lamia_function(self, node, args, keywords) -> ast.FunctionDef:
         """Build sync function with lamia.run() call."""
         lamia_call = ast.Call(
@@ -744,10 +888,13 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             args=args,
             keywords=keywords
         )
+        body: List[ast.stmt] = [ast.Return(value=lamia_call)]
+        if self._current_files_ctx_var:
+            body = self._build_files_context_wrapped_body(body, self._current_files_ctx_var)
         return ast.FunctionDef(
             name=node.name,
             args=node.args,
-            body=[ast.Return(value=lamia_call)],
+            body=body,
             decorator_list=node.decorator_list,
             returns=node.returns,
             type_comment=getattr(node, 'type_comment', None),
@@ -818,6 +965,8 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             encoding=file_return_type.encoding,
             is_async=is_async,
         )
+        if self._current_files_ctx_var:
+            body = self._build_files_context_wrapped_body(body, self._current_files_ctx_var)
 
         if is_async:
             return ast.AsyncFunctionDef(

@@ -363,7 +363,7 @@ def _build_lamia_auto_imports() -> set[str]:
     names.update(_NAMESPACE_REGISTRY.keys())
 
     # Context managers / builtins
-    names.update({"session", "files", "File"})
+    names.update({"session", "files", "File", "capture_files_context"})
 
     # Validation types from lamia.types (JSON, HTML, YAML, …)
     try:

@@ -312,6 +312,46 @@ def get_active_files_context() -> Optional[FilesContext]:
     return _context_stack[-1] if _context_stack else None
 
 
+class CapturedFilesContext:
+    """Snapshot of a FilesContext for deferred use outside the original ``with files()`` block.
+
+    When an LLM function is defined inside a ``with files()`` block, the AST
+    transformer inserts ``capture_files_context()`` before the function definition
+    and wraps the function body with ``__enter__`` / ``__exit__`` calls so the
+    captured context is re-activated on every invocation, even after the original
+    ``with`` block has exited.
+    """
+
+    def __init__(self, indexed_files: List[str]) -> None:
+        self._indexed_files = list(indexed_files)
+
+    def __enter__(self) -> 'FilesContext':
+        ctx = FilesContext.__new__(FilesContext)
+        ctx.paths = ()
+        ctx.indexed_files = list(self._indexed_files)
+        ctx.searcher = FileSearcher(ctx.indexed_files)
+        _context_stack.append(ctx)
+        return ctx
+
+    def __exit__(self, *args) -> None:
+        if _context_stack:
+            _context_stack.pop()
+
+
+def capture_files_context() -> Optional[CapturedFilesContext]:
+    """Snapshot the current active files context for deferred use.
+
+    Call this inside a ``with files(...)`` block.  The returned
+    :class:`CapturedFilesContext` can be used later (outside the original
+    ``with`` block) to temporarily restore the same set of indexed files.
+    Returns ``None`` when no files context is currently active.
+    """
+    ctx = get_active_files_context()
+    if ctx is None:
+        return None
+    return CapturedFilesContext(list(ctx.indexed_files))
+
+
 def files(*paths: str) -> FilesContext:
     """Create a files context manager.
     

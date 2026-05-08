@@ -6,12 +6,14 @@ The `files()` context manager allows you to reference files in your LLM prompts 
 
 ```python
 with files("~/Documents/", "~/projects/"):
-    def answer_question(question=question):
+    def answer_question(question: str):
         """
         Answer: {question}
-        
+
         Use information from {@resume.pdf} and {@cover_letter.txt}
         """
+
+answer = answer_question(question="What are my main skills?")
 ```
 
 ## Key Features
