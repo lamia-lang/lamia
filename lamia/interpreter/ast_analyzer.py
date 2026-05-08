@@ -186,8 +186,9 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
         execution_globals['file'] = file
     
     if 'files' in used_namespaces:
-        from lamia.engine.managers.llm.files_context_manager import files
+        from lamia.engine.managers.llm.files_context_manager import files, capture_files_context
         execution_globals['files'] = files
+        execution_globals['capture_files_context'] = capture_files_context
     
     # Always inject InputType for form automation
     from lamia.types import InputType
