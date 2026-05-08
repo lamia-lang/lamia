@@ -161,6 +161,35 @@ class TestAnthropicAdapterGeneration:
                 "output_tokens": 8,
                 "total_tokens": 18
             }
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', True)
+    async def test_generate_with_sdk_error_sanitized(self):
+        """SDK errors should be surfaced with API keys fully redacted."""
+        with patch('lamia.adapters.llm.anthropic_adapter.AsyncAnthropic') as mock_anthropic:
+            mock_client = AsyncMock()
+            mock_anthropic.return_value = mock_client
+            mock_client.messages.create = AsyncMock(
+                side_effect=RuntimeError(
+                    "Error code: 401 - {'error': {'message': 'invalid x-api-key sk-ant-api03-abcdefghijk'}}"
+                )
+            )
+
+            adapter = AnthropicAdapter(api_key="test-key")
+
+            mock_model = Mock(spec=LLMModel)
+            mock_model.name = "anthropic/claude-3-sonnet"
+            mock_model.temperature = 0.7
+            mock_model.max_tokens = 1000
+            mock_model.top_p = 1.0
+            mock_model.get_model_name_without_provider.return_value = "claude-3-sonnet"
+
+            with pytest.raises(RuntimeError) as exc:
+                await adapter.generate("Hello", mock_model)
+
+            msg = str(exc.value)
+            assert "sk-ant-api03-abcdefghijk" not in msg
+            assert "[REDACTED]" in msg
     
     @pytest.mark.asyncio
     @patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', False)

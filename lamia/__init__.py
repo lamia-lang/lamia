@@ -74,6 +74,8 @@ from .errors import (
     FileReferenceError,
     MultipleSelectableInputsError,
     NoSelectableInputError,
+    LLMErrorType,
+    LLMProviderError,
 )
 
 __all__ = [
@@ -91,4 +93,6 @@ __all__ = [
     "FileReferenceError",
     "MultipleSelectableInputsError",
     "NoSelectableInputError",
+    "LLMErrorType",
+    "LLMProviderError",
 ]

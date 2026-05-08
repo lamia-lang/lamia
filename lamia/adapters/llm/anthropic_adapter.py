@@ -145,7 +145,10 @@ class AnthropicAdapter(BaseLLMAdapter):
                 }
             }
 
-        response = await self.client.messages.create(**request_kwargs)
+        try:
+            response = await self.client.messages.create(**request_kwargs)
+        except Exception as e:
+            raise RuntimeError(f"Anthropic API error: {sanitize_api_error(str(e))}")
         
         return LLMResponse(
             text=response.content[0].text,
@@ -201,4 +204,4 @@ class AnthropicAdapter(BaseLLMAdapter):
                 )
                 
         except aiohttp.ClientError as e:
-            raise RuntimeError(f"Failed to communicate with Anthropic API: {str(e)}")
+            raise RuntimeError(f"Failed to communicate with Anthropic API: {sanitize_api_error(str(e))}")

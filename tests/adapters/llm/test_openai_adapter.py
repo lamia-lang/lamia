@@ -206,6 +206,39 @@ class TestOpenAIAdapterGeneration:
                 "completion_tokens": 8,
                 "total_tokens": 18
             }
+
+    @pytest.mark.asyncio
+    @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', True)
+    async def test_generate_with_sdk_error_sanitized(self):
+        """SDK errors should be surfaced with API keys fully redacted."""
+        with patch('lamia.adapters.llm.openai_adapter.AsyncOpenAI') as mock_openai:
+            mock_client = AsyncMock()
+            mock_openai.return_value = mock_client
+            mock_client.chat.completions.create = AsyncMock(
+                side_effect=RuntimeError(
+                    "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-dsfsd*******fsdf.'}}"
+                )
+            )
+
+            adapter = OpenAIAdapter(api_key="test-key")
+
+            mock_model = Mock(spec=LLMModel)
+            mock_model.name = "gpt-4o"
+            mock_model.get_model_name_without_provider = Mock(return_value="gpt-4o")
+            mock_model.temperature = 0.7
+            mock_model.max_tokens = 1000
+            mock_model.top_p = 1.0
+            mock_model.top_k = None
+            mock_model.frequency_penalty = None
+            mock_model.presence_penalty = None
+            mock_model.seed = None
+
+            with pytest.raises(RuntimeError) as exc:
+                await adapter.generate("Hello", mock_model)
+
+            msg = str(exc.value)
+            assert "sk-dsfsd*******fsdf" not in msg
+            assert "[REDACTED]" in msg
     
     @pytest.mark.asyncio
     @patch('lamia.adapters.llm.openai_adapter.OPENAI_AVAILABLE', False)

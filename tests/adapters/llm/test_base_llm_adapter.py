@@ -4,6 +4,7 @@ import pytest
 from abc import ABC
 from unittest.mock import Mock
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, sanitize_api_error
+from lamia.errors import LLMProviderError, LLMErrorType
 from lamia import LLMModel
 
 
@@ -377,6 +378,56 @@ class TestSanitizeApiError:
 
     def test_empty_string(self):
         assert sanitize_api_error("") == ""
+
+
+class TestLLMProviderError:
+    def test_invalid_key_classified_as_auth(self):
+        exc = RuntimeError("Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-abc123'}}")
+        pe = LLMProviderError.from_exception(exc)
+        assert pe.error_type == LLMErrorType.AUTH
+        assert "sk-abc123" not in pe.sanitized_detail
+        assert pe.user_message == "Authentication failed: invalid API key. Update your API key in settings."
+
+    def test_rate_limit_classified(self):
+        exc = RuntimeError("OpenAI API error (429): rate limit exceeded")
+        pe = LLMProviderError.from_exception(exc)
+        assert pe.error_type == LLMErrorType.RATE_LIMIT
+        assert pe.user_message == "Rate limit reached. Please retry in a moment."
+        assert pe.status_code == 429
+
+    def test_quota_classified(self):
+        exc = RuntimeError("Error code: 402 - insufficient credits")
+        pe = LLMProviderError.from_exception(exc)
+        assert pe.error_type == LLMErrorType.QUOTA
+        assert pe.status_code == 402
+
+    def test_timeout_classified(self):
+        exc = RuntimeError("Request timed out after 30 seconds")
+        pe = LLMProviderError.from_exception(exc)
+        assert pe.error_type == LLMErrorType.TIMEOUT
+
+    def test_network_classified(self):
+        exc = RuntimeError("Connection refused to api.openai.com")
+        pe = LLMProviderError.from_exception(exc)
+        assert pe.error_type == LLMErrorType.NETWORK
+
+    def test_generic_provider_error_extracts_message(self):
+        exc = RuntimeError("OpenAI API error: {'error': {'message': 'Model is overloaded, try again'}}")
+        pe = LLMProviderError.from_exception(exc)
+        assert pe.error_type == LLMErrorType.PROVIDER
+        assert pe.user_message == "Model is overloaded, try again"
+
+    def test_empty_error_gives_fallback(self):
+        exc = RuntimeError("")
+        pe = LLMProviderError.from_exception(exc)
+        assert pe.error_type == LLMErrorType.PROVIDER
+        assert pe.user_message == "Provider request failed."
+
+    def test_custom_adapter_raw_error_works(self):
+        exc = RuntimeError("claude-max-api error (status 500): Internal Server Error")
+        pe = LLMProviderError.from_exception(exc)
+        assert pe.error_type == LLMErrorType.PROVIDER
+        assert pe.status_code == 500
 
 
 class TestBaseLLMAdapterVariants:

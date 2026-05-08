@@ -138,7 +138,10 @@ class OpenAIAdapter(BaseLLMAdapter):
             if response_format is not None:
                 request_kwargs["response_format"] = response_format
 
-            response = await self.client.chat.completions.create(**request_kwargs)
+            try:
+                response = await self.client.chat.completions.create(**request_kwargs)
+            except Exception as e:
+                raise RuntimeError(f"OpenAI API error: {sanitize_api_error(str(e))}")
             
             return LLMResponse(
                 text=response.choices[0].message.content,
@@ -181,7 +184,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                     )
                     
             except aiohttp.ClientError as e:
-                raise RuntimeError(f"Failed to communicate with OpenAI API: {str(e)}")
+                raise RuntimeError(f"Failed to communicate with OpenAI API: {sanitize_api_error(str(e))}")
     
     async def close(self) -> None:
         """Cleanup any resources used by the adapter."""

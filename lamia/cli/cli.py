@@ -30,6 +30,8 @@ from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.hybrid_executor import HybridExecutor
 from lamia.interpreter.human.parser import parse_hu_file
 from lamia.interpreter.human.executor import HuCallable
+from lamia.adapters.llm.base import sanitize_api_error
+from lamia.errors import LLMProviderError
 
 HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
@@ -180,6 +182,19 @@ def _friendly_error(raw: str) -> str:
     if msg.startswith("Error writing file: "):
         msg = msg[20:]
     return msg
+
+
+def _make_json_error(exc: Exception) -> dict:
+    """Build a typed JSON error payload for IDE/JSON callers."""
+    pe = LLMProviderError.from_exception(exc)
+    result: dict = {
+        "type": "error",
+        "error_type": pe.error_type.value,
+        "message": pe.user_message,
+    }
+    if pe.status_code:
+        result["status"] = pe.status_code
+    return result
 
 
 def _format_history(messages: list[dict]) -> str:
@@ -385,14 +400,19 @@ async def json_mode(lamia: Lamia) -> None:
             _json_write(response)
 
         except MissingAPIKeysError as exc:
-            _json_write({"type": "error", "message": str(exc)})
+            pe = LLMProviderError.from_exception(exc)
+            _json_write(_make_json_error(exc))
+            logger.warning("json_mode missing_api_keys: %s", pe.sanitized_detail)
         except (ExternalOperationTransientError,
                 ExternalOperationPermanentError,
                 ExternalOperationRateLimitError) as exc:
-            _json_write({"type": "error", "message": str(exc)})
+            pe = LLMProviderError.from_exception(exc)
+            _json_write(_make_json_error(exc))
+            logger.warning("json_mode external_operation_error: %s", pe.sanitized_detail)
         except Exception as exc:
-            logger.error(f"json_mode error: {exc}", exc_info=True)
-            _json_write({"type": "error", "message": str(exc)})
+            pe = LLMProviderError.from_exception(exc)
+            logger.error("json_mode error: %s", pe.sanitized_detail)
+            _json_write(_make_json_error(exc))
 
 
 def _extract_tool_calls(text: str) -> list[dict]:

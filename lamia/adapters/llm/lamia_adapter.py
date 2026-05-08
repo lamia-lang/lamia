@@ -210,7 +210,7 @@ class LamiaAdapter(BaseLLMAdapter):
                 return self._parse_response(data, provider_name, model)
                 
         except aiohttp.ClientError as e:
-            raise RuntimeError(f"Failed to communicate with Lamia API: {str(e)}")
+            raise RuntimeError(f"Failed to communicate with Lamia API: {sanitize_api_error(str(e))}")
 
     @classmethod
     async def models(cls, api_key: str = "") -> list[dict]:

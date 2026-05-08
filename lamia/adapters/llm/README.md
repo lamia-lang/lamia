@@ -172,6 +172,63 @@ models:
 
 ---
 
+## Error Handling
+
+Lamia classifies adapter errors automatically at the framework boundary — **custom
+adapters do not need to implement error normalization**.  Just let exceptions
+propagate naturally and Lamia takes care of the rest.
+
+### What the framework does for you
+
+1. **Secret redaction** — any `sk-*` tokens in error messages are replaced with
+   `[REDACTED]` before the message reaches the user or logs.
+2. **Error classification** — raw exceptions are mapped to typed categories
+   (`auth`, `rate_limit`, `quota`, `timeout`, `network`, `provider`) via
+   `LLMProviderError.from_exception()`.
+3. **User-facing messages** — concise, actionable text is generated per
+   category (e.g. "Authentication failed: invalid API key").
+4. **IDE integration** — the IDE shows different UI per error type (e.g. an
+   "Update API Key" button for auth errors, "Retry" for transient ones).
+
+### Best practices for custom adapters
+
+- **Do** raise `RuntimeError` (or any exception) with a descriptive message.
+  Include the HTTP status code and provider error text when available — the
+  framework extracts useful information from it.
+
+  ```python
+  raise RuntimeError(f"MyProvider error ({response.status}): {error_text}")
+  ```
+
+- **Do** use `sanitize_api_error()` when including raw provider responses that
+  might contain API keys.  This is optional defense-in-depth — the framework
+  applies it again at the boundary — but prevents accidental leaks in your own
+  log statements.
+
+  ```python
+  from lamia.adapters.llm.base import sanitize_api_error
+  raise RuntimeError(f"MyProvider error: {sanitize_api_error(error_text)}")
+  ```
+
+- **Don't** implement your own error classification or user-message generation.
+  The framework handles this centrally so all adapters behave consistently.
+
+- **Don't** catch and swallow provider exceptions silently.  Let them propagate
+  so the retry handler and error classifier can do their job.
+
+### Error type reference
+
+| Type | Typical cause | User sees |
+|------|-------------|-----------|
+| `auth` | Invalid / expired API key (401) | "Update API Key" button |
+| `rate_limit` | Too many requests (429) | "Retry" button |
+| `quota` | Insufficient credits (402) | Check provider account |
+| `timeout` | Request timed out (408) | "Retry" button |
+| `network` | Connection refused / DNS failure | "Retry" button |
+| `provider` | Any other provider error | "Retry" button |
+
+---
+
 ## Tips
 
 - Use the provided `LLMResponse` dataclass for all outputs.

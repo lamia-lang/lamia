@@ -9,6 +9,8 @@ Import these exceptions from the main lamia module:
     from lamia import FileNotFoundError, AmbiguousFileError
 """
 
+from enum import Enum
+import re
 from typing import List, Optional
 
 
@@ -185,6 +187,158 @@ class ExternalOperationPermanentError(ExternalOperationError):
             # Fix configuration before retrying
     """
     pass
+
+
+class LLMErrorType(str, Enum):
+    """Classification of LLM provider errors for UI/protocol consumers."""
+    AUTH = "auth"
+    RATE_LIMIT = "rate_limit"
+    QUOTA = "quota"
+    TIMEOUT = "timeout"
+    NETWORK = "network"
+    PROVIDER = "provider"
+
+
+_AUTH_PATTERNS = [
+    re.compile(r"invalid.{0,5}api.{0,3}key", re.I),
+    re.compile(r"incorrect api key", re.I),
+    re.compile(r"invalid x-api-key", re.I),
+    re.compile(r"authentication.{0,5}failed", re.I),
+    re.compile(r"(?:^|\b)unauthorized\b", re.I),
+    re.compile(r"\b401\b.*(?:api.?key|unauthorized)", re.I),
+]
+
+_RATE_LIMIT_PATTERNS = [
+    re.compile(r"rate.?limit", re.I),
+    re.compile(r"too many requests", re.I),
+    re.compile(r"\b429\b", re.I),
+    re.compile(r"resource.?exhausted", re.I),
+]
+
+_QUOTA_PATTERNS = [
+    re.compile(r"insufficient.{0,5}quota", re.I),
+    re.compile(r"insufficient.{0,5}credits", re.I),
+    re.compile(r"billing.{0,10}(hard|limit)", re.I),
+    re.compile(r"\b402\b", re.I),
+]
+
+_TIMEOUT_PATTERNS = [
+    re.compile(r"time.?out", re.I),
+    re.compile(r"timed.?out", re.I),
+    re.compile(r"\b408\b", re.I),
+]
+
+_NETWORK_PATTERNS = [
+    re.compile(r"connection.{0,5}(refused|reset|error)", re.I),
+    re.compile(r"name.{0,5}resolution", re.I),
+    re.compile(r"dns", re.I),
+    re.compile(r"network.{0,5}(error|unreachable)", re.I),
+]
+
+_USER_MESSAGES = {
+    LLMErrorType.AUTH: "Authentication failed: invalid API key. Update your API key in settings.",
+    LLMErrorType.RATE_LIMIT: "Rate limit reached. Please retry in a moment.",
+    LLMErrorType.QUOTA: "Insufficient quota or credits for this provider.",
+    LLMErrorType.TIMEOUT: "Provider request timed out. Please retry.",
+    LLMErrorType.NETWORK: "Could not connect to the provider. Check your network connection.",
+    LLMErrorType.PROVIDER: "Provider request failed.",
+}
+
+
+def _classify_error(text: str) -> LLMErrorType:
+    """Classify an error message into an LLMErrorType via pattern matching."""
+    for pat in _AUTH_PATTERNS:
+        if pat.search(text):
+            return LLMErrorType.AUTH
+    for pat in _RATE_LIMIT_PATTERNS:
+        if pat.search(text):
+            return LLMErrorType.RATE_LIMIT
+    for pat in _QUOTA_PATTERNS:
+        if pat.search(text):
+            return LLMErrorType.QUOTA
+    for pat in _TIMEOUT_PATTERNS:
+        if pat.search(text):
+            return LLMErrorType.TIMEOUT
+    for pat in _NETWORK_PATTERNS:
+        if pat.search(text):
+            return LLMErrorType.NETWORK
+    return LLMErrorType.PROVIDER
+
+
+def _extract_nested_message(text: str) -> str:
+    """Best-effort extraction of a nested 'message' value from raw payload text."""
+    m = re.search(r'"message"\s*:\s*"([^"]+)"', text)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"'message'\s*:\s*'([^']+)'", text)
+    if m:
+        return m.group(1).strip()
+    return ""
+
+
+class LLMProviderError(ExternalOperationError):
+    """Typed, UI-safe wrapper around raw LLM provider / SDK errors.
+
+    Attributes:
+        error_type: classified category (auth, rate_limit, etc.)
+        status_code: HTTP status when available
+        provider: provider name when available
+        user_message: concise UI-safe text for end-users
+        sanitized_detail: full sanitized detail string for logs
+    """
+
+    def __init__(
+        self,
+        user_message: str,
+        *,
+        error_type: LLMErrorType = LLMErrorType.PROVIDER,
+        status_code: Optional[int] = None,
+        provider: Optional[str] = None,
+        sanitized_detail: str = "",
+        original_error: Optional[Exception] = None,
+    ):
+        super().__init__(user_message, original_error=original_error)
+        self.error_type = error_type
+        self.status_code = status_code
+        self.provider = provider
+        self.user_message = user_message
+        self.sanitized_detail = sanitized_detail
+
+    @classmethod
+    def from_exception(cls, exc: Exception, *, provider: str | None = None) -> "LLMProviderError":
+        """Classify any exception into a typed LLMProviderError.
+
+        This is the single boundary function that JSON mode / IDE should call.
+        Adapters (including custom ones) do NOT need to use this — the framework
+        applies it at the protocol boundary.
+        """
+        from lamia.adapters.llm.base import sanitize_api_error
+
+        raw = str(exc)
+        safe = sanitize_api_error(raw)
+        error_type = _classify_error(safe)
+
+        if error_type != LLMErrorType.PROVIDER:
+            user_msg = _USER_MESSAGES[error_type]
+        else:
+            extracted = _extract_nested_message(safe)
+            user_msg = extracted or safe or _USER_MESSAGES[LLMErrorType.PROVIDER]
+
+        status = None
+        status_match = re.search(r"\b(\d{3})\b", safe)
+        if status_match:
+            code = int(status_match.group(1))
+            if 400 <= code <= 599:
+                status = code
+
+        return cls(
+            user_message=user_msg,
+            error_type=error_type,
+            status_code=status,
+            provider=provider,
+            sanitized_detail=safe,
+            original_error=exc,
+        )
 
 
 class OllamaNotInstalledError(ExternalOperationPermanentError):
