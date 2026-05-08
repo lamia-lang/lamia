@@ -467,3 +467,27 @@ class TestFSManagerErrorHandling:
             assert isinstance(result, ValidationResult)
             assert result.is_valid
             assert result.typed_result == "hi"
+
+
+# ---------------------------------------------------------------------------
+# Resource cleanup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestFSManagerClose:
+    """FSManager.close() must be a no-op and must not raise AttributeError."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_close_does_not_raise(self) -> None:
+        await self.fs_manager.close()
+
+    async def test_close_returns_none(self) -> None:
+        result = await self.fs_manager.close()
+        assert result is None
+
+    async def test_close_is_idempotent(self) -> None:
+        await self.fs_manager.close()
+        await self.fs_manager.close()

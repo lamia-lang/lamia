@@ -12,11 +12,14 @@ class Manager(ABC, Generic[T]):
     @abstractmethod
     async def execute(self, command: T, validator: BaseValidator) -> Any:
         """Execute a request in this domain.
-        
+
         Args:
             content: The content to process
             validator: The validator to use
         Returns:
             Domain-specific response
         """
+        pass
+
+    async def close(self) -> None:
         pass

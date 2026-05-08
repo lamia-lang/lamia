@@ -10,19 +10,39 @@ from lamia.validation.base import BaseValidator
 
 class TestManagerInterface:
     """Test Manager interface."""
-    
+
     def test_is_abstract_base_class(self):
         """Test that Manager is an abstract base class."""
         assert issubclass(Manager, ABC)
-        
+
         # Should not be able to instantiate directly
         with pytest.raises(TypeError):
             Manager()
-    
+
     def test_abstract_execute_method(self):
         """Test that execute method is abstract."""
         assert hasattr(Manager, 'execute')
         assert callable(Manager.execute)
+
+    def test_close_method_exists(self):
+        """close() must exist on the base class so close_all() never raises AttributeError."""
+        assert hasattr(Manager, 'close')
+        assert callable(Manager.close)
+
+
+@pytest.mark.asyncio
+class TestManagerClose:
+    """Test the default close() no-op on Manager subclasses."""
+
+    async def test_close_is_noop(self):
+        manager = MockManager()
+        result = await manager.close()
+        assert result is None
+
+    async def test_close_can_be_called_multiple_times(self):
+        manager = MockManager()
+        await manager.close()
+        await manager.close()
     
     def test_execute_method_signature(self):
         """Test execute method signature and documentation."""
