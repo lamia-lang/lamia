@@ -12,6 +12,8 @@ from lamia.engine.managers.llm.files_context_manager import (
     read_file_content,
     _has_path_components,
     _resolve_standalone_reference,
+    FilesContext,
+    FileSearcher,
 )
 from lamia.project import find_project_root
 from lamia.errors import AmbiguousFileError, FileReferenceError
@@ -290,3 +292,40 @@ class TestPriorityOrder:
             result = c()
             assert "{@data.json}" not in result
             assert '"key"' in result
+
+
+class TestFilesContextErrorMessages:
+    def test_file_reference_error_message_has_plain_filename(self):
+        err = FileReferenceError("memos.txt", [])
+        assert "File 'memos.txt' not found in files context." in str(err)
+        assert "{memos.txt}" not in str(err)
+
+    def test_empty_files_context_shows_paths_hint(self):
+        ctx = FilesContext("~/Dcouments")
+        ctx.__enter__()
+        try:
+            with pytest.raises(FileReferenceError) as exc:
+                ctx.resolve_file_reference("memos.txt")
+            msg = str(exc.value)
+            assert "File 'memos.txt' not found in files context." in msg
+            assert "indexed 0 files" in msg
+            assert "~/Dcouments" in msg
+        finally:
+            ctx.__exit__(None, None, None)
+
+    def test_empty_paths_hint_uses_indexed_file_dirs_for_captured_context(self, tmp_path):
+        f = tmp_path / "memos.txt"
+        f.write_text("hello")
+
+        ctx = FilesContext.__new__(FilesContext)
+        ctx.paths = ()
+        ctx.indexed_files = [str(f)]
+        ctx.searcher = FileSearcher(ctx.indexed_files)
+
+        with pytest.raises(FileReferenceError) as exc:
+            ctx.resolve_file_reference("missing.txt")
+
+        msg = str(exc.value)
+        assert "not found by direct lookup" not in msg
+        assert str(tmp_path) in msg
+        assert "(none)" not in msg

@@ -2,6 +2,7 @@
 
 import os
 import logging
+import time
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 from difflib import SequenceMatcher, get_close_matches
@@ -59,8 +60,14 @@ class FileSearcher:
         # Strategy 1: Exact filename match (highest score)
         results.extend(self._filename_match(query, boost=100))
         
-        # Strategy 2: Content grep (if query looks like a keyword)
-        if len(query) > 3 and not query.endswith('.pdf'):  # Skip binary files
+        # Strategy 2: Content grep (for keyword-like queries only)
+        # Filename/path-like queries should avoid grep to keep failures fast.
+        if (
+            len(query) > 3
+            and not query.endswith('.pdf')  # Skip binary files
+            and not _has_path_components(query)
+            and os.path.splitext(os.path.basename(query))[1] == ""
+        ):
             results.extend(self._content_grep(query, boost=50))
         
         # Strategy 3: Fuzzy filename match
@@ -233,6 +240,12 @@ class FilesContext:
         """
         if not self.searcher:
             raise RuntimeError("FilesContext not entered. Use 'with files(...):'")
+        if not self.indexed_files:
+            raise FileReferenceError(
+                query,
+                [],
+                self._build_empty_index_hint(),
+            )
         
         # 1. Try as absolute path
         if os.path.isabs(query) and os.path.exists(query):
@@ -248,13 +261,28 @@ class FilesContext:
                 return candidate
         
         # 3. Smart search
+        logger.warning(
+            "File '%s' not found by direct lookup. Searching similar files in %d indexed files...",
+            query,
+            len(self.indexed_files),
+        )
+        started = time.perf_counter()
         matches = self.searcher.search(query)
+        logger.info(
+            "Similarity search for '%s' finished in %.2fs with %d candidates",
+            query,
+            time.perf_counter() - started,
+            len(matches),
+        )
         
         if not matches:
-            # No matches - provide fuzzy suggestions
             all_filenames = [os.path.basename(f) for f in self.indexed_files]
             suggestions = get_close_matches(query, all_filenames, n=3, cutoff=0.3)
-            raise FileReferenceError(query, suggestions)
+            raise FileReferenceError(
+                query,
+                suggestions,
+                self._build_not_found_hint(),
+            )
         
         # Check for ambiguity
         if len(matches) > 1:
@@ -268,6 +296,29 @@ class FilesContext:
         resolved_path = matches[0][0]
         logger.info(f"Resolved '{query}' → '{resolved_path}' (score: {matches[0][1]:.2f})")
         return resolved_path
+
+    def _build_empty_index_hint(self) -> str:
+        """Diagnostic hint when indexed_files is empty — tells user which paths failed."""
+        if not self.paths:
+            return "files() was called with no paths."
+
+        lines = ["files() indexed 0 files. Provided paths:"]
+        for p in self.paths:
+            resolved = Path(os.path.expanduser(p)).resolve()
+            if resolved.exists():
+                lines.append(f"  {p} → exists but contains no files")
+            else:
+                lines.append(f"  {p} → Does not exists (resolved to {resolved})")
+        return "\n".join(lines)
+
+    def _build_not_found_hint(self) -> str:
+        """Diagnostic hint when file not found but paths are valid."""
+        if not self.paths:
+            roots = sorted({os.path.dirname(p) for p in self.indexed_files})
+            preview = roots[:5]
+            suffix = " ..." if len(roots) > 5 else ""
+            return f"Searched {len(self.indexed_files)} files in: {', '.join(preview)}{suffix}"
+        return f"Searched {len(self.indexed_files)} files in: {', '.join(self.paths)}"
     
     def read_file_content(self, filepath: str) -> str:
         """Read file content with appropriate extraction."""
@@ -322,12 +373,13 @@ class CapturedFilesContext:
     ``with`` block has exited.
     """
 
-    def __init__(self, indexed_files: List[str]) -> None:
+    def __init__(self, indexed_files: List[str], original_paths: Tuple[str, ...] = ()) -> None:
         self._indexed_files = list(indexed_files)
+        self._original_paths = original_paths
 
     def __enter__(self) -> 'FilesContext':
         ctx = FilesContext.__new__(FilesContext)
-        ctx.paths = ()
+        ctx.paths = self._original_paths
         ctx.indexed_files = list(self._indexed_files)
         ctx.searcher = FileSearcher(ctx.indexed_files)
         _context_stack.append(ctx)
@@ -349,7 +401,7 @@ def capture_files_context() -> Optional[CapturedFilesContext]:
     ctx = get_active_files_context()
     if ctx is None:
         return None
-    return CapturedFilesContext(list(ctx.indexed_files))
+    return CapturedFilesContext(list(ctx.indexed_files), ctx.paths)
 
 
 def files(*paths: str) -> FilesContext:

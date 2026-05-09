@@ -398,7 +398,7 @@ class AmbiguousFileError(Exception):
         ])
         
         message = (
-            f"Multiple files match '{{{query}}}':\n{match_list}\n\n"
+            f"Multiple files match '{query}':\n{match_list}\n\n"
             f"Please be more specific with the filename or path."
         )
         super().__init__(message)
@@ -425,14 +425,17 @@ class FileReferenceError(Exception):
                 print(f"Did you mean: {e.suggestions}")
     """
     
-    def __init__(self, query: str, suggestions: List[str]):
+    def __init__(self, query: str, suggestions: List[str], hint: str = ""):
         self.query = query
         self.suggestions = suggestions
+        self.hint = hint
         
         if suggestions:
             suggestion_list = "\n".join([f"  - {s}" for s in suggestions[:3]])
-            message = f"File '{{{query}}}' not found.\n\nDid you mean:\n{suggestion_list}"
+            message = f"File '{query}' not found.\n\nDid you mean:\n{suggestion_list}"
         else:
-            message = f"File '{{{query}}}' not found in files context."
+            message = f"File '{query}' not found in files context."
+        if hint:
+            message = f"{message}\n\nHint: {hint}"
         
         super().__init__(message)
