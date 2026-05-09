@@ -678,6 +678,11 @@ def main():
         handle_debug()
         return
 
+    if len(sys.argv) > 1 and sys.argv[1] == "inspect":
+        from .inspect_cli import handle_inspect
+        handle_inspect()
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] == "init":
         parser = argparse.ArgumentParser(
             description="Lamia CLI",
