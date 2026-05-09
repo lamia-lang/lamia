@@ -172,16 +172,75 @@ web.click("button")
         assert "lamia.run" in result
         assert "WebCommand" in result
 
+    @staticmethod
+    def _run_call_line(result: str) -> str:
+        """Return the lamia.run(...) line from transformed code."""
+        for line in result.splitlines():
+            if "lamia.run(" in line:
+                return line
+        return ""
+
     def test_function_with_models_parameter(self):
-        """Test function with models parameter."""
+        """Test function with models parameter uses variable reference, not constant."""
         source = """
 def process(models: list = ['gpt-4']):
     "Process data"
 """
         result = self.transformer.transform_code(source)
+        run_line = self._run_call_line(result)
 
         assert "lamia.run" in result
-        assert "models" in result
+        assert "models=models" in run_line
+        assert "models='gpt-4'" not in run_line
+        assert 'models="gpt-4"' not in run_line
+
+    def test_function_with_models_string_uses_variable_ref(self):
+        """models='openai:gpt-4' should generate models=models in lamia.run(), not the constant."""
+        source = """
+def summarize(models="openai:gpt-4"):
+    "Summarize the document"
+"""
+        result = self.transformer.transform_code(source)
+        run_line = self._run_call_line(result)
+
+        assert "lamia.run" in result
+        assert "models=models" in run_line
+        assert "models='openai:gpt-4'" not in run_line
+
+    def test_function_with_models_list_uses_variable_ref(self):
+        """models=['a', 'b'] should generate models=models in lamia.run()."""
+        source = """
+def compare(models=["openai:gpt-4", "anthropic:claude-3"]):
+    "Compare documents"
+"""
+        result = self.transformer.transform_code(source)
+        run_line = self._run_call_line(result)
+
+        assert "models=models" in run_line
+        assert "models=['openai:gpt-4'" not in run_line
+
+    def test_function_with_models_none_default_uses_variable_ref(self):
+        """models=None should still generate models=models in lamia.run()."""
+        source = """
+def run(models=None):
+    "Run the task"
+"""
+        result = self.transformer.transform_code(source)
+        run_line = self._run_call_line(result)
+
+        assert "models=models" in run_line
+
+    def test_function_without_models_param_no_models_keyword(self):
+        """Function without models param should not inject models= into lamia.run()."""
+        source = """
+def extract(name: str):
+    "Extract {name}"
+"""
+        result = self.transformer.transform_code(source)
+        run_line = self._run_call_line(result)
+
+        assert "lamia.run" in result
+        assert "models=" not in run_line
 
     def test_web_method_with_fallback_selectors(self):
         """Test web method with fallback selectors."""

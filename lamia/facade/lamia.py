@@ -18,10 +18,25 @@ from lamia.types import BaseType, ExternalOperationRetryConfig
 from lamia.interpreter.commands import Command
 
 from .result_types import LamiaResult
-from .config_builder import build_config_from_dict, build_config_from_models
+from .config_builder import build_config_from_dict, build_config_from_models, _build_model_chain_from_specs
 from .command_processor import process_string_command
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_models(models) -> Optional[List[ModelWithRetries]]:
+    """Convert str or list-of-str model specs into List[ModelWithRetries]."""
+    if models is None:
+        return None
+    if isinstance(models, str):
+        return _build_model_chain_from_specs((models,))
+    if isinstance(models, list):
+        if not models:
+            return None
+        if isinstance(models[0], ModelWithRetries):
+            return models
+        return _build_model_chain_from_specs(tuple(models))
+    return models
 
 
 class Lamia:
@@ -105,15 +120,16 @@ class Lamia:
             if python_result is not None:
                 return python_result
 
-        if models is not None:
-            self._engine.config_provider.override_model_chain_with(models)
+        normalized_models = _normalize_models(models)
+        if normalized_models is not None:
+            self._engine.config_provider.override_model_chain_with(normalized_models)
 
         response = await self._engine.execute(
             parsed_command,
             return_type=return_type
         )
 
-        if models is not None:
+        if normalized_models is not None:
             self._engine.config_provider.reset_model_chain()
 
         if _full_result:

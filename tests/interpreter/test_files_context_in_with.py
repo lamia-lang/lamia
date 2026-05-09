@@ -403,12 +403,8 @@ class TestRuntimeContextBehaviour:
         assert snap is None
 
 
-# ---------------------------------------------------------------------------
-# Document pattern tests — define inside, call outside
-# ---------------------------------------------------------------------------
 
 class TestDefineInsideCallOutside:
-    """Validate the canonical usage pattern from the documentation."""
 
     def test_parser_transform_define_inside_call_outside(self):
         src = """
@@ -419,8 +415,6 @@ with files("~/Documents/"):
 result = extract_name()
 """
         t = _transform(src)
-        # The call outside the with block should work because the function
-        # now carries context-restoration wrapping.
         assert _has_capture(t)
         assert _has_enter_exit(t)
         ast.parse(t)  # must be valid Python
@@ -434,7 +428,6 @@ with files("~/Documents/"):
     result = answer(question="hello")
 """
         t = _transform(src)
-        # No capture needed — the call is inside the with block
         assert not _has_capture(t)
         ast.parse(t)
 
@@ -453,4 +446,336 @@ answer = answer_question(question="What are my main skills?")
         t = _transform(src)
         assert _has_capture(t)
         assert _has_enter_exit(t)
+        ast.parse(t)
+
+
+
+class TestModelsParameterInFilesContext:
+    """Ensure functions with models= default defined inside with files() work correctly."""
+
+    def _lamia_run_call_contains(self, transformed: str, substring: str) -> bool:
+        """Check if substring appears in a lamia.run(...) call line."""
+        for line in transformed.splitlines():
+            if "lamia.run(" in line and substring in line:
+                return True
+        return False
+
+    def test_models_string_default_uses_variable_ref(self):
+        """models='openai:gpt-4' default: lamia.run() must use models=models, not the constant."""
+        src = """
+with files("~/Documents/"):
+    def compare(models="openai:gpt-4"):
+        "Compare {@resume_v1.pdf} and {@resume_v2.pdf}"
+result = compare()
+"""
+        t = _transform(src)
+        assert self._lamia_run_call_contains(t, "models=models")
+        assert not self._lamia_run_call_contains(t, "models='openai:gpt-4'")
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_models_list_default_uses_variable_ref(self):
+        """models=['a', 'b'] default: lamia.run() must reference the variable."""
+        src = """
+with files("~/Documents/"):
+    def extract(models=["openai:gpt-4", "anthropic:claude-3"]):
+        "Extract from {@data.txt}"
+result = extract()
+"""
+        t = _transform(src)
+        assert self._lamia_run_call_contains(t, "models=models")
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_models_none_default_uses_variable_ref(self):
+        """models=None still injects models=models into lamia.run()."""
+        src = """
+with files("~/Documents/"):
+    def run_task(models=None):
+        "Run the task with {@context.txt}"
+"""
+        t = _transform(src)
+        assert self._lamia_run_call_contains(t, "models=models")
+        ast.parse(t)
+
+    def test_models_outside_with_also_uses_variable_ref(self):
+        """models= in a function defined OUTSIDE with files also uses variable ref."""
+        src = """
+def summarize(models="openai:gpt-4"):
+    "Summarize this document"
+"""
+        t = _transform(src)
+        assert self._lamia_run_call_contains(t, "models=models")
+        assert not self._lamia_run_call_contains(t, "models='openai:gpt-4'")
+        ast.parse(t)
+
+    def test_define_inside_with_models_and_params(self):
+        """Function with both models= and other params defined inside with files."""
+        src = """
+with files("~/Documents/"):
+    def answer(question: str, models="openai:gpt-4"):
+        "Answer {question} using {@resume.pdf}"
+result = answer(question="What are my skills?")
+"""
+        t = _transform(src)
+        assert self._lamia_run_call_contains(t, "models=models")
+        assert _has_capture(t)
+        assert _has_enter_exit(t)
+        ast.parse(t)
+
+
+
+class TestAllDefinitionCallPlacements:
+
+
+
+    def test_define_inside_call_outside_no_params(self):
+        """Canonical pattern: define inside with files, call outside."""
+        src = """
+with files("~/docs/"):
+    def get_name():
+        "Extract name from {@resume.pdf}"
+result = get_name()
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        assert _has_enter_exit(t)
+        ast.parse(t)
+
+    def test_define_inside_call_outside_with_str_param(self):
+        """Define inside, call outside with a string parameter."""
+        src = """
+with files("~/docs/"):
+    def answer(question: str):
+        "Answer {question} from {@resume.pdf}"
+r = answer(question="What is my experience?")
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_define_inside_call_outside_with_models_string(self):
+        """Define inside with models='provider:model', call outside."""
+        src = """
+with files("~/docs/"):
+    def extract(models="openai:gpt-4"):
+        "Extract from {@resume.pdf}"
+result = extract()
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        assert "models=models" in t
+        ast.parse(t)
+
+    def test_define_inside_call_outside_with_models_override(self):
+        """Caller can override the model when calling outside the with block."""
+        src = """
+with files("~/docs/"):
+    def compare(models="openai:gpt-4"):
+        "Compare documents"
+r1 = compare()
+r2 = compare(models="anthropic:claude-3")
+"""
+        t = _transform(src)
+        assert "models=models" in t
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_define_inside_call_outside_captured_variable_default(self):
+        """Python-like capture: variable default evaluated at definition time."""
+        src = """
+default_model = "openai:gpt-4"
+with files("~/docs/"):
+    def run(models=default_model):
+        "Run with {@context.txt}"
+result = run()
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_define_outside_call_inside_no_files_ctx_var(self):
+        """Classic pattern: define outside, call inside; no capture injection needed."""
+        src = """
+def answer(question: str):
+    "Answer {question}"
+
+with files("~/docs/"):
+    result = answer(question="hello")
+"""
+        t = _transform(src)
+        assert not _has_capture(t)
+        ast.parse(t)
+
+    def test_define_outside_call_inside_with_models(self):
+        """Define outside with models=, call inside; context active at call time."""
+        src = """
+def summarize(models="openai:gpt-4"):
+    "Summarize the document"
+
+with files("~/docs/"):
+    result = summarize()
+"""
+        t = _transform(src)
+        assert not _has_capture(t)
+        assert "models=models" in t
+        ast.parse(t)
+
+    def test_define_inside_call_inside(self):
+        """Both define and call inside the with block; capture still injected."""
+        src = """
+with files("~/docs/"):
+    def extract():
+        "Extract from {@resume.pdf}"
+    result = extract()
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_define_inside_call_inside_with_models(self):
+        """Both define and call inside; models= uses variable ref."""
+        src = """
+with files("~/docs/"):
+    def compare(models="openai:gpt-4"):
+        "Compare docs"
+    result = compare()
+"""
+        t = _transform(src)
+        assert "models=models" in t
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_multiple_funcs_define_inside_call_outside(self):
+        """Multiple functions defined inside with files(), all called outside."""
+        src = """
+with files("~/docs/"):
+    def func_a():
+        "Do A with {@a.txt}"
+    def func_b(models="openai:gpt-4"):
+        "Do B with {@b.txt}"
+    def func_c(q: str):
+        "Do C: {q}"
+
+ra = func_a()
+rb = func_b()
+rc = func_c(q="hello")
+"""
+        t = _transform(src)
+        assert t.count("capture_files_context") == 3
+        assert t.count("models=models") == 1
+        assert _has_enter_exit(t)
+        ast.parse(t)
+
+    def test_mixed_define_inside_and_outside(self):
+        """Some functions inside with files, some outside; each handled correctly."""
+        src = """
+def helper():
+    "General helper"
+
+with files("~/docs/"):
+    def contextual():
+        "Contextual {@doc.txt}"
+
+r1 = helper()
+r2 = contextual()
+"""
+        t = _transform(src)
+        assert t.count("capture_files_context") == 1
+        ast.parse(t)
+
+    def test_async_define_inside_call_outside(self):
+        """Async function defined inside with files(), called outside."""
+        src = """
+with files("~/docs/"):
+    async def async_extract():
+        "Extract from {@resume.pdf}"
+
+import asyncio
+result = asyncio.run(async_extract())
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        assert "async def async_extract" in t
+        ast.parse(t)
+
+    def test_async_define_inside_with_models_call_outside(self):
+        """Async function with models= defined inside, called outside."""
+        src = """
+with files("~/docs/"):
+    async def async_compare(models="openai:gpt-4"):
+        "Compare {@doc1.txt} and {@doc2.txt}"
+
+import asyncio
+result = asyncio.run(async_compare())
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        assert "models=models" in t
+        ast.parse(t)
+
+    def test_nested_with_define_in_inner_call_outside(self):
+        """Function defined in the inner with files() block, called outside both."""
+        src = """
+with files("~/outer/"):
+    with files("~/inner/"):
+        def inner_func():
+            "Use {@inner_doc.txt}"
+
+result = inner_func()
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_nested_with_define_in_outer_call_outside(self):
+        """Function defined in the outer with files() block, inner is unrelated."""
+        src = """
+with files("~/outer/"):
+    def outer_func():
+        "Use {@outer_doc.txt}"
+    with files("~/inner/"):
+        x = 1
+
+result = outer_func()
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_function_with_return_type_annotation_define_inside(self):
+        """Function with -> str annotation defined inside with files()."""
+        src = """
+with files("~/docs/"):
+    def get_name() -> str:
+        "Extract name from {@resume.pdf}"
+result = get_name()
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        ast.parse(t)
+
+    def test_function_with_many_params_define_inside(self):
+        """Function with many parameters defined inside with files()."""
+        src = """
+with files("~/docs/"):
+    def analyze(question: str, context: str, models="openai:gpt-4"):
+        "Analyze {question} in context of {context} from {@report.pdf}"
+result = analyze(question="Q", context="C")
+"""
+        t = _transform(src)
+        assert _has_capture(t)
+        assert "models=models" in t
+        ast.parse(t)
+
+    def test_docstring_only_function_not_captured(self):
+        """Non-LLM helper function inside with files() is NOT wrapped."""
+        src = """
+with files("~/docs/"):
+    def helper():
+        return "hello"
+result = helper()
+"""
+        t = _transform(src)
+        assert not _has_capture(t)
         ast.parse(t)

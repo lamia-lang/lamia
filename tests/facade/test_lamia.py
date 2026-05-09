@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
-from lamia.facade.lamia import Lamia
+from lamia.facade.lamia import Lamia, _normalize_models
 from lamia.facade.result_types import LamiaResult
 from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
 from lamia import LLMModel
@@ -611,3 +611,147 @@ class TestLamiaLifecycle:
 
             assert isinstance(result, LamiaResult)
             assert result.result_text == "clean"
+
+
+
+class TestNormalizeModels:
+
+    def test_none_returns_none(self):
+        assert _normalize_models(None) is None
+
+    def test_string_returns_list_of_model_with_retries(self):
+        result = _normalize_models("openai:gpt-4")
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert isinstance(result[0], ModelWithRetries)
+        assert result[0].model.name == "openai:gpt-4"
+
+    def test_list_of_strings_returns_list_of_model_with_retries(self):
+        result = _normalize_models(["openai:gpt-4", "anthropic:claude-3"])
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0].model.name == "openai:gpt-4"
+        assert result[1].model.name == "anthropic:claude-3"
+
+    def test_list_of_model_with_retries_returned_unchanged(self):
+        mwr = [ModelWithRetries(LLMModel("openai:gpt-4"), retries=2)]
+        result = _normalize_models(mwr)
+        assert result is mwr
+
+    def test_empty_list_returns_none(self):
+        assert _normalize_models([]) is None
+
+    def test_single_model_string_with_provider_prefix(self):
+        result = _normalize_models("ollama")
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0].model.name == "ollama"
+
+
+
+class TestRunAsyncModelsNormalization:
+
+    def _make_lamia_with_mocks(self):
+        """Return (lamia_instance, mock_engine) with engine.execute pre-stubbed."""
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = MagicMock()
+            mock_engine.execute = AsyncMock(
+                return_value=MockValidationResult(
+                    is_valid=True, raw_text="response", typed_result="response"
+                )
+            )
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+            lamia = Lamia("ollama")
+        mock_engine.config_provider.override_model_chain_with = MagicMock()
+        mock_engine.config_provider.reset_model_chain = MagicMock()
+        return lamia, mock_engine
+
+    @pytest.mark.asyncio
+    async def test_string_model_normalised_before_override(self):
+        """Passing models='openai:gpt-4' (string) must not crash."""
+        dummy_config = MagicMock()
+        dummy_config.override_model_chain_with = MagicMock()
+        dummy_config.reset_model_chain = MagicMock()
+
+        dummy_engine = MagicMock()
+        dummy_engine.execute = AsyncMock(
+            return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
+        )
+        dummy_engine.config_provider = dummy_config
+
+        with patch("lamia.facade.lamia.LamiaEngine", return_value=dummy_engine):
+            lamia = Lamia("ollama")
+            result = await lamia.run_async("generate a story", models="openai:gpt-4")
+
+        assert result == "ok"
+        call_args = dummy_config.override_model_chain_with.call_args[0][0]
+        assert isinstance(call_args, list)
+        assert len(call_args) == 1
+        assert isinstance(call_args[0], ModelWithRetries)
+        assert call_args[0].model.name == "openai:gpt-4"
+
+    @pytest.mark.asyncio
+    async def test_list_of_string_models_normalised_before_override(self):
+        """Passing models=['openai:gpt-4', 'ollama'] (list of str) must not crash."""
+        dummy_config = MagicMock()
+        dummy_config.override_model_chain_with = MagicMock()
+        dummy_config.reset_model_chain = MagicMock()
+
+        dummy_engine = MagicMock()
+        dummy_engine.execute = AsyncMock(
+            return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
+        )
+        dummy_engine.config_provider = dummy_config
+
+        with patch("lamia.facade.lamia.LamiaEngine", return_value=dummy_engine):
+            lamia = Lamia("ollama")
+            result = await lamia.run_async(
+                "generate a story",
+                models=["openai:gpt-4", "ollama"],
+            )
+
+        assert result == "ok"
+        call_args = dummy_config.override_model_chain_with.call_args[0][0]
+        assert isinstance(call_args, list)
+        assert len(call_args) == 2
+        assert call_args[0].model.name == "openai:gpt-4"
+        assert call_args[1].model.name == "ollama"
+
+    @pytest.mark.asyncio
+    async def test_none_models_does_not_call_override(self):
+        """When models=None, override_model_chain_with must NOT be called."""
+        dummy_config = MagicMock()
+        dummy_engine = MagicMock()
+        dummy_engine.execute = AsyncMock(
+            return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
+        )
+        dummy_engine.config_provider = dummy_config
+
+        with patch("lamia.facade.lamia.LamiaEngine", return_value=dummy_engine):
+            lamia = Lamia("ollama")
+            await lamia.run_async("generate a story", models=None)
+
+        dummy_config.override_model_chain_with.assert_not_called()
+        dummy_config.reset_model_chain.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_model_with_retries_list_passed_through(self):
+        """Passing List[ModelWithRetries] still works (existing behaviour preserved)."""
+        dummy_config = MagicMock()
+        dummy_config.override_model_chain_with = MagicMock()
+        dummy_config.reset_model_chain = MagicMock()
+
+        dummy_engine = MagicMock()
+        dummy_engine.execute = AsyncMock(
+            return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
+        )
+        dummy_engine.config_provider = dummy_config
+
+        mwr_list = [ModelWithRetries(LLMModel("openai:gpt-4"), retries=2)]
+
+        with patch("lamia.facade.lamia.LamiaEngine", return_value=dummy_engine):
+            lamia = Lamia("ollama")
+            await lamia.run_async("generate a story", models=mwr_list)  # type: ignore[arg-type]
+
+        dummy_config.override_model_chain_with.assert_called_once_with(mwr_list)

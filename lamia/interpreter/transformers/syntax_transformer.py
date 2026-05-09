@@ -823,17 +823,11 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     def _build_models_keyword(self, parameters: List[FunctionParameter]) -> Optional[ast.keyword]:
         """Build models keyword argument from function parameters."""
         for param in parameters:
-            if param.name == 'models' and param.default is not None:
-                # Create models keyword argument with the actual default value
-                if isinstance(param.default, list):
-                    # Create list literal for multiple models
-                    list_elements = [ast.Constant(value=model) for model in param.default]
-                    value_node = ast.List(elts=list_elements, ctx=ast.Load())
-                else:
-                    # Single model string
-                    value_node = ast.Constant(value=param.default)
-                
-                return ast.keyword(arg='models', value=value_node)
+            if param.name == 'models':
+                return ast.keyword(
+                    arg='models',
+                    value=ast.Name(id='models', ctx=ast.Load()),
+                )
         return None
 
     def _build_return_type_keyword(
