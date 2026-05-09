@@ -397,9 +397,13 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             for name in dict.fromkeys(placeholders)
         ]
 
+        # Escape {@...} file references so Python's str.format() doesn't treat
+        # them as format fields; they become {@ ...} again after .format() runs.
+        escaped_value = re.sub(r'\{(@[^}]+)\}', r'{{\1}}', command_node.value)
+
         return ast.Call(
             func=ast.Attribute(
-                value=command_node,
+                value=ast.Constant(value=escaped_value),
                 attr='format',
                 ctx=ast.Load(),
             ),
@@ -1209,10 +1213,14 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                     )
                 )
         
+        # Escape {@...} file references so Python's str.format() doesn't treat
+        # them as format fields; they become {@...} again after .format() runs.
+        escaped_command = re.sub(r'\{(@[^}]+)\}', r'{{\1}}', command)
+
         # Create command.format(...) call
         return ast.Call(
             func=ast.Attribute(
-                value=ast.Constant(value=command),
+                value=ast.Constant(value=escaped_command),
                 attr='format',
                 ctx=ast.Load(),
             ),

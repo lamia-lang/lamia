@@ -195,6 +195,32 @@ def click_with_fallback():
         assert "fallback_selectors" in result
         assert "WebCommand" in result
 
+    def test_function_param_plus_file_ref_escapes_file_ref(self):
+        """Function with {param} and {@file} in docstring: {@file} must be double-brace-escaped."""
+        source = """
+def answer_question(question="What are my main skills?"):
+    \"\"\"
+    Answer: {question}
+
+    Use information from {@resume.pdf} and {@cover_letter.txt}
+    \"\"\"
+"""
+        result = self.transformer.transform_code(source)
+
+        assert ".format" in result
+        assert "question" in result
+        # {@...} refs must be escaped so str.format() doesn't raise KeyError
+        assert "{{@resume.pdf}}" in result
+        assert "{{@cover_letter.txt}}" in result
+
+    def test_function_param_plus_file_ref_runtime_format_does_not_raise(self):
+        """At runtime .format() must preserve {@...} refs after double-brace escaping."""
+        escaped = "\n    Answer: {question}\n\n    Use information from {{@resume.pdf}} and {{@cover_letter.txt}}\n    "
+        result = escaped.format(question="Python, Go")
+        assert "{@resume.pdf}" in result
+        assert "{@cover_letter.txt}" in result
+        assert "Python, Go" in result
+
 
 class TestFileWriteSyntaxTransformer:
     """Test -> File(...) hybrid syntax transformation."""
@@ -360,6 +386,33 @@ class TestInlineVariableSubstitution:
         assert ".format" in result
         assert "topic" in result
         assert "resume" not in result.split(".format")[1] or "@resume" not in result.split(".format")[1]
+
+    def test_inline_arrow_file_ref_escaped_so_format_does_not_raise(self):
+        """{@file} must be double-brace-escaped in the format string so str.format() ignores it."""
+        source = '__LAMIA_TYPED_EXPR__(HTML, "About {topic} using {@resume.pdf}")'
+        result = self.transformer.transform_code(source)
+
+        # The generated string literal must contain {{@resume.pdf}} so that
+        # .format(topic=...) at runtime doesn't raise KeyError('@resume').
+        assert "{{@resume.pdf}}" in result
+
+    def test_inline_arrow_file_ref_runtime_format_does_not_raise(self):
+        """At runtime .format() must not choke on {@resume.pdf} after escaping."""
+        # Simulate what the generated code would do at runtime:
+        # escaped_str.format(topic=str(topic)) must NOT raise KeyError
+        escaped = "About {topic} using {{@resume.pdf}}"
+        result = escaped.format(topic="Python")
+        assert result == "About Python using {@resume.pdf}"
+
+    def test_inline_arrow_multiple_file_refs_all_escaped(self):
+        """Multiple {@...} refs in the same string are all escaped."""
+        source = '__LAMIA_TYPED_EXPR__(HTML, "From {@resume.pdf} and {@cover_letter.txt} about {topic}")'
+        result = self.transformer.transform_code(source)
+
+        assert "{{@resume.pdf}}" in result
+        assert "{{@cover_letter.txt}}" in result
+        # The param placeholder is a regular kwarg, not escaped
+        assert "topic=str(topic)" in result
 
     def test_inline_arrow_multiple_variables(self):
         source = '__LAMIA_TYPED_EXPR__(HTML, "Compare {stock_a} vs {stock_b}")'
