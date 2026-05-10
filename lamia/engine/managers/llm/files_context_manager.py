@@ -2,7 +2,6 @@
 
 import os
 import logging
-import time
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 from difflib import SequenceMatcher, get_close_matches
@@ -16,6 +15,44 @@ from lamia.project import find_project_root
 logger = logging.getLogger(__name__)
 
 _FILE_REF_RE = re.compile(r'\{@([^}]+)\}')
+
+
+def _compute_minimal_unique_paths(paths: List[str]) -> Dict[str, str]:
+    """For a list of absolute paths that share a basename, compute the shortest
+    path suffix that uniquely identifies each one.
+
+    Example::
+
+        ["/a/b/resume.pdf", "/a/c/resume.pdf"]
+        → {"/a/b/resume.pdf": "b/resume.pdf",
+           "/a/c/resume.pdf": "c/resume.pdf"}
+
+    If two paths are truly identical after normalization, the full path is
+    returned for both (the caller should have deduplicated).
+    """
+    if len(paths) <= 1:
+        return {p: os.path.basename(p) for p in paths}
+
+    split = {p: p.replace("\\", "/").split("/") for p in paths}
+    result: Dict[str, str] = {}
+
+    for target in paths:
+        parts = split[target]
+        for depth in range(1, len(parts) + 1):
+            suffix = "/".join(parts[-depth:])
+            others_match = any(
+                "/".join(split[other][-depth:]) == suffix
+                for other in paths
+                if other != target
+            )
+            if not others_match:
+                result[target] = suffix
+                break
+        else:
+            result[target] = target
+
+    return result
+
 
 # ---------------------------------------------------------------------------
 # Source-file context stack
@@ -165,12 +202,7 @@ class FileSearcher:
 
 class FilesContext:
     """Manages file context for LLM prompts."""
-    
-    # Ambiguity threshold: if top 2 matches differ by less than this, it's ambiguous
-    AMBIGUITY_THRESHOLD = 10.0
-    # Minimum score for a match to be considered a real hit (not just noise)
-    MIN_MATCH_SCORE = 40.0
-    
+
     def __init__(self, *paths: str, _push_to_stack: bool = False):
         """Initialize file context with paths.
         
@@ -179,12 +211,12 @@ class FilesContext:
         """
         self.paths = paths
         self.indexed_files: List[str] = []
-        self.searcher: Optional[FileSearcher] = None
+        self._entered = False
     
     def __enter__(self):
         """Load files on context enter."""
         self.indexed_files = self._index_files(self.paths)
-        self.searcher = FileSearcher(self.indexed_files)
+        self._entered = True
         logger.debug(f"Indexed {len(self.indexed_files)} files for context")
         
         _context_stack.append(self)
@@ -194,13 +226,12 @@ class FilesContext:
     
     def __exit__(self, *args):
         """Clean up on context exit."""
-        # Pop from global stack if we pushed
         if _context_stack and _context_stack[-1] is self:
             _context_stack.pop()
             logger.debug(f"FilesContext popped from stack (size={len(_context_stack)})")
         
         self.indexed_files.clear()
-        self.searcher = None
+        self._entered = False
     
     def _index_files(self, paths: List[str]) -> List[str]:
         """Index all files in the given paths."""
@@ -227,19 +258,19 @@ class FilesContext:
         return indexed
     
     def resolve_file_reference(self, query: str) -> str:
-        """Resolve a file reference to an actual filepath.
-        
-        Args:
-            query: The filename or pattern to search for (e.g., "resume.pdf")
-        
-        Returns:
-            Absolute path to the resolved file
-        
-        Raises:
-            FileNotFoundError: If no file matches
-            AmbiguousFileError: If multiple files match with similar scores
+        """Resolve a file reference to an actual filepath using exact matching.
+
+        Resolution order:
+        1. Absolute path → use directly
+        2. Exact path-suffix match against all indexed files
+           - 1 match  → resolved
+           - 0 matches → FileReferenceError with "Did you mean?" from difflib
+           - >1 matches → AmbiguousFileError with minimal unique paths
+
+        No fuzzy/similarity resolution is performed — only exact suffix matching.
+        Fuzzy matching is used *only* for "Did you mean?" suggestions on failure.
         """
-        if not self.searcher:
+        if not self._entered:
             raise RuntimeError("FilesContext not entered. Use 'with files(...):'")
         if not self.indexed_files:
             raise FileReferenceError(
@@ -247,61 +278,39 @@ class FilesContext:
                 [],
                 self._build_empty_index_hint(),
             )
-        
-        # 1. Try as absolute path
+
+        # 1. Absolute path
         if os.path.isabs(query) and os.path.exists(query):
             logger.debug(f"Resolved '{query}' as absolute path")
             return query
-        
-        # 2. Try as relative path from each indexed directory
+
+        # 2. Exact suffix match: query must match the tail of the indexed path
+        query_normalized = query.replace("\\", "/").strip("/")
+        exact_matches: List[str] = []
         for indexed_path in self.indexed_files:
-            indexed_dir = os.path.dirname(indexed_path)
-            candidate = os.path.join(indexed_dir, query)
-            if os.path.exists(candidate):
-                logger.debug(f"Resolved '{query}' as relative path: {candidate}")
-                return candidate
-        
-        # 3. Smart search
-        logger.warning(
-            "File '%s' not found by direct lookup. Searching similar files in %d indexed files...",
-            query,
-            len(self.indexed_files),
-        )
-        started = time.perf_counter()
-        matches = self.searcher.search(query)
-        logger.debug(
-            "Similarity search for '%s' finished in %.2fs with %d candidates",
-            query,
-            time.perf_counter() - started,
-            len(matches),
-        )
-        
-        if not matches:
-            all_filenames = [os.path.basename(f) for f in self.indexed_files]
-            suggestions = get_close_matches(query, all_filenames, n=3, cutoff=0.3)
-            raise FileReferenceError(
+            normalized = indexed_path.replace("\\", "/")
+            if normalized.endswith("/" + query_normalized) or normalized == query_normalized:
+                exact_matches.append(indexed_path)
+
+        if len(exact_matches) == 1:
+            logger.debug(f"Resolved '{query}' → '{exact_matches[0]}'")
+            return exact_matches[0]
+
+        if len(exact_matches) > 1:
+            unique_paths = _compute_minimal_unique_paths(exact_matches)
+            raise AmbiguousFileError(
                 query,
-                suggestions,
-                self._build_not_found_hint(),
+                [(p, unique_paths[p]) for p in exact_matches],
             )
 
-        top_path, top_score = matches[0]
-
-        if top_score < self.MIN_MATCH_SCORE:
-            suggestions = [os.path.basename(p) for p, _ in matches[:3]]
-            raise FileReferenceError(
-                query,
-                suggestions,
-                self._build_not_found_hint(),
-            )
-
-        if len(matches) > 1:
-            second_score = matches[1][1]
-            if abs(top_score - second_score) < self.AMBIGUITY_THRESHOLD:
-                raise AmbiguousFileError(query, matches)
-
-        logger.debug(f"Resolved '{query}' → '{top_path}' (score: {top_score:.2f})")
-        return top_path
+        # 3. No exact match — build "Did you mean?" via difflib
+        all_filenames = sorted({os.path.basename(f) for f in self.indexed_files})
+        suggestions = get_close_matches(query_normalized, all_filenames, n=3, cutoff=0.4)
+        raise FileReferenceError(
+            query,
+            suggestions,
+            self._build_not_found_hint(),
+        )
 
     def _build_empty_index_hint(self) -> str:
         """Diagnostic hint when indexed_files is empty — tells user which paths failed."""
@@ -387,7 +396,7 @@ class CapturedFilesContext:
         ctx = FilesContext.__new__(FilesContext)
         ctx.paths = self._original_paths
         ctx.indexed_files = list(self._indexed_files)
-        ctx.searcher = FileSearcher(ctx.indexed_files)
+        ctx._entered = True
         _context_stack.append(ctx)
         return ctx
 
@@ -508,7 +517,7 @@ def _resolve_standalone_reference(query: str, source_path: str) -> str:
 
     ctx = FilesContext(project_root)
     ctx.indexed_files = ctx._index_files([project_root])
-    ctx.searcher = FileSearcher(ctx.indexed_files)
+    ctx._entered = True
     logger.debug(
         f"Standalone: indexed {len(ctx.indexed_files)} files under project root '{project_root}'"
     )

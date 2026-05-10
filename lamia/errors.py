@@ -367,39 +367,29 @@ class OllamaNotInstalledError(ExternalOperationPermanentError):
 
 
 class AmbiguousFileError(Exception):
-    """Raised when multiple files match a file reference with similar scores.
-    
-    This occurs when using {@filename} syntax in a files context and multiple
-    files have similar match scores, making it unclear which file was intended.
-    
+    """Raised when multiple files match a file reference.
+
+    This occurs when using {@filename} syntax and the name resolves to more
+    than one file across the indexed directories.
+
+    ``matches`` is a list of ``(absolute_path, minimal_unique_path)`` tuples.
+
     What to do:
-    - Be more specific with the filename (include more of the path)
-    - Use the full filename with extension
-    - Check the suggested matches in the error message
-    
-    Example:
-        with files("~/Documents/"):
-            try:
-                result = lamia.run("Extract from {@config}")
-            except AmbiguousFileError as e:
-                print(f"Multiple files match '{e.query}':")
-                for path, score in e.matches:
-                    print(f"  - {path} (score: {score:.2f})")
+    - Use the minimal unique path shown in the error to disambiguate.
     """
-    
+
     def __init__(self, query: str, matches: List[tuple]):
-        import os
         self.query = query
         self.matches = matches
-        
+
         match_list = "\n".join([
-            f"  {i+1}. {os.path.basename(path)} (score: {score:.2f})"
-            for i, (path, score) in enumerate(matches[:5])
+            f"  - {{@{unique_path}}}"
+            for _, unique_path in matches[:5]
         ])
-        
+
         message = (
             f"Multiple files match '{query}':\n{match_list}\n\n"
-            f"Please be more specific with the filename or path."
+            f"Use a more specific path from the list above."
         )
         super().__init__(message)
 

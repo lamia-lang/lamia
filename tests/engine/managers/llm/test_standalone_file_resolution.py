@@ -13,7 +13,6 @@ from lamia.engine.managers.llm.files_context_manager import (
     _has_path_components,
     _resolve_standalone_reference,
     FilesContext,
-    FileSearcher,
 )
 from lamia.project import find_project_root
 from lamia.errors import AmbiguousFileError, FileReferenceError
@@ -313,42 +312,7 @@ class TestFilesContextErrorMessages:
         finally:
             ctx.__exit__(None, None, None)
 
-    def test_empty_paths_hint_uses_indexed_file_dirs_for_captured_context(self, tmp_path):
-        f = tmp_path / "memos.txt"
-        f.write_text("hello")
-
-        ctx = FilesContext.__new__(FilesContext)
-        ctx.paths = ()
-        ctx.indexed_files = [str(f)]
-        ctx.searcher = FileSearcher(ctx.indexed_files)
-
-        with pytest.raises(FileReferenceError) as exc:
-            ctx.resolve_file_reference("missing.txt")
-
-        msg = str(exc.value)
-        assert "not found by direct lookup" not in msg
-        assert str(tmp_path) in msg
-        assert "(none)" not in msg
-
-    def test_low_score_matches_raise_not_found_not_ambiguous(self, tmp_path):
-        """When fuzzy matches score below MIN_MATCH_SCORE, raise FileReferenceError."""
-        readme = tmp_path / "README.md"
-        readme.write_text("hello")
-        sumpy = tmp_path / "sum.py"
-        sumpy.write_text("x=1")
-
-        ctx = FilesContext(str(tmp_path))
-        ctx.__enter__()
-        try:
-            with pytest.raises(FileReferenceError) as exc:
-                ctx.resolve_file_reference("resume.pdf")
-            msg = str(exc.value)
-            assert "not found" in msg.lower()
-        finally:
-            ctx.__exit__(None, None, None)
-
     def test_nonexistent_path_shows_does_not_exist(self):
-        """When a path given to files() doesn't exist, hint should say so."""
         ctx = FilesContext("~/Document", "~/projects/linkedin/", "./config/")
         ctx.__enter__()
         try:
@@ -363,7 +327,6 @@ class TestFilesContextErrorMessages:
             ctx.__exit__(None, None, None)
 
     def test_captured_context_preserves_original_paths(self, tmp_path):
-        """CapturedFilesContext should carry the original paths for diagnostics."""
         from lamia.engine.managers.llm.files_context_manager import CapturedFilesContext
         f = tmp_path / "data.txt"
         f.write_text("hello")
@@ -374,3 +337,216 @@ class TestFilesContextErrorMessages:
             assert ctx.paths == ("~/Documents/", "./config/")
         finally:
             captured.__exit__(None, None, None)
+
+
+class TestExactMatchResolution:
+    """Exact suffix matching — no fuzzy file loading."""
+
+    def test_exact_basename_single_match(self, tmp_path):
+        """Single file with matching basename resolves correctly."""
+        f = tmp_path / "resume.pdf"
+        f.write_text("my resume")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            result = ctx.resolve_file_reference("resume.pdf")
+            assert result == str(f)
+
+    def test_exact_subpath_match(self, tmp_path):
+        """User can provide a partial path suffix to resolve."""
+        (tmp_path / "docs").mkdir()
+        f = tmp_path / "docs" / "resume.pdf"
+        f.write_text("my resume")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            result = ctx.resolve_file_reference("docs/resume.pdf")
+            assert result == str(f)
+
+    def test_no_fuzzy_loading_of_wrong_file(self, tmp_path):
+        """resume.pdf must NOT resolve to README.md via fuzzy matching."""
+        (tmp_path / "README.md").write_text("readme")
+        (tmp_path / "sum.py").write_text("x=1")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            with pytest.raises(FileReferenceError) as exc:
+                ctx.resolve_file_reference("resume.pdf")
+            msg = str(exc.value)
+            assert "not found" in msg.lower()
+
+    def test_not_found_suggests_similar_names(self, tmp_path):
+        """When file not found, 'Did you mean?' uses difflib, not fuzzy load."""
+        (tmp_path / "credentials.json").write_text("{}")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            with pytest.raises(FileReferenceError) as exc:
+                ctx.resolve_file_reference("credential.json")
+            msg = str(exc.value)
+            assert "Did you mean" in msg
+            assert "credentials.json" in msg
+
+    def test_absolute_path_still_works(self, tmp_path):
+        f = tmp_path / "data.csv"
+        f.write_text("a,b")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            result = ctx.resolve_file_reference(str(f))
+            assert result == str(f)
+
+    def test_case_insensitive_not_used(self, tmp_path):
+        """Exact matching is case-sensitive on case-sensitive filesystems."""
+        (tmp_path / "Data.csv").write_text("a,b")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            with pytest.raises(FileReferenceError):
+                ctx.resolve_file_reference("data.csv")
+
+
+class TestDuplicateFileDetection:
+    """When the same filename exists in multiple directories."""
+
+    def test_same_name_two_dirs_raises_ambiguous(self, tmp_path):
+        """resume.pdf in two different dirs → AmbiguousFileError."""
+        dir_a = tmp_path / "docs"
+        dir_b = tmp_path / "archive"
+        dir_a.mkdir()
+        dir_b.mkdir()
+        (dir_a / "resume.pdf").write_text("v1")
+        (dir_b / "resume.pdf").write_text("v2")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            with pytest.raises(AmbiguousFileError) as exc:
+                ctx.resolve_file_reference("resume.pdf")
+            msg = str(exc.value)
+            assert "docs/resume.pdf" in msg
+            assert "archive/resume.pdf" in msg
+
+    def test_disambiguate_with_subpath(self, tmp_path):
+        """User resolves ambiguity by adding parent dir to the reference."""
+        dir_a = tmp_path / "docs"
+        dir_b = tmp_path / "archive"
+        dir_a.mkdir()
+        dir_b.mkdir()
+        (dir_a / "resume.pdf").write_text("v1")
+        (dir_b / "resume.pdf").write_text("v2")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            result = ctx.resolve_file_reference("docs/resume.pdf")
+            assert result == str(dir_a / "resume.pdf")
+
+            result2 = ctx.resolve_file_reference("archive/resume.pdf")
+            assert result2 == str(dir_b / "resume.pdf")
+
+    def test_same_name_across_separate_roots(self, tmp_path):
+        """Duplicate across two separate root dirs passed to files()."""
+        root_a = tmp_path / "root_a"
+        root_b = tmp_path / "root_b"
+        root_a.mkdir()
+        root_b.mkdir()
+        (root_a / "config.yaml").write_text("a: 1")
+        (root_b / "config.yaml").write_text("b: 2")
+
+        with FilesContext(str(root_a), str(root_b)) as ctx:
+            with pytest.raises(AmbiguousFileError) as exc:
+                ctx.resolve_file_reference("config.yaml")
+            msg = str(exc.value)
+            assert "root_a/config.yaml" in msg
+            assert "root_b/config.yaml" in msg
+
+    def test_disambiguate_across_roots_with_folder_name(self, tmp_path):
+        """Provide enough path to uniquely identify across roots."""
+        root_a = tmp_path / "root_a"
+        root_b = tmp_path / "root_b"
+        root_a.mkdir()
+        root_b.mkdir()
+        (root_a / "config.yaml").write_text("a: 1")
+        (root_b / "config.yaml").write_text("b: 2")
+
+        with FilesContext(str(root_a), str(root_b)) as ctx:
+            result = ctx.resolve_file_reference("root_a/config.yaml")
+            assert result == str(root_a / "config.yaml")
+
+    def test_deeper_nesting_minimal_path(self, tmp_path):
+        """a/b/resume.pdf vs a/b/c/resume.pdf — minimal unique paths differ."""
+        (tmp_path / "a" / "b").mkdir(parents=True)
+        (tmp_path / "a" / "b" / "c").mkdir()
+        (tmp_path / "a" / "b" / "resume.pdf").write_text("shallow")
+        (tmp_path / "a" / "b" / "c" / "resume.pdf").write_text("deep")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            with pytest.raises(AmbiguousFileError) as exc:
+                ctx.resolve_file_reference("resume.pdf")
+            msg = str(exc.value)
+            assert "b/resume.pdf" in msg
+            assert "c/resume.pdf" in msg
+
+    def test_three_duplicates_across_dirs(self, tmp_path):
+        """Three copies of same file across three directories."""
+        for name in ["alpha", "beta", "gamma"]:
+            d = tmp_path / name
+            d.mkdir()
+            (d / "settings.json").write_text(f"{name}")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            with pytest.raises(AmbiguousFileError) as exc:
+                ctx.resolve_file_reference("settings.json")
+            msg = str(exc.value)
+            assert "alpha/settings.json" in msg
+            assert "beta/settings.json" in msg
+            assert "gamma/settings.json" in msg
+
+    def test_unique_file_not_affected_by_others(self, tmp_path):
+        """A file that exists only once should resolve even if dir has duplicates."""
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        dir_a.mkdir()
+        dir_b.mkdir()
+        (dir_a / "resume.pdf").write_text("v1")
+        (dir_b / "resume.pdf").write_text("v2")
+        (dir_a / "cover_letter.pdf").write_text("unique")
+
+        with FilesContext(str(tmp_path)) as ctx:
+            result = ctx.resolve_file_reference("cover_letter.pdf")
+            assert result == str(dir_a / "cover_letter.pdf")
+
+
+class TestMinimalUniquePaths:
+    """Unit tests for _compute_minimal_unique_paths."""
+
+    def test_single_path(self):
+        from lamia.engine.managers.llm.files_context_manager import _compute_minimal_unique_paths
+        result = _compute_minimal_unique_paths(["/a/b/file.txt"])
+        assert result == {"/a/b/file.txt": "file.txt"}
+
+    def test_two_paths_different_parent(self):
+        from lamia.engine.managers.llm.files_context_manager import _compute_minimal_unique_paths
+        result = _compute_minimal_unique_paths(["/a/b/file.txt", "/a/c/file.txt"])
+        assert result["/a/b/file.txt"] == "b/file.txt"
+        assert result["/a/c/file.txt"] == "c/file.txt"
+
+    def test_deeper_nesting_needs_more_components(self):
+        from lamia.engine.managers.llm.files_context_manager import _compute_minimal_unique_paths
+        result = _compute_minimal_unique_paths([
+            "/x/y/sub/file.txt",
+            "/x/z/sub/file.txt",
+        ])
+        assert result["/x/y/sub/file.txt"] == "y/sub/file.txt"
+        assert result["/x/z/sub/file.txt"] == "z/sub/file.txt"
+
+    def test_three_paths(self):
+        from lamia.engine.managers.llm.files_context_manager import _compute_minimal_unique_paths
+        result = _compute_minimal_unique_paths([
+            "/a/alpha/f.txt",
+            "/a/beta/f.txt",
+            "/a/gamma/f.txt",
+        ])
+        assert result["/a/alpha/f.txt"] == "alpha/f.txt"
+        assert result["/a/beta/f.txt"] == "beta/f.txt"
+        assert result["/a/gamma/f.txt"] == "gamma/f.txt"
+
+    def test_same_parent_different_grandparent(self):
+        from lamia.engine.managers.llm.files_context_manager import _compute_minimal_unique_paths
+        result = _compute_minimal_unique_paths([
+            "/a/b/shared/f.txt",
+            "/a/c/shared/f.txt",
+        ])
+        assert result["/a/b/shared/f.txt"] == "b/shared/f.txt"
+        assert result["/a/c/shared/f.txt"] == "c/shared/f.txt"

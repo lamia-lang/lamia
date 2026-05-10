@@ -22,7 +22,6 @@ import pytest
 from lamia.engine.managers.llm.files_context_manager import (
     CapturedFilesContext,
     FilesContext,
-    FileSearcher,
     _context_stack,
     capture_files_context,
     files,
@@ -82,13 +81,12 @@ class TestCapturedFilesContext:
         finally:
             snap.__exit__(None, None, None)
 
-    def test_searcher_created_on_enter(self, tmp_path):
+    def test_entered_flag_set_on_enter(self, tmp_path):
         (tmp_path / "c.txt").write_text("content")
         snap = CapturedFilesContext([str(tmp_path / "c.txt")])
         ctx = snap.__enter__()
         try:
-            assert ctx.searcher is not None
-            assert isinstance(ctx.searcher, FileSearcher)
+            assert ctx._entered is True
         finally:
             snap.__exit__(None, None, None)
 
