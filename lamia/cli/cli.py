@@ -807,7 +807,7 @@ def main():
         parser.add_argument('--file', '-f', type=str, help='Lamia script file to run (if not provided, runs in interactive mode)')
         parser.add_argument('--config', '-c', type=str, help='Path to config file (optional)')
         parser.add_argument('--log-level', default='INFO', help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
-        #parser.add_argument('--verbose', '-v', action='store_true', help='Show all Lamia logs on console (default: only warnings/errors)')
+        parser.add_argument('--verbose', '-v', action='store_true', help='Show all Lamia logs on console (default: only warnings/errors)')
         parser.add_argument('--log-file', type=str, help='Custom path for the Lamia log file (default: .lamia/lamia.log)')
         parser.add_argument('--no-cache', action='store_true', help='Disable selector resolution cache (forces fresh resolution)')
         parser.add_argument('--json', action='store_true', help='Machine-readable JSON-line mode for IDE/tool integration')
@@ -817,7 +817,7 @@ def main():
 
     setup_cli_logging(
         level=args.log_level.upper(),
-        verbose=not json_flag,
+        verbose=getattr(args, 'verbose', False) and not json_flag,
         log_file=args.log_file,
     )
 

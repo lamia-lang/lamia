@@ -329,3 +329,48 @@ class TestFilesContextErrorMessages:
         assert "not found by direct lookup" not in msg
         assert str(tmp_path) in msg
         assert "(none)" not in msg
+
+    def test_low_score_matches_raise_not_found_not_ambiguous(self, tmp_path):
+        """When fuzzy matches score below MIN_MATCH_SCORE, raise FileReferenceError."""
+        readme = tmp_path / "README.md"
+        readme.write_text("hello")
+        sumpy = tmp_path / "sum.py"
+        sumpy.write_text("x=1")
+
+        ctx = FilesContext(str(tmp_path))
+        ctx.__enter__()
+        try:
+            with pytest.raises(FileReferenceError) as exc:
+                ctx.resolve_file_reference("resume.pdf")
+            msg = str(exc.value)
+            assert "not found" in msg.lower()
+        finally:
+            ctx.__exit__(None, None, None)
+
+    def test_nonexistent_path_shows_does_not_exist(self):
+        """When a path given to files() doesn't exist, hint should say so."""
+        ctx = FilesContext("~/Document", "~/projects/linkedin/", "./config/")
+        ctx.__enter__()
+        try:
+            with pytest.raises(FileReferenceError) as exc:
+                ctx.resolve_file_reference("credentials.json")
+            msg = str(exc.value)
+            assert "~/Document" in msg
+            assert "~/projects/linkedin/" in msg
+            assert "./config/" in msg
+            assert "Does not exist" in msg
+        finally:
+            ctx.__exit__(None, None, None)
+
+    def test_captured_context_preserves_original_paths(self, tmp_path):
+        """CapturedFilesContext should carry the original paths for diagnostics."""
+        from lamia.engine.managers.llm.files_context_manager import CapturedFilesContext
+        f = tmp_path / "data.txt"
+        f.write_text("hello")
+
+        captured = CapturedFilesContext([str(f)], ("~/Documents/", "./config/"))
+        ctx = captured.__enter__()
+        try:
+            assert ctx.paths == ("~/Documents/", "./config/")
+        finally:
+            captured.__exit__(None, None, None)

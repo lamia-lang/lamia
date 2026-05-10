@@ -168,6 +168,8 @@ class FilesContext:
     
     # Ambiguity threshold: if top 2 matches differ by less than this, it's ambiguous
     AMBIGUITY_THRESHOLD = 10.0
+    # Minimum score for a match to be considered a real hit (not just noise)
+    MIN_MATCH_SCORE = 40.0
     
     def __init__(self, *paths: str, _push_to_stack: bool = False):
         """Initialize file context with paths.
@@ -183,11 +185,10 @@ class FilesContext:
         """Load files on context enter."""
         self.indexed_files = self._index_files(self.paths)
         self.searcher = FileSearcher(self.indexed_files)
-        logger.info(f"Indexed {len(self.indexed_files)} files for context")
+        logger.debug(f"Indexed {len(self.indexed_files)} files for context")
         
-        # Push to global stack
         _context_stack.append(self)
-        logger.info(f"FilesContext pushed to stack (size={len(_context_stack)})")
+        logger.debug(f"FilesContext pushed to stack (size={len(_context_stack)})")
         
         return self
     
@@ -196,7 +197,7 @@ class FilesContext:
         # Pop from global stack if we pushed
         if _context_stack and _context_stack[-1] is self:
             _context_stack.pop()
-            logger.info(f"FilesContext popped from stack (size={len(_context_stack)})")
+            logger.debug(f"FilesContext popped from stack (size={len(_context_stack)})")
         
         self.indexed_files.clear()
         self.searcher = None
@@ -268,7 +269,7 @@ class FilesContext:
         )
         started = time.perf_counter()
         matches = self.searcher.search(query)
-        logger.info(
+        logger.debug(
             "Similarity search for '%s' finished in %.2fs with %d candidates",
             query,
             time.perf_counter() - started,
@@ -283,19 +284,24 @@ class FilesContext:
                 suggestions,
                 self._build_not_found_hint(),
             )
-        
-        # Check for ambiguity
+
+        top_path, top_score = matches[0]
+
+        if top_score < self.MIN_MATCH_SCORE:
+            suggestions = [os.path.basename(p) for p, _ in matches[:3]]
+            raise FileReferenceError(
+                query,
+                suggestions,
+                self._build_not_found_hint(),
+            )
+
         if len(matches) > 1:
-            top_score = matches[0][1]
             second_score = matches[1][1]
-            
             if abs(top_score - second_score) < self.AMBIGUITY_THRESHOLD:
                 raise AmbiguousFileError(query, matches)
-        
-        # Clear winner
-        resolved_path = matches[0][0]
-        logger.info(f"Resolved '{query}' → '{resolved_path}' (score: {matches[0][1]:.2f})")
-        return resolved_path
+
+        logger.debug(f"Resolved '{query}' → '{top_path}' (score: {top_score:.2f})")
+        return top_path
 
     def _build_empty_index_hint(self) -> str:
         """Diagnostic hint when indexed_files is empty — tells user which paths failed."""
@@ -308,7 +314,7 @@ class FilesContext:
             if resolved.exists():
                 lines.append(f"  {p} → exists but contains no files")
             else:
-                lines.append(f"  {p} → Does not exists (resolved to {resolved})")
+                lines.append(f"  {p} → Does not exist (resolved to {resolved})")
         return "\n".join(lines)
 
     def _build_not_found_hint(self) -> str:
