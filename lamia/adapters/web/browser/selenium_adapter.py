@@ -950,16 +950,12 @@ class SeleniumAdapter(BaseBrowserAdapter):
     
     def _load_session_data(self):
         """Load session data (cookies) from files."""
-        print(f"TO DELETE: _load_session_data called with profile_name: {self.profile_name}")
         if not self.session_manager or not self.session_manager.enabled or not self.driver:
-            print(f"TO DELETE: Not loading session data - session_manager: {self.session_manager}, enabled: {self.session_manager.enabled if self.session_manager else None}, driver: {bool(self.driver)}")
             return
         
         try:
             # Load and add cookies - need to navigate to domain first
-            print(f"TO DELETE: About to load cookies for profile: {self.profile_name}")
             cookies = self.session_manager.load_cookies(self.profile_name)
-            print(f"TO DELETE: Loaded {len(cookies) if cookies else 0} cookies")
             if cookies:
                 # Group cookies by domain
                 domain_cookies = {}

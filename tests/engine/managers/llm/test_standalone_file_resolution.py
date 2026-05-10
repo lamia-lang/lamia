@@ -550,3 +550,150 @@ class TestMinimalUniquePaths:
         ])
         assert result["/a/b/shared/f.txt"] == "b/shared/f.txt"
         assert result["/a/c/shared/f.txt"] == "c/shared/f.txt"
+
+
+class TestVariablePathsInFilesContext:
+    """files() must work with variable paths, not just string literals."""
+
+    def test_variable_holding_directory_path(self, tmp_path):
+        """A variable pointing to a directory should index files."""
+        (tmp_path / "report.txt").write_text("Q3 results")
+        dir_path = str(tmp_path)
+
+        with FilesContext(dir_path) as ctx:
+            result = ctx.resolve_file_reference("report.txt")
+            assert result == str(tmp_path / "report.txt")
+
+    def test_variable_holding_single_file_path(self, tmp_path):
+        """A variable pointing to a single file should index just that file."""
+        f = tmp_path / "resume.pdf"
+        f.write_text("John Doe")
+        file_path = str(f)
+
+        with FilesContext(file_path) as ctx:
+            assert len(ctx.indexed_files) == 1
+            result = ctx.resolve_file_reference("resume.pdf")
+            assert result == str(f)
+
+    def test_multiple_variable_paths(self, tmp_path):
+        """Multiple variable paths are all indexed."""
+        dir_a = tmp_path / "docs"
+        dir_b = tmp_path / "config"
+        dir_a.mkdir()
+        dir_b.mkdir()
+        (dir_a / "readme.md").write_text("Hello")
+        (dir_b / "settings.json").write_text("{}")
+
+        path_a = str(dir_a)
+        path_b = str(dir_b)
+
+        with FilesContext(path_a, path_b) as ctx:
+            assert ctx.resolve_file_reference("readme.md") == str(dir_a / "readme.md")
+            assert ctx.resolve_file_reference("settings.json") == str(dir_b / "settings.json")
+
+    def test_single_file_no_with_required_for_exact(self, tmp_path):
+        """When files() gets a single file, it indexes just that file."""
+        f = tmp_path / "data.csv"
+        f.write_text("a,b,c")
+
+        with FilesContext(str(f)) as ctx:
+            assert len(ctx.indexed_files) == 1
+            assert ctx.resolve_file_reference("data.csv") == str(f)
+
+    def test_variable_path_nonexistent_warns(self, tmp_path):
+        """A variable pointing to a non-existent path: zero files indexed."""
+        bad_path = str(tmp_path / "nonexistent_dir")
+
+        with FilesContext(bad_path) as ctx:
+            assert len(ctx.indexed_files) == 0
+
+    def test_mix_of_file_and_dir_paths(self, tmp_path):
+        """Mix of a single file and a directory."""
+        single = tmp_path / "standalone.txt"
+        single.write_text("solo")
+        subdir = tmp_path / "extras"
+        subdir.mkdir()
+        (subdir / "bonus.txt").write_text("extra")
+
+        with FilesContext(str(single), str(subdir)) as ctx:
+            assert ctx.resolve_file_reference("standalone.txt") == str(single)
+            assert ctx.resolve_file_reference("bonus.txt") == str(subdir / "bonus.txt")
+
+
+class TestHuVariableFileReferences:
+    """Test {@variable} resolution in .hu executor with kwargs."""
+
+    def test_kwarg_replaces_file_ref(self):
+        """When caller passes doc_path kwarg, {@doc_path} becomes {@value}."""
+        from lamia.interpreter.human.parser import HuFunction
+        from lamia.interpreter.human.executor import HuCallable
+
+        fn = HuFunction(
+            name="summarize",
+            template="Summarize {@doc_path}",
+            params=frozenset(),
+            source_path="/tmp/test.hu",
+        )
+        c = HuCallable(fn)
+
+        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+            mock.return_value = MagicMock()
+            result = c(doc_path="report.pdf")
+            assert "{@report.pdf}" in result
+            assert "{@doc_path}" not in result
+
+    def test_no_kwarg_keeps_literal_filename(self):
+        """Without kwarg, {@article.txt} stays as-is for file resolution."""
+        from lamia.interpreter.human.parser import HuFunction
+        from lamia.interpreter.human.executor import HuCallable
+
+        fn = HuFunction(
+            name="summarize",
+            template="Summarize {@article.txt}",
+            params=frozenset(),
+            source_path="/tmp/test.hu",
+        )
+        c = HuCallable(fn)
+
+        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+            mock.return_value = MagicMock()
+            result = c()
+            assert "{@article.txt}" in result
+
+    def test_variable_ref_with_extension_stays_literal(self):
+        """If template has {@resume.pdf} and no kwarg named 'resume.pdf', it stays."""
+        from lamia.interpreter.human.parser import HuFunction
+        from lamia.interpreter.human.executor import HuCallable
+
+        fn = HuFunction(
+            name="extract",
+            template="Extract from {@resume.pdf}",
+            params=frozenset(),
+            source_path="/tmp/test.hu",
+        )
+        c = HuCallable(fn)
+
+        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+            mock.return_value = MagicMock()
+            result = c()
+            assert "{@resume.pdf}" in result
+
+    def test_param_substitution_and_file_ref_coexist(self):
+        """Both {variable} and {@file} work in the same template."""
+        from lamia.interpreter.human.parser import HuFunction
+        from lamia.interpreter.human.executor import HuCallable
+
+        fn = HuFunction(
+            name="answer",
+            template="Answer {question} using {@resume.pdf}",
+            params=frozenset({"question"}),
+            source_path="/tmp/test.hu",
+        )
+        c = HuCallable(fn)
+
+        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+            mock.return_value = MagicMock()
+            result = c(question="What are my skills?")
+            assert "What are my skills?" in result
+            assert "{@resume.pdf}" in result
+            assert "{question}" not in result

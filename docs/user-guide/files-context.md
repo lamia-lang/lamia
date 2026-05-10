@@ -18,25 +18,25 @@ answer = answer_question(question="What are my main skills?")
 
 ## Key Features
 
-### 🔍 Smart File Search
+### Exact File Resolution
 
-Files are resolved using **multiple strategies**:
+Files are resolved by **exact suffix matching** against indexed paths. No fuzzy loading — only the file you name gets loaded:
 
-1. **Exact filename match** (highest priority)
-2. **Content grep** (searches inside files)
-3. **Fuzzy matching** (handles typos)
-4. **Path component matching**
+1. Absolute path → used directly
+2. Filename or path suffix → must match exactly (e.g., `resume.pdf` or `docs/resume.pdf`)
 
-### 📄 Automatic File Extraction
+If the same filename exists in multiple directories, you'll be asked to disambiguate with a longer path.
+
+### Automatic File Extraction
 
 - **PDF files**: Text extracted using PyPDF2
 - **DOCX files**: Text extracted using python-docx
 - **Text files**: Read directly
 
-### ⚠️ Error Handling
+### Error Handling
 
-- **AmbiguousFileError**: Multiple files match with similar scores
-- **FileReferenceError**: File not found
+- **AmbiguousFileError**: Same filename exists in multiple indexed directories
+- **FileReferenceError**: File not found (with "Did you mean?" suggestions)
 
 ---
 
@@ -88,67 +88,54 @@ with files("~/Documents/"):
 
 ## File Reference Syntax
 
-### Exact Path
+### Filename or Path
 
 ```python
-{@resume.pdf}                    # Searches for resume.pdf in indexed directories
-{@path/to/resume.pdf}            # Relative path from indexed directory
+{@resume.pdf}                    # Exact filename match in indexed directories
+{@docs/resume.pdf}               # Path suffix — disambiguates when resume.pdf exists in multiple dirs
 {@/Users/me/Documents/resume.pdf} # Absolute path (always works)
 ```
 
-### Variable File References
+File references use **exact suffix matching**. The reference must match the end of an indexed file path. No fuzzy or partial matching is performed — this prevents accidentally loading the wrong file.
 
-In `.hu` files, `{@identifier}` can refer to a parameter passed by the caller. If the caller provides a kwarg with that name, its value is used as the filepath. If not, the name is treated as a literal filename.
+### Disambiguating Duplicates
 
-### Fuzzy Matching
-
-The search is **typo-tolerant**:
+When the same filename exists in multiple directories:
 
 ```python
-{@resum.pdf}      # Finds resume.pdf (fuzzy match)
-{@my resume}      # Finds john_doe_resume.pdf (word matching)
-{@config}         # Finds config.yaml, config.json, etc.
+with files("~/Documents/", "~/Archive/"):
+    # Both dirs have resume.pdf — this will raise AmbiguousFileError:
+    {@resume.pdf}
+
+    # Fix: use enough of the path to be unique:
+    {@Documents/resume.pdf}
+    {@Archive/resume.pdf}
 ```
 
----
+The error message shows the minimal path needed to disambiguate each file.
 
-## File Search Strategies
+### Variable File References (`.hu` files)
 
-### 1. Filename Match (Score: +100)
+In `.hu` files, `{@identifier}` can refer to a parameter passed by the caller. If the caller passes a kwarg with that name, its value replaces the reference as a filepath:
 
 ```python
+# summarize.hu
+Summarize the following document: {@doc_path}
+```
+
+```python
+# caller.lm
 with files("~/Documents/"):
-    # Exact: resume.pdf (score: 150)
-    # Prefix: resume_2024.pdf (score: 130)
-    # Contains: my_resume.pdf (score: 100)
-    {@resume}
+    result = summarize(doc_path="report.pdf")
+    # {@doc_path} becomes {@report.pdf} → resolves to ~/Documents/report.pdf
 ```
 
-### 2. Content Grep (Score: +50)
+If no kwarg matches, the identifier is treated as a literal filename.
 
-```python
-with files("~/projects/"):
-    # Searches file contents for "database"
-    # Useful for finding files by keywords
-    {@database}
-```
+### Variable vs File Reference
 
-### 3. Fuzzy Match (Score: +30)
-
-```python
-with files("~/Documents/"):
-    # Handles typos and partial names
-    {@resum}  # → resume.pdf
-    {@cv}     # → john_doe_cv.pdf
-```
-
-### 4. Path Component Match (Score: +20)
-
-```python
-with files("~/projects/"):
-    # Matches directory names in path
-    {@linkedin}  # → projects/linkedin/config.yaml
-```
+- `{variable}` — Python variable substitution (no `@`)
+- `{@filename}` — file content injection (has `@`)
 
 ---
 
@@ -156,41 +143,44 @@ with files("~/projects/"):
 
 ### AmbiguousFileError
 
-Raised when multiple files have similar match scores:
+Raised when the same filename exists in multiple indexed directories:
 
 ```python
-from lamia import AmbiguousFileError
-
-with files("~/Documents/"):
+with files("~/Documents/", "~/Archive/"):
     try:
         def load_config(models="openai:gpt-4"):
-            "Load {@config}"  # Multiple config.* files exist
+            "Load {@config.yaml}"  # config.yaml exists in both dirs
     except AmbiguousFileError as e:
         print(f"Multiple files match '{e.query}':")
-        for path, score in e.matches:
-            print(f"  - {path} (score: {score:.2f})")
+        for path, minimal in e.matches:
+            print(f"  - {{@{minimal}}}")
 ```
 
-**Solution**: Be more specific:
+**Solution**: Use the minimal unique path shown in the error:
 ```python
 def load_config(models="openai:gpt-4"):
-    "Load {@config.yaml}"  # Specific extension
+    "Load {@Documents/config.yaml}"
 ```
 
 ### FileReferenceError
 
-Raised when file cannot be found:
+Raised when no file matches the exact reference:
 
 ```python
-from lamia import FileReferenceError
-
 with files("~/Documents/"):
     try:
         def load_data(models="openai:gpt-4"):
             "Load {@nonexistent.pdf}"
     except FileReferenceError as e:
         print(f"File '{e.query}' not found")
-        print(f"Did you mean: {e.suggestions}")
+        if e.suggestions:
+            print(f"Did you mean: {e.suggestions}")
+```
+
+When `files()` indexes zero files (e.g., due to a typo in the path), the error shows which paths failed:
+```
+files() indexed 0 files. Provided paths:
+  ~/Dcouments → DOES NOT EXIST (resolved to /Users/sergey/Dcouments)
 ```
 
 ---
@@ -261,16 +251,30 @@ def compare_documents(models="openai:gpt-4"):
     """
 ```
 
-### Conditional File Loading
+### Variable Paths
+
+`files()` accepts variables — the paths are resolved at runtime:
 
 ```python
 import os
+from pathlib import Path
 
-resume_path = "~/Documents/resume.pdf" if os.path.exists("~/Documents/resume.pdf") else "./fallback_resume.pdf"
+docs_dir = Path("~/Documents").expanduser()
+resume = str(docs_dir / "resume.pdf") if (docs_dir / "resume.pdf").exists() else "./fallback_resume.pdf"
 
-with files(resume_path):
+with files(resume):
     def get_name(models="openai:gpt-4"):
         "Extract name from {@resume.pdf}"
+```
+
+You can also pass directory variables:
+
+```python
+project_dir = os.environ.get("PROJECT_DIR", "./projects")
+
+with files(project_dir):
+    def summarize_readme(models="openai:gpt-4"):
+        "Summarize {@README.md}"
 ```
 
 ### Mixed Contexts
