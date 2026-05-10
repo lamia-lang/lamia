@@ -835,13 +835,41 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#imports" class="md-nav__link">
+  <a href="#imports-and-cross-file-function-discovery" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Imports
+        Imports and Cross-File Function Discovery
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Imports and Cross-File Function Discovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#calling-hu-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calling .hu files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#calling-functions-from-other-lm-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calling functions from other .lm files
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1607,13 +1635,41 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#imports" class="md-nav__link">
+  <a href="#imports-and-cross-file-function-discovery" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Imports
+        Imports and Cross-File Function Discovery
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Imports and Cross-File Function Discovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#calling-hu-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calling .hu files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#calling-functions-from-other-lm-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calling functions from other .lm files
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1891,57 +1947,73 @@
 </span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>            <span class="s2">&quot;Fill the form using {@resume.pdf}&quot;</span>
 </span></code></pre></div>
 <p>For full details see the <a href="../files-context/">File Context Reference</a>.</p>
-<h2 id="imports">Imports<a class="headerlink" href="#imports" title="Permanent link">&para;</a></h2>
+<h2 id="imports-and-cross-file-function-discovery">Imports and Cross-File Function Discovery<a class="headerlink" href="#imports-and-cross-file-function-discovery" title="Permanent link">&para;</a></h2>
 <p>Lamia avoids explicit imports. All Lamia types and interfaces are available without any import statements. But if you mix it with Python code, you will import Python dependencies as usual.</p>
 <p>Because of implicit imports, IDEs will show warnings on some Lamia commands. They need to be ignored if the syntax is correct.</p>
+<h3 id="calling-hu-files">Calling .hu files<a class="headerlink" href="#calling-hu-files" title="Permanent link">&para;</a></h3>
+<p>Every <code>.hu</code> file in your project is automatically available as a function. The filename (without <code>.hu</code>) is the function name:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># analyst_report.hu exists in the project</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">result</span> <span class="o">=</span> <span class="n">analyst_report</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">my_data</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">[</span><span class="n">Report</span><span class="p">]</span>
+</span></code></pre></div>
+<h3 id="calling-functions-from-other-lm-files">Calling functions from other .lm files<a class="headerlink" href="#calling-functions-from-other-lm-files" title="Permanent link">&para;</a></h3>
+<p>Functions defined in neighboring <code>.lm</code> files are auto-discovered at runtime via lazy loading. You call them directly — no imports needed:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># report.lm defines: def generate_report(): ...</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="c1"># buy_stocks.lm defines: def buy_winner_stock(): ...</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># orchestrator.lm — just call them:</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="n">generate_report</span><span class="p">()</span>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="n">buy_winner_stock</span><span class="p">()</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Pipeline complete&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Lamia scans <code>.lm</code> files in the project directory to find function definitions. When <code>orchestrator.lm</code> calls <code>generate_report()</code>, Lamia finds it in <code>report.lm</code> and loads it automatically.</p>
 <h2 id="session-management">Session Management<a class="headerlink" href="#session-management" title="Permanent link">&para;</a></h2>
 <p>Use <code>with session()</code> for multi-step workflows that persist across runs:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">login_to_site</span><span class="p">():</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>    <span class="k">with</span> <span class="n">session</span><span class="p">(</span><span class="s2">&quot;login&quot;</span><span class="p">):</span>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>        <span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com/login&quot;</span><span class="p">)</span>
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>        <span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#username&quot;</span><span class="p">,</span> <span class="s2">&quot;your_username&quot;</span><span class="p">)</span>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>        <span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#password&quot;</span><span class="p">,</span> <span class="s2">&quot;your_password&quot;</span><span class="p">)</span>
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>        <span class="n">web</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;#login-button&quot;</span><span class="p">)</span>
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>
-</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>    <span class="c1"># Always runs — session block is skipped if already completed</span>
-</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>    <span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com/dashboard&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">login_to_site</span><span class="p">():</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>    <span class="k">with</span> <span class="n">session</span><span class="p">(</span><span class="s2">&quot;login&quot;</span><span class="p">):</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>        <span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com/login&quot;</span><span class="p">)</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>        <span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#username&quot;</span><span class="p">,</span> <span class="s2">&quot;your_username&quot;</span><span class="p">)</span>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>        <span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#password&quot;</span><span class="p">,</span> <span class="s2">&quot;your_password&quot;</span><span class="p">)</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>        <span class="n">web</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;#login-button&quot;</span><span class="p">)</span>
+</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>
+</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>    <span class="c1"># Always runs — session block is skipped if already completed</span>
+</span><span id="__span-17-9"><a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>    <span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com/dashboard&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p><strong>First run</strong>: executes the block, saves session on success.
 <strong>Subsequent runs</strong>: detects valid session, skips the block.</p>
 <p>Sessions are stored in <code>.lamia_sessions/</code>. Clear with <code>rm -rf .lamia_sessions/</code>.</p>
 <h2 id="web-actions">Web Actions<a class="headerlink" href="#web-actions" title="Permanent link">&para;</a></h2>
 <p>Use the <code>web</code> object for browser automation:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com&quot;</span><span class="p">)</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">web</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;#login-button&quot;</span><span class="p">)</span>
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#username&quot;</span><span class="p">,</span> <span class="s2">&quot;user@example.com&quot;</span><span class="p">)</span>
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="n">text</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">&quot;.result&quot;</span><span class="p">)</span>
-</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="n">web</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="s2">&quot;.loading&quot;</span><span class="p">,</span> <span class="s2">&quot;hidden&quot;</span><span class="p">)</span>
-</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="n">web</span><span class="o">.</span><span class="n">screenshot</span><span class="p">(</span><span class="s2">&quot;page.png&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com&quot;</span><span class="p">)</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="n">web</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;#login-button&quot;</span><span class="p">)</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#username&quot;</span><span class="p">,</span> <span class="s2">&quot;user@example.com&quot;</span><span class="p">)</span>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="n">text</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">&quot;.result&quot;</span><span class="p">)</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="n">web</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="s2">&quot;.loading&quot;</span><span class="p">,</span> <span class="s2">&quot;hidden&quot;</span><span class="p">)</span>
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="n">web</span><span class="o">.</span><span class="n">screenshot</span><span class="p">(</span><span class="s2">&quot;page.png&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Scoped elements:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="n">modal</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_element</span><span class="p">(</span><span class="s2">&quot;div.modal&quot;</span><span class="p">)</span>
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="n">modal</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;button.close&quot;</span><span class="p">)</span>
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
-</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="n">fields</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_elements</span><span class="p">(</span><span class="s2">&quot;div.form-field&quot;</span><span class="p">)</span>
-</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
-</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>    <span class="n">label</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">)</span>
-</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>    <span class="n">field</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;answer&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="n">modal</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_element</span><span class="p">(</span><span class="s2">&quot;div.modal&quot;</span><span class="p">)</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="n">modal</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;button.close&quot;</span><span class="p">)</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="n">fields</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_elements</span><span class="p">(</span><span class="s2">&quot;div.form-field&quot;</span><span class="p">)</span>
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>    <span class="n">label</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">)</span>
+</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>    <span class="n">field</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;answer&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="parameters-and-models">Parameters and Models<a class="headerlink" href="#parameters-and-models" title="Permanent link">&para;</a></h2>
 <h3 id="parameter-substitution">Parameter Substitution<a class="headerlink" href="#parameter-substitution" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_report</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">style</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>    <span class="s2">&quot;Create a </span><span class="si">{style}</span><span class="s2"> report based on: </span><span class="si">{data}</span><span class="s2">&quot;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_report</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">style</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>    <span class="s2">&quot;Create a </span><span class="si">{style}</span><span class="s2"> report based on: </span><span class="si">{data}</span><span class="s2">&quot;</span>
 </span></code></pre></div>
 <h2 id="advanced-async-and-parallel-execution">Advanced: Async and Parallel Execution<a class="headerlink" href="#advanced-async-and-parallel-execution" title="Permanent link">&para;</a></h2>
 <p>Functions can be defined as async and executed in parallel:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
-</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
-</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>    <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
-</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>        <span class="n">get_weather</span><span class="p">(),</span>
-</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>        <span class="n">read_config</span><span class="p">(),</span>
-</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>        <span class="n">fetch_webpage</span><span class="p">()</span>
-</span><span id="__span-19-8"><a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>    <span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>    <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
+</span><span id="__span-21-5"><a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>        <span class="n">get_weather</span><span class="p">(),</span>
+</span><span id="__span-21-6"><a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>        <span class="n">read_config</span><span class="p">(),</span>
+</span><span id="__span-21-7"><a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>        <span class="n">fetch_webpage</span><span class="p">()</span>
+</span><span id="__span-21-8"><a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>    <span class="p">)</span>
 </span></code></pre></div>
 
 
