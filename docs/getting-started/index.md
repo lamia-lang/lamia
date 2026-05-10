@@ -137,9 +137,9 @@ print(f"Spanish: {spanish}")
 
 This is a realistic split where each `.lm` file owns a separate workflow:
 
-- `report.lm` gathers market data and writes a structured analyst report.
-- `buy_stocks.lm` reads that report and places the buy order for the winner.
-- `orchestrator.lm` runs both scripts in sequence and stops on failure.
+- `report.lm` defines functions to gather market data and write a structured analyst report.
+- `buy_stocks.lm` defines functions to read that report and place the buy order for the winner.
+- `orchestrator.lm` calls these functions directly — Lamia auto-discovers them from neighboring files.
 
 Create `analyst_report.hu`:
 
@@ -163,15 +163,16 @@ def stock_data(ticker: str) -> File(CSV[StockQuote], "stocks.csv", append=True):
     "extract quote summary from https://finance.yahoo.com/quote/{ticker}"
 
 
-tickers = ["AAPL", "NVDA", "MSFT", "GOOG"]
-for ticker in tickers:
-    stock_data(ticker=ticker)
-    print(f"Scraped {ticker}")
+def generate_report():
+    tickers = ["AAPL", "NVDA", "MSFT", "GOOG"]
+    for ticker in tickers:
+        stock_data(ticker=ticker)
+        print(f"Scraped {ticker}")
 
-with files("./"):
-    analyst_report() -> File(JSON[AnalystReport], "analyst_report.json")
+    with files("./"):
+        analyst_report() -> File(JSON[AnalystReport], "analyst_report.json")
 
-print("Created stocks.csv and analyst_report.json")
+    print("Created stocks.csv and analyst_report.json")
 ```
 
 Create `buy_stocks.lm`:
@@ -228,27 +229,17 @@ def buy_winner_stock(default_budget_usd: float = 1000.0):
     order = BuyOrder(symbol=winner, side="buy", budget_usd=default_budget_usd, order_type="market")
     status = submit_order(order)
     print(f"Order status: {status}")
-
-
-buy_winner_stock()
 ```
 
 Create `orchestrator.lm`:
 
 ```python
-import subprocess
-
-
-def run_script(path: str):
-    result = subprocess.run(["lamia", path], check=False)
-    if result.returncode != 0:
-        raise RuntimeError(f"{path} failed with exit code {result.returncode}")
-
-
-run_script("report.lm")
-run_script("buy_stocks.lm")
+generate_report()
+buy_winner_stock()
 print("Pipeline complete: analysis generated and winner purchased")
 ```
+
+Lamia auto-discovers `generate_report` from `report.lm` and `buy_winner_stock` from `buy_stocks.lm` — no imports or subprocess calls needed.
 
 Run the full workflow:
 
