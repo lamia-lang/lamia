@@ -239,7 +239,7 @@ buy_winner_stock()
 print("Pipeline complete: analysis generated and winner purchased")
 ```
 
-Lamia auto-discovers `generate_report` from `report.lm` and `buy_winner_stock` from `buy_stocks.lm` — no imports or subprocess calls needed.
+Lamia auto-discovers `generate_report` from `report.lm` and `buy_winner_stock` from `buy_stocks.lm` — no imports needed.
 
 Run the full workflow:
 

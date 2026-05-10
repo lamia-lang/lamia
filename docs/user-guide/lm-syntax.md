@@ -205,11 +205,36 @@ with files("~/Documents/", "~/projects/"):
 
 For full details see the [File Context Reference](files-context.md).
 
-## Imports
+## Imports and Cross-File Function Discovery
 
 Lamia avoids explicit imports. All Lamia types and interfaces are available without any import statements. But if you mix it with Python code, you will import Python dependencies as usual.
 
 Because of implicit imports, IDEs will show warnings on some Lamia commands. They need to be ignored if the syntax is correct.
+
+### Calling .hu files
+
+Every `.hu` file in your project is automatically available as a function. The filename (without `.hu`) is the function name:
+
+```python
+# analyst_report.hu exists in the project
+result = analyst_report(data=my_data) -> JSON[Report]
+```
+
+### Calling functions from other .lm files
+
+Functions defined in neighboring `.lm` files are auto-discovered at runtime via lazy loading. You call them directly — no imports needed:
+
+```python
+# report.lm defines: def generate_report(): ...
+# buy_stocks.lm defines: def buy_winner_stock(): ...
+
+# orchestrator.lm — just call them:
+generate_report()
+buy_winner_stock()
+print("Pipeline complete")
+```
+
+Lamia scans `.lm` files in the project directory to find function definitions. When `orchestrator.lm` calls `generate_report()`, Lamia finds it in `report.lm` and loads it automatically.
 
 ## Session Management
 

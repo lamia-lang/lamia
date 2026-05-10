@@ -100,10 +100,18 @@ All orchestration flows through `.lm` files:
 
 ```
 orchestrator.lm
-  -> calls researcher.hu
+  -> calls researcher.hu          (auto-callable: filename = function name)
   -> passes result to developer.hu
   -> passes result to reviewer.hu
   -> loops if review fails
+```
+
+Functions defined in other `.lm` files are also auto-discovered. An orchestrator can call functions from any neighboring `.lm` file directly — no imports needed:
+
+```
+orchestrator.lm
+  -> calls generate_report()       (defined in report.lm, auto-discovered)
+  -> calls buy_winner_stock()      (defined in buy_stocks.lm, auto-discovered)
 ```
 
 This keeps each agent focused on a single responsibility and makes
