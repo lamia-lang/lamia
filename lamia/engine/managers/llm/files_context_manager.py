@@ -349,6 +349,12 @@ class FilesContext:
         """
         def replace_file_ref(match):
             filename = match.group(1).strip()
+            if not filename:
+                raise FileReferenceError(
+                    "(empty)",
+                    [],
+                    "A file reference cannot be empty. Provide a filename or path.",
+                )
             
             try:
                 filepath = self.resolve_file_reference(filename)
@@ -488,6 +494,12 @@ def _extract_docx_text(filepath: str) -> str:
 
 def _resolve_standalone_reference(query: str, source_path: str) -> str:
     """Resolve a single {@...} reference without a FilesContext."""
+    if not query:
+        raise FileReferenceError(
+            "(empty)",
+            [],
+            "A file reference cannot be empty. Provide a filename or path.",
+        )
     # 1. Absolute path
     if os.path.isabs(query) and os.path.exists(query):
         logger.debug(f"Standalone resolved '{query}' as absolute path")
