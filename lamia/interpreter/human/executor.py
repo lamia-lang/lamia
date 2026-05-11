@@ -66,6 +66,17 @@ class HuCallable:
         for p in missing:
             substitutions[p] = self._fn.defaults.get(p, "")
 
+        empty_file_refs = [
+            k for k in self._fn.file_contexts
+            if k in substitutions and not substitutions[k].strip()
+        ]
+        if empty_file_refs:
+            raise TypeError(
+                f"{self._fn.name}() received empty value for file reference parameter(s): "
+                f"{', '.join(sorted(empty_file_refs))}. "
+                f"File references must point to an actual file path."
+            )
+
         # Escape ALL braces first so .format() ignores arbitrary
         # curly-brace content (CSS, JSON, JS, etc.) in the template,
         # then selectively un-escape only the declared parameter

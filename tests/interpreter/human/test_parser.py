@@ -178,14 +178,14 @@ class TestParseHuFileOptionalParams:
 class TestParseHuFileVariableFileRefs:
     """Tests for {@variable} syntax where variable is an identifier."""
 
-    def test_identifier_file_ref_becomes_optional_param(self, tmp_path):
+    def test_identifier_file_ref_becomes_required_param(self, tmp_path):
         hu = tmp_path / "review.hu"
         hu.write_text("Review this: {@code_file}")
         fn = parse_hu_file(str(hu))
 
         assert "code_file" in fn.params
         assert "code_file" in fn.file_contexts
-        assert "code_file" in fn.defaults
+        assert "code_file" not in fn.defaults
 
     def test_literal_path_not_param(self, tmp_path):
         hu = tmp_path / "review.hu"

@@ -65,7 +65,6 @@ def parse_hu_file(file_path: str) -> HuFunction:
     for ref in file_contexts:
         if ref.isidentifier() and ref not in params:
             params.add(ref)
-            defaults.setdefault(ref, "")
 
     return HuFunction(
         name=name,

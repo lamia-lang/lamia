@@ -13,12 +13,14 @@ def _make_fn(
     params: frozenset[str] = frozenset(),
     defaults: dict | None = None,
     source_path: str = "/fake/test.hu",
+    file_contexts: frozenset[str] = frozenset(),
 ) -> HuFunction:
     return HuFunction(
         name=name,
         template=template,
         params=params,
         defaults=defaults or {},
+        file_contexts=file_contexts,
         source_path=source_path,
     )
 
@@ -263,15 +265,35 @@ class TestHuCallableVariableFileRefs:
         result = c()
         assert "{@config.yaml}" in result
 
-    def test_omitted_variable_ref_stays_as_literal(self):
+    def test_omitted_file_ref_raises_missing_param(self):
         fn = self._fn(
             template="Review {@some_file}",
             params=frozenset({"some_file"}),
-            defaults={"some_file": ""},
+            file_contexts=frozenset({"some_file"}),
         )
         c = HuCallable(fn)
-        result = c()
-        assert "{@some_file}" in result
+        with pytest.raises(TypeError, match="missing required keyword arguments"):
+            c()
+
+    def test_empty_string_file_ref_raises_error(self):
+        fn = self._fn(
+            template="Review {@code_file}",
+            params=frozenset({"code_file"}),
+            file_contexts=frozenset({"code_file"}),
+        )
+        c = HuCallable(fn)
+        with pytest.raises(TypeError, match="received empty value for file reference"):
+            c(code_file="")
+
+    def test_whitespace_only_file_ref_raises_error(self):
+        fn = self._fn(
+            template="Review {@code_file}",
+            params=frozenset({"code_file"}),
+            file_contexts=frozenset({"code_file"}),
+        )
+        c = HuCallable(fn)
+        with pytest.raises(TypeError, match="received empty value for file reference"):
+            c(code_file="   ")
 
     def test_variable_ref_with_text_param(self):
         fn = self._fn(
