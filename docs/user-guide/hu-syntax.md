@@ -8,13 +8,13 @@ Each `.hu` file is automatically a callable function whose name matches the file
 
 **summarize.hu**
 ```
-Summarize the following article: {@article.txt}
+Summarize the following article: {@article_path}
 Focus on {aspect} and keep it under {max_words} words.
 ```
 
 **pipeline.lm**
 ```python
-result = summarize(aspect="key findings", max_words=200) -> HTML
+result = summarize(article_path="article.txt", aspect="key findings", max_words=200) -> HTML
 print(result)
 ```
 
@@ -59,7 +59,7 @@ The result is in the format {{key: value}}.
 
 ## File context references
 
-Use `{@filename}` to inject the contents of a local file into the prompt. This uses the same file-context resolution as `.lm` files -- fuzzy matching, absolute paths, and `with files()` scoping all work.
+Use `{@filename}` to inject the contents of a local file into the prompt. The file is resolved by exact name matching. If same filename exists in multiple directories, the error message will suggest the minimal path suffix to disambiguate. If file does not exist, an error will be raised and files with similar name will be suggested in case user forgot the corrent filename.
 
 ```
 Review the code in {@main.py} and suggest improvements.
@@ -68,9 +68,47 @@ Also check {@utils.py} for any issues.
 
 ### Variable file references
 
-Use `{@identifier}` where the identifier matches a parameter name. If the caller provides a value, it is used as the filepath. If not, the name is treated as a literal filename.
+Use `{@identifier}` where the identifier matches a kwarg name. If the caller provides the file path as an argument -- **no `files()` context needed**:
 
-See the [File Context](files-context.md) documentation for details on search strategies and error handling.
+**analyze.hu**
+```
+Analyze the document: {@doc_path}
+Focus on: {aspect}
+```
+
+If no kwarg matches the identifier, it is treated as a literal filename.
+
+### Literal file names
+
+**caller.lm**
+```python
+# Absolute path -- resolves directly
+result = analyze(doc_path="/Users/me/report.pdf", aspect="financials") -> JSON
+
+# Relative path -- resolves relative to the .hu file location
+result = analyze(doc_path="./data/report.pdf", aspect="financials") -> JSON
+
+# Bare filename -- resolves relative to the .hu file location
+result = analyze(doc_path="report.pdf", aspect="financials") -> JSON
+```
+
+### When to use `files()` vs variable paths
+
+- **`files("~/Documents/", "~/projects/")`** -- use when you want directory-based discovery: "search for files across these folders"
+- **`{@doc_path}` with kwarg** -- use when you have a specific file to pass: "use this exact file"
+
+Passing a single file to `files()` is an anti-pattern. Instead, pass the file path without files() syntax:
+
+```python
+# Anti-pattern:
+with files("~/Documents/resume.pdf"):
+    result = extract(aspect="skills") -> JSON
+
+# Better:
+result = extract(doc_path="~/Documents/resume.pdf", aspect="skills") -> JSON
+```
+
+See the [File Context](files-context.md) documentation for details on directory-based resolution and error handling.
 
 ## Return types
 

@@ -14,6 +14,7 @@ Rule index (code format: LM{severity}{NNN}, sorted by severity):
   LMW006  W  positional-hu-args        .hu calls must use keyword arguments
   LMW007  W  empty-file                .lm file has no content
   LMW008  W  trailing-whitespace       trailing whitespace on lines
+  LMW018  W  single-file-in-files-ctx  files() with a single file path is an anti-pattern
   ── Convention ──
   LMC009  C  variable-naming           variables should use snake_case
   LMC010  C  filename-naming           .lm filename should be snake_case
@@ -179,6 +180,16 @@ UNKNOWN_NAMESPACE_METHOD = LintRule(
     ),
 )
 
+SINGLE_FILE_IN_FILES_CONTEXT = LintRule(
+    code="LMW018",
+    severity=Severity.Warning,
+    name="single-file-in-files-context",
+    description=(
+        "files() is for directory-based discovery. "
+        "Pass the file path directly as a kwarg to the .hu function instead."
+    ),
+)
+
 _LONG_SCRIPT_THRESHOLD = 5000
 
 _GENERIC_LM_NAMES = {
@@ -193,6 +204,7 @@ ALL_RULES = [
     EMPTY_FILE, TRAILING_WHITESPACE,
     VARIABLE_NAMING, FILENAME_NAMING, LEADING_BLANK_LINES, GENERIC_FILENAME,
     OUTPUT_FORMAT_HINT, INLINE_PYDANTIC_MODEL, LONG_SCRIPT,
+    SINGLE_FILE_IN_FILES_CONTEXT,
 ]
 
 _HU_CALL_RE = re.compile(
@@ -215,6 +227,12 @@ _PYDANTIC_MODEL_RE = re.compile(
     r'^class\s+(\w+)\s*\(\s*(?:BaseModel|Base)\s*\)',
     re.MULTILINE,
 )
+
+_SINGLE_FILE_FILES_RE = re.compile(
+    r'\bfiles\s*\(\s*(["\'])([^"\']+)\1\s*\)',
+)
+
+_FILE_EXTENSION_RE = re.compile(r'\.\w{1,10}$')
 
 
 def _extract_call_kwargs(args_text: str) -> set[str]:
@@ -642,6 +660,20 @@ class LmLinter(BaseLinter):
                 violations.append(LintViolation(
                     rule=GENERIC_FILENAME, line=0,
                     message=GENERIC_FILENAME.description % (stem + ".lm"),
+                ))
+
+        # ── Single file in files() anti-pattern ──────────────────────────
+        for m in _SINGLE_FILE_FILES_RE.finditer(content):
+            path_arg = m.group(2)
+            if _FILE_EXTENSION_RE.search(path_arg):
+                lineno = content[:m.start()].count("\n") + 1
+                violations.append(LintViolation(
+                    rule=SINGLE_FILE_IN_FILES_CONTEXT, line=lineno,
+                    message=(
+                        f"files(\"{path_arg}\") passes a single file. "
+                        f"{SINGLE_FILE_IN_FILES_CONTEXT.description}"
+                    ),
+                    snippet=m.group()[:60],
                 ))
 
         # ── Namespace / method validation ─────────────────────────────────

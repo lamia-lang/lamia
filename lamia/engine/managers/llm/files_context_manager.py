@@ -10,7 +10,6 @@ import re
 import PyPDF2
 
 from lamia.errors import AmbiguousFileError, FileReferenceError
-from lamia.project import find_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -488,40 +487,19 @@ def _extract_docx_text(filepath: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _resolve_standalone_reference(query: str, source_path: str) -> str:
-    """Resolve a single {@...} reference without a FilesContext.
-
-    Strategy:
-    1. Absolute path -- use directly.
-    2. Has path components (``/``, ``..``) -- resolve relative to source file.
-    3. Bare filename -- find the project root (walk up to config.yaml) and
-       use the same smart-search logic as ``FilesContext``.
-    """
+    """Resolve a single {@...} reference without a FilesContext."""
     # 1. Absolute path
     if os.path.isabs(query) and os.path.exists(query):
         logger.debug(f"Standalone resolved '{query}' as absolute path")
         return query
 
-    # 2. Relative path with explicit components
-    if _has_path_components(query):
-        source_dir = os.path.dirname(source_path)
-        candidate = os.path.normpath(os.path.join(source_dir, query))
-        if os.path.exists(candidate):
-            logger.debug(f"Standalone resolved '{query}' relative to source: {candidate}")
-            return candidate
-        raise FileReferenceError(query, [])
+    source_dir = os.path.dirname(source_path)
+    candidate = os.path.normpath(os.path.join(source_dir, query))
+    if os.path.exists(candidate):
+        logger.debug(f"Standalone resolved '{query}' relative to source: {candidate}")
+        return candidate
 
-    # 3. Bare filename -- use project root as context
-    project_root = find_project_root(source_path)
-    if project_root is None:
-        raise FileReferenceError(query, [])
-
-    ctx = FilesContext(project_root)
-    ctx.indexed_files = ctx._index_files([project_root])
-    ctx._entered = True
-    logger.debug(
-        f"Standalone: indexed {len(ctx.indexed_files)} files under project root '{project_root}'"
-    )
-    return ctx.resolve_file_reference(query)
+    raise FileReferenceError(query, [])
 
 
 def resolve_standalone_file_references(prompt: str, source_path: str) -> str:

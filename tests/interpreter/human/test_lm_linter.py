@@ -590,6 +590,42 @@ class TestLmLinterHallucinationPatterns:
         assert ns_violations == []
 
 
+# ── LMW018 single-file-in-files-context ──────────────────────────────────────
+
+class TestLMW018SingleFileInFilesContext:
+
+    def test_single_file_path_triggers(self):
+        code = 'with files("~/Documents/resume.pdf"):'
+        violations = _violations_for(code, "LMW018")
+        assert len(violations) == 1
+        assert "resume.pdf" in violations[0].message
+
+    def test_directory_path_no_violation(self):
+        code = 'with files("~/Documents/"):'
+        violations = _violations_for(code, "LMW018")
+        assert violations == []
+
+    def test_directory_without_trailing_slash_no_violation(self):
+        code = 'with files("~/Documents"):'
+        violations = _violations_for(code, "LMW018")
+        assert violations == []
+
+    def test_multiple_dirs_no_violation(self):
+        code = 'with files("~/Documents/", "~/projects/"):'
+        violations = _violations_for(code, "LMW018")
+        assert violations == []
+
+    def test_single_quotes_also_detected(self):
+        code = "with files('./data/report.csv'):"
+        violations = _violations_for(code, "LMW018")
+        assert len(violations) == 1
+
+    def test_variable_path_no_violation(self):
+        code = 'with files(my_dir):'
+        violations = _violations_for(code, "LMW018")
+        assert violations == []
+
+
 # ── Existing rules still work ───────────────────────────────────────────────
 
 class TestLmLinterExistingRulesUnaffected:

@@ -135,8 +135,8 @@ class TestReadFileContent:
         assert "Page 1" in content
 
     def test_pdf_standalone_resolution(self, project_tree):
-        """A .pdf reference is located via project search and content is extracted."""
-        pdf_file = project_tree / "resume.pdf"
+        """A .pdf reference in the source dir is resolved and extracted."""
+        pdf_file = project_tree / "prompts" / "resume.pdf"
         pdf_file.write_bytes(b"%PDF-fake")
 
         mock_page = MagicMock()
@@ -174,15 +174,16 @@ class TestResolveStandaloneReference:
         resolved = _resolve_standalone_reference("./helper.txt", source)
         assert resolved == str(project_tree / "prompts" / "helper.txt")
 
-    def test_bare_filename_uses_project_search(self, project_tree):
+    def test_bare_filename_resolves_relative_to_source_dir(self, project_tree):
+        (project_tree / "prompts" / "data.json").write_text('{"local": true}')
         source = str(project_tree / "prompts" / "greet.hu")
         resolved = _resolve_standalone_reference("data.json", source)
-        assert resolved == str(project_tree / "data.json")
+        assert resolved == str(project_tree / "prompts" / "data.json")
 
-    def test_bare_filename_nested(self, project_tree):
+    def test_bare_filename_not_in_source_dir_raises(self, project_tree):
         source = str(project_tree / "prompts" / "greet.hu")
-        resolved = _resolve_standalone_reference("notes.md", source)
-        assert os.path.basename(resolved) == "notes.md"
+        with pytest.raises(FileReferenceError):
+            _resolve_standalone_reference("notes.md", source)
 
     def test_bare_filename_not_found(self, project_tree):
         source = str(project_tree / "prompts" / "greet.hu")
@@ -194,7 +195,7 @@ class TestResolveStandaloneReference:
         with pytest.raises(FileReferenceError):
             _resolve_standalone_reference("../nonexistent.txt", source)
 
-    def test_no_project_root_raises(self, tmp_path):
+    def test_no_project_root_still_raises(self, tmp_path):
         orphan = tmp_path / "orphan.hu"
         orphan.write_text("hi")
         with pytest.raises(FileReferenceError):
@@ -207,12 +208,13 @@ class TestResolveStandaloneReference:
 
 class TestResolveStandaloneFileReferences:
 
-    def test_replaces_bare_filename(self, project_tree):
+    def test_replaces_bare_filename_from_same_dir(self, project_tree):
+        (project_tree / "prompts" / "data.json").write_text('{"local": true}')
         source = str(project_tree / "prompts" / "greet.hu")
         prompt = "Use this config: {@data.json}"
         result = resolve_standalone_file_references(prompt, source)
         assert "{@data.json}" not in result
-        assert '"key"' in result
+        assert '"local"' in result
         assert "--- data.json ---" in result
 
     def test_replaces_relative_path(self, project_tree):
@@ -227,10 +229,11 @@ class TestResolveStandaloneFileReferences:
         assert resolve_standalone_file_references(prompt, source) == prompt
 
     def test_multiple_refs(self, project_tree):
+        (project_tree / "prompts" / "data.json").write_text('{"local": true}')
         source = str(project_tree / "prompts" / "greet.hu")
         prompt = "A: {@data.json} B: {@helper.txt}"
         result = resolve_standalone_file_references(prompt, source)
-        assert '"key"' in result
+        assert '"local"' in result
         assert "helper content" in result
 
     def test_not_found_raises(self, project_tree):
@@ -278,6 +281,7 @@ class TestPriorityOrder:
         from lamia.interpreter.human.parser import HuFunction
         from lamia.interpreter.human.executor import HuCallable
 
+        (project_tree / "prompts" / "data.json").write_text('{"key": "local"}')
         fn = HuFunction(
             name="test",
             template="Check {@data.json}",
@@ -290,7 +294,7 @@ class TestPriorityOrder:
             mock_ctx.return_value = None
             result = c()
             assert "{@data.json}" not in result
-            assert '"key"' in result
+            assert '"local"' in result
 
 
 class TestFilesContextErrorMessages:
@@ -697,3 +701,96 @@ class TestHuVariableFileReferences:
             assert "What are my skills?" in result
             assert "{@resume.pdf}" in result
             assert "{question}" not in result
+
+
+class TestStandaloneVariablePathResolution:
+    """Verify {@variable_path} resolves without files() context."""
+
+    def test_kwarg_absolute_path_resolves_standalone(self, tmp_path):
+        """Pass absolute file path as kwarg — resolves without files()."""
+        from lamia.interpreter.human.parser import HuFunction
+        from lamia.interpreter.human.executor import HuCallable
+
+        f = tmp_path / "article.txt"
+        f.write_text("The quick brown fox")
+
+        fn = HuFunction(
+            name="summarize",
+            template="Summarize: {@doc_path}",
+            params=frozenset(),
+            source_path=str(tmp_path / "test.hu"),
+        )
+        c = HuCallable(fn)
+
+        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+            mock.return_value = None
+            result = c(doc_path=str(f))
+            assert "The quick brown fox" in result
+            assert "{@" not in result
+
+    def test_kwarg_relative_path_resolves_standalone(self, tmp_path):
+        """Pass relative path as kwarg — resolves relative to .hu file."""
+        from lamia.interpreter.human.parser import HuFunction
+        from lamia.interpreter.human.executor import HuCallable
+
+        subdir = tmp_path / "data"
+        subdir.mkdir()
+        f = subdir / "report.txt"
+        f.write_text("Q3 earnings")
+
+        fn = HuFunction(
+            name="summarize",
+            template="Summarize: {@doc_path}",
+            params=frozenset(),
+            source_path=str(tmp_path / "test.hu"),
+        )
+        c = HuCallable(fn)
+
+        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+            mock.return_value = None
+            result = c(doc_path="./data/report.txt")
+            assert "Q3 earnings" in result
+
+    def test_kwarg_bare_filename_resolves_relative_to_hu_file(self, tmp_path):
+        """Bare filename resolves relative to the .hu file first."""
+        from lamia.interpreter.human.parser import HuFunction
+        from lamia.interpreter.human.executor import HuCallable
+
+        prompts = tmp_path / "prompts"
+        prompts.mkdir()
+        (prompts / "notes.txt").write_text("Local notes")
+
+        fn = HuFunction(
+            name="read",
+            template="Read: {@doc_path}",
+            params=frozenset(),
+            source_path=str(prompts / "reader.hu"),
+        )
+        c = HuCallable(fn)
+
+        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+            mock.return_value = None
+            result = c(doc_path="notes.txt")
+            assert "Local notes" in result
+
+    def test_kwarg_bare_filename_not_in_hu_dir_raises(self, tmp_path):
+        """Bare filename must exist in the .hu file directory."""
+        from lamia.interpreter.human.parser import HuFunction
+        from lamia.interpreter.human.executor import HuCallable
+
+        prompts = tmp_path / "prompts"
+        prompts.mkdir()
+        (tmp_path / "notes.txt").write_text("Project root notes")
+
+        fn = HuFunction(
+            name="read",
+            template="Read: {@doc_path}",
+            params=frozenset(),
+            source_path=str(prompts / "reader.hu"),
+        )
+        c = HuCallable(fn)
+
+        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+            mock.return_value = None
+            with pytest.raises(FileReferenceError):
+                c(doc_path="notes.txt")
