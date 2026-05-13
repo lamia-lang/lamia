@@ -2,7 +2,7 @@
 
 import pytest
 
-from lamia.cli.inspect_cli import has_top_level_steps, get_executable_lines
+from lamia.cli.inspect_cli import has_top_level_steps, get_executable_lines, _analyze
 
 
 class TestHasTopLevelSteps:
@@ -435,3 +435,175 @@ class TestPlaygroundFilesSyntaxErrors:
             "print(in_memory)"
         )
         assert has_top_level_steps(source) is False
+
+
+class TestDiagnosticsOutput:
+    """Tests for the diagnostics field returned by _analyze."""
+
+    def test_valid_source_has_empty_diagnostics(self):
+        result = _analyze("x = 1\nprint(x)")
+        assert result.diagnostics == []
+        assert result.executable is True
+
+    def test_syntax_error_returns_diagnostic_with_line_and_message(self):
+        result = _analyze("def foo(\n")
+        assert result.executable is False
+        assert len(result.diagnostics) == 1
+        diag = result.diagnostics[0]
+        assert diag["severity"] == "error"
+        assert diag["line"] >= 1
+        assert "message" in diag
+        assert diag["source"] in ("lamia-parser", "lamia-ast")
+
+    def test_syntax_error_diagnostic_has_col(self):
+        result = _analyze("x = (1 +\n")
+        assert len(result.diagnostics) == 1
+        diag = result.diagnostics[0]
+        assert "col" in diag
+        assert isinstance(diag["col"], int)
+
+    def test_lamia_specific_syntax_error(self):
+        source = 'data = "./users.json" -> JSON:'
+        result = _analyze(source)
+        assert result.executable is False
+        assert len(result.diagnostics) >= 1
+        assert result.diagnostics[0]["severity"] == "error"
+
+    def test_multiple_errors_stop_at_first(self):
+        source = "def (\ndef (\n"
+        result = _analyze(source)
+        assert result.executable is False
+        assert len(result.diagnostics) == 1
+
+    def test_definitions_only_no_diagnostics(self):
+        source = "def foo():\n    pass\n\ndef bar():\n    pass"
+        result = _analyze(source)
+        assert result.executable is False
+        assert result.diagnostics == []
+
+    def test_batch_includes_diagnostics_per_file(self, tmp_path):
+        good = tmp_path / "good.lm"
+        good.write_text("print('hello')")
+
+        bad = tmp_path / "bad.lm"
+        bad.write_text("def foo(\n")
+
+        from lamia.cli.inspect_cli import _inspect_batch
+        import io
+        import json
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _inspect_batch([str(good), str(bad)], as_json=True)
+
+        output = json.loads(buf.getvalue())
+        results = output["results"]
+
+        assert "diagnostics" not in results[str(good)]
+        assert len(results[str(bad)]["diagnostics"]) == 1
+        assert results[str(bad)]["diagnostics"][0]["severity"] == "error"
+
+
+class TestSemanticDiagnostics:
+    """Tests for cross-file call validation and inline def mismatch."""
+
+    def test_missing_required_arg_detected(self, tmp_path):
+        hu_file = tmp_path / "greet.hu"
+        hu_file.write_text("Hello {name}, welcome to {company}!")
+
+        lm_file = tmp_path / "caller.lm"
+        lm_file.write_text('greet(name="Alice")\n')
+
+        with open(str(lm_file)) as f:
+            source = f.read()
+        result = _analyze(source, str(lm_file))
+
+        errors = [d for d in result.diagnostics if d["severity"] == "error"]
+        assert len(errors) == 1
+        assert "company" in errors[0]["message"]
+        assert "missing required" in errors[0]["message"]
+
+    def test_all_args_provided_no_error(self, tmp_path):
+        hu_file = tmp_path / "greet.hu"
+        hu_file.write_text("Hello {name}, welcome to {company}!")
+
+        lm_file = tmp_path / "caller.lm"
+        lm_file.write_text('greet(name="Alice", company="Acme")\n')
+
+        with open(str(lm_file)) as f:
+            source = f.read()
+        result = _analyze(source, str(lm_file))
+
+        errors = [d for d in result.diagnostics if d["severity"] == "error"]
+        assert len(errors) == 0
+
+    def test_unresolved_function_flagged(self, tmp_path):
+        lm_file = tmp_path / "caller.lm"
+        lm_file.write_text('nonexistent_func(x="1")\n')
+
+        with open(str(lm_file)) as f:
+            source = f.read()
+        result = _analyze(source, str(lm_file))
+
+        errors = [d for d in result.diagnostics if d["severity"] == "error"]
+        assert len(errors) == 1
+        assert "Unresolved function" in errors[0]["message"]
+        assert "nonexistent_func" in errors[0]["message"]
+
+    def test_inline_def_template_mismatch(self, tmp_path):
+        lm_file = tmp_path / "defs.lm"
+        lm_file.write_text(
+            'def summarize(aspect) -> HTML:\n'
+            '    "Focus on {aspect} under {max_words:200} words about {@doc}"\n'
+        )
+
+        with open(str(lm_file)) as f:
+            source = f.read()
+        result = _analyze(source, str(lm_file))
+
+        warnings = [d for d in result.diagnostics if d["severity"] == "warning"]
+        assert len(warnings) == 1
+        assert "max_words" in warnings[0]["message"]
+        assert "doc" in warnings[0]["message"]
+
+    def test_local_def_not_flagged_as_unresolved(self, tmp_path):
+        lm_file = tmp_path / "local.lm"
+        lm_file.write_text(
+            'def helper():\n'
+            '    "Do something"\n'
+            '\n'
+            'helper()\n'
+        )
+
+        with open(str(lm_file)) as f:
+            source = f.read()
+        result = _analyze(source, str(lm_file))
+
+        errors = [d for d in result.diagnostics if d["severity"] == "error"]
+        assert len(errors) == 0
+
+    def test_builtins_not_flagged(self, tmp_path):
+        lm_file = tmp_path / "builtins.lm"
+        lm_file.write_text('print("hello")\nresult = len([1,2,3])\n')
+
+        with open(str(lm_file)) as f:
+            source = f.read()
+        result = _analyze(source, str(lm_file))
+
+        errors = [d for d in result.diagnostics if d["severity"] == "error"]
+        assert len(errors) == 0
+
+    def test_commented_lines_not_checked(self, tmp_path):
+        hu_file = tmp_path / "greet.hu"
+        hu_file.write_text("Hello {name}!")
+
+        lm_file = tmp_path / "caller.lm"
+        lm_file.write_text('#greet()\nprint("ok")\n')
+
+        with open(str(lm_file)) as f:
+            source = f.read()
+        result = _analyze(source, str(lm_file))
+
+        errors = [d for d in result.diagnostics if "greet" in d.get("message", "")]
+        assert len(errors) == 0

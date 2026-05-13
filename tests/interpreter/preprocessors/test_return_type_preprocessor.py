@@ -404,3 +404,39 @@ class TestCallableFileWritePreprocessor:
         processed, _ = self.preprocessor.preprocess(source)
 
         assert "__LAMIA_FILE_WRITE__" not in processed
+
+
+class TestCommentedLinesNotProcessed:
+    """Commented-out lines must never be preprocessed."""
+
+    def setup_method(self):
+        self.preprocessor = WithReturnTypePreprocessor()
+
+    def test_commented_callable_typed_expression(self):
+        source = '#result = summarize(aspect="key") -> HTML'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "__LAMIA_TYPED_EXPR__" not in processed
+        assert processed.strip() == source.strip()
+
+    def test_commented_file_write_expression(self):
+        source = '#code = developer(t=t) -> File(str, "out.py")'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "__LAMIA_FILE_WRITE__" not in processed
+        assert processed.strip() == source.strip()
+
+    def test_indented_comment_not_processed(self):
+        source = '    #result = greet() -> HTML'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        assert "__LAMIA_TYPED_EXPR__" not in processed
+        assert processed.strip() == source.strip()
+
+    def test_mixed_commented_and_active_lines(self):
+        source = '#result = foo() -> HTML\nresult = foo() -> HTML'
+        processed, _ = self.preprocessor.preprocess(source)
+
+        lines = processed.strip().split('\n')
+        assert "__LAMIA_TYPED_EXPR__" not in lines[0]
+        assert "__LAMIA_TYPED_EXPR__" in lines[1]

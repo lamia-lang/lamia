@@ -141,7 +141,8 @@ class WithReturnTypePreprocessor:
             stripped = line.rstrip()
             lstripped = stripped.lstrip()
 
-            if (lstripped.startswith('def ')
+            if (lstripped.startswith('#')
+                    or lstripped.startswith('def ')
                     or stripped.endswith(':')
                     or any(m in stripped for m in _ALREADY)):
                 result.append(line)
@@ -226,7 +227,8 @@ class WithReturnTypePreprocessor:
             stripped = line.rstrip()
             lstripped = stripped.lstrip()
 
-            if (lstripped.startswith('def ')
+            if (lstripped.startswith('#')
+                    or lstripped.startswith('def ')
                     or stripped.endswith(':')
                     or any(m in stripped for m in _ALREADY_PROCESSED)):
                 result.append(line)
