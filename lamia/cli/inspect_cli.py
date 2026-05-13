@@ -217,10 +217,21 @@ def _check_call_integrity(
                 break
 
     lines = source.split("\n")
+    in_class_body = False
+    class_indent = 0
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("#") or stripped.startswith("def "):
+        if stripped.startswith("#") or stripped.startswith("def ") or stripped.startswith("class "):
+            if stripped.startswith("class "):
+                in_class_body = True
+                class_indent = len(line) - len(line.lstrip())
             continue
+
+        if in_class_body:
+            if stripped and (len(line) - len(line.lstrip())) <= class_indent:
+                in_class_body = False
+            else:
+                continue
 
         m = _CALL_RE.search(line)
         if not m:
@@ -231,18 +242,17 @@ def _check_call_integrity(
             continue
         if func_name in local_defs:
             continue
-        if func_name in _PYTHON_BUILTINS:
+        if func_name in _SKIP_NAMES:
             continue
-        if "." in line[:m.start() + len(m.group(0))] and line[m.start()] != " ":
-            idx = line.find(func_name + "(")
-            if idx > 0 and line[idx - 1] == ".":
-                continue
+        idx = line.find(func_name + "(")
+        if idx > 0 and line[idx - 1] == ".":
+            continue
 
         if func_name not in hu_registry:
             col = line.find(func_name)
             diagnostics.append({
                 "severity": "error",
-                "message": f"Unresolved function '{func_name}' — no matching .hu file found",
+                "message": f"Unresolved function '{func_name}' — no matching .hu or .lm function found",
                 "line": i + 1,
                 "col": max(0, col),
                 "source": "lamia-semantic",
@@ -314,13 +324,17 @@ def _add_kwarg(part: str, names: Set[str]) -> None:
             names.add(key)
 
 
-_PYTHON_BUILTINS = frozenset([
+_SKIP_NAMES = frozenset([
+    # Python builtins
     "print", "len", "range", "str", "int", "float", "list", "dict", "set",
     "tuple", "type", "isinstance", "open", "super", "enumerate", "zip", "map",
     "filter", "sorted", "reversed", "any", "all", "min", "max", "sum", "abs",
     "round", "getattr", "setattr", "delattr", "vars", "dir", "id", "hash",
     "input", "format", "repr", "bool", "bytes", "bytearray", "memoryview",
     "object", "staticmethod", "classmethod", "property",
+    # Pydantic (auto-imported in Lamia)
+    "BaseModel", "Field", "validator", "field_validator", "model_validator",
+    "ConfigDict", "computed_field", "PrivateAttr",
 ])
 
 
