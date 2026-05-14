@@ -1,10 +1,11 @@
 import pytest
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
-from lamia.facade.lamia import Lamia, _normalize_models
+from lamia.facade.lamia import Lamia, _normalize_models, _resolve_local_file
 from lamia.facade.result_types import LamiaResult
 from lamia.engine.managers.llm.llm_manager import MissingAPIKeysError
 from lamia import LLMModel
@@ -755,3 +756,186 @@ class TestRunAsyncModelsNormalization:
             await lamia.run_async("generate a story", models=mwr_list)  # type: ignore[arg-type]
 
         dummy_config.override_model_chain_with.assert_called_once_with(mwr_list)
+
+
+class TestResolveLocalFile:
+
+    def test_relative_path_resolved(self, tmp_path):
+        f = tmp_path / "data.json"
+        f.write_text('{"a":1}')
+        with patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            result = _resolve_local_file("./data.json")
+        assert result == f.resolve()
+
+    def test_absolute_path_resolved(self, tmp_path):
+        f = tmp_path / "data.json"
+        f.write_text('{"a":1}')
+        result = _resolve_local_file(str(f))
+        assert result == f.resolve()
+
+    def test_url_returns_none(self):
+        assert _resolve_local_file("https://api.example.com/data") is None
+
+    def test_multiline_returns_none(self):
+        assert _resolve_local_file("Generate JSON\nwith fields") is None
+
+    def test_empty_returns_none(self):
+        assert _resolve_local_file("") is None
+
+    def test_path_like_missing_file_raises(self, tmp_path):
+        with patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            with pytest.raises(FileNotFoundError):
+                _resolve_local_file("./missing.json")
+
+    def test_bare_name_missing_returns_none(self):
+        assert _resolve_local_file("nonexistent.json") is None
+
+    def test_plain_prompt_returns_none(self):
+        assert _resolve_local_file("Generate a JSON config") is None
+
+    def test_bare_name_existing_file_returns_none(self, tmp_path):
+        f = tmp_path / "report"
+        f.write_text("a,b\n1,2")
+        with patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            result = _resolve_local_file("report")
+        assert result is None
+
+    def test_unquoted_whitespace_is_not_path(self):
+        assert _resolve_local_file("./config.json extra") is None
+
+    def test_quoted_path_with_spaces_resolved(self, tmp_path):
+        target = tmp_path / "my config" / "prod.json"
+        target.parent.mkdir(parents=True)
+        target.write_text('{"ok": true}')
+        with patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            result = _resolve_local_file('"./my config/prod.json"')
+        assert result == target.resolve()
+
+    def test_escaped_space_path_resolved(self, tmp_path):
+        target = tmp_path / "my config" / "prod.json"
+        target.parent.mkdir(parents=True)
+        target.write_text('{"ok": true}')
+        with patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            result = _resolve_local_file("./my\\ config/prod.json")
+        assert result == target.resolve()
+
+    def test_quoted_path_missing_raises(self, tmp_path):
+        with patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            with pytest.raises(FileNotFoundError):
+                _resolve_local_file('"./missing folder/file.txt"')
+
+    def test_extensionless_explicit_path_resolved(self, tmp_path):
+        target = tmp_path / "config"
+        target.write_text('{"x": 1}')
+        with patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            result = _resolve_local_file("./config")
+        assert result == target.resolve()
+
+
+class TestLocalFileRead:
+
+    def test_json_file_parsed(self, tmp_path):
+        f = tmp_path / "config.json"
+        f.write_text('{"key": "value", "num": 42}')
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            from lamia.types import JSON
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("./config.json", return_type=JSON))
+
+        assert result == {"key": "value", "num": 42}
+        mock_engine.execute.assert_not_called()
+
+    def test_txt_file_returned_as_string(self, tmp_path):
+        f = tmp_path / "notes.txt"
+        f.write_text("hello world")
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("./notes.txt"))
+
+        assert result == "hello world"
+        mock_engine.execute.assert_not_called()
+
+    def test_full_result_mode(self, tmp_path):
+        f = tmp_path / "data.json"
+        f.write_text('{"x": 1}')
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            from lamia.types import JSON
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("./data.json", return_type=JSON, _full_result=True))
+
+        assert isinstance(result, LamiaResult)
+        assert result.typed_result == {"x": 1}
+        assert '"x": 1' in result.result_text
+        assert result.tracking_context.data_provider_name == "local_file"
+
+    def test_file_not_found_raises(self, tmp_path):
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia()
+            with pytest.raises(FileNotFoundError):
+                asyncio.run(lamia.run_async("./nonexistent.json"))
+
+    def test_extensionless_explicit_path_reads_local_file(self, tmp_path):
+        f = tmp_path / "settings"
+        f.write_text('{"feature": true}')
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            from lamia.types import JSON
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("./settings", return_type=JSON))
+
+        assert result == {"feature": True}
+        mock_engine.execute.assert_not_called()
+
+    def test_ambiguous_path_text_delegates_to_llm(self):
+        from lamia.interpreter.commands import LLMCommand
+
+        mock_parsed_command = LLMCommand("./config.json a")
+        with patch('lamia.facade.lamia.process_string_command') as mock_process, \
+             patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_process.return_value = (mock_parsed_command, None)
+
+            mock_engine = MagicMock()
+            mock_engine.execute = AsyncMock(
+                return_value=MockValidationResult(
+                    is_valid=True,
+                    raw_text="llm response",
+                    typed_result="llm response",
+                )
+            )
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("./config.json a"))
+
+        mock_process.assert_called_once_with("./config.json a")
+        mock_engine.execute.assert_called_once()
+        assert result == "llm response"

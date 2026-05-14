@@ -6,7 +6,11 @@ between different subsystems (engine, adapters, validation).
 """
 
 import asyncio
+import json
 import logging
+import os
+import re
+from pathlib import Path
 from typing import Any, Optional, List, Dict, Union, Tuple, Type
 
 from lamia.async_bridge import EventLoopManager
@@ -14,14 +18,71 @@ from lamia.env_loader import load_env_files
 from lamia.engine.engine import LamiaEngine
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
-from lamia.types import BaseType, ExternalOperationRetryConfig
+from lamia.types import BaseType, ExternalOperationRetryConfig, JSON, CSV, HTML
 from lamia.interpreter.commands import Command
+from lamia.engine.managers.llm.files_context_manager import get_current_source_file
+from lamia.validation.base import TrackingContext
 
 from .result_types import LamiaResult
 from .config_builder import build_config_from_dict, build_config_from_models, _build_model_chain_from_specs
 from .command_processor import process_string_command
 
 logger = logging.getLogger(__name__)
+
+_PATH_PREFIXES = ('./', '../', '/', '~/')
+
+
+def _resolve_local_file(command: str) -> Optional[Path]:
+    """Return resolved Path if *command* is an explicit local file path.
+
+    Rules:
+    - Must be single-line
+    - URLs are never treated as files
+    - Must use explicit path prefixes: ./, ../, /, ~/
+    - Unquoted whitespace invalidates file detection
+    - Spaces are allowed only in shell-like forms:
+      - quoted string: "./path with spaces/file"
+      - escaped spaces: ./path\ with\ spaces/file
+    """
+    stripped = command.strip()
+    if not stripped or '\n' in stripped:
+        return None
+    if stripped.startswith(('http://', 'https://')):
+        return None
+
+    candidate_text = stripped
+    quoted = (
+        (stripped.startswith('"') and stripped.endswith('"'))
+        or (stripped.startswith("'") and stripped.endswith("'"))
+    )
+    if quoted:
+        candidate_text = stripped[1:-1]
+    elif re.search(r"(?<!\\)\s", stripped):
+        # Unescaped whitespace means this is not a file-path token.
+        return None
+
+    looks_like_path = candidate_text.startswith(_PATH_PREFIXES)
+    if not looks_like_path:
+        return None
+
+    # Support Linux-style escaped spaces in path tokens.
+    normalized = candidate_text.replace(r"\ ", " ")
+    if re.search(r"\s", normalized) and not (quoted or r"\ " in candidate_text):
+        return None
+
+    if normalized.startswith('~/'):
+        candidate = Path(normalized).expanduser()
+    elif not os.path.isabs(normalized):
+        source = get_current_source_file()
+        base = Path(source).parent if source else Path.cwd()
+        candidate = base / normalized
+    else:
+        candidate = Path(normalized)
+
+    resolved = candidate.resolve()
+    if resolved.is_file():
+        return resolved
+    raise FileNotFoundError(f"File not found: {candidate_text} (resolved to {resolved})")
 
 
 def _normalize_models(models) -> Optional[List[ModelWithRetries]]:
@@ -112,10 +173,12 @@ class Lamia:
         """
         # Handle Command objects vs strings differently
         if isinstance(command, Command):
-            # Command object passed directly - skip Python execution and parsing
             parsed_command = command
         else:
-            # String command - try Python first, then parse
+            local_path = _resolve_local_file(command)
+            if local_path is not None:
+                return self._read_local_file(local_path, return_type, _full_result)
+
             parsed_command, python_result = process_string_command(command)
             if python_result is not None:
                 return python_result
@@ -142,6 +205,33 @@ class Lamia:
             return response.typed_result or response.raw_text # for no return action both typed_result and raw_text will be None and None will be returned
         else:
             return response.typed_result or response.raw_text
+
+    def _read_local_file(
+        self,
+        path: Path,
+        return_type: Optional[Type[BaseType]],
+        _full_result: bool,
+    ) -> Union[Any, LamiaResult]:
+        """Read a local file and optionally parse it according to *return_type*."""
+        raw_text = path.read_text(encoding='utf-8')
+        typed_result: Any = raw_text
+
+        if return_type is not None and issubclass(return_type, JSON):
+            typed_result = json.loads(raw_text)
+        elif return_type is not None and issubclass(return_type, CSV):
+            typed_result = raw_text
+        elif return_type is not None and issubclass(return_type, HTML):
+            typed_result = raw_text
+
+        ctx = TrackingContext(
+            data_provider_name="local_file",
+            command_type="file_read",
+            metadata={"path": str(path)},
+        )
+
+        if _full_result:
+            return LamiaResult(result_text=raw_text, typed_result=typed_result, tracking_context=ctx)
+        return typed_result
 
     def run(
         self,

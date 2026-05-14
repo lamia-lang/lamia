@@ -126,7 +126,7 @@ for ticker in ["AAPL", "NVDA", "GOOG"]:
 
 ### Reading Files
 
-Use relative or absolute paths:
+Use explicit local path prefixes:
 
 ```python
 def read_data():
@@ -138,6 +138,26 @@ def load_settings() -> JSON:
 def read_logs():
     "/var/log/application.log"
 ```
+
+Rules for local file reads in `.lm` string commands:
+
+- Local file read is detected only for explicit prefixes: `./`, `../`, `/`, `~/`
+- If the path exists, Lamia reads it from local disk (no LLM call)
+- If the path does not exist, Lamia raises `FileNotFoundError`
+- Bare names without prefixes (for example: `"config"` or `"config.json"`) are treated as normal LLM prompt text
+- If the string is not an unambiguous path token (for example: `"./config.json a"`), it is treated as LLM prompt text
+
+Paths with spaces must use shell-like escaping:
+
+```python
+def read_report() -> JSON:
+    "./reports/q1\ summary.json"      # escaped space
+
+def read_report_quoted() -> JSON:
+    '"./reports/q1 summary.json"'     # quoted path token
+```
+
+These path-token rules are POSIX-style and intended for macOS/Linux.
 
 In addition, Lamia's `file` action API can be used:
 
@@ -304,4 +324,6 @@ async def main():
         read_config(),
         fetch_webpage()
     )
+
+asyncio.run(main())
 ```
