@@ -4,6 +4,7 @@ from pydantic import BaseModel, create_model
 import re
 from .document_structure_validator import DocumentStructureValidator, DuplicateKeyError
 from .utils import import_model_from_path
+from ....base import ValidationResult
 
 
 class YAMLStructureValidator(DocumentStructureValidator):
@@ -163,6 +164,40 @@ class YAMLStructureValidator(DocumentStructureValidator):
         if isinstance(elem, (str, int, float, bool)) or elem is None:
             return str(elem)
         return yaml.dump(elem, allow_unicode=True, sort_keys=False).rstrip()
+
+    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+        result = self._reject_bare_scalar(response)
+        if result is not None:
+            return result
+        return await super().validate_strict(response, **kwargs)
+
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+        result = self._reject_bare_scalar(response)
+        if result is not None:
+            return result
+        return await super().validate_permissive(response, **kwargs)
+
+    def _reject_bare_scalar(self, response: str):
+        """Return a failing ValidationResult if the content parses as a bare
+        YAML scalar (string, number, bool, null) rather than a mapping or
+        sequence.  Returns None when the check does not apply (model is set),
+        parsing fails (let the parent handle errors + hints), or the parsed
+        result is structured."""
+        if self.model is not None:
+            return None
+        try:
+            tree = self.parse(response)
+        except Exception:
+            return None
+        if not isinstance(tree, (dict, list)):
+            return ValidationResult(
+                is_valid=False,
+                error_message=(
+                    f"Expected a YAML mapping or sequence, "
+                    f"got a bare scalar ({type(tree).__name__})"
+                ),
+            )
+        return None
 
     def get_field_order(self, tree):
         """Get the order of keys as they appear in the YAML object."""

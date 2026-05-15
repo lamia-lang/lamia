@@ -381,6 +381,37 @@ class CSVStructureValidator(DocumentStructureValidator):
     def _user_row_num(self, index):
         return index + 1
 
+    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+        result = self._reject_empty_csv(response)
+        if result is not None:
+            return result
+        return await super().validate_strict(response, **kwargs)
+
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+        result = self._reject_empty_csv(response)
+        if result is not None:
+            return result
+        return await super().validate_permissive(response, **kwargs)
+
+    def _reject_empty_csv(self, response: str):
+        """Return a failing ValidationResult if the CSV has no data rows.
+        Returns None when the check does not apply (model is set, since
+        the model-based path already validates row presence) or when parsing
+        fails (let the parent handle errors + hints)."""
+        if self.model is not None:
+            return None
+        try:
+            tree = self.parse(response)
+        except Exception:
+            return None
+        header, rows = tree
+        if not rows:
+            return ValidationResult(
+                is_valid=False,
+                error_message="CSV has a header row but no data rows",
+            )
+        return None
+
     # Overrides the base class method because of the flat nature of CSV
     def validate_strict_recursive(self, tree, model):
         return self._validate_csv_recursive(tree, model)

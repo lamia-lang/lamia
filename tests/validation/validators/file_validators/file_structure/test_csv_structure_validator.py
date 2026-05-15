@@ -51,7 +51,7 @@ async def test_csv_structure_validator_many_fields_with_same_name(strict):
     validator = CSVStructureValidator(model=DupHeaderModel, strict=False)
     result = await validator.validate(csv)
     assert result.is_valid is False
-    assert result.error_message == "Invalid file: Duplicate header found: dup_header"
+    assert result.error_message == "Duplicate header found: dup_header"
     #assert result.hint == "Duplicate header 'dup_header'. Duplicate headers are not supported please return the results in 'dup_header' column."
 
 @pytest.mark.asyncio
@@ -170,3 +170,16 @@ def test_csv_order_validation_in_extract_payload():
         "col2,col1,name,age\ntest,1,John,25",  # Ordered fields completely reversed
         "name,age,col2,col1\nJohn,25,test,1",  # Ordered fields at end but reversed
     ]
+
+
+def test_csv_duplicate_header_error_message_not_file_scoped_sync():
+    import asyncio
+
+    class DupHeaderModel(BaseModel):
+        dup_header: str
+
+    csv = "dup_header;dup_header;\ncell1;cell2;\ncell3;cell4;"
+    validator = CSVStructureValidator(model=DupHeaderModel, strict=False)
+    result = asyncio.run(validator.validate(csv))
+    assert result.is_valid is False
+    assert result.error_message == "Duplicate header found: dup_header"

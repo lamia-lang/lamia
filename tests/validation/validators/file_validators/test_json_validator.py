@@ -28,3 +28,12 @@ async def test_json_duplicate_keys_rejected(strict):
     result = await validator.validate(dup_payload)
     assert not result.is_valid
     assert "Duplicate key" in (result.error_message or "")
+
+
+def test_json_validator_error_message_not_file_scoped():
+    validator = JSONValidator(strict=True)
+    import asyncio
+    result = asyncio.run(validator.validate("<html>Missing api key</html>"))
+    assert result.is_valid is False
+    assert "Invalid file:" not in (result.error_message or "")
+    assert "Invalid json:" in (result.error_message or "")

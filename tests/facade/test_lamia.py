@@ -30,6 +30,7 @@ class MockValidationResult:
     raw_text: str
     typed_result: Any = None
     validated_text: Optional[str] = None
+    error_message: Optional[str] = None
     execution_context: TrackingContext = field(default_factory=_create_mock_tracking_context)
 
 
@@ -284,6 +285,48 @@ class TestLamiaLifecycle:
 
             assert isinstance(result, MyModel)
             assert result.value == "parsed"
+
+    def test_run_async_with_return_type_raises_on_invalid_validation(self):
+        """When return_type is requested, invalid validation must raise."""
+        from lamia.types import JSON
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = MagicMock()
+            mock_result = MockValidationResult(
+                is_valid=False,
+                raw_text="<html>not json</html>",
+                typed_result=None,
+                validated_text=None,
+                error_message="Invalid JSON response",
+            )
+            mock_engine.execute = AsyncMock(return_value=mock_result)
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia()
+            with pytest.raises(ValueError, match="Invalid JSON response"):
+                asyncio.run(lamia.run_async("https://api.weather.com/current", return_type=JSON))
+
+    def test_run_async_with_return_type_prefers_validated_text(self):
+        """When typed_result is None but validation is valid, use validated_text."""
+        from lamia.types import HTML
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = MagicMock()
+            mock_result = MockValidationResult(
+                is_valid=True,
+                raw_text="<html><body>raw</body></html> extra",
+                typed_result=None,
+                validated_text="<html><body>raw</body></html>",
+            )
+            mock_engine.execute = AsyncMock(return_value=mock_result)
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("https://example.com", return_type=HTML))
+
+            assert result == "<html><body>raw</body></html>"
 
     @pytest.mark.asyncio
     async def test_run_async_without_return_type(self):
@@ -848,7 +891,8 @@ class TestLocalFileRead:
             lamia = Lamia()
             result = asyncio.run(lamia.run_async("./config.json", return_type=JSON))
 
-        assert result == {"key": "value", "num": 42}
+        import json
+        assert json.loads(result) == {"key": "value", "num": 42}
         mock_engine.execute.assert_not_called()
 
     def test_txt_file_returned_as_string(self, tmp_path):
@@ -881,9 +925,9 @@ class TestLocalFileRead:
             lamia = Lamia()
             result = asyncio.run(lamia.run_async("./data.json", return_type=JSON, _full_result=True))
 
+        import json
         assert isinstance(result, LamiaResult)
-        assert result.typed_result == {"x": 1}
-        assert '"x": 1' in result.result_text
+        assert json.loads(result.typed_result) == {"x": 1}
         assert result.tracking_context.data_provider_name == "local_file"
 
     def test_file_not_found_raises(self, tmp_path):
@@ -911,8 +955,107 @@ class TestLocalFileRead:
             lamia = Lamia()
             result = asyncio.run(lamia.run_async("./settings", return_type=JSON))
 
-        assert result == {"feature": True}
+        import json
+        assert json.loads(result) == {"feature": True}
         mock_engine.execute.assert_not_called()
+
+    def test_sync_invalid_local_json_message(self, tmp_path):
+        f = tmp_path / "broken.json"
+        f.write_text("<html>not json</html>")
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            from lamia.types import JSON
+            lamia = Lamia()
+            with pytest.raises(ValueError, match="failed validation"):
+                lamia.run("./broken.json", return_type=JSON)
+
+    def test_yaml_file_parsed(self, tmp_path):
+        f = tmp_path / "config.yaml"
+        f.write_text("key: value\nnum: 42\n")
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            from lamia.types import YAML
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("./config.yaml", return_type=YAML))
+
+        assert result is not None
+        mock_engine.execute.assert_not_called()
+
+    def test_xml_file_parsed(self, tmp_path):
+        f = tmp_path / "data.xml"
+        f.write_text("<root><item>hello</item></root>")
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            from lamia.types import XML
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("./data.xml", return_type=XML))
+
+        assert result is not None
+        mock_engine.execute.assert_not_called()
+
+    def test_csv_file_parsed(self, tmp_path):
+        f = tmp_path / "data.csv"
+        f.write_text("name,age\nAlice,30\nBob,25\n")
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            from lamia.types import CSV
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("./data.csv", return_type=CSV))
+
+        assert result is not None
+        mock_engine.execute.assert_not_called()
+
+    def test_markdown_file_parsed(self, tmp_path):
+        f = tmp_path / "readme.md"
+        f.write_text("# Title\n\nSome content here.\n")
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            from lamia.types import Markdown
+            lamia = Lamia()
+            result = asyncio.run(lamia.run_async("./readme.md", return_type=Markdown))
+
+        assert result is not None
+        mock_engine.execute.assert_not_called()
+
+    def test_invalid_yaml_file_raises(self, tmp_path):
+        f = tmp_path / "bad.yaml"
+        f.write_text("key: [unclosed bracket")
+
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine, \
+             patch('lamia.facade.lamia.get_current_source_file', return_value=str(tmp_path / "script.lm")):
+            mock_engine = MagicMock()
+            mock_engine.config_provider = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            from lamia.types import YAML
+            lamia = Lamia()
+            with pytest.raises(ValueError, match="failed validation"):
+                lamia.run("./bad.yaml", return_type=YAML)
 
     def test_ambiguous_path_text_delegates_to_llm(self):
         from lamia.interpreter.commands import LLMCommand

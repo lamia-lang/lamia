@@ -292,6 +292,28 @@ class MarkdownStructureValidator(DocumentStructureValidator):
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         return await self._validate_common(response, strict=False, **kwargs)
 
+    _STRUCTURAL_NODE_TYPES = frozenset({
+        'heading', 'list', 'block_quote', 'block_code', 'table',
+        'thematic_break', 'block_html',
+    })
+    _INLINE_MARKER_TYPES = frozenset({
+        'strong', 'emphasis', 'codespan', 'link', 'image',
+        'strikethrough',
+    })
+
+    def _has_markdown_elements(self, ast: list) -> bool:
+        """Return True if the AST contains at least one markdown-specific
+        structural or inline element (heading, list, emphasis, link, etc.)."""
+        for node in ast:
+            node_type = node.get('type')
+            if node_type in self._STRUCTURAL_NODE_TYPES:
+                return True
+            children = node.get('children', [])
+            for child in children:
+                if child.get('type') in self._INLINE_MARKER_TYPES:
+                    return True
+        return False
+
     # Private methods
     def _extract_text_from_children(self, children):
         if not children:
@@ -429,6 +451,15 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         ast = self.load_payload(payload)  # Parse Markdown string into AST
 
         if self.model is None:
+            if not self._has_markdown_elements(ast):
+                return ValidationResult(
+                    is_valid=False,
+                    error_message=(
+                        "Content does not contain any markdown-specific "
+                        "elements (headings, lists, emphasis, links, code "
+                        "blocks, etc.)"
+                    ),
+                )
             return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(ast))
 
         valid, err, values = self._match_fields(ast, model=self.model, strict=strict)

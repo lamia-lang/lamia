@@ -919,8 +919,9 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(tree), typed_result=None)
             return callback(tree, self.model)
         except Exception as e:
+            error_message = str(e)
             if self.generate_hints:
                 hint = self.get_retry_hint(e, e.hint if isinstance(e, BaseValidationError) and e.hint else "")
-                return ValidationResult(is_valid=False, error_message=f"Invalid file: {str(e)}", hint=hint)
+                return ValidationResult(is_valid=False, error_message=error_message, hint=hint)
             else:
-                return ValidationResult(is_valid=False, error_message=f"Invalid file: {str(e)}")
+                return ValidationResult(is_valid=False, error_message=error_message)

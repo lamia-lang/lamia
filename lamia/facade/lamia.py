@@ -6,7 +6,6 @@ between different subsystems (engine, adapters, validation).
 """
 
 import asyncio
-import json
 import logging
 import os
 import re
@@ -18,7 +17,8 @@ from lamia.env_loader import load_env_files
 from lamia.engine.engine import LamiaEngine
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
-from lamia.types import BaseType, ExternalOperationRetryConfig, JSON, CSV, HTML
+from lamia.types import BaseType, ExternalOperationRetryConfig
+from lamia.type_converter import create_validator
 from lamia.interpreter.commands import Command
 from lamia.engine.managers.llm.files_context_manager import get_current_source_file
 from lamia.validation.base import TrackingContext
@@ -177,7 +177,7 @@ class Lamia:
         else:
             local_path = _resolve_local_file(command)
             if local_path is not None:
-                return self._read_local_file(local_path, return_type, _full_result)
+                return await self._read_local_file(local_path, return_type, _full_result)
 
             parsed_command, python_result = process_string_command(command)
             if python_result is not None:
@@ -203,25 +203,22 @@ class Lamia:
             )
         if return_type is None:
             return response.typed_result or response.raw_text # for no return action both typed_result and raw_text will be None and None will be returned
-        else:
-            return response.typed_result or response.raw_text
+        if not response.is_valid:
+            raise ValueError(response.error_message or "Validation failed for requested return type")
+        if response.typed_result is not None:
+            return response.typed_result
+        if response.validated_text is not None:
+            return response.validated_text
+        return response.raw_text
 
-    def _read_local_file(
+    async def _read_local_file(
         self,
         path: Path,
         return_type: Optional[Type[BaseType]],
         _full_result: bool,
     ) -> Union[Any, LamiaResult]:
-        """Read a local file and optionally parse it according to *return_type*."""
+        """Read a local file and validate/convert it according to *return_type*."""
         raw_text = path.read_text(encoding='utf-8')
-        typed_result: Any = raw_text
-
-        if return_type is not None and issubclass(return_type, JSON):
-            typed_result = json.loads(raw_text)
-        elif return_type is not None and issubclass(return_type, CSV):
-            typed_result = raw_text
-        elif return_type is not None and issubclass(return_type, HTML):
-            typed_result = raw_text
 
         ctx = TrackingContext(
             data_provider_name="local_file",
@@ -229,8 +226,21 @@ class Lamia:
             metadata={"path": str(path)},
         )
 
+        if return_type is not None:
+            validator = create_validator(return_type)
+            result = await validator.validate(raw_text, execution_context=ctx)
+            if not result.is_valid:
+                raise ValueError(
+                    f"Local file '{path}' failed validation: {result.error_message}"
+                )
+            typed_result = result.typed_result if result.typed_result is not None else result.validated_text
+            validated_text = result.validated_text or raw_text
+        else:
+            typed_result = raw_text
+            validated_text = raw_text
+
         if _full_result:
-            return LamiaResult(result_text=raw_text, typed_result=typed_result, tracking_context=ctx)
+            return LamiaResult(result_text=validated_text, typed_result=typed_result, tracking_context=ctx)
         return typed_result
 
     def run(
