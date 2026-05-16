@@ -311,13 +311,13 @@ class TestPlaygroundFilesNonExecutable:
         source = (
             "import asyncio\n"
             "\n"
-            "def get_weather() -> JSON:\n"
+            "async def get_weather() -> JSON:\n"
             '    "https://api.weather.com/current"\n'
             "\n"
-            "def read_config() -> JSON:\n"
+            "async def read_config() -> JSON:\n"
             '    "./config.json"\n'
             "\n"
-            "def fetch_webpage() -> HTML:\n"
+            "async def fetch_webpage() -> HTML:\n"
             '    "https://news.example.com"\n'
             "\n"
             "async def main():\n"
@@ -586,6 +586,21 @@ class TestSemanticDiagnostics:
     def test_builtins_not_flagged(self, tmp_path):
         lm_file = tmp_path / "builtins.lm"
         lm_file.write_text('print("hello")\nresult = len([1,2,3])\n')
+
+        with open(str(lm_file)) as f:
+            source = f.read()
+        result = _analyze(source, str(lm_file))
+
+        errors = [d for d in result.diagnostics if d["severity"] == "error"]
+        assert len(errors) == 0
+
+    def test_lamia_keywords_not_flagged(self, tmp_path):
+        lm_file = tmp_path / "keywords.lm"
+        lm_file.write_text(
+            'with files("~/docs/"):\n'
+            '    with session("my_sess"):\n'
+            '        result = File(JSON, "out.json")\n'
+        )
 
         with open(str(lm_file)) as f:
             source = f.read()

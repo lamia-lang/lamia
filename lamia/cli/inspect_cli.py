@@ -335,6 +335,12 @@ _SKIP_NAMES = frozenset([
     # Pydantic (auto-imported in Lamia)
     "BaseModel", "Field", "validator", "field_validator", "model_validator",
     "ConfigDict", "computed_field", "PrivateAttr",
+    # Lamia context managers and builtins
+    "files", "session", "File", "capture_files_context",
+    # Lamia validation types
+    "JSON", "YAML", "XML", "HTML", "CSV", "Markdown", "TEXT", "TXT",
+    # Python stdlib commonly used in .lm files
+    "asyncio",
 ])
 
 
