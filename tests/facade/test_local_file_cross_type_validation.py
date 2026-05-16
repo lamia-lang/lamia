@@ -25,6 +25,9 @@ SAMPLE_HTML = "<html><body><p>hello</p></body></html>"
 SAMPLE_CSV = "name,age\nAlice,30\nBob,25\n"
 SAMPLE_MARKDOWN = "# Title\n\nSome paragraph content here.\n"
 SAMPLE_TEXT = "Just some plain text that is not structured."
+SAMPLE_YAML_UNQUOTED_KEYS = "x: 1\ny:\n  - a\n  - b\n"
+SAMPLE_YAML_BOOLEAN_YES = "name: John\nactive: yes\n"
+SAMPLE_JSON_CANONICAL = '{"a":[1,2,true,null]}'
 
 FORMAT_SAMPLES = {
     "json": SAMPLE_JSON,
@@ -129,6 +132,12 @@ class TestKnownCrossTypeSuccesses:
         assert result.is_valid, "JSON is valid YAML by spec"
 
     @pytest.mark.asyncio
+    async def test_json_canonical_accepted_as_yaml(self):
+        validator = create_validator(YAML)
+        result = await validator.validate(SAMPLE_JSON_CANONICAL)
+        assert result.is_valid, "Valid JSON must also be valid YAML 1.2"
+
+    @pytest.mark.asyncio
     async def test_html_content_accepted_as_xml(self):
         validator = create_validator(XML)
         result = await validator.validate(SAMPLE_HTML)
@@ -139,6 +148,42 @@ class TestKnownCrossTypeSuccesses:
         validator = create_validator(Markdown)
         result = await validator.validate(SAMPLE_HTML)
         assert result.is_valid, "Markdown supports inline HTML blocks"
+
+
+class TestJsonYamlSpecCases:
+    """Explicit JSON↔YAML spec examples discussed in review."""
+
+    @pytest.mark.asyncio
+    async def test_yaml_unquoted_keys_valid_yaml_invalid_json(self):
+        yaml_validator = create_validator(YAML)
+        yaml_result = await yaml_validator.validate(SAMPLE_YAML_UNQUOTED_KEYS)
+        assert yaml_result.is_valid, "Unquoted keys + indentation list are valid YAML"
+
+        json_validator = create_validator(JSON)
+        json_result = await json_validator.validate(SAMPLE_YAML_UNQUOTED_KEYS)
+        assert not json_result.is_valid, (
+            "The same content must fail JSON (unquoted keys / indentation syntax)"
+        )
+
+    @pytest.mark.asyncio
+    async def test_yaml_yes_scalar_valid_yaml_invalid_json(self):
+        yaml_validator = create_validator(YAML)
+        yaml_result = await yaml_validator.validate(SAMPLE_YAML_BOOLEAN_YES)
+        assert yaml_result.is_valid, "'yes' scalar must be accepted by YAML parser"
+
+        json_validator = create_validator(JSON)
+        json_result = await json_validator.validate(SAMPLE_YAML_BOOLEAN_YES)
+        assert not json_result.is_valid, "'yes' scalar syntax is invalid JSON"
+
+    @pytest.mark.asyncio
+    async def test_json_canonical_valid_for_both_json_and_yaml(self):
+        json_validator = create_validator(JSON)
+        json_result = await json_validator.validate(SAMPLE_JSON_CANONICAL)
+        assert json_result.is_valid, "Canonical JSON sample must pass JSON"
+
+        yaml_validator = create_validator(YAML)
+        yaml_result = await yaml_validator.validate(SAMPLE_JSON_CANONICAL)
+        assert yaml_result.is_valid, "Canonical JSON sample must pass YAML 1.2"
 
 
 class TestCrossTypeThroughFacade:
