@@ -1939,6 +1939,7 @@
 </span><span id="__span-12-14"><a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_latin</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">&quot;output.txt&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;latin-1&quot;</span><span class="p">):</span>
 </span><span id="__span-12-15"><a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a>    <span class="s2">&quot;Generate text with special characters&quot;</span>
 </span></code></pre></div>
+<p>For <code>File(..., append=True)</code>, Lamia includes the existing file content as context so the model can continue from current data instead of generating unrelated output.</p>
 <h2 id="file-context-with-files">File Context (<code>with files()</code>)<a class="headerlink" href="#file-context-with-files" title="Permanent link">&para;</a></h2>
 <p>Reference local files in LLM prompts using <code>{@filename}</code> syntax:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;~/Documents/&quot;</span><span class="p">):</span>
