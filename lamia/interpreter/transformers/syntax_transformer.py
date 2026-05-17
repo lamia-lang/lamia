@@ -594,6 +594,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             body = self._build_file_write_body(
                 [web_command_ast], main_kw,
                 has_inner_type=inner_rt_node is not None,
+                inner_rt_node=inner_rt_node,
                 path=path, append=append, encoding=encoding,
                 is_async=is_async,
             )
@@ -971,14 +972,17 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 return __lamia_file_result__
         """
         # Add inner return type keyword if present
+        file_inner_rt_node: Optional[ast.expr] = None
         if file_return_type.inner_return_type is not None:
             rt_keyword = self._build_return_type_keyword(file_return_type.inner_return_type)
             if rt_keyword:
                 keywords.append(rt_keyword)
+                file_inner_rt_node = rt_keyword.value
 
         body = self._build_file_write_body(
             args, keywords,
             has_inner_type=file_return_type.inner_return_type is not None,
+            inner_rt_node=file_inner_rt_node,
             path=file_return_type.path,
             append=file_return_type.append,
             encoding=file_return_type.encoding,
@@ -1014,6 +1018,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         args: list,
         keywords: list,
         has_inner_type: bool,
+        inner_rt_node: Optional[ast.expr],
         path: str,
         append: bool,
         encoding: str,
@@ -1022,18 +1027,31 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         """Build the multi-step body for a file write function.
 
         Steps:
-            1. __lamia_file_result__ = lamia.run(command [, return_type=Type])
+            0. (append only) read existing file content for LLM context
+            1. __lamia_file_result__ = lamia.run(command [, return_type=Type, _append_context=...])
             2. lamia.run(FileCommand(action=WRITE|APPEND, path=..., content=...))
             3. return __lamia_file_result__
         """
         tmp_var = '__lamia_file_result__'
+        ctx_var = '__lamia_append_ctx__'
         method = 'run_async' if is_async else 'run'
+        stmts: List[ast.stmt] = []
 
         # When a return type is present, request the full LamiaResult so we can
         # write .result_text (raw content) to the file and return .typed_result.
         if has_inner_type:
             keywords = list(keywords) + [
                 ast.keyword(arg='_full_result', value=ast.Constant(value=True)),
+            ]
+
+        # Step 0 – for append, read existing file to provide LLM context
+        if append:
+            stmts.extend(self._build_file_context_read(ctx_var, path, encoding))
+            keywords = list(keywords) + [
+                ast.keyword(
+                    arg='_append_context',
+                    value=ast.Name(id=ctx_var, ctx=ast.Load()),
+                ),
             ]
 
         # Step 1 – execute the command
@@ -1090,7 +1108,14 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             ],
         )
 
-        # Step 4 – lamia.run(FileCommand(...))
+        # Step 4 – lamia.run(FileCommand(...), return_type=Type)
+        # Pass return_type so FSManager gets a validator for prepare_content_for_write
+        file_write_keywords: List[ast.keyword] = []
+        if inner_rt_node is not None:
+            file_write_keywords.append(
+                ast.keyword(arg='return_type', value=inner_rt_node),
+            )
+
         file_write_call = ast.Call(
             func=ast.Attribute(
                 value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
@@ -1098,7 +1123,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 ctx=ast.Load(),
             ),
             args=[file_command_ast],
-            keywords=[],
+            keywords=file_write_keywords,
         )
         if is_async:
             file_write_call = ast.Await(value=file_write_call)
@@ -1116,7 +1141,69 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             return_value = ast.Name(id=tmp_var, ctx=ast.Load())
         return_stmt = ast.Return(value=return_value)
 
-        return [assign_stmt, write_stmt, return_stmt]
+        stmts.extend([assign_stmt, write_stmt, return_stmt])
+        return stmts
+
+    def _build_file_context_read(self, ctx_var: str, path: str, encoding: str) -> List[ast.stmt]:
+        """Build AST for reading existing file content into ctx_var (for append context).
+
+        Generates:
+            __lamia_append_ctx__ = ""
+            try:
+                with open(path, "r", encoding=encoding) as __f:
+                    __lamia_append_ctx__ = __f.read()
+            except FileNotFoundError:
+                pass
+        """
+        init_stmt = ast.Assign(
+            targets=[ast.Name(id=ctx_var, ctx=ast.Store())],
+            value=ast.Constant(value=""),
+            lineno=1, col_offset=0,
+        )
+
+        f_var = '__lamia_f__'
+        read_call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=f_var, ctx=ast.Load()),
+                attr='read',
+                ctx=ast.Load(),
+            ),
+            args=[], keywords=[],
+        )
+        read_assign = ast.Assign(
+            targets=[ast.Name(id=ctx_var, ctx=ast.Store())],
+            value=read_call,
+            lineno=1, col_offset=0,
+        )
+
+        open_call = ast.Call(
+            func=ast.Name(id='open', ctx=ast.Load()),
+            args=[ast.Constant(value=path), ast.Constant(value='r')],
+            keywords=[ast.keyword(arg='encoding', value=ast.Constant(value=encoding))],
+        )
+        with_stmt = ast.With(
+            items=[ast.withitem(
+                context_expr=open_call,
+                optional_vars=ast.Name(id=f_var, ctx=ast.Store()),
+            )],
+            body=[read_assign],
+            lineno=1, col_offset=0,
+        )
+
+        try_stmt = ast.Try(
+            body=[with_stmt],
+            handlers=[ast.ExceptHandler(
+                type=ast.Name(id='FileNotFoundError', ctx=ast.Load()),
+                name=None,
+                body=[ast.Pass()],
+                lineno=1, col_offset=0,
+            )],
+            orelse=[],
+            finalbody=[],
+            lineno=1, col_offset=0,
+        )
+
+        return [init_stmt, try_stmt]
 
     def _build_file_write_statements(
         self,
@@ -1132,7 +1219,9 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         Returns a list of statement nodes to splice in place of the original Expr.
         """
         tmp_var = '__lamia_file_result__'
+        ctx_var = '__lamia_append_ctx__'
         method = 'run'
+        stmts: List[ast.stmt] = []
 
         # Keywords for the main command call — always use _full_result so we
         # can access result_text for file content regardless of inner type.
@@ -1141,6 +1230,14 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         ]
         if inner_rt_node is not None:
             keywords.insert(0, ast.keyword(arg='return_type', value=inner_rt_node))
+
+        # For append: read existing file to provide LLM context
+        if append:
+            stmts.extend(self._build_file_context_read(ctx_var, path, encoding))
+            keywords.append(ast.keyword(
+                arg='_append_context',
+                value=ast.Name(id=ctx_var, ctx=ast.Load()),
+            ))
 
         # Step 1 – __lamia_file_result__ = lamia.run(command, [return_type=...,] _full_result=True)
         lamia_call = ast.Call(
@@ -1185,7 +1282,13 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             ],
         )
 
-        # Step 4 – lamia.run(FileCommand(...))
+        # Step 4 – lamia.run(FileCommand(...), return_type=Type)
+        file_write_keywords: List[ast.keyword] = []
+        if inner_rt_node is not None:
+            file_write_keywords.append(
+                ast.keyword(arg='return_type', value=inner_rt_node),
+            )
+
         file_write_call = ast.Call(
             func=ast.Attribute(
                 value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
@@ -1193,11 +1296,12 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 ctx=ast.Load(),
             ),
             args=[file_command_ast],
-            keywords=[],
+            keywords=file_write_keywords,
         )
         write_stmt = ast.Expr(value=file_write_call)
 
-        return [assign_stmt, write_stmt]
+        stmts.extend([assign_stmt, write_stmt])
+        return stmts
 
     # ── Parameter substitution ──────────────────────────────────────────
 

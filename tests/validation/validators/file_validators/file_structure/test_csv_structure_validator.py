@@ -137,12 +137,12 @@ class TestCSVStructureAppend:
         result = validator.prepare_content_for_write("title,value\nTest,123\n", "title,value")
         assert result == "title,value\nTest,123\n"
 
-    def test_no_model_plain_concatenation(self) -> None:
+    def test_no_model_strips_duplicate_header(self) -> None:
         validator = CSVStructureValidator(model=None)
         existing = "a,b\n1,2\n"
         new = "a,b\n3,4\n"
         result = validator.prepare_content_for_write(existing, new)
-        assert result == "a,b\n1,2\na,b\n3,4\n"
+        assert result == "a,b\n1,2\n3,4\n"
 
     def test_non_matching_header_plain_concatenation(self) -> None:
         validator = CSVStructureValidator(model=SimpleModel)
@@ -150,6 +150,13 @@ class TestCSVStructureAppend:
         new = "other,cols\nFoo,456\n"
         result = validator.prepare_content_for_write(existing, new)
         assert result == "title,value\nTest,123\nother,cols\nFoo,456\n"
+
+    def test_no_model_inserts_row_separator_when_existing_has_no_trailing_newline(self) -> None:
+        validator = CSVStructureValidator(model=None)
+        existing = "a,b\n1,2\n3,4"
+        new = "a,b\n5,6\n7,8\n"
+        result = validator.prepare_content_for_write(existing, new)
+        assert result == "a,b\n1,2\n3,4\n5,6\n7,8\n"
 
 
 def test_csv_order_validation_in_extract_payload():

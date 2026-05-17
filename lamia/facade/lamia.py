@@ -150,6 +150,7 @@ class Lamia:
         *,
         models: Optional[List[ModelWithRetries]] = None,
         _full_result: bool = False,
+        _append_context: Optional[str] = None,
     ) -> Union[Any, LamiaResult]:
         """
         Generate a response, trying Python code first, then LLM.
@@ -158,6 +159,7 @@ class Lamia:
             command: The command to execute (string or Command object)
             models: The models to use, if not provided, the default models will be used
             return_type: The expected return type for validation (optional)
+            _append_context: Existing file content to prepend as context (used by File append)
             
         Returns:
             If return_type is None: for lamia f(): functions without return types
@@ -171,6 +173,13 @@ class Lamia:
             ExternalOperationTransientError: If external service has temporary failures (network issues, timeouts)
             ExternalOperationFailedError: If external service fails with unclassified error
         """
+        # Prepend existing file content as context for append operations
+        if _append_context and isinstance(command, str):
+            command = (
+                f"Existing file content (append new rows only, do NOT repeat headers or existing data):\n"
+                f"{_append_context}\n\n{command}"
+            )
+
         # Handle Command objects vs strings differently
         if isinstance(command, Command):
             parsed_command = command
@@ -250,6 +259,7 @@ class Lamia:
         *,
         models: Optional[List[ModelWithRetries]] = None,
         _full_result: bool = False,
+        _append_context: Optional[str] = None,
     ) -> Union[Any, LamiaResult]:
         """
         Run a command synchronously.
@@ -259,6 +269,7 @@ class Lamia:
             models: The models to use, if not provided, the default models will be used
             return_type: The expected return type for validation (optional)
             _full_result: If True, return LamiaResult with both raw text and typed result
+            _append_context: Existing file content to prepend as context (used by File append)
         
         Returns:
             If return_type is None: Plain result (Any) for direct usage
@@ -278,6 +289,7 @@ class Lamia:
                 command,
                 return_type,
                 models=models,
+                _append_context=_append_context,
                 _full_result=_full_result,
             )
         )

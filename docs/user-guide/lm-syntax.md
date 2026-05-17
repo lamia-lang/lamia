@@ -188,6 +188,8 @@ def generate_latin() -> File("output.txt", encoding="latin-1"):
     "Generate text with special characters"
 ```
 
+For `File(..., append=True)`, Lamia includes the existing file content as context so the model can continue from current data instead of generating unrelated output.
+
 ## File Context (`with files()`)
 
 Reference local files in LLM prompts using `{@filename}` syntax:

@@ -123,15 +123,32 @@ class CSVStructureValidator(DocumentStructureValidator):
         return "csv"
 
     def prepare_content_for_write(self, existing_content: str, new_content: str) -> str:
-        if not existing_content or self.model is None:
-            return existing_content + new_content
-        model_fields = self._get_model_fields()
-        expected_header = ",".join(model_fields)
-        first_line = new_content.split("\n", 1)[0].strip()
-        if first_line == expected_header:
+        if not existing_content:
+            return new_content
+        if not new_content.strip():
+            return existing_content
+
+        existing_header = existing_content.split("\n", 1)[0].strip()
+        new_first_line = new_content.split("\n", 1)[0].strip()
+
+        if self.model is not None:
+            model_fields = self._get_model_fields()
+            expected_header = ",".join(model_fields)
+            if new_first_line == expected_header:
+                rest = new_content.split("\n", 1)
+                new_content = rest[1] if len(rest) > 1 else ""
+        elif new_first_line == existing_header:
             rest = new_content.split("\n", 1)
-            return existing_content + (rest[1] if len(rest) > 1 else "")
-        return existing_content + new_content
+            new_content = rest[1] if len(rest) > 1 else ""
+
+        if not new_content.strip():
+            return existing_content
+
+        # Normalize append boundary to avoid row merges like "3,45,6"
+        # when either side misses a trailing/leading newline.
+        existing_tail = existing_content.rstrip("\n")
+        new_head = new_content.lstrip("\n")
+        return existing_tail + "\n" + new_head
 
     @property
     def initial_hint(self) -> str:

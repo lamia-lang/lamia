@@ -17,14 +17,21 @@ async def test_csv_validator(strict):
 
 class TestCSVValidatorAppend:
 
-    def test_append_no_model_plain_concatenation(self) -> None:
+    def test_append_strips_duplicate_header(self) -> None:
         validator = CSVValidator()
         existing = "name,age\nAlice,30\n"
         new = "name,age\nBob,25\n"
         result = validator.prepare_content_for_write(existing, new)
-        assert result == "name,age\nAlice,30\nname,age\nBob,25\n"
+        assert result == "name,age\nAlice,30\nBob,25\n"
 
     def test_append_keeps_everything_on_empty_file(self) -> None:
         validator = CSVValidator()
         result = validator.prepare_content_for_write("", "name,age\nAlice,30\n")
         assert result == "name,age\nAlice,30\n"
+
+    def test_append_inserts_row_separator_when_existing_has_no_trailing_newline(self) -> None:
+        validator = CSVValidator()
+        existing = "name,age\nAlice,30\nBob,25"
+        new = "name,age\nCarol,22\n"
+        result = validator.prepare_content_for_write(existing, new)
+        assert result == "name,age\nAlice,30\nBob,25\nCarol,22\n"
