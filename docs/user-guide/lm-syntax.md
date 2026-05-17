@@ -81,11 +81,11 @@ summary = "Write a summary" -> TEXT:
 But if we are not interested in catching the values and we want to save the execution result to a file, we can use the `-> File(...)` syntax.
 
 ```python
-"./users.json" -> File(JSON, "users.json"):
+"./users.json" -> File(JSON, "users.json")
 
-"Create a login form" -> File(HTML, "login.html"):
+"Create a login form" -> File(HTML, "login.html")
 
-"Write a summary" -> File(TEXT, "summary.txt"):
+"Write a summary" -> File(TEXT, "summary.txt")
 ```
 
 ### Model Selection

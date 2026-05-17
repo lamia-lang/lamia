@@ -37,7 +37,6 @@ _STRATEGIES: list[tuple[str, str]] = [
 
 _MAX_PROMPT_PREVIEW = 80
 
-
 def handle_eval() -> None:
     """Handle ``lamia eval <script>`` — interactive model evaluation."""
     parser = argparse.ArgumentParser(prog="lamia eval")

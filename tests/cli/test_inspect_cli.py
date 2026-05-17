@@ -2,7 +2,13 @@
 
 import pytest
 
-from lamia.cli.inspect_cli import has_top_level_steps, get_executable_lines, _analyze
+from lamia.cli.inspect_cli import (
+    has_top_level_steps,
+    get_executable_lines,
+    _analyze,
+    _check_duplicate_functions,
+    _check_cross_file_duplicates,
+)
 
 
 class TestHasTopLevelSteps:
@@ -418,11 +424,11 @@ class TestPlaygroundFilesSyntaxErrors:
 
     def test_file_write_to_disk_trailing_colon(self):
         source = (
-            '"./users.json" -> File(JSON, "users.json"):\n'
+            '"./users.json" -> File(JSON, "users.json")\n'
             "\n"
-            '"Create a login form" -> File(HTML, "login.html"):\n'
+            '"Create a login form" -> File(HTML, "login.html")\n'
             "\n"
-            '"Write a summary" -> File(TEXT, "summary.txt"):'
+            '"Write a summary" -> File(TEXT, "summary.txt")'
         )
         assert has_top_level_steps(source) is False
 
@@ -622,3 +628,80 @@ class TestSemanticDiagnostics:
 
         errors = [d for d in result.diagnostics if "greet" in d.get("message", "")]
         assert len(errors) == 0
+
+
+class TestDuplicateFunctionDetection:
+
+    def test_intra_file_duplicate_flagged(self):
+        source = (
+            'def add_rows():\n'
+            '    "Generate CSV rows"\n'
+            '\n'
+            'def add_rows():\n'
+            '    "Add rand row"\n'
+        )
+        diags = _check_duplicate_functions(source)
+        assert len(diags) == 1
+        assert diags[0]["severity"] == "error"
+        assert "Duplicate function 'add_rows'" in diags[0]["message"]
+        assert "line 1" in diags[0]["message"]
+        assert diags[0]["line"] == 4
+
+    def test_no_duplicate_no_diagnostic(self):
+        source = (
+            'def foo():\n'
+            '    "do foo"\n'
+            '\n'
+            'def bar():\n'
+            '    "do bar"\n'
+        )
+        diags = _check_duplicate_functions(source)
+        assert len(diags) == 0
+
+    def test_triple_duplicate_two_diagnostics(self):
+        source = (
+            'def f():\n    pass\n\n'
+            'def f():\n    pass\n\n'
+            'def f():\n    pass\n'
+        )
+        diags = _check_duplicate_functions(source)
+        assert len(diags) == 2
+
+    def test_intra_file_via_analyze(self):
+        source = (
+            'def greet():\n'
+            '    "Hello"\n'
+            '\n'
+            'def greet():\n'
+            '    "Hi"\n'
+            '\n'
+            'greet()\n'
+        )
+        result = _analyze(source)
+        dup_diags = [d for d in result.diagnostics if "Duplicate function" in d.get("message", "")]
+        assert len(dup_diags) == 1
+
+    def test_cross_file_duplicate_flagged(self, tmp_path):
+        other = tmp_path / "other.lm"
+        other.write_text('def shared_fn():\n    "do stuff"\n')
+
+        current = tmp_path / "current.lm"
+        source = 'def shared_fn():\n    "do other stuff"\n'
+        current.write_text(source)
+
+        diags = _check_cross_file_duplicates(source, str(current))
+        assert len(diags) == 1
+        assert diags[0]["severity"] == "warning"
+        assert "shared_fn" in diags[0]["message"]
+        assert "other.lm" in diags[0]["message"]
+
+    def test_cross_file_no_collision(self, tmp_path):
+        other = tmp_path / "other.lm"
+        other.write_text('def helper():\n    "help"\n')
+
+        current = tmp_path / "current.lm"
+        source = 'def unique_fn():\n    "unique"\n'
+        current.write_text(source)
+
+        diags = _check_cross_file_duplicates(source, str(current))
+        assert len(diags) == 0

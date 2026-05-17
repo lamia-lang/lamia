@@ -99,8 +99,10 @@ def _analyze(source: str, file_path: Optional[str] = None) -> InspectResult:
     deduped = sorted(set(original_lines))
 
     diagnostics: List[dict] = []
+    diagnostics.extend(_check_duplicate_functions(source))
     if file_path:
-        diagnostics = _check_call_integrity(tree, source_map, source, file_path)
+        diagnostics.extend(_check_call_integrity(tree, source_map, source, file_path))
+        diagnostics.extend(_check_cross_file_duplicates(source, file_path))
 
     return InspectResult(len(deduped) > 0, deduped, diagnostics)
 
@@ -185,6 +187,96 @@ def _collect_inline_def_params(source: str) -> Dict[str, Set[str]]:
 
 
 _CALL_RE = re.compile(r'(?:^|\s)(?:\w+\s*=\s*)?(\w+)\(([^)]*)\)')
+
+
+def _check_duplicate_functions(source: str) -> List[dict]:
+    """Flag duplicate top-level function definitions within a single file."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    seen: Dict[str, int] = {}
+    diagnostics: List[dict] = []
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        name = node.name
+        if name in seen:
+            diagnostics.append({
+                "severity": "error",
+                "message": (
+                    f"Duplicate function '{name}' — "
+                    f"already defined on line {seen[name]}; last definition wins"
+                ),
+                "line": node.lineno,
+                "col": node.col_offset,
+                "source": "lamia-semantic",
+            })
+        else:
+            seen[name] = node.lineno
+    return diagnostics
+
+
+def _discover_lm_functions(file_path: str) -> Dict[str, List[str]]:
+    """Scan sibling .lm files and return {func_name: [file_paths]}."""
+    current = Path(file_path).resolve()
+    project_root = _find_project_root(current.parent)
+    if not project_root:
+        project_root = current.parent
+
+    registry: Dict[str, List[str]] = {}
+    for lm_path in project_root.rglob("*.lm"):
+        if any(part in _SKIP_DIRS for part in lm_path.parts):
+            continue
+        resolved = lm_path.resolve()
+        if resolved == current:
+            continue
+        try:
+            src = resolved.read_text(encoding="utf-8")
+            lm_tree = ast.parse(src)
+        except (OSError, SyntaxError):
+            continue
+        for node in lm_tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                registry.setdefault(node.name, []).append(str(resolved))
+    return registry
+
+
+def _check_cross_file_duplicates(source: str, file_path: str) -> List[dict]:
+    """Flag functions in this file that collide with definitions in other .lm files."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    local_funcs: Dict[str, int] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name not in local_funcs:
+                local_funcs[node.name] = node.lineno
+
+    if not local_funcs:
+        return []
+
+    external = _discover_lm_functions(file_path)
+    diagnostics: List[dict] = []
+    for name, lineno in local_funcs.items():
+        if name not in external:
+            continue
+        other_files = external[name]
+        short_paths = [str(Path(p).name) for p in other_files]
+        diagnostics.append({
+            "severity": "warning",
+            "message": (
+                f"Function '{name}' also defined in {', '.join(short_paths)} — "
+                f"the version that runs depends on which file loads first"
+            ),
+            "line": lineno,
+            "col": 0,
+            "source": "lamia-semantic",
+        })
+    return diagnostics
 
 
 def _check_call_integrity(
