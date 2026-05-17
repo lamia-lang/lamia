@@ -318,7 +318,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         return [assign_enter, try_stmt]
 
     def visit_Call(self, node):
-        """Transform web method calls and typed expression markers into lamia.run() calls."""
+        """Transform namespace method calls and typed expression markers into lamia.run() calls."""
         # Check if this is a web.method_name() call
         if self._is_web_call(node):
             # Transform to WebCommand (_transform_web_call handles starred arguments internally)
@@ -332,6 +332,19 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                     ctx=ast.Load()
                 ),
                 args=[web_command],
+                keywords=[]
+            )
+
+        # Check if this is a file.method() or http.method() call
+        if self._is_runnable_namespace_call(node):
+            visited_node = self.generic_visit(node)
+            return ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                    attr='run',
+                    ctx=ast.Load()
+                ),
+                args=[visited_node],
                 keywords=[]
             )
 
@@ -528,11 +541,19 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         # Return new expression statement with lamia.run()
         return ast.Expr(value=lamia_call)
     
+    _RUNNABLE_NAMESPACES = frozenset(('file', 'http'))
+
     def _is_web_call(self, node) -> bool:
         """Check if call is a web method call."""
         return (isinstance(node.func, ast.Attribute) and
                 isinstance(node.func.value, ast.Name) and
                 node.func.value.id == 'web')
+
+    def _is_runnable_namespace_call(self, node) -> bool:
+        """Check if call is a file.method() or http.method() call."""
+        return (isinstance(node.func, ast.Attribute) and
+                isinstance(node.func.value, ast.Name) and
+                node.func.value.id in self._RUNNABLE_NAMESPACES)
     
     def _is_web_command_function(self, node) -> bool:
         """Check if function returns a web command from method calls like web.type_text()."""

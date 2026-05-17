@@ -590,3 +590,48 @@ class TestWebMethodTransformation:
             assert kw_value in result, (
                 f"web.{method_name}() missing value '{kw_value}' for keyword '{kw_name}' in output: {result}"
             )
+
+
+class TestFileNamespaceTransformer:
+    """Test file.method() and http.method() namespace transformation."""
+
+    def setup_method(self):
+        self.transformer = HybridSyntaxTransformer()
+
+    def test_file_read_wrapped_in_lamia_run(self):
+        result = self.transformer.transform_code('file.read("data.csv")')
+        assert "lamia.run(file.read(" in result
+
+    def test_file_read_with_encoding(self):
+        result = self.transformer.transform_code('file.read("data.csv", encoding="latin-1")')
+        assert "lamia.run(file.read(" in result
+        assert "encoding=" in result
+
+    def test_file_write_wrapped_in_lamia_run(self):
+        result = self.transformer.transform_code('file.write("out.txt", "hello")')
+        assert "lamia.run(file.write(" in result
+
+    def test_file_append_wrapped_in_lamia_run(self):
+        result = self.transformer.transform_code('file.append("log.txt", "entry")')
+        assert "lamia.run(file.append(" in result
+
+    def test_file_read_in_assignment(self):
+        result = self.transformer.transform_code('content = file.read("/path/to/file.txt")')
+        assert "content = lamia.run(file.read(" in result
+
+    def test_file_read_in_print(self):
+        result = self.transformer.transform_code('print(file.read("data.csv"))')
+        assert "lamia.run(file.read(" in result
+
+    def test_http_get_wrapped_in_lamia_run(self):
+        result = self.transformer.transform_code('http.get("https://api.example.com")')
+        assert "lamia.run(http.get(" in result
+
+    def test_http_post_wrapped_in_lamia_run(self):
+        result = self.transformer.transform_code('http.post("https://api.example.com", data={"k": "v"})')
+        assert "lamia.run(http.post(" in result
+
+    def test_web_not_affected_by_runnable_namespace(self):
+        """web.method() should still use WebCommand, not generic wrapping."""
+        result = self.transformer.transform_code('web.click("#btn")')
+        assert "WebCommand" in result

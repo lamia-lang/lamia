@@ -709,19 +709,15 @@ topic = "cats"
         with open(out) as f:
             assert "<html>" in f.read()
 
-    def test_string_path_routed_as_llm_not_file_read(self, executor, tmp_dir):
-        """``def f() -> JSON: "./config.json"`` → sent to LLM, not file system.
-
-        The mock LLM returns HTML which fails JSON validation, proving the
-        command was routed through the LLM pipeline.
-        """
+    def test_string_path_raises_file_not_found(self, executor, tmp_dir):
+        """``def f() -> JSON: "./config.json"`` → FileNotFoundError if file missing."""
         path = _write_lm(tmp_dir, '''
 def read_config() -> JSON:
     "./config.json"
 
 result = read_config()
 ''')
-        with pytest.raises(ValueError, match="All models in the chain exhausted retries"):
+        with pytest.raises(FileNotFoundError, match="File not found"):
             executor.execute_file(path)
 
 

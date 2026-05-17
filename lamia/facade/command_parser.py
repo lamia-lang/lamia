@@ -5,10 +5,15 @@ This module handles parsing of command strings to determine the appropriate
 domain type and extract arguments for execution.
 """
 
+import json
+import re
 from typing import Optional, Tuple, Any
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import Command, LLMCommand, WebCommand, FileCommand, WebActionType, FileActionType
 from lamia.validation.base import BaseValidator
+
+_FILE_PROTOCOL_RE = re.compile(r'^file://(read|write|append):(.+)')
+_FILE_KV_RE = re.compile(r'(encoding|content):(.+)')
 
 class CommandParser:
     def __init__(self, command: str):
@@ -77,10 +82,46 @@ class CommandParser:
     def _parse_file_command(self, command: str) -> FileCommand:
         """Parse filesystem command into FileCommand object.
 
-        Plain paths default to READ. File writes are driven by the
-        hybrid syntax `-> File(...)` (not by protocol strings).
+        Handles the file:// protocol format produced by FileActions:
+            file://read:path [encoding:enc]
+            file://write:path content:"..." [encoding:enc]
+            file://append:path content:"..." [encoding:enc]
         """
-        return FileCommand(action=FileActionType.READ, path=command)
+        stripped = command.strip()
+        m = _FILE_PROTOCOL_RE.match(stripped)
+        if not m:
+            return FileCommand(action=FileActionType.READ, path=stripped)
+
+        action_str = m.group(1)
+        remainder = m.group(2)
+
+        action_map = {
+            'read': FileActionType.READ,
+            'write': FileActionType.WRITE,
+            'append': FileActionType.APPEND,
+        }
+        action = action_map[action_str]
+
+        parts = remainder.split(' ')
+        path = parts[0]
+        encoding = 'utf-8'
+        content: Optional[str] = None
+
+        for part in parts[1:]:
+            if part.startswith('encoding:'):
+                encoding = part[len('encoding:'):]
+            elif part.startswith('content:'):
+                raw = remainder[remainder.index('content:') + len('content:'):]
+                if raw.startswith('"') or raw.startswith("'"):
+                    try:
+                        content = json.loads(raw.split(' encoding:')[0])
+                    except (json.JSONDecodeError, ValueError):
+                        content = raw
+                else:
+                    content = raw
+                break
+
+        return FileCommand(action=action, path=path, content=content, encoding=encoding)
     
     def _parse_web_command(self, command) -> WebCommand:
         """Parse web command into WebCommand object."""
