@@ -7,6 +7,7 @@ interactive_mode) — this module only provides the tool definitions and
 execution logic.
 """
 import enum
+import json
 import fnmatch
 import os
 import logging
@@ -15,6 +16,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+from lamia.actions.http import HttpActions
 from lamia.interpreter.commands import WebCommand, WebActionType
 from lamia.interpreter.human.parser import parse_hu_file
 from lamia.lint.find_usage import UsageReference, find_usage
@@ -37,6 +39,7 @@ class ToolName(str, enum.Enum):
     MOVE_FILE = "move_file"
     GREP = "grep"
     GLOB = "glob"
+    WEB_FETCH = "web_fetch"
     BROWSER_NAVIGATE = "browser_navigate"
     BROWSER_CLICK = "browser_click"
     BROWSER_TYPE = "browser_type"
@@ -70,6 +73,7 @@ TOOL_LABELS: dict[str, tuple[str, str]] = {
     ToolName.GLOB:               ("Finding files",       "pattern"),
     ToolName.FIND_DEFINITION:    ("Finding definition",  "symbol"),
     ToolName.FIND_REFERENCES:    ("Finding references",  "symbol"),
+    ToolName.WEB_FETCH:          ("Fetching page",       "url"),
     ToolName.BROWSER_NAVIGATE:   ("Navigating to",       "url"),
     ToolName.BROWSER_CLICK:      ("Clicking",            "selector"),
     ToolName.BROWSER_TYPE:       ("Typing into",         "selector"),
@@ -350,6 +354,23 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": ToolName.WEB_FETCH.value,
+        "description": (
+            "Fetch a web page via Lamia HTTP actions and return response content. "
+            "Lightweight -- no browser required. Prefer this over browser tools when you only need page content."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "URL to fetch",
+                },
+            },
+            "required": ["url"],
+        },
+    },
+    {
         "name": ToolName.BROWSER_NAVIGATE.value,
         "description": "Navigate to a URL in the browser. Returns the page title and visible text.",
         "parameters": {
@@ -540,6 +561,8 @@ def _execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
         return _grep(args.get("pattern", ""), args.get("directory", "."), args.get("include", ""), cwd)
     elif name == ToolName.GLOB:
         return _glob(args.get("pattern", ""), args.get("directory", "."), cwd)
+    elif name == ToolName.WEB_FETCH:
+        return _web_fetch(args.get("url", ""), lamia)
     elif name == ToolName.LINT_CODE:
         result = lint_code(args.get("content", ""), args.get("file_type", ""), cwd)
         import json as _json
@@ -1269,6 +1292,47 @@ def _glob(pattern: str, directory: str, cwd: str) -> str:
     if len(matches) >= MAX_RESULTS:
         output += f"\n\n... (truncated at {MAX_RESULTS} results)"
     return output
+
+
+# ── Web fetch (lightweight Lamia HTTP) ───────────────────────────────────────
+
+_http_actions = HttpActions()
+_WEB_FETCH_MAX_CHARS = 80_000
+
+
+def _http_to_web_command(http_action) -> WebCommand:
+    """Convert HttpActions output to the existing WebCommand HTTP format."""
+    return WebCommand(
+        action=WebActionType.HTTP_REQUEST,
+        url=http_action.params.url,
+        method=str(http_action.action).upper(),
+        headers=http_action.params.headers,
+        data=http_action.params.data,
+    )
+
+
+def _web_fetch(url: str, lamia) -> str:
+    """Fetch URL content using Lamia's existing HTTP action flow."""
+    if not url:
+        return "Error: url is required"
+    if lamia is None:
+        return "Error: web_fetch not available (no lamia instance)"
+
+    normalized_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
+    http_action = _http_actions.get(normalized_url)
+    web_command = _http_to_web_command(http_action)
+    result = _run_web(web_command, lamia)
+    if isinstance(result, str) and result.startswith("Browser error"):
+        return result.replace("Browser error", "Error fetching", 1)
+
+    if isinstance(result, (dict, list)):
+        text = json.dumps(result, ensure_ascii=False, indent=2)
+    else:
+        text = str(result) if result is not None else ""
+
+    if len(text) > _WEB_FETCH_MAX_CHARS:
+        text = text[:_WEB_FETCH_MAX_CHARS] + f"\n\n... (truncated, total {len(text)} chars)"
+    return text or "(empty)"
 
 
 # ── Browser tools ────────────────────────────────────────────────────────────
