@@ -573,6 +573,48 @@ class TestSemanticDiagnostics:
         assert "max_words" in warnings[0]["message"]
         assert "doc" in warnings[0]["message"]
 
+    def test_inline_def_typed_params_reports_dedicated_warning(self, tmp_path):
+        lm_file = tmp_path / "typed.lm"
+        lm_file.write_text(
+            "def generate_report(data: dict, style: str):\n"
+            '    "Create a {style} report based on: {data}"\n'
+            '\n'
+            'report = generate_report(data={"sales": 100, "returns": 5}, style="executive")\n'
+            "print(report)\n"
+        )
+
+        source = lm_file.read_text()
+        result = _analyze(source, str(lm_file))
+
+        typed = [d for d in result.diagnostics if "uses typed parameters" in d["message"]]
+        missing = [
+            d for d in result.diagnostics
+            if "placeholders not present in function params" in d["message"]
+        ]
+
+        assert len(typed) == 1
+        assert typed[0]["severity"] == "error"
+        assert "data" in typed[0]["message"]
+        assert "style" in typed[0]["message"]
+        assert "untyped params" in typed[0]["message"]
+        assert len(missing) == 0
+
+    def test_inline_def_missing_placeholders_keeps_missing_message(self, tmp_path):
+        lm_file = tmp_path / "missing.lm"
+        lm_file.write_text(
+            "def generate_report(data, style):\n"
+            '    "Create a {style} report based on: {data} and {region}"\n'
+        )
+
+        source = lm_file.read_text()
+        result = _analyze(source, str(lm_file))
+
+        warnings = [d for d in result.diagnostics if d["severity"] == "warning"]
+        missing = [d for d in warnings if "placeholders not present in function params" in d["message"]]
+
+        assert len(missing) == 1
+        assert "region" in missing[0]["message"]
+
     def test_local_def_not_flagged_as_unresolved(self, tmp_path):
         lm_file = tmp_path / "local.lm"
         lm_file.write_text(

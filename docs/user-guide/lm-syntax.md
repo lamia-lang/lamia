@@ -309,7 +309,7 @@ for field in fields:
 ### Parameter Substitution
 
 ```python
-def generate_report(data: dict, style: str):
+def generate_report(data, style):
     "Create a {style} report based on: {data}"
 ```
 

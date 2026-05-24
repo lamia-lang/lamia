@@ -156,34 +156,59 @@ def _collect_local_defs(tree: ast.AST) -> Set[str]:
     return names
 
 
-def _collect_inline_def_params(source: str) -> Dict[str, Set[str]]:
-    """For each inline def, collect the template parameters (from body string)."""
-    result: Dict[str, Set[str]] = {}
-    lines = source.split("\n")
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        m = re.match(r'def\s+(\w+)\s*\(([^)]*)\)', stripped)
-        if not m:
-            continue
-        func_name = m.group(1)
-        sig_params = {p.strip().split("=")[0].strip() for p in m.group(2).split(",") if p.strip()}
+def _collect_inline_def_issues(source: str) -> tuple[Dict[str, Set[str]], Dict[str, Set[str]]]:
+    """Collect inline-function issues: (missing_placeholders, typed_params)."""
+    missing_by_fn: Dict[str, Set[str]] = {}
+    typed_params_by_fn: Dict[str, Set[str]] = {}
 
-        body_line_idx = i + 1
-        if body_line_idx >= len(lines):
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return missing_by_fn, typed_params_by_fn
+
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        body = lines[body_line_idx]
+
+        func_name = node.name
+        all_args = (
+            list(node.args.posonlyargs)
+            + list(node.args.args)
+            + list(node.args.kwonlyargs)
+        )
+        if node.args.vararg is not None:
+            all_args.append(node.args.vararg)
+        if node.args.kwarg is not None:
+            all_args.append(node.args.kwarg)
+
+        sig_params = {arg.arg for arg in all_args}
+        typed_params = {arg.arg for arg in all_args if arg.annotation is not None}
+        if typed_params:
+            typed_params_by_fn[func_name] = typed_params
+
+        template_text = None
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            template_text = node.body[0].value.value
+
+        if template_text is None:
+            continue
 
         template_refs: Set[str] = set()
-        for pm in _INLINE_DEF_PARAM_RE.finditer(body):
+        for pm in _INLINE_DEF_PARAM_RE.finditer(template_text):
             template_refs.add(pm.group(1))
-        for pm in _INLINE_DEF_FILEREF_RE.finditer(body):
+        for pm in _INLINE_DEF_FILEREF_RE.finditer(template_text):
             template_refs.add(pm.group(1))
 
         missing = template_refs - sig_params
         if missing:
-            result[func_name] = missing
+            missing_by_fn[func_name] = missing
 
-    return result
+    return missing_by_fn, typed_params_by_fn
 
 
 _CALL_RE = re.compile(r'(?:^|\s)(?:\w+\s*=\s*)?(\w+)\(([^)]*)\)')
@@ -288,8 +313,25 @@ def _check_call_integrity(
     """Validate function calls against .hu definitions and inline defs."""
     hu_registry = _discover_hu_functions(file_path)
     local_defs = _collect_local_defs(tree)
-    inline_mismatches = _collect_inline_def_params(source)
+    inline_mismatches, inline_typed_params = _collect_inline_def_issues(source)
     diagnostics: List[dict] = []
+
+    for func_name, typed_params in inline_typed_params.items():
+        lines = source.split("\n")
+        for i, line in enumerate(lines):
+            if re.match(rf'\s*def\s+{re.escape(func_name)}\s*\(', line):
+                diagnostics.append({
+                    "severity": "warning",
+                    "message": (
+                        f"{func_name}() uses typed parameters: "
+                        f"{', '.join(sorted(typed_params))}. "
+                        f"Lamia inline functions currently require untyped params."
+                    ),
+                    "line": i + 1,
+                    "col": 0,
+                    "source": "lamia-semantic",
+                })
+                break
 
     for func_name, missing_params in inline_mismatches.items():
         lines = source.split("\n")
@@ -298,9 +340,8 @@ def _check_call_integrity(
                 diagnostics.append({
                     "severity": "warning",
                     "message": (
-                        f"{func_name}() template references "
-                        f"{', '.join(sorted(missing_params))} "
-                        f"not in function signature"
+                        f"{func_name}() template uses placeholders not present in function params: "
+                        f"{', '.join(sorted(missing_params))}"
                     ),
                     "line": i + 1,
                     "col": 0,

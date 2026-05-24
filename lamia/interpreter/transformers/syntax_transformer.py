@@ -435,6 +435,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     def _transform_llm_function(self, node, is_async: bool):
         """Transform function with LLM string command."""
         func_info = self.detector.llm_functions[node.name]
+        self._validate_inline_typed_params(node.name, func_info.command, func_info.parameters)
 
         # Process command for parameter substitution
         processed_command = self._create_parameter_substitution_logic(
@@ -444,6 +445,34 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         # Generate lamia.run() call (works for both LLM and web commands)
         return self._create_lamia_call_function(
             node, processed_command, func_info.return_type, is_async,
+        )
+
+    def _validate_inline_typed_params(
+        self,
+        function_name: str,
+        command: str,
+        parameters: List[FunctionParameter],
+    ) -> None:
+        """Reject typed inline params used in template placeholders.
+
+        Lamia inline template functions currently require untyped parameters.
+        This keeps runtime behavior aligned with inspect diagnostics.
+        """
+        placeholders = set(re.findall(r"\{(\w+)\}", command))
+        if not placeholders:
+            return
+
+        typed_params = sorted(
+            p.name for p in parameters
+            if p.type_annotation and p.name in placeholders
+        )
+        if not typed_params:
+            return
+
+        raise ValueError(
+            f"{function_name}() uses typed parameters: "
+            f"{', '.join(typed_params)}. "
+            "Lamia inline functions currently require untyped params."
         )
 
     
