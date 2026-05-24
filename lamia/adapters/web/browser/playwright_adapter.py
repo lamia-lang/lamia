@@ -59,13 +59,26 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             logger.info(f"Session persistence enabled for profile: {self.profile_name}")
     
     def _require_selector(self, params: BrowserActionParams) -> str:
-        """Ensure selector is present for selector-based actions."""
-        if not params.selector:
+        """Ensure selector is present for selector-based actions.
+        
+        Empty selector is allowed when scope_element_handle is present (self-targeting).
+        """
+        if not params.selector and params.scope_element_handle is None:
             raise ExternalOperationPermanentError(
                 "Selector is required for this browser action",
                 retry_history=[]
             )
-        return params.selector
+        return params.selector or ""
+
+    def _is_self_target(self, params: BrowserActionParams) -> bool:
+        """Check if this is a self-targeting call (no selector, scoped to an element)."""
+        return not params.selector and params.scope_element_handle is not None
+
+    async def _resolve_element(self, params: BrowserActionParams):
+        """Resolve the target element: self-target or find via selector."""
+        if self._is_self_target(params):
+            return params.scope_element_handle
+        return await self._find_element_with_fallbacks(params)
     
     async def _ensure_dom_tracker(self) -> None:
         """Ensure the DOM stability tracker bootstrap script is installed."""
@@ -284,22 +297,22 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        selector = self._require_selector(params)
-        logger.info(f"PlaywrightAdapter: Click element {selector}")
+        desc = "<self>" if self._is_self_target(params) else params.selector
+        logger.info(f"PlaywrightAdapter: Click element {desc}")
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
             await element.click()
-            logger.info(f"PlaywrightAdapter: Successfully clicked {selector}")
+            logger.info(f"PlaywrightAdapter: Successfully clicked {desc}")
             await self._wait_for_dom_stability()
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
-                f"Element '{selector}' not clickable",
+                f"Element '{desc}' not clickable",
                 e
             )
         except PlaywrightError as e:
             raise ExternalOperationTransientError(
-                f"Click failed for '{selector}': {e}",
+                f"Click failed for '{desc}': {e}",
                 retry_history=[],
                 original_error=e
             )
@@ -310,20 +323,20 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         text = params.value
-        selector = self._require_selector(params)
-        logger.info(f"PlaywrightAdapter: Type '{text}' into {selector}")
+        desc = "<self>" if self._is_self_target(params) else params.selector
+        logger.info(f"PlaywrightAdapter: Type '{text}' into {desc}")
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
             await element.fill(text)
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
-                f"Element '{selector}' not found for typing",
+                f"Element '{desc}' not found for typing",
                 e
             )
         except PlaywrightError as e:
             raise ExternalOperationTransientError(
-                f"Type text failed for '{selector}': {e}",
+                f"Type text failed for '{desc}': {e}",
                 retry_history=[],
                 original_error=e
             )
@@ -337,20 +350,20 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise ValueError("File path is required for upload_file action")
         
         file_path = params.value
-        selector = self._require_selector(params)
-        logger.info(f"PlaywrightAdapter: Upload file '{file_path}' to {selector}")
+        desc = "<self>" if self._is_self_target(params) else params.selector
+        logger.info(f"PlaywrightAdapter: Upload file '{file_path}' to {desc}")
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
             await element.set_input_files(file_path)
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
-                f"File input '{selector}' not found for upload",
+                f"File input '{desc}' not found for upload",
                 e
             )
         except PlaywrightError as e:
             raise ExternalOperationTransientError(
-                f"File upload failed for '{selector}': {e}",
+                f"File upload failed for '{desc}': {e}",
                 retry_history=[],
                 original_error=e
             )
@@ -390,15 +403,15 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        selector = self._require_selector(params)
-        logger.info(f"PlaywrightAdapter: Get text from {selector}")
+        desc = "<self>" if self._is_self_target(params) else params.selector
+        logger.info(f"PlaywrightAdapter: Get text from {desc}")
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
             return await element.text_content() or ""
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
-                f"Element '{selector}' not found for get_text",
+                f"Element '{desc}' not found for get_text",
                 e
             )
             return ""
@@ -409,15 +422,15 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         attribute_name = params.value
-        selector = self._require_selector(params)
-        logger.info(f"PlaywrightAdapter: Get attribute '{attribute_name}' from {selector}")
+        desc = "<self>" if self._is_self_target(params) else params.selector
+        logger.info(f"PlaywrightAdapter: Get attribute '{attribute_name}' from {desc}")
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
             return await element.get_attribute(attribute_name) or ""
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
-                f"Element '{selector}' not found for get_attribute",
+                f"Element '{desc}' not found for get_attribute",
                 e
             )
             return ""
@@ -427,24 +440,24 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        selector = self._require_selector(params)
+        desc = "<self>" if self._is_self_target(params) else params.selector
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
         except Exception:
             await self._raise_dom_classified_error(
-                f"Element '{selector}' not found for visibility check",
+                f"Element '{desc}' not found for visibility check",
                 PlaywrightError("Element not found")
             )
             return False
         
         try:
             visible = await element.is_visible()
-            logger.info(f"PlaywrightAdapter: Check if {selector} is visible -> {visible}")
+            logger.info(f"PlaywrightAdapter: Check if {desc} is visible -> {visible}")
             return visible
         except PlaywrightError as e:
             raise ExternalOperationTransientError(
-                f"Visibility check failed for '{selector}': {e}",
+                f"Visibility check failed for '{desc}': {e}",
                 retry_history=[],
                 original_error=e
             )
@@ -454,24 +467,24 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        selector = self._require_selector(params)
+        desc = "<self>" if self._is_self_target(params) else params.selector
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
         except Exception:
             await self._raise_dom_classified_error(
-                f"Element '{selector}' not found for enablement check",
+                f"Element '{desc}' not found for enablement check",
                 PlaywrightError("Element not found")
             )
             return False
         
         try:
             enabled = await element.is_enabled()
-            logger.info(f"PlaywrightAdapter: Check if {selector} is enabled -> {enabled}")
+            logger.info(f"PlaywrightAdapter: Check if {desc} is enabled -> {enabled}")
             return enabled
         except PlaywrightError as e:
             raise ExternalOperationTransientError(
-                f"Enablement check failed for '{selector}': {e}",
+                f"Enablement check failed for '{desc}': {e}",
                 retry_history=[],
                 original_error=e
             )
@@ -739,15 +752,15 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        selector = self._require_selector(params)
-        logger.info(f"PlaywrightAdapter: Hover over {selector}")
+        desc = "<self>" if self._is_self_target(params) else params.selector
+        logger.info(f"PlaywrightAdapter: Hover over {desc}")
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
             await element.hover()
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
-                f"Element '{selector}' not found for hover",
+                f"Element '{desc}' not found for hover",
                 e
             )
     
@@ -756,15 +769,15 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        selector = self._require_selector(params)
-        logger.info(f"PlaywrightAdapter: Scroll to {selector}")
+        desc = "<self>" if self._is_self_target(params) else params.selector
+        logger.info(f"PlaywrightAdapter: Scroll to {desc}")
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
             await element.scroll_into_view_if_needed()
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
-                f"Element '{selector}' not found for scroll",
+                f"Element '{desc}' not found for scroll",
                 e
             )
     
@@ -774,15 +787,15 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             raise RuntimeError("PlaywrightAdapter not initialized")
         
         option_value = params.value
-        selector = self._require_selector(params)
-        logger.info(f"PlaywrightAdapter: Select option '{option_value}' in {selector}")
+        desc = "<self>" if self._is_self_target(params) else params.selector
+        logger.info(f"PlaywrightAdapter: Select option '{option_value}' in {desc}")
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
             await element.select_option(value=option_value)
         except PlaywrightTimeoutError as e:
             await self._raise_dom_classified_error(
-                f"Option '{option_value}' not found for '{selector}'",
+                f"Option '{option_value}' not found for '{desc}'",
                 e
             )
     
@@ -791,15 +804,15 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("PlaywrightAdapter not initialized")
         
-        selector = self._require_selector(params)
-        logger.info(f"PlaywrightAdapter: Submit form {selector}")
+        desc = "<self>" if self._is_self_target(params) else params.selector
+        logger.info(f"PlaywrightAdapter: Submit form {desc}")
         
         try:
-            element = await self._find_element_with_fallbacks(params)
+            element = await self._resolve_element(params)
             await element.evaluate("form => form.submit()")
         except Exception:
             await self._raise_dom_classified_error(
-                f"Form '{selector}' not found",
+                f"Form '{desc}' not found",
                 PlaywrightError("Form element not found")
             )
     

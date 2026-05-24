@@ -144,8 +144,8 @@ class BrowserManager:
         )
     
     def _has_selector(self, action: BrowserAction) -> bool:
-        """Check if action requires a selector."""
-        return action.params.selector is not None
+        """Check if action has a non-empty selector that may need resolution."""
+        return bool(action.params.selector)
     
     async def _resolve_selectors(self, action: BrowserAction) -> BrowserAction:
         """Resolve selectors using AI service.

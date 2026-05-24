@@ -64,13 +64,30 @@ class SeleniumAdapter(BaseBrowserAdapter):
             logger.info(f"Session persistence enabled for profile: {self.profile_name}")
     
     def _require_selector(self, params: BrowserActionParams) -> str:
-        """Ensure selector is provided for selector-based actions."""
-        if not params.selector:
+        """Ensure selector is provided for selector-based actions.
+        
+        Empty selector is allowed when scope_element_handle is present (self-targeting).
+        """
+        if not params.selector and params.scope_element_handle is None:
             raise ExternalOperationPermanentError(
                 "Selector is required for this browser action",
                 retry_history=[]
             )
-        return params.selector
+        return params.selector or ""
+
+    def _is_self_target(self, params: BrowserActionParams) -> bool:
+        """Check if this is a self-targeting call (no selector, scoped to an element)."""
+        return not params.selector and params.scope_element_handle is not None
+
+    def _resolve_element(self, params: BrowserActionParams):
+        """Resolve the target element: self-target or find via selector.
+        
+        Returns:
+            Tuple of (element, descriptor_string)
+        """
+        if self._is_self_target(params):
+            return params.scope_element_handle, "<self>"
+        return self._find_element(params)
 
     def _selector_chain(self, params: BrowserActionParams) -> List[str]:
         """Return primary selector plus fallback chain, preserving order."""
@@ -422,27 +439,22 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise ExternalOperationPermanentError("SeleniumAdapter not initialized", retry_history=[])
         
-        selector = self._require_selector(params)
-        logger.info(f"SeleniumAdapter: Click element {selector}")
-        element, active_selector = self._find_element(params)
-        if active_selector != selector:
-            logger.info(f"SeleniumAdapter: Using fallback selector {active_selector}")
+        if self._is_self_target(params):
+            element = params.scope_element_handle
+            logger.info("SeleniumAdapter: Click self-targeted element")
+        else:
+            selector = self._require_selector(params)
+            logger.info(f"SeleniumAdapter: Click element {selector}")
+            element, active_selector = self._find_element(params)
+            if active_selector != selector:
+                logger.info(f"SeleniumAdapter: Using fallback selector {active_selector}")
         
-        # Wait for element to be clickable
         try:
-            timeout = params.timeout or self.default_timeout
-            by, value = self._get_by_locator(active_selector, params.selector_type)
-            WebDriverWait(self.driver, timeout).until(
-                EC.element_to_be_clickable((by, value))
-            )
-            
             element.click()
-            logger.info(f"SeleniumAdapter: Successfully clicked {active_selector}")
-            
-            # Wait for DOM stabilization after click
+            logger.info("SeleniumAdapter: Click completed")
             self._wait_for_dom_stability()
         except (TimeoutException, NoSuchElementException) as e:
-            self._raise_dom_classified_error(f"Element '{active_selector}' not clickable: {str(e)}", e)
+            self._raise_dom_classified_error(f"Element not clickable: {str(e)}", e)
         except WebDriverException as e:
             raise ExternalOperationTransientError(f"Click failed: {str(e)}", retry_history=[], original_error=e)
         except Exception as e:
@@ -454,11 +466,10 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise ExternalOperationPermanentError("SeleniumAdapter not initialized", retry_history=[])
         
         text = params.value
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         logger.info(f"SeleniumAdapter: Type '{text}' into {active_selector}")
         
         try:
-            # Clear existing text and type new text
             element.clear()
             element.send_keys(text)
         except WebDriverException as e:
@@ -475,15 +486,10 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise ValueError("File path is required for upload_file action")
         
         file_path = params.value
-        
-        # Find the file input element
-        element, active_selector = self._find_element(params)
-        
+        element, active_selector = self._resolve_element(params)
         logger.info(f"SeleniumAdapter: Upload file '{file_path}' to {active_selector}")
         
         try:
-            # Send the file path to the input element
-            # Selenium handles the file upload dialog automatically
             element.send_keys(file_path)
         except WebDriverException as e:
             raise ExternalOperationTransientError(f"File upload failed: {str(e)}", retry_history=[], original_error=e)
@@ -542,7 +548,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("SeleniumAdapter not initialized")
         
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         logger.info(f"SeleniumAdapter: Get text from {active_selector}")
         return element.text
     
@@ -602,7 +608,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         attribute_name = params.value
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         logger.info(f"SeleniumAdapter: Get attribute '{attribute_name}' from {active_selector}")
         return element.get_attribute(attribute_name) or ""
     
@@ -611,7 +617,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("SeleniumAdapter not initialized")
         
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         try:
             visible = element.is_displayed()
             logger.info(f"SeleniumAdapter: Check if {active_selector} is visible -> {visible}")
@@ -628,7 +634,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("SeleniumAdapter not initialized")
         
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         try:
             enabled = element.is_enabled()
             logger.info(f"SeleniumAdapter: Check if {active_selector} is enabled -> {enabled}")
@@ -645,7 +651,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("SeleniumAdapter not initialized")
         
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         try:
             checked = element.is_selected()
             logger.info(f"SeleniumAdapter: Check if {active_selector} is checked -> {checked}")
@@ -852,7 +858,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("SeleniumAdapter not initialized")
         
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         logger.info(f"SeleniumAdapter: Hover over {active_selector}")
         
         actions = ActionChains(self.driver)
@@ -863,12 +869,11 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("SeleniumAdapter not initialized")
         
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         logger.info(f"SeleniumAdapter: Scroll to {active_selector}")
         
-        # Scroll element into view
         self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
-        time.sleep(0.5)  # Small delay for smooth scrolling
+        time.sleep(0.5)
     
     async def select_option(self, params: BrowserActionParams) -> None:
         """Select an option from a dropdown."""
@@ -876,16 +881,13 @@ class SeleniumAdapter(BaseBrowserAdapter):
             raise RuntimeError("SeleniumAdapter not initialized")
         
         option_value = params.value
-        selector = self._require_selector(params)
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         logger.info(f"SeleniumAdapter: Select option '{option_value}' in {active_selector}")
         
         select = Select(element)
         try:
-            # Try to select by visible text first
             select.select_by_visible_text(option_value)
         except NoSuchElementException:
-            # If that fails, try by value
             try:
                 select.select_by_value(option_value)
             except NoSuchElementException as e:
@@ -899,7 +901,7 @@ class SeleniumAdapter(BaseBrowserAdapter):
         if not self.initialized:
             raise RuntimeError("SeleniumAdapter not initialized")
         
-        element, active_selector = self._find_element(params)
+        element, active_selector = self._resolve_element(params)
         logger.info(f"SeleniumAdapter: Submit form {active_selector}")
         element.submit()
     

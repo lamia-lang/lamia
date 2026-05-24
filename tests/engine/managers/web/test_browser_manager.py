@@ -163,15 +163,14 @@ class TestBrowserManagerSelectorDetection:
         assert self.manager._has_selector(action_without_selector) is False
     
     def test_has_selector_with_empty_selector(self):
-        """Test _has_selector returns True for empty selectors."""
+        """Test _has_selector returns False for empty selectors (self-targeting)."""
         action_with_empty_selector = BrowserAction(
             action=BrowserActionType.CLICK,
             params=BrowserActionParams(selector="")
         )
         
-        # The actual implementation only checks if selector is not None
-        # Empty string is considered a valid selector
-        assert self.manager._has_selector(action_with_empty_selector) is True
+        # Empty string means self-targeting (no selector resolution needed)
+        assert self.manager._has_selector(action_with_empty_selector) is False
     
     def test_has_selector_with_none_selector(self):
         """Test _has_selector returns False for None selectors."""

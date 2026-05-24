@@ -112,7 +112,16 @@ class WebActions:
                 result = result_processor(result)
             return result
         return command
-    
+
+    def _validate_self_target(self, selector: Optional[str], method_name: str) -> None:
+        """Raise if no selector given on a global (non-scoped) WebActions instance."""
+        if not selector and self._element_handle is None:
+            raise ValueError(
+                f"web.{method_name}() requires a selector when called globally. "
+                f"Use web.{method_name}('selector') or call on a scoped element: "
+                f"element = web.get_element('selector'); element.{method_name}()"
+            )
+
     def get_element(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
         """Get a single element as a scoped WebActions instance.
         
@@ -193,11 +202,12 @@ class WebActions:
         
         return self._execute_if_available(command, ensure_executors)  # type: ignore
     
-    def click(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Click an element.
+    def click(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Click an element, or click this element itself if no selector given.
         
         Args:
-            selector: CSS selector, XPath, or natural language description
+            selector: CSS selector, XPath, or natural language description.
+                     If None and this is a scoped element, clicks the element itself.
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
@@ -205,15 +215,22 @@ class WebActions:
             Executed result if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
         """
-        command = self._create_web_command(WebActionType.CLICK, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        self._validate_self_target(selector, "click")
+        command = self._create_web_command(WebActionType.CLICK, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
         return self._execute_if_available(command)
         
-    def type_text(self, selector: str, text: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Type text into an input element.
+    def type_text(self, selector_or_text: str, text: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Type text into an input element, or into this element itself if scoped.
+        
+        When called on a scoped element with one arg, the arg is the text to type:
+            field.type_text("hello")  # types "hello" into the element itself
+        
+        When called with two args, first is selector, second is text:
+            modal.type_text("input", "hello")  # types "hello" into input within modal
         
         Args:
-            selector: CSS selector, XPath, or natural language description
-            text: Text to type
+            selector_or_text: Selector when text is provided, or text to type when scoped
+            text: Text to type (if None and scoped, selector_or_text is the text)
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
@@ -221,14 +238,21 @@ class WebActions:
             Executed result if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
         """
-        command = self._create_web_command(WebActionType.TYPE, selector, fallback_selectors, timeout, text, scope_element=self._element_handle)
+        if text is None and self._element_handle is not None:
+            actual_selector = ""
+            actual_text = selector_or_text
+        else:
+            actual_selector = selector_or_text
+            actual_text = text or ""
+        command = self._create_web_command(WebActionType.TYPE, actual_selector, fallback_selectors, timeout, actual_text, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
-    def wait_for(self, selector: str, condition: str = "visible", *fallback_selectors: str, timeout: Optional[float] = None):
-        """Wait for an element to meet a condition.
+    def wait_for(self, selector: Optional[str] = None, condition: str = "visible", *fallback_selectors: str, timeout: Optional[float] = None):
+        """Wait for an element to meet a condition, or wait for this element if scoped.
         
         Args:
-            selector: CSS selector, XPath, or natural language description
+            selector: CSS selector, XPath, or natural language description.
+                     If None and scoped, waits for this element itself.
             condition: Condition to wait for (default: "visible")
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
@@ -237,34 +261,33 @@ class WebActions:
             Executed result if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
         """
-        command = self._create_web_command(WebActionType.WAIT, selector, fallback_selectors, timeout, condition, scope_element=self._element_handle)
+        self._validate_self_target(selector, "wait_for")
+        command = self._create_web_command(WebActionType.WAIT, selector or "", fallback_selectors, timeout, condition, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
-    def get_text(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Get text from an element.
+    def get_text(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Get text from an element, or from this element itself if scoped.
         
         Args:
-            selector: CSS selector, XPath, or natural language description
+            selector: CSS selector, XPath, or natural language description.
+                     If None and scoped, gets text of this element itself.
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
         Returns:
             String text if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
-            
-        Note:
-            When called from a scoped WebActions object (e.g., 'field.get_text()'),
-            this executes immediately via the executor pattern. See class docstring
-            for architectural details.
         """
-        command = self._create_web_command(WebActionType.GET_TEXT, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        self._validate_self_target(selector, "get_text")
+        command = self._create_web_command(WebActionType.GET_TEXT, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
-    def hover(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Hover over an element.
+    def hover(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Hover over an element, or over this element itself if scoped.
         
         Args:
-            selector: CSS selector, XPath, or natural language description
+            selector: CSS selector, XPath, or natural language description.
+                     If None and scoped, hovers over this element itself.
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
@@ -272,14 +295,16 @@ class WebActions:
             Executed result if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
         """
-        command = self._create_web_command(WebActionType.HOVER, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        self._validate_self_target(selector, "hover")
+        command = self._create_web_command(WebActionType.HOVER, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
-    def scroll_to(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Scroll to an element.
+    def scroll_to(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Scroll to an element, or to this element itself if scoped.
         
         Args:
-            selector: CSS selector, XPath, or natural language description
+            selector: CSS selector, XPath, or natural language description.
+                     If None and scoped, scrolls to this element itself.
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
@@ -287,15 +312,22 @@ class WebActions:
             Executed result if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
         """
-        command = self._create_web_command(WebActionType.SCROLL, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        self._validate_self_target(selector, "scroll_to")
+        command = self._create_web_command(WebActionType.SCROLL, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
-    def select_option(self, selector: str, option_value: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Select an option in a dropdown.
+    def select_option(self, selector_or_value: str, option_value: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Select an option in a dropdown, or on this element itself if scoped.
+        
+        When called on a scoped element with one arg, the arg is the option value:
+            dropdown.select_option("Option A")
+        
+        When called with two args, first is selector, second is option value:
+            form.select_option("select.country", "USA")
         
         Args:
-            selector: CSS selector, XPath, or natural language description
-            option_value: Value of the option to select
+            selector_or_value: Selector when option_value provided, or option value when scoped
+            option_value: Value to select (if None and scoped, selector_or_value is the value)
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
@@ -303,14 +335,21 @@ class WebActions:
             Executed result if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
         """
-        command = self._create_web_command(WebActionType.SELECT, selector, fallback_selectors, timeout, option_value, scope_element=self._element_handle)
+        if option_value is None and self._element_handle is not None:
+            actual_selector = ""
+            actual_value = selector_or_value
+        else:
+            actual_selector = selector_or_value
+            actual_value = option_value or ""
+        command = self._create_web_command(WebActionType.SELECT, actual_selector, fallback_selectors, timeout, actual_value, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
-    def submit_form(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Submit a form.
+    def submit_form(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Submit a form, or submit this form element itself if scoped.
         
         Args:
-            selector: CSS selector, XPath, or natural language description
+            selector: CSS selector, XPath, or natural language description.
+                     If None and scoped, submits this element itself.
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
@@ -318,7 +357,8 @@ class WebActions:
             Executed result if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
         """
-        command = self._create_web_command(WebActionType.SUBMIT, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        self._validate_self_target(selector, "submit_form")
+        command = self._create_web_command(WebActionType.SUBMIT, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
     def screenshot(self, file_path: Optional[str] = None) -> WebCommand:
@@ -338,11 +378,12 @@ class WebActions:
             value=file_path
         )
     
-    def is_visible(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Check if an element is visible.
+    def is_visible(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Check if an element is visible, or if this element is visible when scoped.
         
         Args:
-            selector: CSS selector, XPath, or natural language description
+            selector: CSS selector, XPath, or natural language description.
+                     If None and scoped, checks this element itself.
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
@@ -350,14 +391,16 @@ class WebActions:
             Boolean if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
         """
-        command = self._create_web_command(WebActionType.IS_VISIBLE, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        self._validate_self_target(selector, "is_visible")
+        command = self._create_web_command(WebActionType.IS_VISIBLE, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
-    def is_enabled(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Check if an element is enabled.
+    def is_enabled(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Check if an element is enabled, or if this element is enabled when scoped.
         
         Args:
-            selector: CSS selector, XPath, or natural language description
+            selector: CSS selector, XPath, or natural language description.
+                     If None and scoped, checks this element itself.
             fallback_selectors: Alternative selectors to try
             timeout: Optional timeout in seconds
             
@@ -365,14 +408,16 @@ class WebActions:
             Boolean if executor is available (when called from scoped objects),
             otherwise WebCommand for DSL execution.
         """
-        command = self._create_web_command(WebActionType.IS_ENABLED, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        self._validate_self_target(selector, "is_enabled")
+        command = self._create_web_command(WebActionType.IS_ENABLED, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
-    def is_checked(self, selector: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Check if a checkbox or radio button is checked.
+    def is_checked(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Check if a checkbox or radio button is checked, or this element when scoped.
         
         Args:
-            selector: CSS selector for the checkbox/radio input
+            selector: CSS selector for the checkbox/radio input.
+                     If None and scoped, checks this element itself.
             fallback_selectors: Alternative selectors
             timeout: Optional timeout in seconds
             
@@ -384,7 +429,8 @@ class WebActions:
             if web.is_checked("input[type='checkbox']"):
                 print("Checkbox is checked")
         """
-        command = self._create_web_command(WebActionType.IS_CHECKED, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
+        self._validate_self_target(selector, "is_checked")
+        command = self._create_web_command(WebActionType.IS_CHECKED, selector or "", fallback_selectors, timeout, None, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
     def get_input_type(self, selector: str = "input, select, textarea", *fallback_selectors: str, timeout: Optional[float] = None):
@@ -420,12 +466,18 @@ class WebActions:
         command = self._create_web_command(WebActionType.GET_INPUT_TYPE, selector, fallback_selectors, timeout, None, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
-    def get_attribute(self, selector: str, attribute_name: str, *fallback_selectors: str, timeout: Optional[float] = None):
-        """Get an attribute value from an element.
+    def get_attribute(self, selector_or_attr: str, attribute_name: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):
+        """Get an attribute value from an element, or from this element when scoped.
+        
+        When called on a scoped element with one arg, the arg is the attribute name:
+            link.get_attribute("href")  # gets href of this element
+        
+        When called with two args, first is selector, second is attribute name:
+            form.get_attribute("a.link", "href")
         
         Args:
-            selector: CSS selector for the element
-            attribute_name: Name of the attribute to get (e.g., "href", "class", "data-id")
+            selector_or_attr: Selector when attribute_name provided, or attribute name when scoped
+            attribute_name: Attribute name (if None and scoped, selector_or_attr is the attr name)
             fallback_selectors: Alternative selectors
             timeout: Optional timeout in seconds
             
@@ -435,9 +487,16 @@ class WebActions:
             
         Example:
             href = web.get_attribute("a.link", "href")
-            data_id = web.get_attribute("div", "data-id")
+            link = web.get_element("a")
+            href = link.get_attribute("href")
         """
-        command = self._create_web_command(WebActionType.GET_ATTRIBUTE, selector, fallback_selectors, timeout, attribute_name, scope_element=self._element_handle)
+        if attribute_name is None and self._element_handle is not None:
+            actual_selector = ""
+            actual_attr = selector_or_attr
+        else:
+            actual_selector = selector_or_attr
+            actual_attr = attribute_name or ""
+        command = self._create_web_command(WebActionType.GET_ATTRIBUTE, actual_selector, fallback_selectors, timeout, actual_attr, scope_element=self._element_handle)
         return self._execute_if_available(command)
     
     def get_options(self, selector: Optional[str] = None, *fallback_selectors: str, timeout: Optional[float] = None):

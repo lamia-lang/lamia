@@ -440,3 +440,133 @@ class TestWebActionsCommandCreation:
         )
         
         assert command.fallback_selectors is None
+
+
+class TestWebActionsSelfTargeting:
+    """Test self-targeting (no selector) on scoped WebActions elements."""
+
+    def setup_method(self):
+        self.element_handle = Mock()
+        self.scoped = WebActions(element_handle=self.element_handle)
+
+    def test_click_no_selector_on_scoped_element(self):
+        result = self.scoped.click()
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.CLICK
+        assert result.selector == ""
+        assert result.scope_element_handle == self.element_handle
+
+    def test_get_text_no_selector_on_scoped_element(self):
+        result = self.scoped.get_text()
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.GET_TEXT
+        assert result.selector == ""
+        assert result.scope_element_handle == self.element_handle
+
+    def test_hover_no_selector_on_scoped_element(self):
+        result = self.scoped.hover()
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.HOVER
+        assert result.selector == ""
+
+    def test_scroll_to_no_selector_on_scoped_element(self):
+        result = self.scoped.scroll_to()
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.SCROLL
+        assert result.selector == ""
+
+    def test_is_visible_no_selector_on_scoped_element(self):
+        result = self.scoped.is_visible()
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.IS_VISIBLE
+        assert result.selector == ""
+
+    def test_is_enabled_no_selector_on_scoped_element(self):
+        result = self.scoped.is_enabled()
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.IS_ENABLED
+        assert result.selector == ""
+
+    def test_is_checked_no_selector_on_scoped_element(self):
+        result = self.scoped.is_checked()
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.IS_CHECKED
+        assert result.selector == ""
+
+    def test_submit_form_no_selector_on_scoped_element(self):
+        result = self.scoped.submit_form()
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.SUBMIT
+        assert result.selector == ""
+
+    def test_type_text_single_arg_on_scoped_element(self):
+        """When scoped and only one arg given, it's the text to type."""
+        result = self.scoped.type_text("hello world")
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.TYPE
+        assert result.selector == ""
+        assert result.value == "hello world"
+
+    def test_type_text_two_args_on_scoped_element(self):
+        """When two args given, first is selector, second is text."""
+        result = self.scoped.type_text("input", "hello")
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.TYPE
+        assert result.selector == "input"
+        assert result.value == "hello"
+
+    def test_get_attribute_single_arg_on_scoped_element(self):
+        """When scoped and only one arg given, it's the attribute name."""
+        result = self.scoped.get_attribute("href")
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.GET_ATTRIBUTE
+        assert result.selector == ""
+        assert result.value == "href"
+
+    def test_get_attribute_two_args_on_scoped_element(self):
+        """When two args given, first is selector, second is attribute name."""
+        result = self.scoped.get_attribute("a.link", "href")
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.GET_ATTRIBUTE
+        assert result.selector == "a.link"
+        assert result.value == "href"
+
+    def test_select_option_single_arg_on_scoped_element(self):
+        """When scoped and only one arg given, it's the option value."""
+        result = self.scoped.select_option("Option A")
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.SELECT
+        assert result.selector == ""
+        assert result.value == "Option A"
+
+    def test_select_option_two_args_on_scoped_element(self):
+        """When two args given, first is selector, second is option value."""
+        result = self.scoped.select_option("select.country", "USA")
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.SELECT
+        assert result.selector == "select.country"
+        assert result.value == "USA"
+
+    def test_click_no_selector_on_global_raises(self):
+        """Calling click() with no selector on global web raises ValueError."""
+        global_web = WebActions()
+        with pytest.raises(ValueError, match="requires a selector"):
+            global_web.click()
+
+    def test_hover_no_selector_on_global_raises(self):
+        global_web = WebActions()
+        with pytest.raises(ValueError, match="requires a selector"):
+            global_web.hover()
+
+    def test_get_text_no_selector_on_global_raises(self):
+        global_web = WebActions()
+        with pytest.raises(ValueError, match="requires a selector"):
+            global_web.get_text()
+
+    def test_scoped_click_with_selector_still_works(self):
+        """Scoped elements can still use selectors for sub-element targeting."""
+        result = self.scoped.click("button.submit")
+        assert isinstance(result, WebCommand)
+        assert result.action == WebActionType.CLICK
+        assert result.selector == "button.submit"
+        assert result.scope_element_handle == self.element_handle
