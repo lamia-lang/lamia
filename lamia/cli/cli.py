@@ -1,5 +1,6 @@
 from ast import Pass
 import asyncio
+import atexit
 import json
 import re
 import signal
@@ -875,7 +876,8 @@ def main():
             config_dict['web']['selector_resolution']['cache_enabled'] = False
         
         lamia = Lamia.from_config(config_dict)
-        
+        _register_browser_cleanup(lamia)
+
         if prompt_file:
             # File execution - no async needed
             file_ext = os.path.splitext(prompt_file)[1].lower()
@@ -936,45 +938,53 @@ def main():
                     _graceful_shutdown(lamia, 1)
         elif json_flag:
             async def run_json():
-                await json_mode(lamia)
+                try:
+                    await json_mode(lamia)
+                finally:
+                    await lamia._engine.cleanup()
 
             asyncio.run(run_json())
         else:
             async def run_interactive():
-                await interactive_mode(lamia)
+                try:
+                    await interactive_mode(lamia)
+                finally:
+                    await lamia._engine.cleanup()
 
             asyncio.run(run_interactive())
-            
+
     except MissingAPIKeysError as e:
         logger.error(f"❌ Missing API Keys: {str(e)}")
         logger.error("Please check your .env file or config.yaml for required API keys.")
-        sys.exit(1)
+        _graceful_shutdown(lamia, 1)
     except Exception as e:
         logger.error(f"❌ Error: {e}")
         logger.debug(traceback.format_exc())
-        sys.exit(1)
+        _graceful_shutdown(lamia, 1)
     except KeyboardInterrupt:
         _graceful_shutdown(lamia)
 
 
 def _install_sigint_handler() -> None:
-    """Install a SIGINT handler that immediately silences loggers and exits.
+    """Install SIGINT/SIGTERM handlers that close the browser then exit.
 
     When Ctrl+C is pressed the OS sends SIGINT to the whole process group,
     killing ChromeDriver instantly.  In-flight Selenium calls then fail and
     urllib3 retries each one, flooding the console with warnings.
     Raising KeyboardInterrupt from the handler is not enough because asyncio
     absorbs it and the loop continues processing fields against a dead browser.
-    Instead we mute every noisy logger and terminate the process directly.
+    Instead we mute every noisy logger, kill the browser, and terminate.
     """
     def _handler(signum: int, frame: object) -> None:
         logging.getLogger("urllib3").setLevel(logging.CRITICAL)
         logging.getLogger("selenium").setLevel(logging.CRITICAL)
         logging.getLogger("lamia").setLevel(logging.CRITICAL)
-        print("\nShutting down...", flush=True)
+        _force_kill_browser(_atexit_lamia_ref)
         os._exit(0)
 
     signal.signal(signal.SIGINT, _handler)
+    if sys.platform != "win32":
+        signal.signal(signal.SIGTERM, _handler)
 
 
 def _graceful_shutdown(lamia_instance: 'Optional[Lamia]', exit_code: int = 0) -> None:
@@ -987,11 +997,48 @@ def _graceful_shutdown(lamia_instance: 'Optional[Lamia]', exit_code: int = 0) ->
         try:
             EventLoopManager.run_coroutine(lamia_instance._engine.cleanup())
         except Exception:
-            pass
+            _force_kill_browser(lamia_instance)
     EventLoopManager.shutdown()
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(exit_code)
+
+
+def _force_kill_browser(lamia_instance: 'Optional[Lamia]') -> None:
+    """Kill browser process directly when graceful close fails."""
+    if lamia_instance is None:
+        return
+    try:
+        factory = lamia_instance._engine.manager_factory
+        web_mgr = factory._manager_instances.get(CommandType.WEB)
+        if web_mgr is None:
+            return
+        adapter = web_mgr.browser_manager._browser_adapter
+        if adapter is None:
+            return
+        driver = getattr(adapter, "driver", None)
+        if driver is None:
+            return
+        driver.quit()
+    except Exception:
+        pass
+
+
+_atexit_lamia_ref: 'Optional[Lamia]' = None
+
+
+def _register_browser_cleanup(lamia_instance: 'Lamia') -> None:
+    """Register atexit handler to close browser on any exit path."""
+    global _atexit_lamia_ref
+    _atexit_lamia_ref = lamia_instance
+
+
+def _atexit_browser_cleanup() -> None:
+    """Atexit callback: close browser if still running."""
+    _force_kill_browser(_atexit_lamia_ref)
+
+
+atexit.register(_atexit_browser_cleanup)
 
 
 def _log_external_error(prefix: str, exc: Exception) -> None:

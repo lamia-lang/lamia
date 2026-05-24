@@ -8,6 +8,7 @@ Rule index (code format: LM{severity}{NNN}, sorted by severity):
   LME014  E  unknown-hu-kwargs         .hu call passes kwargs the .hu file doesn't accept
   LME016  E  unknown-namespace         uses a namespace that is not part of Lamia
   LME017  E  unknown-namespace-method  calls a method that does not exist on a Lamia namespace
+  LME020  E  global-web-no-selector    web.action() without a selector on global web
   ── Warnings (should fix) ──
   LMW001  W  excessive-growth          content grew >2x original
   LMW005  W  tab-indentation           use 4 spaces, not tabs (PEP 8)
@@ -15,6 +16,7 @@ Rule index (code format: LM{severity}{NNN}, sorted by severity):
   LMW007  W  empty-file                .lm file has no content
   LMW008  W  trailing-whitespace       trailing whitespace on lines
   LMW018  W  single-file-in-files-ctx  files() with a single file path is an anti-pattern
+  LMW019  W  prefer-atomic-web-action  prefer web.action(sel) over get_element + .action()
   ── Convention ──
   LMC009  C  variable-naming           variables should use snake_case
   LMC010  C  filename-naming           .lm filename should be snake_case
@@ -190,6 +192,25 @@ SINGLE_FILE_IN_FILES_CONTEXT = LintRule(
     ),
 )
 
+PREFER_ATOMIC_WEB_ACTION = LintRule(
+    code="LMW019",
+    severity=Severity.Warning,
+    name="prefer-atomic-web-action",
+    description=(
+        "Prefer %s over get_element + .%s() for atomicity and readability"
+    ),
+)
+
+GLOBAL_WEB_NO_SELECTOR = LintRule(
+    code="LME020",
+    severity=Severity.Error,
+    name="global-web-no-selector",
+    description=(
+        "web.%s() called without a selector — "
+        "provide a selector: web.%s(\"selector\")"
+    ),
+)
+
 _LONG_SCRIPT_THRESHOLD = 5000
 
 _GENERIC_LM_NAMES = {
@@ -200,11 +221,12 @@ _GENERIC_LM_NAMES = {
 ALL_RULES = [
     MISSING_REQUIRED_PARAMS, UNKNOWN_HU_KWARGS,
     UNKNOWN_NAMESPACE, UNKNOWN_NAMESPACE_METHOD,
+    GLOBAL_WEB_NO_SELECTOR,
     EXCESSIVE_GROWTH, TAB_INDENTATION, POSITIONAL_HU_ARGS,
     EMPTY_FILE, TRAILING_WHITESPACE,
+    SINGLE_FILE_IN_FILES_CONTEXT, PREFER_ATOMIC_WEB_ACTION,
     VARIABLE_NAMING, FILENAME_NAMING, LEADING_BLANK_LINES, GENERIC_FILENAME,
     OUTPUT_FORMAT_HINT, INLINE_PYDANTIC_MODEL, LONG_SCRIPT,
-    SINGLE_FILE_IN_FILES_CONTEXT,
 ]
 
 _HU_CALL_RE = re.compile(
@@ -549,6 +571,106 @@ def _check_namespace_usage(
     return violations
 
 
+_WEB_SELF_TARGET_METHODS = frozenset([
+    "click", "get_text", "hover", "scroll_to", "is_visible",
+    "is_enabled", "is_checked", "submit_form", "wait_for",
+    "type_text", "get_attribute", "select_option", "upload_file",
+])
+
+
+def _check_web_action_patterns(content: str) -> list[LintViolation]:
+    """Lint web action usage patterns for atomicity and correctness.
+
+    LMW019: prefer web.action(selector) over get_element(sel) + .action()
+            when the variable is only used for a single no-arg action.
+    LME020: forbid calling action methods without a selector on global web.
+    """
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    violations: list[LintViolation] = []
+
+    get_elem_vars: dict[str, tuple] = {}
+    var_usage_count: dict[str, int] = {}
+
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id == "web"
+            and node.value.func.attr == "get_element"
+            and node.value.args
+        ):
+            var_name = node.targets[0].id
+            selector_node = node.value.args[0]
+            selector_str = ast.literal_eval(selector_node) if isinstance(selector_node, ast.Constant) else None
+            get_elem_vars[var_name] = (selector_str, node.lineno)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute):
+            continue
+
+        method_name = node.func.attr
+        if method_name not in _WEB_SELF_TARGET_METHODS:
+            continue
+
+        # LME020: web.action() without selector on global web
+        if isinstance(node.func.value, ast.Name) and node.func.value.id == "web":
+            if not node.args:
+                violations.append(LintViolation(
+                    rule=GLOBAL_WEB_NO_SELECTOR,
+                    line=node.lineno,
+                    message=GLOBAL_WEB_NO_SELECTOR.description % (method_name, method_name),
+                    snippet=f"web.{method_name}()",
+                ))
+            continue
+
+        # Count usages for LMW019
+        if isinstance(node.func.value, ast.Name):
+            var_name = node.func.value.id
+            if var_name in get_elem_vars:
+                var_usage_count[var_name] = var_usage_count.get(var_name, 0) + 1
+
+    # LMW019: single-use get_element + no-arg action
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr not in _WEB_SELF_TARGET_METHODS:
+            continue
+        if not isinstance(node.func.value, ast.Name):
+            continue
+
+        var_name = node.func.value.id
+        if var_name not in get_elem_vars:
+            continue
+        if var_usage_count.get(var_name, 0) != 1:
+            continue
+        if node.args:
+            continue
+
+        selector_str, _ = get_elem_vars[var_name]
+        method_name = node.func.attr
+        suggestion = f"web.{method_name}(\"{selector_str}\")" if selector_str else f"web.{method_name}(selector)"
+        violations.append(LintViolation(
+            rule=PREFER_ATOMIC_WEB_ACTION,
+            line=node.lineno,
+            message=PREFER_ATOMIC_WEB_ACTION.description % (suggestion, method_name),
+            snippet=f"{var_name}.{method_name}()",
+        ))
+
+    return violations
+
+
 class LmLinter(BaseLinter):
     """Linter for .lm (Lamia script) files."""
 
@@ -678,6 +800,9 @@ class LmLinter(BaseLinter):
 
         # ── Namespace / method validation ─────────────────────────────────
         violations.extend(_check_namespace_usage(content, cwd=cwd))
+
+        # ── Web action patterns ───────────────────────────────────────────
+        violations.extend(_check_web_action_patterns(content))
 
         # ── Cross-file checks (require cwd) ─────────────────────────────
         if cwd:

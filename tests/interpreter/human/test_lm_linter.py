@@ -626,6 +626,69 @@ class TestLMW018SingleFileInFilesContext:
         assert violations == []
 
 
+# ── LMW019: prefer atomic web action ─────────────────────────────────────────
+
+class TestLMW019PreferAtomicWebAction:
+
+    def test_get_element_then_single_click_triggers(self):
+        code = 'link = web.get_element("a")\nlink.click()'
+        violations = _violations_for(code, "LMW019")
+        assert len(violations) == 1
+        assert "web.click" in violations[0].message
+
+    def test_get_element_then_single_get_text_triggers(self):
+        code = 'el = web.get_element(".title")\nel.get_text()'
+        violations = _violations_for(code, "LMW019")
+        assert len(violations) == 1
+        assert "web.get_text" in violations[0].message
+
+    def test_multi_use_variable_no_warning(self):
+        code = 'el = web.get_element("div")\nel.click()\nel.get_text()'
+        violations = _violations_for(code, "LMW019")
+        assert violations == []
+
+    def test_sub_selector_arg_no_warning(self):
+        code = 'el = web.get_element("form")\nel.click("button")'
+        violations = _violations_for(code, "LMW019")
+        assert violations == []
+
+    def test_severity_is_warning(self):
+        code = 'link = web.get_element("a")\nlink.click()'
+        violations = _violations_for(code, "LMW019")
+        assert violations[0].rule.severity == Severity.Warning
+
+
+# ── LME020: global web action without selector ───────────────────────────────
+
+class TestLME020GlobalWebNoSelector:
+
+    def test_web_click_no_arg_triggers(self):
+        code = 'web.click()'
+        violations = _violations_for(code, "LME020")
+        assert len(violations) == 1
+        assert "web.click()" in violations[0].message
+
+    def test_web_hover_no_arg_triggers(self):
+        code = 'web.hover()'
+        violations = _violations_for(code, "LME020")
+        assert len(violations) == 1
+
+    def test_web_click_with_selector_no_error(self):
+        code = 'web.click("#submit")'
+        violations = _violations_for(code, "LME020")
+        assert violations == []
+
+    def test_severity_is_error(self):
+        code = 'web.click()'
+        violations = _violations_for(code, "LME020")
+        assert violations[0].rule.severity == Severity.Error
+
+    def test_non_action_method_no_error(self):
+        code = 'web.navigate("https://example.com")'
+        violations = _violations_for(code, "LME020")
+        assert violations == []
+
+
 # ── Existing rules still work ───────────────────────────────────────────────
 
 class TestLmLinterExistingRulesUnaffected:
