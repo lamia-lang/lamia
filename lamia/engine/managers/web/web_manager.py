@@ -44,6 +44,7 @@ class WebManager(Manager[WebCommand]):
             WebActionType.WAIT,
             WebActionType.GET_TEXT,
             WebActionType.GET_PAGE_SOURCE,
+            WebActionType.GET_ELEMENT,
             WebActionType.GET_ELEMENTS,
             WebActionType.GET_INPUT_TYPE,
             WebActionType.GET_OPTIONS,
@@ -56,6 +57,7 @@ class WebManager(Manager[WebCommand]):
             WebActionType.IS_VISIBLE,
             WebActionType.IS_ENABLED,
             WebActionType.IS_CHECKED,
+            WebActionType.UPLOAD_FILE,
         }
         
         self.http_actions = {

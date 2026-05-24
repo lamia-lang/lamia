@@ -52,7 +52,7 @@ async def fetch_data():
     def test_parameter_substitution_with_param_in_command_string(self):
         """Test parameter substitution with {param} in command string."""
         source = """
-def search(query):
+def search(query: str):
     "Search for {query}"
 """
         result = self.transformer.transform_code(source)
@@ -233,7 +233,7 @@ def run(models=None):
     def test_function_without_models_param_no_models_keyword(self):
         """Function without models param should not inject models= into lamia.run()."""
         source = """
-def extract(name):
+def extract(name: str):
     "Extract {name}"
 """
         result = self.transformer.transform_code(source)
@@ -242,20 +242,15 @@ def extract(name):
         assert "lamia.run" in result
         assert "models=" not in run_line
 
-    def test_typed_placeholder_params_raise_clear_error(self):
-        """Typed params in inline templates should fail with clear guidance."""
+    def test_typed_placeholder_params_are_serialized_safely(self):
+        """Typed params in inline templates should still transform safely."""
         source = """
 def generate_report(data: dict, style: str):
     "Create a {style} report based on: {data}"
 """
-        with pytest.raises(
-            ValueError,
-            match=(
-                r"generate_report\(\) uses typed parameters: data, style\. "
-                r"Lamia inline functions currently require untyped params\."
-            ),
-        ):
-            self.transformer.transform_code(source)
+        result = self.transformer.transform_code(source)
+        assert "SmartTypeResolver.resolve_for_parameter" in result
+        assert "SmartTypeResolver.serialize_for_prompt" in result
 
     def test_web_method_with_fallback_selectors(self):
         """Test web method with fallback selectors."""

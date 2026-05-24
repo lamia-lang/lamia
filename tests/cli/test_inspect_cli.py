@@ -574,7 +574,7 @@ class TestSemanticDiagnostics:
         assert "max_words" in warnings[0]["message"]
         assert "doc" in warnings[0]["message"]
 
-    def test_inline_def_typed_params_reports_dedicated_warning(self, tmp_path):
+    def test_inline_def_typed_params_do_not_trigger_mismatch(self, tmp_path):
         lm_file = tmp_path / "typed.lm"
         lm_file.write_text(
             "def generate_report(data: dict, style: str):\n"
@@ -587,17 +587,13 @@ class TestSemanticDiagnostics:
         source = lm_file.read_text()
         result = _analyze(source, str(lm_file))
 
-        typed = [d for d in result.diagnostics if "uses typed parameters" in d["message"]]
         missing = [
             d for d in result.diagnostics
             if "placeholders not present in function params" in d["message"]
         ]
 
-        assert len(typed) == 1
-        assert typed[0]["severity"] == "error"
-        assert "data" in typed[0]["message"]
-        assert "style" in typed[0]["message"]
-        assert "untyped params" in typed[0]["message"]
+        typed = [d for d in result.diagnostics if "uses typed parameters" in d["message"]]
+        assert len(typed) == 0
         assert len(missing) == 0
 
     def test_inline_def_missing_placeholders_keeps_missing_message(self, tmp_path):

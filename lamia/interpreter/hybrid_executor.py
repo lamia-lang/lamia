@@ -8,8 +8,10 @@ parameter handling, and integration with Lamia instances.
 import inspect
 import os
 import logging
+import json
 from pathlib import Path
 from typing import Optional, Dict, Any
+from pydantic import BaseModel
 from .hybrid_syntax_parser import HybridSyntaxParser
 from .hybrid_file_cache import HybridFileCache
 from .ast_analyzer import extract_code_dependencies, create_execution_globals
@@ -303,6 +305,18 @@ class SmartTypeResolver:
         result = lamia_result.result_text if isinstance(lamia_result, LamiaResult) else lamia_result
         logger.info(f"SmartTypeResolver: returning fallback {type(result)}")
         return result
+
+    @staticmethod
+    def serialize_for_prompt(value: Any) -> str:
+        """Serialize a value for prompt string substitution."""
+        if isinstance(value, BaseModel):
+            return value.model_dump_json()
+        if isinstance(value, (dict, list, tuple, set)):
+            try:
+                return json.dumps(value, ensure_ascii=False)
+            except TypeError:
+                return str(value)
+        return str(value)
 
 
 # Example usage patterns:

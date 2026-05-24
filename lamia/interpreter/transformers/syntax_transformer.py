@@ -27,10 +27,6 @@ from lamia.internal_types import (
     VALUE_SECOND_ARG_ACTIONS,
     BrowserActionType,
 )
-from lamia.interpreter.inline_function_validation import (
-    analyze_inline_template,
-    typed_params_message,
-)
 
 
 
@@ -439,7 +435,6 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     def _transform_llm_function(self, node, is_async: bool):
         """Transform function with LLM string command."""
         func_info = self.detector.llm_functions[node.name]
-        self._validate_inline_typed_params(node.name, func_info.command, func_info.parameters)
 
         # Process command for parameter substitution
         processed_command = self._create_parameter_substitution_logic(
@@ -451,32 +446,6 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             node, processed_command, func_info.return_type, is_async,
         )
 
-    def _validate_inline_typed_params(
-        self,
-        function_name: str,
-        command: str,
-        parameters: List[FunctionParameter],
-    ) -> None:
-        """Reject typed inline params used in template placeholders.
-
-        Lamia inline template functions currently require untyped parameters.
-        This keeps runtime behavior aligned with inspect diagnostics.
-        """
-        signature_params = {p.name for p in parameters}
-        typed_signature_params = {
-            p.name for p in parameters if p.type_annotation is not None
-        }
-        issues = analyze_inline_template(
-            command,
-            signature_params=signature_params,
-            typed_signature_params=typed_signature_params,
-        )
-        if not issues.typed_params_in_placeholders:
-            return
-
-        raise ValueError(typed_params_message(function_name, issues.typed_params_in_placeholders))
-
-    
     def _is_web_return_type_expression(self, node) -> bool:
         """Check if expression is preprocessed web return type expression."""
         return (
@@ -1379,38 +1348,28 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     
     def _create_param_serialization(self, param: FunctionParameter) -> ast.AST:
         """Create AST for serializing a parameter based on its type."""
-        if not param.type_annotation or param.type_annotation in ['str', 'int', 'float', 'bool']:
-            # Simple types, use string representation
-            return ast.Call(
-                func=ast.Name(id='str', ctx=ast.Load()),
-                args=[ast.Name(id=param.name, ctx=ast.Load())],
-                keywords=[],
-            )
-        else:
-            # Complex types - use SmartTypeResolver to handle LamiaResult -> Model conversion
-            resolved_param = ast.Call(
-                func=ast.Attribute(
-                    value=ast.Name(id='SmartTypeResolver', ctx=ast.Load()),
-                    attr='resolve_for_parameter',
-                    ctx=ast.Load(),
-                ),
-                args=[
-                    ast.Name(id=param.name, ctx=ast.Load()),
-                    ast.Constant(value=param.type_annotation),
-                ],
-                keywords=[],
-            )
-            
-            # Then serialize the resolved object
-            return ast.Call(
-                func=ast.Attribute(
-                    value=resolved_param,
-                    attr='model_dump_json' if 'Model' in param.type_annotation else 'json',
-                    ctx=ast.Load(),
-                ),
-                args=[],
-                keywords=[],
-            )
+        # Always resolve LamiaResult wrappers first (if present), then serialize safely.
+        resolved_param = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id='SmartTypeResolver', ctx=ast.Load()),
+                attr='resolve_for_parameter',
+                ctx=ast.Load(),
+            ),
+            args=[
+                ast.Name(id=param.name, ctx=ast.Load()),
+                ast.Constant(value=param.type_annotation),
+            ],
+            keywords=[],
+        )
+        return ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id='SmartTypeResolver', ctx=ast.Load()),
+                attr='serialize_for_prompt',
+                ctx=ast.Load(),
+            ),
+            args=[resolved_param],
+            keywords=[],
+        )
     
     def _ast_to_source(self, tree: ast.AST) -> str:
         """Convert AST back to source code."""
