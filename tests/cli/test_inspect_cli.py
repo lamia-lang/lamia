@@ -262,7 +262,7 @@ class TestPlaygroundFilesExecutable:
     def test_mixed_vars_and_files(self):
         source = (
             'with files("~/Documents/"):\n'
-            "    def answer_question(question: str, company: str, models=\"openai:gpt-4\"):\n"
+            "    def answer_question(question, company, models=\"openai:gpt-4\"):\n"
             '        """\n'
             "        Answer this {company} job application question: {question}\n"
             "\n"
@@ -430,7 +430,8 @@ class TestPlaygroundFilesSyntaxErrors:
             "\n"
             '"Write a summary" -> File(TEXT, "summary.txt")'
         )
-        assert has_top_level_steps(source) is False
+        # This syntax is valid and represents top-level executable file writes.
+        assert has_top_level_steps(source) is True
 
     def test_lm_style_file_ops_trailing_colon(self):
         source = (

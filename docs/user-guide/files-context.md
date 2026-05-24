@@ -6,7 +6,7 @@ The `files()` context manager allows you to reference files in your LLM prompts 
 
 ```python
 with files("~/Documents/", "~/projects/"):
-    def answer_question(question: str):
+    def answer_question(question):
         """
         Answer: {question}
 
@@ -51,7 +51,7 @@ with files("~/Documents/"):
     def extract_name(models="openai:gpt-4"):
         """Extract my full name from {@resume.pdf}"""
     
-    def answer_experience_question(question: str, models="openai:gpt-4"):
+    def answer_experience_question(question, models="openai:gpt-4"):
         """
         Answer this job application question: {question}
         
@@ -282,7 +282,7 @@ with files(project_dir):
 ```python
 with files("~/Documents/"):
     # Variable substitution + file references
-    def answer_question(question: str, company: str, models="openai:gpt-4"):
+    def answer_question(question, company, models="openai:gpt-4"):
         """
         Answer this {company} job application question: {question}
         

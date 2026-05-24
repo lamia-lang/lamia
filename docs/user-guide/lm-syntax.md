@@ -111,7 +111,7 @@ def with_fallback(models=["openai:gpt-4", 'openai:gpt-4', "anthropic:sonnet-4"])
 Variable substitution is a feature that allows you to use variables in your LLM prompts, web actions and file operations. Example:
 
 ```python
-def stock_data(ticker: str = "AAPL") -> File(CSV[StockQuote], "stocks.csv", append=True):
+def stock_data(ticker="AAPL") -> File(CSV[StockQuote], "stocks.csv", append=True):
     "extract the stock quote data https://finance.yahoo.com/quote/{ticker}"
 
 for ticker in ["AAPL", "NVDA", "GOOG"]:
@@ -197,7 +197,7 @@ Reference local files in LLM prompts using `{@filename}` syntax:
 
 ```python
 with files("~/Documents/"):
-    def answer_question(question: str, models="openai:gpt-4"):
+    def answer_question(question, models="openai:gpt-4"):
         """
         Answer: {question}
         

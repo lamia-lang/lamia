@@ -27,6 +27,10 @@ from lamia.internal_types import (
     VALUE_SECOND_ARG_ACTIONS,
     BrowserActionType,
 )
+from lamia.interpreter.inline_function_validation import (
+    analyze_inline_template,
+    typed_params_message,
+)
 
 
 
@@ -458,22 +462,19 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         Lamia inline template functions currently require untyped parameters.
         This keeps runtime behavior aligned with inspect diagnostics.
         """
-        placeholders = set(re.findall(r"\{(\w+)\}", command))
-        if not placeholders:
+        signature_params = {p.name for p in parameters}
+        typed_signature_params = {
+            p.name for p in parameters if p.type_annotation is not None
+        }
+        issues = analyze_inline_template(
+            command,
+            signature_params=signature_params,
+            typed_signature_params=typed_signature_params,
+        )
+        if not issues.typed_params_in_placeholders:
             return
 
-        typed_params = sorted(
-            p.name for p in parameters
-            if p.type_annotation and p.name in placeholders
-        )
-        if not typed_params:
-            return
-
-        raise ValueError(
-            f"{function_name}() uses typed parameters: "
-            f"{', '.join(typed_params)}. "
-            "Lamia inline functions currently require untyped params."
-        )
+        raise ValueError(typed_params_message(function_name, issues.typed_params_in_placeholders))
 
     
     def _is_web_return_type_expression(self, node) -> bool:

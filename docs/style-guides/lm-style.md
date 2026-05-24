@@ -153,7 +153,7 @@ Instead of using many paths to a directory in your code, use `with files("~/Docu
 
 ```python
 with files("~/Documents/"):
-    def answer_question(question: str):
+    def answer_question(question):
         """
         Answer: {question}
         Use information from {@resume.pdf} and {@cover_letter.txt}

@@ -20,6 +20,11 @@ from typing import List, Optional, Dict, Set
 
 from lamia.interpreter.hybrid_syntax_parser import HybridSyntaxParser
 from lamia.interpreter.human.parser import parse_hu_file, HuFunction
+from lamia.interpreter.inline_function_validation import (
+    analyze_inline_template,
+    missing_placeholders_message,
+    typed_params_message,
+)
 
 
 _NON_EXEC_TYPES = (
@@ -107,8 +112,6 @@ def _analyze(source: str, file_path: Optional[str] = None) -> InspectResult:
     return InspectResult(len(deduped) > 0, deduped, diagnostics)
 
 
-_INLINE_DEF_PARAM_RE = re.compile(r'\{(\w+)(?::[^}]*)?\}')
-_INLINE_DEF_FILEREF_RE = re.compile(r'\{@(\w+)\}')
 _SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv", ".tox", "dist", "build"}
 
 
@@ -198,15 +201,13 @@ def _collect_inline_def_issues(source: str) -> tuple[Dict[str, Set[str]], Dict[s
         if template_text is None:
             continue
 
-        template_refs: Set[str] = set()
-        for pm in _INLINE_DEF_PARAM_RE.finditer(template_text):
-            template_refs.add(pm.group(1))
-        for pm in _INLINE_DEF_FILEREF_RE.finditer(template_text):
-            template_refs.add(pm.group(1))
-
-        missing = template_refs - sig_params
-        if missing:
-            missing_by_fn[func_name] = missing
+        issues = analyze_inline_template(
+            template_text,
+            signature_params=sig_params,
+            typed_signature_params=typed_params,
+        )
+        if issues.missing_placeholders:
+            missing_by_fn[func_name] = issues.missing_placeholders
 
     return missing_by_fn, typed_params_by_fn
 
@@ -322,11 +323,7 @@ def _check_call_integrity(
             if re.match(rf'\s*def\s+{re.escape(func_name)}\s*\(', line):
                 diagnostics.append({
                     "severity": "warning",
-                    "message": (
-                        f"{func_name}() uses typed parameters: "
-                        f"{', '.join(sorted(typed_params))}. "
-                        f"Lamia inline functions currently require untyped params."
-                    ),
+                    "message": typed_params_message(func_name, typed_params),
                     "line": i + 1,
                     "col": 0,
                     "source": "lamia-semantic",
@@ -339,10 +336,7 @@ def _check_call_integrity(
             if re.match(rf'\s*def\s+{re.escape(func_name)}\s*\(', line):
                 diagnostics.append({
                     "severity": "warning",
-                    "message": (
-                        f"{func_name}() template uses placeholders not present in function params: "
-                        f"{', '.join(sorted(missing_params))}"
-                    ),
+                    "message": missing_placeholders_message(func_name, missing_params),
                     "line": i + 1,
                     "col": 0,
                     "source": "lamia-semantic",

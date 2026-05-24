@@ -159,7 +159,7 @@ Stock data:
 Create `report.lm`:
 
 ```python
-def stock_data(ticker: str) -> File(CSV[StockQuote], "stocks.csv", append=True):
+def stock_data(ticker) -> File(CSV[StockQuote], "stocks.csv", append=True):
     "extract quote summary from https://finance.yahoo.com/quote/{ticker}"
 
 
@@ -178,7 +178,7 @@ def generate_report():
 Create `buy_stocks.lm`:
 
 ```python
-def submit_order(order: BuyOrder) -> str:
+def submit_order(order) -> str:
     """Submit order via broker website automation with persistent session."""
     
     # Login only once - session persists across calls
@@ -222,7 +222,7 @@ def submit_order(order: BuyOrder) -> str:
         f"failed: {confirmation}"
 
 
-def buy_winner_stock(default_budget_usd: float = 1000.0):
+def buy_winner_stock(default_budget_usd=1000.0):
     report = "./analyst_report.json" -> JSON[AnalystReport]
     winner = report["winner"]
 
