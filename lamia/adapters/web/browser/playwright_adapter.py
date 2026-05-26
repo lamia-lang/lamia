@@ -78,6 +78,8 @@ class PlaywrightAdapter(BaseBrowserAdapter):
         """Resolve the target element: self-target or find via selector."""
         if self._is_self_target(params):
             return params.scope_element_handle
+        # For global actions we must have an explicit selector.
+        self._require_selector(params)
         return await self._find_element_with_fallbacks(params)
     
     async def _ensure_dom_tracker(self) -> None:

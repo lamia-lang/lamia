@@ -990,8 +990,8 @@ def _install_sigint_handler() -> None:
 def _graceful_shutdown(lamia_instance: 'Optional[Lamia]', exit_code: int = 0) -> None:
     """Clean up resources and terminate the process.
 
-    Uses os._exit() to bypass asyncio's loop-teardown which would otherwise
-    block waiting for cancelled tasks to drain.
+    Use SystemExit so callers (including tests) can observe exit semantics
+    without abruptly terminating the hosting Python process.
     """
     if lamia_instance is not None:
         try:
@@ -1001,7 +1001,7 @@ def _graceful_shutdown(lamia_instance: 'Optional[Lamia]', exit_code: int = 0) ->
     EventLoopManager.shutdown()
     sys.stdout.flush()
     sys.stderr.flush()
-    os._exit(exit_code)
+    raise SystemExit(exit_code)
 
 
 def _force_kill_browser(lamia_instance: 'Optional[Lamia]') -> None:
