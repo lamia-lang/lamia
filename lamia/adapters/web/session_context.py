@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from lamia.interpreter.commands import WebCommand, WebActionType
 from lamia.interpreter.command_types import CommandType
 from lamia.engine.managers.web.browser_manager import BrowserManager
+from lamia.adapters.retry.adapter_wrappers.retrying_browser_adapter import RetryingBrowserAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +149,62 @@ class SessionContext:
         logger.info(f"Starting session execution for profile '{name}'")
         return self
 
+    def _wait_for_post_login_navigation(self, browser_manager: BrowserManager) -> None:
+        """Wait for the browser to finish post-login navigation before saving cookies.
+
+        After clicking submit on a login form, the server typically sets auth
+        cookies and redirects. We poll for a URL change (indicating navigation
+        completed) and then wait for the page to fully stabilize so auth cookies
+        set via JS are available.
+        """
+        try:
+            initial_url = EventLoopManager.run_coroutine(browser_manager.get_current_url()) or ""
+        except Exception:
+            return
+
+        max_wait = 15.0
+        poll_interval = 0.5
+        elapsed = 0.0
+
+        while elapsed < max_wait:
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+            try:
+                current_url = EventLoopManager.run_coroutine(browser_manager.get_current_url()) or ""
+            except Exception:
+                return
+            if current_url != initial_url:
+                logger.info(
+                    f"Post-login navigation detected: {initial_url} -> {current_url}"
+                )
+                self._wait_for_page_stable(browser_manager)
+                return
+
+        logger.debug("No URL change detected after session body, proceeding with cookie save")
+
+    def _wait_for_page_stable(self, browser_manager: BrowserManager) -> None:
+        """Wait for page to fully load after redirect so all auth cookies are set."""
+        max_wait = 10.0
+        poll_interval = 1.0
+        elapsed = 0.0
+        prev_url = ""
+
+        while elapsed < max_wait:
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+            try:
+                current_url = EventLoopManager.run_coroutine(browser_manager.get_current_url()) or ""
+            except Exception:
+                time.sleep(2.0)
+                return
+
+            if current_url == prev_url and current_url:
+                logger.info(f"Page stable after login at: {current_url}")
+                return
+            prev_url = current_url
+
+        logger.debug("Page stabilization timeout, proceeding with cookie save")
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit session context - save session if successful."""
         if self.chrome_profile_mode:
@@ -164,9 +221,10 @@ class SessionContext:
         if self.should_skip:
             logger.debug(f"Session '{name}' was skipped, no cleanup needed")
         elif exc_type is None and self.web_manager:
-            logger.info(f"Session '{name}' completed successfully, saving cookies")
             try:
                 browser_manager: BrowserManager = self.web_manager.browser_manager
+                self._wait_for_post_login_navigation(browser_manager)
+                logger.info(f"Session '{name}' completed successfully, saving cookies")
                 try:
                     EventLoopManager.run_coroutine(browser_manager.save_session_cookies(name))
                 except Exception as e:
@@ -177,6 +235,8 @@ class SessionContext:
                     pass
             except Exception as e:
                 logger.warning(f"Failed to save cookies for profile '{name}': {e}")
+        elif exc_type is SessionSkipException:
+            logger.info(f"Session '{name}' skipped: {exc_val}")
         else:
             logger.warning(f"Session '{name}' failed: {exc_val}")
 
@@ -222,6 +282,42 @@ def _urls_match_ignoring_params(url1: str, url2: str) -> bool:
             and p1.path.rstrip('/') == p2.path.rstrip('/'))
 
 
+def _is_redirected_away(current_url: str, login_url: str) -> bool:
+    """Check if current URL indicates a redirect AWAY from the login page.
+
+    Handles geo-redirects (e.g., www.site.com/login → de.site.com/login)
+    by comparing paths: if the path still matches login, it's not a real redirect.
+    A real auth redirect changes the path (e.g., /login → / or /dashboard).
+    """
+    p_current = urlparse(current_url)
+    p_login = urlparse(login_url)
+    current_path = p_current.path.rstrip('/')
+    login_path = p_login.path.rstrip('/')
+    if current_path == login_path:
+        return False
+    return True
+
+
+def _target_url_reached(current_url: str, target_url: str,
+                        login_url: Optional[str]) -> bool:
+    """Check if the browser reached the target URL (not redirected to login).
+
+    Tolerates geo-subdomain redirects (www → de) by comparing paths.
+    Returns False if the browser was redirected to the login page path.
+    """
+    p_current = urlparse(current_url)
+    p_target = urlparse(target_url)
+    current_path = p_current.path.rstrip('/') or '/'
+    target_path = p_target.path.rstrip('/') or '/'
+    if login_url:
+        login_path = urlparse(login_url).path.rstrip('/') or '/'
+        if current_path == login_path:
+            return False
+    if current_path == target_path:
+        return True
+    return _urls_match_ignoring_params(current_url, target_url)
+
+
 def _get_browser_manager(lamia_instance: Any) -> Optional[BrowserManager]:
     """Get BrowserManager from a Lamia instance (returns None on failure)."""
     try:
@@ -242,15 +338,34 @@ def _get_web_manager(lamia_instance: Any) -> Optional[Any]:
 def _get_session_manager(browser_manager: BrowserManager) -> Optional[Any]:
     """Get SessionManager from a BrowserManager (returns None on failure)."""
     try:
-        adapter = _run_async(browser_manager._get_browser_adapter())
+        adapter = browser_manager._browser_adapter
+        if adapter is None:
+            adapter = _run_async(browser_manager._get_browser_adapter())
+        if isinstance(adapter, RetryingBrowserAdapter):
+            adapter = adapter.adapter
         return adapter.session_manager
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"_get_session_manager failed: {exc}")
         return None
 
 
 def _run_async(coro):
     """Run an async coroutine from synchronous code."""
     return EventLoopManager.run_coroutine(coro)
+
+
+def _set_page_load_timeout(browser_manager: BrowserManager, timeout: int) -> None:
+    """Set page load timeout on the underlying Selenium driver."""
+    try:
+        adapter = browser_manager._browser_adapter
+        if adapter is None:
+            return
+        if isinstance(adapter, RetryingBrowserAdapter):
+            adapter = adapter.adapter
+        if adapter.driver:
+            adapter.driver.set_page_load_timeout(timeout)
+    except Exception:
+        pass
 
 
 def pre_validate_session(lamia_instance: Any, login_url: Optional[str],
@@ -278,39 +393,45 @@ def pre_validate_session(lamia_instance: Any, login_url: Optional[str],
     if not profile or not session_mgr or not session_mgr.has_saved_cookies(profile):
         return
 
-    # --- Tier 1: redirect detection ---
-    if login_url:
-        try:
-            _run_async(browser_manager.navigate_to(login_url))
-            current_url = _run_async(browser_manager.get_current_url()) or ""
-            if current_url and not _urls_match_ignoring_params(current_url, login_url):
-                logger.info(
-                    f"Redirected away from login page ({current_url}), skipping session"
-                )
-                raise SessionSkipException(
-                    f"Redirected from login page to: {current_url}"
-                )
-        except SessionSkipException:
-            raise
-        except Exception as exc:
-            logger.debug(f"Tier 1 check failed: {exc}")
+    logger.info(f"pre_validate_session: checking tiers for profile '{profile}'")
 
-    # --- Tier 2: target URL reachability ---
-    if target_url:
-        try:
-            _run_async(browser_manager.navigate_to(target_url))
-            current_url = _run_async(browser_manager.get_current_url()) or ""
-            if _urls_match_ignoring_params(current_url, target_url):
-                logger.info(
-                    f"Target URL reachable ({current_url}), skipping session"
-                )
-                raise SessionSkipException(
-                    f"Target URL reachable: {current_url}"
-                )
-        except SessionSkipException:
-            raise
-        except Exception as exc:
-            logger.debug(f"Tier 2 check failed: {exc}")
+    _set_page_load_timeout(browser_manager, 15)
+    try:
+        # --- Tier 1: redirect detection ---
+        if login_url:
+            try:
+                _run_async(browser_manager.navigate_to(login_url))
+                current_url = _run_async(browser_manager.get_current_url()) or ""
+                if current_url and _is_redirected_away(current_url, login_url):
+                    logger.info(
+                        f"Redirected away from login page ({current_url}), skipping session"
+                    )
+                    raise SessionSkipException(
+                        f"Redirected from login page to: {current_url}"
+                    )
+            except SessionSkipException:
+                raise
+            except Exception as exc:
+                logger.debug(f"Tier 1 check failed: {exc}")
+
+        # --- Tier 2: target URL reachability ---
+        if target_url:
+            try:
+                _run_async(browser_manager.navigate_to(target_url))
+                current_url = _run_async(browser_manager.get_current_url()) or ""
+                if _target_url_reached(current_url, target_url, login_url):
+                    logger.info(
+                        f"Target URL reachable ({current_url}), skipping session"
+                    )
+                    raise SessionSkipException(
+                        f"Target URL reachable: {current_url}"
+                    )
+            except SessionSkipException:
+                raise
+            except Exception as exc:
+                logger.debug(f"Tier 2 check failed: {exc}")
+    finally:
+        _set_page_load_timeout(browser_manager, 300)
 
     # --- Tier 3: model validation ---
     if return_type is not None:

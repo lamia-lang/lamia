@@ -971,11 +971,12 @@ class SeleniumAdapter(BaseBrowserAdapter):
                 # Load cookies for each domain
                 for domain, cookies_for_domain in domain_cookies.items():
                     try:
-                        # Navigate to domain to set cookies
-                        self.driver.get(f"https://{domain}")
-                        WebDriverWait(self.driver, 10).until(
-                            lambda driver: driver.execute_script("return document.readyState") == "complete"
-                        )
+                        self.driver.set_page_load_timeout(10)
+                        try:
+                            self.driver.get(f"https://{domain}/")
+                        except Exception:
+                            pass
+                        self.driver.set_page_load_timeout(300)
                         
                         # Add cookies for this domain
                         for cookie in cookies_for_domain:
@@ -1006,18 +1007,11 @@ class SeleniumAdapter(BaseBrowserAdapter):
                         except Exception as e:
                             logger.debug(f"Could not restore localStorage for domain {domain}: {e}")
                         
-                        # Refresh to activate cookies
-                        self.driver.refresh()
-                        WebDriverWait(self.driver, 10).until(
-                            lambda driver: driver.execute_script("return document.readyState") == "complete"
-                        )
+                        logger.debug(f"Cookies injected for domain: {domain}")
                         
                     except Exception as e:
                         logger.debug(f"Could not load cookies for domain {domain}: {e}")
             
-            # Give the final page time to fully render with authentication
-            # This prevents race conditions where validation probe runs before page content loads
-            time.sleep(2)
             logger.info(f"Session cookies loaded and page stabilized")
             
             # Update session last used time

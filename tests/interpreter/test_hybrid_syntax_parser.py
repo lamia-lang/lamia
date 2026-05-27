@@ -177,63 +177,62 @@ class TestHybridSyntaxParserTransformation:
         
         assert result == "final_transformed_code"
     
+    @patch('lamia.interpreter.hybrid_syntax_parser.SessionWithTransformer')
     @patch('lamia.interpreter.hybrid_syntax_parser.WithReturnTypePreprocessor')
     @patch('lamia.interpreter.hybrid_syntax_parser.HybridSyntaxTransformer')
     @patch('lamia.interpreter.hybrid_syntax_parser.ast')
-    def test_transform_without_return_types(self, mock_ast, mock_syntax_transformer_class, mock_preprocessor_class):
+    def test_transform_without_return_types(self, mock_ast, mock_syntax_transformer_class, mock_preprocessor_class, mock_session_transformer_class):
         """Test transformation when no return types are present."""
-        # Setup mocks
         mock_preprocessor = Mock()
         mock_syntax_transformer = Mock()
+        mock_session_transformer = Mock()
         mock_tree = Mock()
-        
+
         mock_preprocessor_class.return_value = mock_preprocessor
         mock_syntax_transformer_class.return_value = mock_syntax_transformer
-        
-        # Configure mock return values - no return types
+        mock_session_transformer_class.return_value = mock_session_transformer
+
         mock_preprocessor.preprocess.return_value = ("processed_code", {})
         mock_ast.parse.return_value = mock_tree
+        mock_session_transformer.transform_sessions.return_value = mock_tree
         mock_syntax_transformer.visit.return_value = mock_tree
         mock_syntax_transformer._ast_to_source.return_value = "final_transformed_code"
-        
-        # Create parser (will use mocked components)
+
         parser = HybridSyntaxParser()
-        
-        # Call transform
         result = parser.transform("test source code")
-        
-        # Verify that SessionWithTransformer is not called when no return types
-        from unittest.mock import call
-        # Should not create SessionWithTransformer instance
-        
+
+        mock_session_transformer_class.assert_called_once_with({})
+        mock_session_transformer.transform_sessions.assert_called_once_with(mock_tree)
         mock_syntax_transformer._ast_to_source.assert_called_once_with(mock_tree)
         assert result == "final_transformed_code"
     
     @patch('lamia.interpreter.hybrid_syntax_parser.ast')
     def test_transform_handles_ast_unparse_fallback(self, mock_ast):
         """Test transformation handles fallback when ast.unparse is not available."""
-        # Setup mocks - parser should not rely on ast.unparse.
         mock_tree = Mock()
         mock_ast.parse.return_value = mock_tree
         delattr(mock_ast, 'unparse')
-        
-        # Mock other components
+
         with patch('lamia.interpreter.hybrid_syntax_parser.WithReturnTypePreprocessor') as mock_preprocessor_class:
             with patch('lamia.interpreter.hybrid_syntax_parser.HybridSyntaxTransformer') as mock_syntax_transformer_class:
-                mock_preprocessor = Mock()
-                mock_syntax_transformer = Mock()
-                mock_preprocessor_class.return_value = mock_preprocessor
-                mock_syntax_transformer_class.return_value = mock_syntax_transformer
-                
-                mock_preprocessor.preprocess.return_value = ("processed_code", {})
-                mock_syntax_transformer.visit.return_value = mock_tree
-                mock_syntax_transformer._ast_to_source.return_value = "final_code"
-                
-                parser = HybridSyntaxParser()
-                result = parser.transform("test code")
-                
-                mock_syntax_transformer._ast_to_source.assert_called_once_with(mock_tree)
-                assert result == "final_code"
+                with patch('lamia.interpreter.hybrid_syntax_parser.SessionWithTransformer') as mock_session_class:
+                    mock_preprocessor = Mock()
+                    mock_syntax_transformer = Mock()
+                    mock_session = Mock()
+                    mock_preprocessor_class.return_value = mock_preprocessor
+                    mock_syntax_transformer_class.return_value = mock_syntax_transformer
+                    mock_session_class.return_value = mock_session
+
+                    mock_preprocessor.preprocess.return_value = ("processed_code", {})
+                    mock_session.transform_sessions.return_value = mock_tree
+                    mock_syntax_transformer.visit.return_value = mock_tree
+                    mock_syntax_transformer._ast_to_source.return_value = "final_code"
+
+                    parser = HybridSyntaxParser()
+                    result = parser.transform("test code")
+
+                    mock_syntax_transformer._ast_to_source.assert_called_once_with(mock_tree)
+                    assert result == "final_code"
     
     def test_transform_simple_function(self):
         """Test transforming simple function with string literal."""

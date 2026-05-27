@@ -147,9 +147,8 @@ class HybridSyntaxParser:
         """Return transformed AST and preprocessed source used to build it."""
         processed_code, return_types = self._preprocessor.preprocess(source_code)
         tree = ast.parse(processed_code)
-        if return_types:
-            session_transformer = SessionWithTransformer(return_types)
-            tree = session_transformer.transform_sessions(tree)
+        session_transformer = SessionWithTransformer(return_types)
+        tree = session_transformer.transform_sessions(tree)
 
         # Use a fresh transformer instance each run to avoid stale detector state.
         transformer = HybridSyntaxTransformer(self.lamia_var_name)
