@@ -689,6 +689,45 @@ class TestLME020GlobalWebNoSelector:
         assert violations == []
 
 
+# ── LMW024 session-no-target-url ────────────────────────────────────────────
+
+class TestLMW024SessionNoTargetUrl:
+
+    def test_bare_session_triggers(self):
+        code = '''
+with session("login"):
+    web.navigate("https://site.com/login")
+'''
+        violations = _violations_for(code, "LMW024")
+        assert len(violations) == 1
+        assert "login" in violations[0].message
+        assert 'session("login")' in violations[0].snippet
+
+    def test_session_with_target_url_no_warning(self):
+        code = '''
+with session("login", "https://site.com/dashboard"):
+    web.navigate("https://site.com/login")
+'''
+        violations = _violations_for(code, "LMW024")
+        assert violations == []
+
+    def test_session_with_keyword_target_url_no_warning(self):
+        code = '''
+with session("login", target_url="https://site.com/dashboard"):
+    web.navigate("https://site.com/login")
+'''
+        violations = _violations_for(code, "LMW024")
+        assert violations == []
+
+    def test_severity_is_convention(self):
+        code = '''
+with session("login"):
+    pass
+'''
+        violations = _violations_for(code, "LMW024")
+        assert violations[0].rule.severity == Severity.Convention
+
+
 # ── Existing rules still work ───────────────────────────────────────────────
 
 class TestLmLinterExistingRulesUnaffected:

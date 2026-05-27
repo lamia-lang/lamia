@@ -75,7 +75,7 @@ class SessionContext:
     """
 
     def __init__(self, name: Optional[str], web_manager: Optional[Any] = None,
-                 probe_url: Optional[str] = None,
+                 target_url: Optional[str] = None,
                  user_dir: Optional[str] = None):
         """Initialize session context.
 
@@ -83,13 +83,13 @@ class SessionContext:
             name: Browser profile name (e.g. "linkedin_login").
                   None means "use Chrome user-data-dir instead of lamia sessions".
             web_manager: WebManager instance for validation
-            probe_url: Optional URL (kept for compatibility)
+            target_url: Optional target URL for logged-in state validation
             user_dir: Explicit Chrome user-data-dir path.  When *name* is None
                       and *user_dir* is also None we auto-detect the system path.
         """
         self.name: Optional[str] = name
         self.web_manager = web_manager
-        self.probe_url: Optional[str] = probe_url
+        self.target_url: Optional[str] = target_url
         self.should_skip: bool = False
         self.chrome_profile_mode: bool = name is None
         self.user_dir: Optional[str] = user_dir
@@ -192,7 +192,7 @@ def create_session_factory(web_manager: Optional[Any] = None):
     Returns:
         Session factory function
     """
-    def session(name: Optional[str] = None, probe_url: Optional[str] = None,
+    def session(name: Optional[str] = None, target_url: Optional[str] = None,
                 user_dir: Optional[str] = None) -> SessionContext:
         """Create session context.
 
@@ -200,7 +200,7 @@ def create_session_factory(web_manager: Optional[Any] = None):
             name: Browser profile name.  When omitted (or None) the session
                   will use the real Chrome user-data-dir instead of lamia's
                   cookie management.
-            probe_url: Optional URL to probe for logged-in state
+            target_url: Optional target URL for the logged-in state
             user_dir: Explicit Chrome user-data-dir path (only for
                       Chrome-profile mode when *name* is None).
 
@@ -208,7 +208,7 @@ def create_session_factory(web_manager: Optional[Any] = None):
             SessionContext manager
         """
         return SessionContext(name=name, web_manager=web_manager,
-                             probe_url=probe_url, user_dir=user_dir)
+                             target_url=target_url, user_dir=user_dir)
 
     return session
 
@@ -239,80 +239,111 @@ def _get_web_manager(lamia_instance: Any) -> Optional[Any]:
         return None
 
 
+def _get_session_manager(browser_manager: BrowserManager) -> Optional[Any]:
+    """Get SessionManager from a BrowserManager (returns None on failure)."""
+    try:
+        adapter = _run_async(browser_manager._get_browser_adapter())
+        return adapter.session_manager
+    except Exception:
+        return None
+
+
 def _run_async(coro):
     """Run an async coroutine from synchronous code."""
     return EventLoopManager.run_coroutine(coro)
 
 
-def pre_validate_session(lamia_instance: Any, probe_url: Optional[str],
+def pre_validate_session(lamia_instance: Any, login_url: Optional[str],
+                         target_url: Optional[str],
                          return_type: Any) -> None:
-    """Check whether the user is already logged in and skip the session if so.
+    """Three-tier check whether the user is already logged in.
 
-    Called at the *beginning* of a ``with session(...)`` block.  Two checks
-    are performed in order:
+    Called at the *beginning* of a ``with session(...)`` block.
 
-    1. **URL check** -- if ``probe_url`` is provided and the browser is
-       already on that URL (ignoring query-params / trailing slashes), the
-       user is clearly logged in → raise ``SessionSkipException``.
-    2. **Model validation** -- run ``GET_PAGE_SOURCE`` through the standard
-       pipeline with the given ``return_type``.  If the Pydantic model
-       matches, the user is logged in → raise ``SessionSkipException``.
+    Tier 1 (bare): navigate to login_url; if the site redirects away, skip.
+    Tier 2 (target_url): navigate to target_url; if we stay there, skip.
+    Tier 3 (return_type): validate page content against model; if matches, skip.
 
-    If neither check passes, the function returns normally and the login
-    actions in the session body execute.
+    If no saved cookies exist for the profile, all checks are skipped (first run).
 
     Raises:
         SessionSkipException: when the user is already logged in.
     """
     browser_manager = _get_browser_manager(lamia_instance)
+    if not browser_manager:
+        return
 
-    # --- URL check ---
-    if probe_url and browser_manager:
+    session_mgr = _get_session_manager(browser_manager)
+    profile = browser_manager.get_active_profile()
+    if not profile or not session_mgr or not session_mgr.has_saved_cookies(profile):
+        return
+
+    # --- Tier 1: redirect detection ---
+    if login_url:
         try:
+            _run_async(browser_manager.navigate_to(login_url))
             current_url = _run_async(browser_manager.get_current_url()) or ""
-            if _urls_match_ignoring_params(current_url, probe_url):
+            if current_url and not _urls_match_ignoring_params(current_url, login_url):
                 logger.info(
-                    f"Already on target URL ({current_url}), skipping login"
+                    f"Redirected away from login page ({current_url}), skipping session"
                 )
                 raise SessionSkipException(
-                    f"Already on target URL: {current_url}"
+                    f"Redirected from login page to: {current_url}"
                 )
         except SessionSkipException:
             raise
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(f"Tier 1 check failed: {exc}")
 
-    # --- Model validation check ---
-    web_manager = _get_web_manager(lamia_instance)
-    if web_manager:
-        web_manager.recent_actions.clear()
-    try:
-        result = lamia_instance.run(
-            WebCommand(action=WebActionType.GET_PAGE_SOURCE),
-            return_type=return_type,
-        )
-        if result.typed_result is not None:
-            logger.info("Pre-validation passed - page matches expected model")
-            raise SessionSkipException(
-                "Session validation passed - already in desired state"
+    # --- Tier 2: target URL reachability ---
+    if target_url:
+        try:
+            _run_async(browser_manager.navigate_to(target_url))
+            current_url = _run_async(browser_manager.get_current_url()) or ""
+            if _urls_match_ignoring_params(current_url, target_url):
+                logger.info(
+                    f"Target URL reachable ({current_url}), skipping session"
+                )
+                raise SessionSkipException(
+                    f"Target URL reachable: {current_url}"
+                )
+        except SessionSkipException:
+            raise
+        except Exception as exc:
+            logger.debug(f"Tier 2 check failed: {exc}")
+
+    # --- Tier 3: model validation ---
+    if return_type is not None:
+        web_manager = _get_web_manager(lamia_instance)
+        if web_manager:
+            web_manager.recent_actions.clear()
+        try:
+            result = lamia_instance.run(
+                WebCommand(action=WebActionType.GET_PAGE_SOURCE),
+                return_type=return_type,
             )
-    except SessionSkipException:
-        raise
-    except Exception:
-        pass
+            if result.typed_result is not None:
+                logger.info("Model validation passed, skipping session")
+                raise SessionSkipException(
+                    "Page matches expected model - already in desired state"
+                )
+        except SessionSkipException:
+            raise
+        except Exception as exc:
+            logger.debug(f"Tier 3 check failed: {exc}")
 
 
-def validate_login_completion(lamia_instance: Any, probe_url: Optional[str], return_type: Any,
+def validate_login_completion(lamia_instance: Any, target_url: Optional[str], return_type: Any,
                               timeout: int = 300, poll_interval: int = 10) -> None:
     """Validate that login completed successfully by checking page state.
 
     Three-phase approach:
-      1. Fast path -- if the browser already redirected to probe_url (URL match
-         alone is sufficient — no model validation required).
+      1. Fast path -- if the browser already redirected to target_url (URL match
+         alone is sufficient -- no model validation required).
       2. Polling -- check the current page periodically without navigating, so
          that intermediate verification pages (captcha, ID input) are never
          disrupted.
-      3. Last resort -- run probe_url validation in a temporary tab-bound
+      3. Last resort -- run target_url validation in a temporary tab-bound
          BrowserManager while preserving the original browser manager.
 
     If all phases exhaust, the function returns normally (does NOT raise) so
@@ -320,7 +351,7 @@ def validate_login_completion(lamia_instance: Any, probe_url: Optional[str], ret
 
     Args:
         lamia_instance: The Lamia instance for running web commands
-        probe_url: Target URL for the logged-in state (e.g. the homepage)
+        target_url: Target URL for the logged-in state (e.g. the homepage)
         return_type: Expected return type for validation (e.g. HTML[HomePageModel])
         timeout: Max seconds to wait for successful validation (default 300)
         poll_interval: Seconds between validation attempts
@@ -333,10 +364,10 @@ def validate_login_completion(lamia_instance: Any, probe_url: Optional[str], ret
         web_manager.recent_actions.clear()
 
     # --- Phase 1: fast-path URL check (URL match alone = success) ---
-    if probe_url and browser_manager:
+    if target_url and browser_manager:
         try:
             current_url = _run_async(browser_manager.get_current_url()) or ""
-            if _urls_match_ignoring_params(current_url, probe_url):
+            if _urls_match_ignoring_params(current_url, target_url):
                 logger.info(
                     f"Browser already on target URL ({current_url}), "
                     f"login confirmed (fast path)"
@@ -376,18 +407,18 @@ def validate_login_completion(lamia_instance: Any, probe_url: Optional[str], ret
         time.sleep(wait)
 
     # --- Phase 3: last-resort -- validate in temporary tab BrowserManager ---
-    if probe_url and browser_manager and web_manager:
+    if target_url and browser_manager and web_manager:
         tab_browser_manager = None
         original_browser_manager = web_manager.browser_manager
         try:
-            logger.info(f"Opening probe tab for final login check: {probe_url}")
+            logger.info(f"Opening probe tab for final login check: {target_url}")
             tab_browser_manager = _run_async(browser_manager.open_new_tab())
             web_manager.browser_manager = tab_browser_manager
 
             if web_manager:
                 web_manager.recent_actions.clear()
             lamia_instance.run(
-                WebCommand(action=WebActionType.NAVIGATE, url=probe_url),
+                WebCommand(action=WebActionType.NAVIGATE, url=target_url),
             )
             if web_manager:
                 web_manager.recent_actions.clear()

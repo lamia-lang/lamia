@@ -46,42 +46,29 @@ class SessionWithTransformer(ast.NodeTransformer):
     
     def _transform_session_with(self, node):
         """Transform a with session() statement."""
-        # Extract probe_url from session() call if provided
-        probe_url = self._extract_probe_url(node)
+        target_url = self._extract_target_url(node)
+        login_url = self._extract_first_navigate_url(node.body)
 
-        # Check if we have a return type for this session
         return_type = None
-        pre_validation_call = None
         if self.return_types:
-            # Use the single return type (simplified - only one return type supported)
             return_type = next(iter(self.return_types.values()))
-            pre_validation_call = self._create_pre_validation_call(probe_url, return_type)
 
-        # Create the modified with statement body
-        modified_body = []
+        pre_validation_call = self._create_pre_validation_call(
+            login_url, target_url, return_type
+        )
 
-        # Add validation call at the BEGINNING if return type is specified
-        # This checks if we're already in the desired state and can skip the session
-        if pre_validation_call:
-            modified_body.append(pre_validation_call)
+        modified_body = [pre_validation_call]
 
         if return_type:
-            # Wrap user body in try-except so post-validation always runs even
-            # when an action fails (e.g. element not found because login form changed).
-            # The user can then complete login manually during the polling window.
             wrapped_body = self._wrap_user_body_in_try_except(node.body)
             modified_body.append(wrapped_body)
 
-            post_validation_call = self._create_post_validation_call(probe_url, return_type)
+            post_validation_call = self._create_post_validation_call(target_url, return_type)
             modified_body.append(post_validation_call)
         else:
-            # No return type: keep original body as-is, no wrapping
             modified_body.extend(node.body)
 
-        # Create new with statement with modified body
         modified_with = self._create_modified_with_statement(node, modified_body)
-
-        # Wrap the with statement in try-catch
         return self._wrap_in_try_catch(modified_with, node)
     
     def _create_modified_with_statement(self, original_node, modified_body):
@@ -190,32 +177,33 @@ class SessionWithTransformer(ast.NodeTransformer):
             col_offset=0,
         )
 
-    def _create_pre_validation_call(self, probe_url: Optional[str], return_type: str) -> ast.Expr:
+    def _create_pre_validation_call(
+        self,
+        login_url: Optional[str],
+        target_url: Optional[str],
+        return_type: Optional[str],
+    ) -> ast.Expr:
         """Create a call to pre_validate_session() at the start of the session body.
-
-        This replaces the previous inline AST validation block.  The function
-        checks both URL match (are we already on probe_url?) and model
-        validation, raising SessionSkipException if either confirms we are
-        already in the desired state.
 
         Generated code::
 
-            pre_validate_session(lamia, "https://...", HTML[Model])
+            pre_validate_session(lamia, "login_url", "target_url", HTML[Model])
         """
-        rt_node = self._build_return_type_ast(return_type)
+        login_url_node: ast.expr = ast.Constant(value=login_url)
+        target_url_node: ast.expr = ast.Constant(value=target_url)
 
-        probe_url_node: ast.expr
-        if probe_url is not None:
-            probe_url_node = ast.Constant(value=probe_url)
+        if return_type is not None:
+            rt_node: ast.expr = self._build_return_type_ast(return_type)
         else:
-            probe_url_node = ast.Constant(value=None)
+            rt_node = ast.Constant(value=None)
 
         return ast.Expr(
             value=ast.Call(
                 func=ast.Name(id='pre_validate_session', ctx=ast.Load()),
                 args=[
                     ast.Name(id='lamia', ctx=ast.Load()),
-                    probe_url_node,
+                    login_url_node,
+                    target_url_node,
                     rt_node,
                 ],
                 keywords=[],
@@ -237,8 +225,8 @@ class SessionWithTransformer(ast.NodeTransformer):
         else:
             return ast.Name(id=return_type, ctx=ast.Load())
     
-    def _extract_probe_url(self, node) -> Optional[str]:
-        """Extract probe_url from session() call's second positional argument."""
+    def _extract_target_url(self, node) -> Optional[str]:
+        """Extract target_url from session() call's second positional argument."""
         for item in node.items:
             if self._is_session_context(item):
                 call = item.context_expr
@@ -246,26 +234,37 @@ class SessionWithTransformer(ast.NodeTransformer):
                     return call.args[1].value
         return None
 
-    def _create_post_validation_call(self, probe_url: Optional[str], return_type: str) -> ast.Expr:
+    def _extract_first_navigate_url(self, body: list) -> Optional[str]:
+        """Extract the URL from the first web.navigate("...") call in the body."""
+        for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "web"
+                and node.func.attr == "navigate"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                return node.args[0].value
+        return None
+
+    def _create_post_validation_call(self, target_url: Optional[str], return_type: str) -> ast.Expr:
         """Create a call to validate_login_completion() at the end of the session body.
 
         Generated code:
             validate_login_completion(lamia, "https://...", HTML[HomePageModel])
         """
         rt_node = self._build_return_type_ast(return_type)
-
-        probe_url_node: ast.expr
-        if probe_url is not None:
-            probe_url_node = ast.Constant(value=probe_url)
-        else:
-            probe_url_node = ast.Constant(value=None)
+        target_url_node: ast.expr = ast.Constant(value=target_url)
 
         return ast.Expr(
             value=ast.Call(
                 func=ast.Name(id='validate_login_completion', ctx=ast.Load()),
                 args=[
                     ast.Name(id='lamia', ctx=ast.Load()),
-                    probe_url_node,
+                    target_url_node,
                     rt_node,
                 ],
                 keywords=[],

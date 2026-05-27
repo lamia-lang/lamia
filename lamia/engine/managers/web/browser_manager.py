@@ -527,8 +527,13 @@ class BrowserManager:
             get_page_html_func=self._get_current_page_html
         )
     
+    async def navigate_to(self, url: str) -> None:
+        """Navigate the browser to a URL (used by session pre-validation)."""
+        adapter = await self._get_browser_adapter()
+        await adapter.navigate(BrowserActionParams(value=url))
+
     async def get_current_url(self) -> str:
-        """Get current page URL.""" 
+        """Get current page URL."""
         adapter = await self._get_browser_adapter()
         return await adapter.get_current_url()
     

@@ -49,6 +49,7 @@ class LintViolation:
     line: int
     message: str
     snippet: str = ""
+    col: int = 0
 
 
 @dataclass

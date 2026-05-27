@@ -211,6 +211,16 @@ GLOBAL_WEB_NO_SELECTOR = LintRule(
     ),
 )
 
+SESSION_NO_TARGET_URL = LintRule(
+    code="LMW024",
+    severity=Severity.Convention,
+    name="session-no-target-url",
+    description=(
+        "Consider adding a target URL for reliable session skip: "
+        "session(\"%s\", \"https://...\")"
+    ),
+)
+
 _LONG_SCRIPT_THRESHOLD = 5000
 
 _GENERIC_LM_NAMES = {
@@ -225,6 +235,7 @@ ALL_RULES = [
     EXCESSIVE_GROWTH, TAB_INDENTATION, POSITIONAL_HU_ARGS,
     EMPTY_FILE, TRAILING_WHITESPACE,
     SINGLE_FILE_IN_FILES_CONTEXT, PREFER_ATOMIC_WEB_ACTION,
+    SESSION_NO_TARGET_URL,
     VARIABLE_NAMING, FILENAME_NAMING, LEADING_BLANK_LINES, GENERIC_FILENAME,
     OUTPUT_FORMAT_HINT, INLINE_PYDANTIC_MODEL, LONG_SCRIPT,
 ]
@@ -671,6 +682,46 @@ def _check_web_action_patterns(content: str) -> list[LintViolation]:
     return violations
 
 
+def _check_session_patterns(content: str) -> list[LintViolation]:
+    """Lint session() usage patterns.
+
+    LMW024: session("name") without a target_url -- suggest adding one.
+    """
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    violations: list[LintViolation] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.With):
+            continue
+        for item in node.items:
+            call = item.context_expr
+            if not (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Name)
+                and call.func.id == "session"
+            ):
+                continue
+            if len(call.args) < 2 and not any(
+                kw.arg == "target_url" for kw in call.keywords
+            ):
+                session_name = ""
+                if call.args and isinstance(call.args[0], ast.Constant):
+                    session_name = str(call.args[0].value)
+                violations.append(LintViolation(
+                    rule=SESSION_NO_TARGET_URL,
+                    line=node.lineno,
+                    message=SESSION_NO_TARGET_URL.description % session_name,
+                    snippet=f'session("{session_name}")',
+                    col=call.col_offset,
+                ))
+
+    return violations
+
+
 class LmLinter(BaseLinter):
     """Linter for .lm (Lamia script) files."""
 
@@ -803,6 +854,9 @@ class LmLinter(BaseLinter):
 
         # ── Web action patterns ───────────────────────────────────────────
         violations.extend(_check_web_action_patterns(content))
+
+        # ── Session patterns ──────────────────────────────────────────────
+        violations.extend(_check_session_patterns(content))
 
         # ── Cross-file checks (require cwd) ─────────────────────────────
         if cwd:

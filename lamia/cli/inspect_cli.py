@@ -24,6 +24,11 @@ from lamia.interpreter.inline_function_validation import (
     analyze_inline_template,
     missing_placeholders_message,
 )
+from lamia.lint.lm_linter import (
+    _check_web_action_patterns,
+    _check_session_patterns,
+)
+from lamia.lint.base import Severity
 
 
 _NON_EXEC_TYPES = (
@@ -107,6 +112,12 @@ def _analyze(source: str, file_path: Optional[str] = None) -> InspectResult:
     if file_path:
         diagnostics.extend(_check_call_integrity(tree, source_map, source, file_path))
         diagnostics.extend(_check_cross_file_duplicates(source, file_path))
+    diagnostics.extend(_lint_violations_to_diagnostics(
+        _check_web_action_patterns(source)
+    ))
+    diagnostics.extend(_lint_violations_to_diagnostics(
+        _check_session_patterns(source)
+    ))
 
     return InspectResult(len(deduped) > 0, deduped, diagnostics)
 
@@ -205,6 +216,26 @@ def _collect_inline_def_issues(source: str) -> Dict[str, Set[str]]:
             missing_by_fn[func_name] = issues.missing_placeholders
 
     return missing_by_fn
+
+
+def _lint_violations_to_diagnostics(violations: list) -> List[dict]:
+    """Convert LintViolation objects into inspect-cli diagnostic dicts."""
+    _SEVERITY_MAP = {
+        Severity.Error: "error",
+        Severity.Warning: "warning",
+        Severity.Convention: "warning",
+        Severity.Refactor: "warning",
+    }
+    diagnostics: List[dict] = []
+    for v in violations:
+        diagnostics.append({
+            "severity": _SEVERITY_MAP.get(v.rule.severity, "warning"),
+            "message": f"[{v.rule.code}] {v.message}",
+            "line": v.line,
+            "col": v.col,
+            "source": "lamia-lint",
+        })
+    return diagnostics
 
 
 _CALL_RE = re.compile(r'(?:^|\s)(?:\w+\s*=\s*)?(\w+)\(([^)]*)\)')

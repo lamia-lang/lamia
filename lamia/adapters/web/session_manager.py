@@ -132,6 +132,16 @@ class SessionManager:
                     except OSError as e:
                         logger.warning(f"Failed to clean session for profile '{profile_name}': {e}")
     
+    def has_saved_cookies(self, profile_name: str) -> bool:
+        """Return True if a non-empty cookies file exists for the profile."""
+        cookies_file = self.get_profile_session_dir(profile_name) / "cookies.json"
+        if not cookies_file.exists():
+            return False
+        try:
+            return cookies_file.stat().st_size > 2
+        except OSError:
+            return False
+
     def get_cookies_file(self, profile_name: str) -> Path:
         """Get path to cookies file for a profile."""
         return self.get_profile_session_dir(profile_name) / "cookies.json"

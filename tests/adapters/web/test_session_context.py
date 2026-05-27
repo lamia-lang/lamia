@@ -133,8 +133,8 @@ class TestValidateLoginCompletion:
         assert lamia.run.call_count == 1
 
     @patch('lamia.adapters.web.session_context._get_browser_manager', return_value=None)
-    def test_succeeds_without_probe_url(self, _mock_bm):
-        """Test immediate success without probe_url."""
+    def test_succeeds_without_target_url(self, _mock_bm):
+        """Test immediate success without target_url."""
         lamia = self._make_lamia([{"page": "ok"}])
         validate_login_completion(lamia, None, "HTML", timeout=10, poll_interval=1)
         assert lamia.run.call_count == 1
@@ -154,7 +154,7 @@ class TestValidateLoginCompletion:
 
     @patch('lamia.adapters.web.session_context.time')
     @patch('lamia.adapters.web.session_context._get_browser_manager', return_value=None)
-    def test_warns_on_timeout_without_probe_url(self, _mock_bm, mock_time):
+    def test_warns_on_timeout_without_target_url(self, _mock_bm, mock_time):
         """Test that a warning is logged (not raised) when timeout expires so cookies still get saved."""
         lamia = self._make_lamia([None, None])
         mock_time.time = Mock(side_effect=[0, 5, 125])
@@ -207,7 +207,7 @@ class TestValidateLoginFastPath:
         return mock
 
     def test_fast_path_when_url_matches(self):
-        """Test that validation succeeds immediately when current URL matches probe_url (no model validation)."""
+        """Test that validation succeeds immediately when current URL matches target_url (no model validation)."""
         lamia = self._make_lamia_with_result({"page": "ok"})
         browser_manager = Mock()
         browser_manager.get_current_url = AsyncMock(return_value="https://example.com/feed/?trk=nav")
@@ -220,7 +220,7 @@ class TestValidateLoginFastPath:
 
     @patch('lamia.adapters.web.session_context.time')
     def test_no_fast_path_when_url_differs(self, mock_time):
-        """Test that polling starts when current URL doesn't match probe_url."""
+        """Test that polling starts when current URL doesn't match target_url."""
         browser_manager = Mock()
         browser_manager.get_current_url = AsyncMock(return_value="https://example.com/login")
 
@@ -322,59 +322,137 @@ class TestValidateLoginProbeNavigation:
 
 
 class TestPreValidateSession:
-    """Test pre_validate_session URL and model checks."""
+    """Test three-tier pre_validate_session logic."""
 
-    def test_skips_when_url_matches_probe_url(self):
-        """Test that SessionSkipException is raised when current URL matches probe_url."""
+    def _make_browser_manager(self, current_url="https://example.com/login", profile="login"):
+        bm = Mock()
+        bm.get_current_url = AsyncMock(return_value=current_url)
+        bm.navigate_to = AsyncMock()
+        bm.get_active_profile = Mock(return_value=profile)
+        bm._get_browser_adapter = AsyncMock()
+        return bm
+
+    def _make_session_manager(self, has_cookies=True):
+        sm = Mock()
+        sm.has_saved_cookies = Mock(return_value=has_cookies)
+        return sm
+
+    def test_no_cookies_skips_all_checks(self):
+        """Test that when no cookies exist, all tiers are skipped and body executes."""
         lamia = Mock()
-        browser_manager = Mock()
-        browser_manager.get_current_url = AsyncMock(return_value="https://example.com/feed/?trk=onboarding")
+        bm = self._make_browser_manager()
+        sm = self._make_session_manager(has_cookies=False)
 
-        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=browser_manager):
-            with pytest.raises(SessionSkipException, match="Already on target URL"):
-                pre_validate_session(lamia, "https://example.com/feed/", "HTML")
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                pre_validate_session(lamia, "https://example.com/login", "https://example.com/feed", "HTML")
 
-    def test_skips_when_model_validates(self):
-        """Test that SessionSkipException is raised when model validation succeeds."""
+        bm.navigate_to.assert_not_called()
+
+    def test_tier1_redirect_skips_session(self):
+        """Tier 1: login page redirects away -> skip body."""
+        lamia = Mock()
+        bm = self._make_browser_manager(current_url="https://example.com/dashboard")
+        sm = self._make_session_manager(has_cookies=True)
+
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                with pytest.raises(SessionSkipException, match="Redirected from login page"):
+                    pre_validate_session(lamia, "https://example.com/login", None, None)
+
+        bm.navigate_to.assert_called_once_with("https://example.com/login")
+
+    def test_tier1_no_redirect_falls_through(self):
+        """Tier 1: no redirect from login page -> proceed to tier 2 or execute."""
+        lamia = Mock()
+        bm = self._make_browser_manager(current_url="https://example.com/login")
+        sm = self._make_session_manager(has_cookies=True)
+
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                pre_validate_session(lamia, "https://example.com/login", None, None)
+
+    def test_tier2_target_url_reachable_skips(self):
+        """Tier 2: target_url is reachable (stays on it) -> skip body."""
+        lamia = Mock()
+        bm = self._make_browser_manager(current_url="https://example.com/feed/")
+        sm = self._make_session_manager(has_cookies=True)
+
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                with pytest.raises(SessionSkipException, match="Target URL reachable"):
+                    pre_validate_session(lamia, None, "https://example.com/feed/", None)
+
+    def test_tier2_redirected_away_falls_through(self):
+        """Tier 2: target_url redirects away -> proceed to tier 3 or execute."""
+        lamia = Mock()
+        bm = self._make_browser_manager(current_url="https://example.com/login")
+        sm = self._make_session_manager(has_cookies=True)
+
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                pre_validate_session(lamia, None, "https://example.com/feed/", None)
+
+    def test_tier3_model_validates_skips(self):
+        """Tier 3: model validation passes -> skip body."""
         result = Mock(typed_result={"page": "ok"})
         lamia = Mock()
         lamia.run = Mock(return_value=result)
+        bm = self._make_browser_manager(current_url="https://example.com/login")
+        sm = self._make_session_manager(has_cookies=True)
+        web_manager = Mock()
+        web_manager.recent_actions = Mock()
 
-        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=None):
-            with pytest.raises(SessionSkipException, match="already in desired state"):
-                pre_validate_session(lamia, None, "HTML")
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                with patch('lamia.adapters.web.session_context._get_web_manager', return_value=web_manager):
+                    with pytest.raises(SessionSkipException, match="already in desired state"):
+                        pre_validate_session(lamia, None, None, "HTML")
 
-    def test_continues_when_url_differs_and_model_fails(self):
-        """Test that function returns normally when neither check passes."""
+    def test_tier3_model_fails_executes_body(self):
+        """Tier 3: model validation fails -> execute body."""
         result = Mock(typed_result=None, result_text="no match")
         lamia = Mock()
         lamia.run = Mock(return_value=result)
-        browser_manager = Mock()
-        browser_manager.get_current_url = AsyncMock(return_value="https://example.com/login")
+        bm = self._make_browser_manager(current_url="https://example.com/login")
+        sm = self._make_session_manager(has_cookies=True)
+        web_manager = Mock()
+        web_manager.recent_actions = Mock()
 
-        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=browser_manager):
-            # Should NOT raise
-            pre_validate_session(lamia, "https://example.com/feed/", "HTML")
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                with patch('lamia.adapters.web.session_context._get_web_manager', return_value=web_manager):
+                    pre_validate_session(lamia, None, None, "HTML")
 
-    def test_continues_when_no_probe_url_and_model_fails(self):
-        """Test that function returns normally when no probe_url and model fails."""
-        result = Mock(typed_result=None, result_text="no match")
+    def test_no_browser_manager_returns(self):
+        """Test that when no browser manager, function returns without checks."""
         lamia = Mock()
-        lamia.run = Mock(return_value=result)
 
         with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=None):
-            # Should NOT raise
-            pre_validate_session(lamia, None, "HTML")
+            pre_validate_session(lamia, "https://example.com/login", "https://example.com/feed", "HTML")
 
-    def test_url_check_takes_priority_over_model(self):
-        """Test that URL match skips without even running model validation."""
+    def test_full_cascade_tier1_then_tier2(self):
+        """Test tier 1 fails, tier 2 succeeds."""
         lamia = Mock()
-        browser_manager = Mock()
-        browser_manager.get_current_url = AsyncMock(return_value="https://example.com/feed/")
+        bm = Mock()
+        bm.get_active_profile = Mock(return_value="login")
+        bm._get_browser_adapter = AsyncMock()
+        sm = self._make_session_manager(has_cookies=True)
+        navigate_urls = []
 
-        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=browser_manager):
-            with pytest.raises(SessionSkipException):
-                pre_validate_session(lamia, "https://example.com/feed/", "HTML")
+        async def mock_navigate(url):
+            navigate_urls.append(url)
 
-        # lamia.run should NOT have been called -- URL match is enough
-        lamia.run.assert_not_called()
+        bm.navigate_to = AsyncMock(side_effect=mock_navigate)
+
+        def get_url_side_effect():
+            if len(navigate_urls) == 1:
+                return "https://example.com/login"
+            return "https://example.com/feed/"
+
+        bm.get_current_url = AsyncMock(side_effect=get_url_side_effect)
+
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                with pytest.raises(SessionSkipException, match="Target URL reachable"):
+                    pre_validate_session(lamia, "https://example.com/login", "https://example.com/feed/", None)

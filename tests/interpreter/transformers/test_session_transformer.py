@@ -65,8 +65,8 @@ with session("test"):
         assert isinstance(call.func, ast.Name)
         assert call.func.id == 'pre_validate_session'
 
-    def test_no_return_types_no_validation_injected(self):
-        """Test no return types: no validation injected."""
+    def test_no_return_types_still_injects_pre_validation(self):
+        """Test no return types still injects pre_validate_session (tier 1/2)."""
         transformer = SessionWithTransformer(return_types=None)
         source = """
 with session("test"):
@@ -80,8 +80,11 @@ with session("test"):
         assert isinstance(try_node, ast.Try)
         with_node = try_node.body[0]
         assert isinstance(with_node, ast.With)
-        assert len(with_node.body) == 1
-        assert isinstance(with_node.body[0], ast.Expr)
+        # pre_validate_session + original body
+        assert len(with_node.body) == 2
+        pre_call = with_node.body[0]
+        assert isinstance(pre_call, ast.Expr)
+        assert pre_call.value.func.id == 'pre_validate_session'
 
     def test_parametric_return_types(self):
         """Test parametric return types like HTML[Model] in pre_validate_session."""
@@ -104,7 +107,8 @@ with session("test"):
         call = pre_call.value
         assert isinstance(call, ast.Call)
         assert call.func.id == 'pre_validate_session'
-        rt_arg = call.args[2]
+        # args: [lamia, login_url, target_url, return_type]
+        rt_arg = call.args[3]
         assert isinstance(rt_arg, ast.Subscript)
         assert isinstance(rt_arg.value, ast.Name)
         assert rt_arg.value.id == 'HTML'
@@ -125,7 +129,8 @@ with session("test"):
         assert isinstance(try_node, ast.Try)
         with_node = try_node.body[0]
         assert isinstance(with_node, ast.With)
-        assert len(with_node.body) == 3
+        # pre_validate_session + 3 original statements
+        assert len(with_node.body) == 4
 
     def test_session_with_empty_body(self):
         """Test session with empty body."""
@@ -141,8 +146,9 @@ with session("test"):
         assert isinstance(try_node, ast.Try)
         with_node = try_node.body[0]
         assert isinstance(with_node, ast.With)
-        assert len(with_node.body) == 1
-        assert isinstance(with_node.body[0], ast.Pass)
+        # pre_validate_session + pass
+        assert len(with_node.body) == 2
+        assert isinstance(with_node.body[1], ast.Pass)
 
     def test_multiple_session_statements(self):
         """Test multiple session statements in same code."""
@@ -178,8 +184,9 @@ with session("test"):
         assert isinstance(try_node, ast.Try)
         with_node = try_node.body[0]
         assert isinstance(with_node, ast.With)
-        assert len(with_node.body) == 1
-        assert isinstance(with_node.body[0], ast.If)
+        # pre_validate_session + if statement
+        assert len(with_node.body) == 2
+        assert isinstance(with_node.body[1], ast.If)
 
     def test_session_with_return_type_simple(self):
         """Test session with simple return type calls pre_validate_session."""
@@ -203,7 +210,8 @@ with session("test"):
         assert isinstance(call, ast.Call)
         assert isinstance(call.func, ast.Name)
         assert call.func.id == 'pre_validate_session'
-        rt_arg = call.args[2]
+        # args: [lamia, login_url, target_url, return_type]
+        rt_arg = call.args[3]
         assert isinstance(rt_arg, ast.Name)
         assert rt_arg.id == 'HTML'
 
@@ -268,13 +276,14 @@ with session("login"):
         transformed = transformer.transform_sessions(tree)
 
         with_node = transformed.body[0].body[0]
-        # No wrapping: body has original 2 statements
-        assert len(with_node.body) == 2
-        assert isinstance(with_node.body[0], ast.Expr)
+        # pre_validate_session + 2 original statements (not wrapped in try)
+        assert len(with_node.body) == 3
+        assert with_node.body[0].value.func.id == 'pre_validate_session'
         assert isinstance(with_node.body[1], ast.Expr)
+        assert isinstance(with_node.body[2], ast.Expr)
 
-    def test_post_validation_includes_probe_url(self):
-        """Test that post-validation passes probe_url from session() call."""
+    def test_post_validation_includes_target_url(self):
+        """Test that post-validation passes target_url from session() call."""
         return_types = {"key": "HTML"}
         transformer = SessionWithTransformer(return_types=return_types)
         source = """
@@ -286,14 +295,14 @@ with session("login", "https://example.com/feed"):
 
         with_node = transformed.body[0].body[0]
         post_call = with_node.body[-1].value
-        # args: [lamia, probe_url, return_type]
+        # args: [lamia, target_url, return_type]
         assert len(post_call.args) == 3
-        probe_url_arg = post_call.args[1]
-        assert isinstance(probe_url_arg, ast.Constant)
-        assert probe_url_arg.value == "https://example.com/feed"
+        target_url_arg = post_call.args[1]
+        assert isinstance(target_url_arg, ast.Constant)
+        assert target_url_arg.value == "https://example.com/feed"
 
-    def test_post_validation_none_probe_url_when_not_provided(self):
-        """Test that post-validation passes None probe_url when session has no probe_url."""
+    def test_post_validation_none_target_url_when_not_provided(self):
+        """Test that post-validation passes None target_url when session has no target_url."""
         return_types = {"key": "HTML"}
         transformer = SessionWithTransformer(return_types=return_types)
         source = """
@@ -305,9 +314,9 @@ with session("login"):
 
         with_node = transformed.body[0].body[0]
         post_call = with_node.body[-1].value
-        probe_url_arg = post_call.args[1]
-        assert isinstance(probe_url_arg, ast.Constant)
-        assert probe_url_arg.value is None
+        target_url_arg = post_call.args[1]
+        assert isinstance(target_url_arg, ast.Constant)
+        assert target_url_arg.value is None
 
     def test_no_post_validation_without_return_type(self):
         """Test that no post-validation is injected when there is no return type."""
@@ -320,9 +329,10 @@ with session("login", "https://example.com/feed"):
         transformed = transformer.transform_sessions(tree)
 
         with_node = transformed.body[0].body[0]
-        # Only the original statement, no pre- or post-validation
-        assert len(with_node.body) == 1
-        assert isinstance(with_node.body[0], ast.Expr)
+        # pre_validate_session + original statement (no post-validation)
+        assert len(with_node.body) == 2
+        assert with_node.body[0].value.func.id == 'pre_validate_session'
+        assert isinstance(with_node.body[1], ast.Expr)
 
     def test_post_validation_return_type_passed_correctly(self):
         """Test that post-validation receives the correct parametric return type."""
@@ -344,8 +354,8 @@ with session("test"):
         assert isinstance(rt_arg.slice, ast.Name)
         assert rt_arg.slice.id == 'UserModel'
 
-    def test_pre_validate_session_includes_probe_url(self):
-        """Test that pre_validate_session receives probe_url from session() call."""
+    def test_pre_validate_session_includes_target_url(self):
+        """Test that pre_validate_session receives target_url from session() call."""
         return_types = {"key": "HTML"}
         transformer = SessionWithTransformer(return_types=return_types)
         source = """
@@ -359,14 +369,14 @@ with session("login", "https://example.com/feed"):
         pre_call = with_node.body[0].value
         assert isinstance(pre_call, ast.Call)
         assert pre_call.func.id == 'pre_validate_session'
-        # args: [lamia, probe_url, return_type]
-        assert len(pre_call.args) == 3
-        probe_url_arg = pre_call.args[1]
-        assert isinstance(probe_url_arg, ast.Constant)
-        assert probe_url_arg.value == "https://example.com/feed"
+        # args: [lamia, login_url, target_url, return_type]
+        assert len(pre_call.args) == 4
+        target_url_arg = pre_call.args[2]
+        assert isinstance(target_url_arg, ast.Constant)
+        assert target_url_arg.value == "https://example.com/feed"
 
-    def test_pre_validate_session_none_probe_url(self):
-        """Test that pre_validate_session gets None probe_url when not provided."""
+    def test_pre_validate_session_none_target_url(self):
+        """Test that pre_validate_session gets None target_url when not provided."""
         return_types = {"key": "HTML"}
         transformer = SessionWithTransformer(return_types=return_types)
         source = """
@@ -378,6 +388,41 @@ with session("login"):
 
         with_node = transformed.body[0].body[0]
         pre_call = with_node.body[0].value
-        probe_url_arg = pre_call.args[1]
-        assert isinstance(probe_url_arg, ast.Constant)
-        assert probe_url_arg.value is None
+        # args: [lamia, login_url, target_url, return_type]
+        target_url_arg = pre_call.args[2]
+        assert isinstance(target_url_arg, ast.Constant)
+        assert target_url_arg.value is None
+
+    def test_pre_validate_session_extracts_login_url(self):
+        """Test that login_url is extracted from first web.navigate() in body."""
+        transformer = SessionWithTransformer(return_types=None)
+        source = """
+with session("login"):
+    web.navigate("https://example.com/login")
+    web.type_text("#user", "tom")
+"""
+        tree = ast.parse(source)
+        transformed = transformer.transform_sessions(tree)
+
+        with_node = transformed.body[0].body[0]
+        pre_call = with_node.body[0].value
+        # args: [lamia, login_url, target_url, return_type]
+        login_url_arg = pre_call.args[1]
+        assert isinstance(login_url_arg, ast.Constant)
+        assert login_url_arg.value == "https://example.com/login"
+
+    def test_pre_validate_session_login_url_none_without_navigate(self):
+        """Test that login_url is None when body has no web.navigate()."""
+        transformer = SessionWithTransformer(return_types=None)
+        source = """
+with session("login"):
+    web.click("button")
+"""
+        tree = ast.parse(source)
+        transformed = transformer.transform_sessions(tree)
+
+        with_node = transformed.body[0].body[0]
+        pre_call = with_node.body[0].value
+        login_url_arg = pre_call.args[1]
+        assert isinstance(login_url_arg, ast.Constant)
+        assert login_url_arg.value is None
