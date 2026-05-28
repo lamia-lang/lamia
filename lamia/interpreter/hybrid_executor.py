@@ -206,30 +206,29 @@ class HybridExecutor:
         # Analyze source code to determine what needs to be injected
         analysis = extract_code_dependencies(source_code)
         
-        # Transform the code
-        transformed_code = self.transform(source_code)
-        
+        # Compile directly from AST to preserve original line numbers
+        compiled_code = self.parser.compile(source_code, file_path)
+
         # Prepare execution environment
         if globals_dict is None:
             globals_dict = {}
-        
-        # Add lamia instance to globals
+
+        # Add lamia instance and transformer-injected names to globals
         globals_dict[self.lamia_var_name] = self.lamia
-        
+        globals_dict['SmartTypeResolver'] = SmartTypeResolver
+
         # Inject only the namespaces and types that are actually used
         ast_globals = create_execution_globals(analysis['namespaces'], analysis['types'], self.lamia)
         globals_dict.update(ast_globals)
-        
+
         # Extract and import types from return annotations (legacy support)
         self._extract_and_import_types(source_code, globals_dict)
-        
+
         # Use lazy loading if enabled
         if enable_lazy_dependency_loading:
             from .hybrid_files_lazy_loader import create_lazy_loading_globals
             globals_dict = create_lazy_loading_globals(self.lamia, globals_dict, file_path)
-        
-        # Execute the transformed code directly
-        compiled_code = compile(transformed_code, file_path, 'exec')
+
         push_source_file(str(Path(file_path).resolve()))
         try:
             exec(compiled_code, globals_dict)

@@ -916,7 +916,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
         try:
             tree = self.parse(response)
             if self.model is None:
-                return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(tree), typed_result=None)
+                return ValidationResult(is_valid=True, validated_text=self.get_subtree_string(tree), typed_result=tree)
             return callback(tree, self.model)
         except Exception as e:
             error_message = str(e)

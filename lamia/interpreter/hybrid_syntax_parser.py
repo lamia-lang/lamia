@@ -17,11 +17,34 @@ Each component has:
 This file orchestrates all the components through the main HybridSyntaxParser class.
 """
 
+import ast
+import builtins
+
 from typing import Dict, Any, Tuple
+
 from .preprocessors import WithReturnTypePreprocessor
 from .detectors import LLMCommandDetector
 from .transformers import SessionWithTransformer, HybridSyntaxTransformer
-import ast
+
+builtins_compile = builtins.compile
+
+
+def _fix_line_ranges(tree: ast.AST) -> None:
+    """Ensure all AST nodes have valid line ranges for compile().
+
+    After transformation, some nodes may have end_lineno < lineno or
+    end_col_offset < col_offset which causes ValueError in compile().
+    """
+    for node in ast.walk(tree):
+        lineno = getattr(node, 'lineno', None)
+        end_lineno = getattr(node, 'end_lineno', None)
+        if lineno is not None and end_lineno is not None and end_lineno < lineno:
+            node.end_lineno = lineno
+        col = getattr(node, 'col_offset', None)
+        end_col = getattr(node, 'end_col_offset', None)
+        if (col is not None and end_col is not None
+                and lineno == end_lineno and end_col < col):
+            node.end_col_offset = col
 
 
 def _walk_paired_trees(src_node: ast.AST, out_node: ast.AST, smap: dict) -> None:
@@ -196,6 +219,12 @@ class HybridSyntaxParser:
         """
         transformed_tree, _ = self._build_transformed_tree(source_code)
         return self._syntax_transformer._ast_to_source(transformed_tree)
+
+    def compile(self, source_code: str, filename: str = "<lamia>") -> Any:
+        """Transform and compile to a code object preserving original line numbers."""
+        transformed_tree, _ = self._build_transformed_tree(source_code)
+        _fix_line_ranges(transformed_tree)
+        return builtins_compile(transformed_tree, filename, "exec")
 
     def transform_with_source_map(self, source_code: str) -> Tuple[str, Dict[int, int]]:
         """Transform code and return (transformed_code, {output_line: original_line}).

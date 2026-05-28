@@ -891,8 +891,7 @@ class TestLocalFileRead:
             lamia = Lamia()
             result = asyncio.run(lamia.run_async("./config.json", return_type=JSON))
 
-        import json
-        assert json.loads(result) == {"key": "value", "num": 42}
+        assert result == {"key": "value", "num": 42}
         mock_engine.execute.assert_not_called()
 
     def test_txt_file_returned_as_string(self, tmp_path):
@@ -925,9 +924,8 @@ class TestLocalFileRead:
             lamia = Lamia()
             result = asyncio.run(lamia.run_async("./data.json", return_type=JSON, _full_result=True))
 
-        import json
         assert isinstance(result, LamiaResult)
-        assert json.loads(result.typed_result) == {"x": 1}
+        assert result.typed_result == {"x": 1}
         assert result.tracking_context.data_provider_name == "local_file"
 
     def test_file_not_found_raises(self, tmp_path):
@@ -955,8 +953,7 @@ class TestLocalFileRead:
             lamia = Lamia()
             result = asyncio.run(lamia.run_async("./settings", return_type=JSON))
 
-        import json
-        assert json.loads(result) == {"feature": True}
+        assert result == {"feature": True}
         mock_engine.execute.assert_not_called()
 
     def test_sync_invalid_local_json_message(self, tmp_path):
