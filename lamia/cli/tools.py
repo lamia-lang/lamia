@@ -114,6 +114,10 @@ TOPIC_TO_FILE = {
     "lamia-as-python-library": "user-guide/python-library.md",
     "pydantic-models": "user-guide/pydantic-models.md",
     "custom-llm-adapters": "user-guide/custom-llm-adapters.md",
+    "file-operations": "user-guide/file-operations.md",
+    "file.read": "user-guide/file-operations.md",
+    "file.write": "user-guide/file-operations.md",
+    "file.append": "user-guide/file-operations.md",
 }
 
 _DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))

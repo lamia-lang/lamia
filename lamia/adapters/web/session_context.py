@@ -453,6 +453,19 @@ def pre_validate_session(lamia_instance: Any, login_url: Optional[str],
         except Exception as exc:
             logger.debug(f"Tier 3 check failed: {exc}")
 
+    # All tiers failed — session is invalid. Clear stale cookies so the
+    # session body gets a fresh login page (prevents "Welcome back" flows
+    # where the site remembers the email from expired cookies).
+    logger.info(f"Session invalid for profile '{profile}', clearing stale cookies for fresh login")
+    try:
+        adapter = browser_manager._browser_adapter
+        if isinstance(adapter, RetryingBrowserAdapter):
+            adapter = adapter.adapter
+        if adapter.driver:
+            adapter.driver.delete_all_cookies()
+    except Exception as exc:
+        logger.debug(f"Failed to clear cookies: {exc}")
+
 
 def validate_login_completion(lamia_instance: Any, target_url: Optional[str], return_type: Any,
                               timeout: int = 300, poll_interval: int = 10) -> None:

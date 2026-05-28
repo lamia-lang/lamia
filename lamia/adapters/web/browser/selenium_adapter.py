@@ -470,8 +470,33 @@ class SeleniumAdapter(BaseBrowserAdapter):
         logger.info(f"SeleniumAdapter: Type '{text}' into {active_selector}")
         
         try:
-            element.clear()
-            element.send_keys(text)
+            tag = element.tag_name.lower()
+            if tag in ('input', 'textarea'):
+                try:
+                    element.clear()
+                except WebDriverException:
+                    element.click()
+                element.send_keys(text)
+            else:
+                target = self.driver.execute_script(
+                    "var el = arguments[0];"
+                    "var ce = el.querySelector('[contenteditable=\"true\"]') || "
+                    "el.querySelector('[contenteditable=\"plaintext-only\"]') || "
+                    "el.querySelector('[contenteditable]');"
+                    "return ce || el;",
+                    element
+                )
+                target.click()
+                try:
+                    target.send_keys(text)
+                except WebDriverException:
+                    self.driver.execute_script(
+                        "var el = arguments[0];"
+                        "el.focus(); el.textContent = arguments[1];"
+                        "el.dispatchEvent(new Event('input', {bubbles: true}));"
+                        "el.dispatchEvent(new Event('change', {bubbles: true}));",
+                        target, text
+                    )
         except WebDriverException as e:
             raise ExternalOperationTransientError(f"Type text failed: {str(e)}", retry_history=[], original_error=e)
         except Exception as e:

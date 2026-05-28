@@ -383,3 +383,85 @@ async def test_get_input_type_returns_enum_value():
     result = await adapter.get_input_type(params)
     
     assert result == "checkbox"  # Should return the enum value as string
+
+
+@pytest.mark.asyncio
+async def test_type_text_input_element_clears_and_sends_keys():
+    """type_text on input/textarea uses clear() + send_keys()."""
+    adapter = SeleniumAdapter()
+    adapter.initialized = True
+
+    mock_element = Mock()
+    mock_element.tag_name = "input"
+    adapter._find_element = Mock(return_value=(mock_element, "#email"))
+
+    params = BrowserActionParams(selector="#email", value="hello@test.com")
+    await adapter.type_text(params)
+
+    mock_element.clear.assert_called_once()
+    mock_element.send_keys.assert_called_once_with("hello@test.com")
+
+
+@pytest.mark.asyncio
+async def test_type_text_textarea_falls_back_to_click_when_clear_fails():
+    """type_text on textarea clicks when clear() throws."""
+    adapter = SeleniumAdapter()
+    adapter.initialized = True
+
+    from selenium.common.exceptions import WebDriverException
+    mock_element = Mock()
+    mock_element.tag_name = "textarea"
+    mock_element.clear.side_effect = WebDriverException("invalid state")
+    adapter._find_element = Mock(return_value=(mock_element, "textarea#desc"))
+
+    params = BrowserActionParams(selector="textarea#desc", value="text")
+    await adapter.type_text(params)
+
+    mock_element.click.assert_called_once()
+    mock_element.send_keys.assert_called_once_with("text")
+
+
+@pytest.mark.asyncio
+async def test_type_text_div_finds_contenteditable_child():
+    """type_text on div element looks for contenteditable child via JS."""
+    adapter = SeleniumAdapter()
+    adapter.initialized = True
+    adapter.driver = Mock()
+
+    mock_element = Mock()
+    mock_element.tag_name = "div"
+    mock_ce_child = Mock()
+    adapter.driver.execute_script = Mock(return_value=mock_ce_child)
+    adapter._find_element = Mock(return_value=(mock_element, "div#desc"))
+
+    params = BrowserActionParams(selector="div#desc", value="description text")
+    await adapter.type_text(params)
+
+    adapter.driver.execute_script.assert_called_once()
+    js_call = adapter.driver.execute_script.call_args
+    assert "contenteditable" in js_call[0][0]
+    mock_ce_child.click.assert_called_once()
+    mock_ce_child.send_keys.assert_called_once_with("description text")
+
+
+@pytest.mark.asyncio
+async def test_type_text_div_falls_back_to_js_injection():
+    """type_text on div uses JS when send_keys also fails."""
+    adapter = SeleniumAdapter()
+    adapter.initialized = True
+    adapter.driver = Mock()
+
+    from selenium.common.exceptions import WebDriverException
+    mock_element = Mock()
+    mock_element.tag_name = "div"
+    mock_ce_child = Mock()
+    mock_ce_child.send_keys.side_effect = WebDriverException("not interactable")
+    adapter.driver.execute_script = Mock(return_value=mock_ce_child)
+    adapter._find_element = Mock(return_value=(mock_element, "div#rich"))
+
+    params = BrowserActionParams(selector="div#rich", value="rich text")
+    await adapter.type_text(params)
+
+    assert adapter.driver.execute_script.call_count == 2
+    js_fallback = adapter.driver.execute_script.call_args_list[1]
+    assert "textContent" in js_fallback[0][0]

@@ -431,6 +431,46 @@ class TestPreValidateSession:
         with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=None):
             pre_validate_session(lamia, "https://example.com/login", "https://example.com/feed", "HTML")
 
+    def test_all_tiers_fail_clears_cookies(self):
+        """When all tiers fail, stale cookies are cleared for a fresh login."""
+        result = Mock(typed_result=None)
+        lamia = Mock()
+        lamia.run = Mock(return_value=result)
+        bm = self._make_browser_manager(current_url="https://example.com/login")
+        sm = self._make_session_manager(has_cookies=True)
+        web_manager = Mock()
+        web_manager.recent_actions = Mock()
+
+        mock_driver = Mock()
+        mock_adapter = Mock()
+        mock_adapter.driver = mock_driver
+        bm._browser_adapter = mock_adapter
+
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                with patch('lamia.adapters.web.session_context._get_web_manager', return_value=web_manager):
+                    pre_validate_session(lamia, "https://example.com/login", None, "HTML")
+
+        mock_driver.delete_all_cookies.assert_called_once()
+
+    def test_tier1_skip_does_not_clear_cookies(self):
+        """When tier 1 detects valid session, cookies are NOT cleared."""
+        lamia = Mock()
+        bm = self._make_browser_manager(current_url="https://example.com/dashboard")
+        sm = self._make_session_manager(has_cookies=True)
+
+        mock_driver = Mock()
+        mock_adapter = Mock()
+        mock_adapter.driver = mock_driver
+        bm._browser_adapter = mock_adapter
+
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                with pytest.raises(SessionSkipException):
+                    pre_validate_session(lamia, "https://example.com/login", None, None)
+
+        mock_driver.delete_all_cookies.assert_not_called()
+
     def test_full_cascade_tier1_then_tier2(self):
         """Test tier 1 fails, tier 2 succeeds."""
         lamia = Mock()
