@@ -94,6 +94,7 @@ nav:
   - User Guide:
     - .hu file Syntax: user-guide/hu-syntax.md
     - .lm file Syntax: user-guide/lm-syntax.md
+    - File Operations: user-guide/file-operations.md
     - File Context: user-guide/files-context.md
     - Web Automation: user-guide/web-automation.md
     - Validation: user-guide/validation.md
