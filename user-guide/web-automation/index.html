@@ -692,6 +692,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../file-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../files-context/" class="md-nav__link">
         
   
@@ -851,6 +879,100 @@
     <span class="md-ellipsis">
       
         Mixing Selector Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#session-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Management
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-session-validation-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Session Validation Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-two-argument-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Two-Argument Form
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#expected-behavior-during-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expected Behavior During Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Storage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#re-login-on-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-login on Failure
       
     </span>
   </a>
@@ -1568,6 +1690,100 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#session-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Management
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#basic-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-session-validation-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Session Validation Works
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-two-argument-form" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Two-Argument Form
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#expected-behavior-during-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expected Behavior During Validation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Storage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#re-login-on-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-login on Failure
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1817,17 +2033,96 @@
 </span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;Email input field&quot;</span><span class="p">,</span>      <span class="c1"># AI selector</span>
 </span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>              <span class="s2">&quot;user@example.com&quot;</span><span class="p">)</span>
 </span></code></pre></div>
+<h2 id="session-management">Session Management<a class="headerlink" href="#session-management" title="Permanent link">&para;</a></h2>
+<p>Sessions let you persist login state across script runs. Lamia saves browser cookies after a successful login so subsequent runs skip the login flow entirely.</p>
+<h3 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">login</span><span class="p">():</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="k">with</span> <span class="n">session</span><span class="p">(</span><span class="s2">&quot;my_app&quot;</span><span class="p">,</span> <span class="s2">&quot;https://example.com/dashboard&quot;</span><span class="p">):</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>        <span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com/login&quot;</span><span class="p">)</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>        <span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#email&quot;</span><span class="p">,</span> <span class="s2">&quot;user@example.com&quot;</span><span class="p">)</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="n">web</span><span class="o">.</span><span class="n">type_text</span><span class="p">(</span><span class="s2">&quot;#password&quot;</span><span class="p">,</span> <span class="s2">&quot;secret&quot;</span><span class="p">)</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        <span class="n">web</span><span class="o">.</span><span class="n">click</span><span class="p">(</span><span class="s2">&quot;button[type=&#39;submit&#39;]&quot;</span><span class="p">)</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="n">login</span><span class="p">()</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="n">web</span><span class="o">.</span><span class="n">navigate</span><span class="p">(</span><span class="s2">&quot;https://example.com/dashboard&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p><strong>First run</strong>: executes the login block, waits for the page to stabilize, saves cookies.
+<strong>Subsequent runs</strong>: loads saved cookies, verifies you're still logged in, skips the block.</p>
+<h3 id="how-session-validation-works">How Session Validation Works<a class="headerlink" href="#how-session-validation-works" title="Permanent link">&para;</a></h3>
+<p>Lamia uses a three-tier check to decide if login can be skipped:</p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>What it does</th>
+<th>When it skips</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Tier 1 — Redirect detection</strong></td>
+<td>Navigates to the login page with saved cookies</td>
+<td>If the site redirects you away from login (you're already authenticated)</td>
+</tr>
+<tr>
+<td><strong>Tier 2 — Target URL reachability</strong></td>
+<td>Navigates to the target URL (second argument)</td>
+<td>If the target page loads without being redirected to login</td>
+</tr>
+<tr>
+<td><strong>Tier 3 — Content validation</strong></td>
+<td>Checks the page content matches expected structure</td>
+<td>If return type validation passes (when <code>-&gt; HTML</code> or similar is used)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-two-argument-form">The Two-Argument Form<a class="headerlink" href="#the-two-argument-form" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">with</span> <span class="n">session</span><span class="p">(</span><span class="s2">&quot;profile_name&quot;</span><span class="p">,</span> <span class="s2">&quot;https://example.com/protected-page&quot;</span><span class="p">):</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="c1"># login steps...</span>
+</span></code></pre></div>
+<ul>
+<li><strong>First argument</strong> — session profile name (used for cookie storage folder)</li>
+<li><strong>Second argument</strong> — target URL to verify login state against</li>
+</ul>
+<p>The target URL is critical: it's how Lamia knows whether saved cookies still work. Choose a page that requires authentication (e.g., a dashboard, settings page, or homepage that shows user-specific content).</p>
+<h3 id="expected-behavior-during-validation">Expected Behavior During Validation<a class="headerlink" href="#expected-behavior-during-validation" title="Permanent link">&para;</a></h3>
+<p>When you run a script with an existing session, you may see the browser briefly navigate to the login page. This is normal — Lamia is checking whether the site redirects you away (proving you're authenticated). The check typically takes 5–15 seconds depending on the site's load time.</p>
+<p>If the site is slow or the connection is poor, the validation may take longer. Lamia sets a 15-second timeout for these checks. If the page doesn't respond in time, validation falls through and the login block re-executes.</p>
+<h3 id="session-storage">Session Storage<a class="headerlink" href="#session-storage" title="Permanent link">&para;</a></h3>
+<p>Sessions are stored relative to your script in <code>.lamia_sessions/&lt;profile_name&gt;/</code>:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>.lamia_sessions/
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>└── my_app/
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    ├── cookies.json
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    ├── local_storage.json
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    └── session_info.json
+</span></code></pre></div>
+<p>To force a fresh login, delete the session folder:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>rm<span class="w"> </span>-rf<span class="w"> </span>.lamia_sessions/my_app/
+</span></code></pre></div>
+<h3 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Cookie expiration</strong>: Sites may expire cookies after a period (hours or days). When this happens, the session check will fail and Lamia re-executes the login block automatically.</li>
+<li><strong>Geo-redirects</strong>: Some sites redirect to country-specific subdomains (e.g., <code>de.pinterest.com</code>). Lamia handles this by comparing URL paths rather than full hostnames.</li>
+<li><strong>CAPTCHA / 2FA</strong>: If a site presents CAPTCHA or two-factor authentication, the automated login will fail. Run the login manually once and save the session.</li>
+<li><strong>Browser fingerprint</strong>: Each Lamia run creates a new Chrome instance. Some sites may invalidate cookies when the browser fingerprint changes.</li>
+</ul>
+<h3 id="re-login-on-failure">Re-login on Failure<a class="headerlink" href="#re-login-on-failure" title="Permanent link">&para;</a></h3>
+<p>If the session check passes but your script still encounters auth errors downstream, delete the session and run again:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>rm<span class="w"> </span>-rf<span class="w"> </span>.lamia_sessions/my_app/
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>lamia<span class="w"> </span>--file<span class="w"> </span>my_script.lm
+</span></code></pre></div>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p>In <code>config.yaml</code>:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">web_config</span><span class="p">:</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">browser_engine</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">selenium</span><span class="w">        </span><span class="c1"># selenium or playwright</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">http_client</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">requests</span><span class="w">           </span><span class="c1"># HTTP client library</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="nt">browser_options</span><span class="p">:</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="nt">headless</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                </span><span class="c1"># Run without visible window</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.0</span><span class="w">                 </span><span class="c1"># Default timeout in seconds</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">  </span><span class="nt">http_options</span><span class="p">:</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span><span class="w">                 </span><span class="c1"># HTTP request timeout</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">    </span><span class="nt">user_agent</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Lamia/1.0&quot;</span><span class="w">      </span><span class="c1"># User agent string</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nt">web_config</span><span class="p">:</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="nt">browser_engine</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">selenium</span><span class="w">        </span><span class="c1"># selenium or playwright</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span><span class="nt">http_client</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">requests</span><span class="w">           </span><span class="c1"># HTTP client library</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="nt">browser_options</span><span class="p">:</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="nt">headless</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                </span><span class="c1"># Run without visible window</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.0</span><span class="w">                 </span><span class="c1"># Default timeout in seconds</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">  </span><span class="nt">http_options</span><span class="p">:</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">    </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30.0</span><span class="w">                 </span><span class="c1"># HTTP request timeout</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">    </span><span class="nt">user_agent</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Lamia/1.0&quot;</span><span class="w">      </span><span class="c1"># User agent string</span>
 </span></code></pre></div>
 <h3 id="browser-engines">Browser Engines<a class="headerlink" href="#browser-engines" title="Permanent link">&para;</a></h3>
 <table>
@@ -1850,10 +2145,10 @@
 </table>
 <h2 id="selector-cache">Selector Cache<a class="headerlink" href="#selector-cache" title="Permanent link">&para;</a></h2>
 <p>AI selector resolutions are cached to avoid repeated LLM calls:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>.lamia_cache/selectors/selector_resolutions.json
+<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>.lamia_cache/selectors/selector_resolutions.json
 </span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Clear cache if selectors stop working</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>rm<span class="w"> </span>-rf<span class="w"> </span>.lamia_cache/selectors/
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Clear cache if selectors stop working</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>rm<span class="w"> </span>-rf<span class="w"> </span>.lamia_cache/selectors/
 </span></code></pre></div>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <h3 id="ai-returns-wrong-selector">AI returns wrong selector<a class="headerlink" href="#ai-returns-wrong-selector" title="Permanent link">&para;</a></h3>
