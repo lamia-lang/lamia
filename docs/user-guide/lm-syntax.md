@@ -279,6 +279,8 @@ def login_to_site():
 
 Sessions are stored in `.lamia_sessions/`. Clear with `rm -rf .lamia_sessions/`.
 
+For full details on session blocks and troubleshooting, see [Session Management](web-automation.md#session-management).
+
 ## Web Actions
 
 Use the `web` object for browser automation:

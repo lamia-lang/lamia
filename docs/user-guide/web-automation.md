@@ -116,6 +116,90 @@ web.type_text("Email input field",      # AI selector
               "user@example.com")
 ```
 
+## Session Management
+
+Sessions let you persist login state across script runs. Lamia saves browser cookies after a successful login so subsequent runs skip the login flow entirely.
+
+### Basic Usage
+
+```python
+def login():
+    with session("my_app", "https://example.com/dashboard"):
+        web.navigate("https://example.com/login")
+        web.type_text("#email", "user@example.com")
+        web.type_text("#password", "secret")
+        web.click("button[type='submit']")
+        time.sleep(3)
+
+login()
+web.navigate("https://example.com/dashboard")
+```
+
+**First run**: executes the login block, waits for the page to stabilize, saves cookies.
+**Subsequent runs**: loads saved cookies, verifies you're still logged in, skips the block.
+
+### How Session Validation Works
+
+Lamia uses a three-tier check to decide if login can be skipped:
+
+| Tier | What it does | When it skips |
+|------|-------------|---------------|
+| **Tier 1 — Redirect detection** | Navigates to the login page with saved cookies | If the site redirects you away from login (you're already authenticated) |
+| **Tier 2 — Target URL reachability** | Navigates to the target URL (second argument) | If the target page loads without being redirected to login |
+| **Tier 3 — Content validation** | Checks the page content matches expected structure | If return type validation passes (when `-> HTML` or similar is used) |
+
+### The Two-Argument Form
+
+```python
+with session("profile_name", "https://example.com/protected-page"):
+    # login steps...
+```
+
+- **First argument** — session profile name (used for cookie storage folder)
+- **Second argument** — target URL to verify login state against
+
+The target URL is critical: it's how Lamia knows whether saved cookies still work. Choose a page that requires authentication (e.g., a dashboard, settings page, or homepage that shows user-specific content).
+
+### Expected Behavior During Validation
+
+When you run a script with an existing session, you may see the browser briefly navigate to the login page. This is normal — Lamia is checking whether the site redirects you away (proving you're authenticated). The check typically takes 5–15 seconds depending on the site's load time.
+
+If the site is slow or the connection is poor, the validation may take longer. Lamia sets a 15-second timeout for these checks. If the page doesn't respond in time, validation falls through and the login block re-executes.
+
+### Session Storage
+
+Sessions are stored relative to your script in `.lamia_sessions/<profile_name>/`:
+
+```
+.lamia_sessions/
+└── my_app/
+    ├── cookies.json
+    ├── local_storage.json
+    └── session_info.json
+```
+
+To force a fresh login, delete the session folder:
+
+```bash
+rm -rf .lamia_sessions/my_app/
+```
+
+### Limitations
+
+- **Cookie expiration**: Sites may expire cookies after a period (hours or days). When this happens, the session check will fail and Lamia re-executes the login block automatically.
+- **Geo-redirects**: Some sites redirect to country-specific subdomains (e.g., `de.pinterest.com`). Lamia handles this by comparing URL paths rather than full hostnames.
+- **CAPTCHA / 2FA**: If a site presents CAPTCHA or two-factor authentication, the automated login will fail. Run the login manually once and save the session.
+- **Browser fingerprint**: Each Lamia run creates a new Chrome instance. Some sites may invalidate cookies when the browser fingerprint changes.
+
+### Re-login on Failure
+
+If the session check passes but your script still encounters auth errors downstream, delete the session and run again:
+
+```bash
+rm -rf .lamia_sessions/my_app/
+lamia --file my_script.lm
+```
+
 ## Configuration
 
 In `config.yaml`:
