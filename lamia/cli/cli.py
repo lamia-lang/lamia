@@ -147,7 +147,7 @@ async def interactive_mode(lamia: Lamia):
             return
         except Exception as e:
             traceback.print_exc()
-            logger.error(f"❌ Error: {str(e)}")
+            logger.error(f"Error: {str(e)}")
             logger.error(traceback.format_exc())
             continue
 
@@ -891,34 +891,35 @@ def main():
                     executor.execute_file(prompt_file, enable_lazy_dependency_loading=True)
                     _graceful_shutdown(lamia, 0)
                 except ExternalOperationTransientError as e:
-                    _log_external_error("❌ External operation failed after all retries", e)
+                    _log_external_error("External operation failed after all retries", e)
                     _graceful_shutdown(lamia, 1)
                 except ExternalOperationPermanentError as e:
-                    _log_external_error("❌ Permanent failure", e)
+                    _log_external_error("Permanent failure", e)
                     _graceful_shutdown(lamia, 1)
                 except ExternalOperationRateLimitError as e:
-                    _log_external_error("❌ Rate limit exceeded", e)
+                    _log_external_error("Rate limit exceeded", e)
                     _graceful_shutdown(lamia, 1)
                 except SyntaxError as e:
-                    logger.error(f"❌ Syntax error in hybrid file: {e}")
+                    logger.error(f"Syntax error in hybrid file: {e}")
                     logger.error(f"Line {e.lineno}: {e.text}")
                     logger.debug(traceback.format_exc())
                     _graceful_shutdown(lamia, 1)
                 except ImportError as e:
-                    logger.error(f"❌ Missing dependency: {e}")
+                    logger.error(f"Missing dependency: {e}")
                     logger.debug(traceback.format_exc())
                     _graceful_shutdown(lamia, 1)
                 except MissingAPIKeysError as e:
-                    logger.error(f"❌ {e}")
+                    logger.error(str(e))
                     _graceful_shutdown(lamia, 1)
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
                     error_msg = str(e).lower()
                     if any(keyword in error_msg for keyword in ['parse', 'syntax', 'transform', 'ast']):
-                        logger.error(f"❌ Error processing hybrid syntax file: {e}")
+                        logger.error(f"Error processing hybrid syntax file: {e}")
                     else:
-                        logger.error(f"❌ Runtime error: {e}")
+                        location = _extract_user_error_location(e)
+                        logger.error(f"Runtime error: {e}{location}")
                     logger.debug(traceback.format_exc())
                     _graceful_shutdown(lamia, 1)
             else:
@@ -928,12 +929,13 @@ def main():
                     runpy.run_path(prompt_file, run_name="__main__")
                     _graceful_shutdown(lamia, 0)
                 except MissingAPIKeysError as e:
-                    logger.error(f"❌ {e}")
+                    logger.error(str(e))
                     _graceful_shutdown(lamia, 1)
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
-                    logger.error(f"❌ Error executing script: {e}")
+                    location = _extract_user_error_location(e)
+                    logger.error(f"Runtime error: {e}{location}")
                     logger.debug(traceback.format_exc())
                     _graceful_shutdown(lamia, 1)
         elif json_flag:
@@ -954,11 +956,11 @@ def main():
             asyncio.run(run_interactive())
 
     except MissingAPIKeysError as e:
-        logger.error(f"❌ Missing API Keys: {str(e)}")
+        logger.error(f"Missing API Keys: {str(e)}")
         logger.error("Please check your .env file or config.yaml for required API keys.")
         _graceful_shutdown(lamia, 1)
     except Exception as e:
-        logger.error(f"❌ Error: {e}")
+        logger.error(f"Error: {e}")
         logger.debug(traceback.format_exc())
         _graceful_shutdown(lamia, 1)
     except KeyboardInterrupt:
@@ -1039,6 +1041,25 @@ def _atexit_browser_cleanup() -> None:
 
 
 atexit.register(_atexit_browser_cleanup)
+
+
+def _extract_user_error_location(exc: Exception) -> str:
+    """Extract the last user-code frame from the traceback for error reporting."""
+    tb = exc.__traceback__
+    if not tb:
+        return ""
+    frames = traceback.extract_tb(tb)
+    user_frame = None
+    for frame in reversed(frames):
+        if "<string>" in frame.filename or frame.filename.endswith(".lm"):
+            user_frame = frame
+            break
+    if not user_frame:
+        user_frame = frames[-1]
+    location = f"\n  Line {user_frame.lineno}"
+    if user_frame.line:
+        location += f": {user_frame.line.strip()}"
+    return location
 
 
 def _log_external_error(prefix: str, exc: Exception) -> None:
