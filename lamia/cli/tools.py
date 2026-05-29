@@ -118,6 +118,9 @@ TOPIC_TO_FILE = {
     "file.read": "user-guide/file-operations.md",
     "file.write": "user-guide/file-operations.md",
     "file.append": "user-guide/file-operations.md",
+    "scheduling": "user-guide/scheduling.md",
+    "schedule": "user-guide/scheduling.md",
+    "cron": "user-guide/scheduling.md",
 }
 
 _DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))

@@ -1,0 +1,247 @@
+"""CLI handler for `lamia schedule` commands.
+
+Usage:
+    lamia schedule add <script.lm> --every day
+    lamia schedule add <script.lm> --every hour
+    lamia schedule add <script.lm> --every weekday
+    lamia schedule add <script.lm> --every week
+    lamia schedule add <script.lm> --every on-wake
+    lamia schedule add <script.lm> --cron "0 9 * * *" --timezone Europe/Berlin
+    lamia schedule list
+    lamia schedule remove <id>
+"""
+
+import argparse
+import shutil
+import sys
+from pathlib import Path
+
+from .base import ScheduleJob
+from .local import LocalScheduler
+from .registry import save_job, remove_job, list_jobs, load_job, find_job_by_script
+
+EVERY_PRESETS = {
+    "hour": "0 * * * *",
+    "day": "0 9 * * *",
+    "weekday": "0 9 * * 1-5",
+    "week": "0 9 * * 1",
+    "on-wake": "@reboot",
+}
+
+# Backward-compatible aliases for older docs/commands.
+EVERY_ALIASES = {
+    "hourly": "hour",
+    "daily": "day",
+    "weekdays": "weekday",
+    "weekly": "week",
+}
+
+EVERY_CHOICES = list(EVERY_PRESETS.keys())
+
+
+def _resolve_cron(args: argparse.Namespace) -> str:
+    """Resolve schedule from --every preset or --cron expression."""
+    if args.every:
+        preset = args.every.lower().strip()
+        preset = EVERY_ALIASES.get(preset, preset)
+        if preset not in EVERY_PRESETS:
+            aliases = ", ".join(sorted(EVERY_ALIASES.keys()))
+            print(
+                f"Error: unknown preset '{args.every}'. Choose from: {', '.join(EVERY_CHOICES)}. "
+                f"Aliases: {aliases}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return EVERY_PRESETS[preset]
+
+    if args.cron:
+        return args.cron
+
+    print("Error: provide exactly one of --every <preset> or --cron <expression>.", file=sys.stderr)
+    print(
+        f"  Presets: {', '.join(EVERY_CHOICES)} "
+        f"(aliases: {', '.join(sorted(EVERY_ALIASES.keys()))})",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def _find_lamia_bin() -> str:
+    lamia_path = shutil.which("lamia")
+    if lamia_path:
+        return lamia_path
+    return f"{sys.executable} -m lamia"
+
+
+def _handle_add(args: argparse.Namespace) -> None:
+    script = args.script
+    script_path = Path(script).resolve()
+
+    if not script_path.exists():
+        print(f"Error: script not found: {script_path}", file=sys.stderr)
+        sys.exit(1)
+
+    if not script_path.suffix == ".lm":
+        print(f"Error: only .lm scripts can be scheduled", file=sys.stderr)
+        sys.exit(1)
+
+    cron = _resolve_cron(args)
+
+    project_root = script_path.parent
+    relative_script = script_path.name
+
+    job = ScheduleJob(
+        script=relative_script,
+        cron=cron,
+        timezone=args.timezone,
+        catch_up=not args.no_catch_up,
+        project_root=project_root,
+    )
+
+    lamia_bin = _find_lamia_bin()
+    scheduler = LocalScheduler()
+
+    existing = find_job_by_script(relative_script, str(project_root))
+    if existing:
+        scheduler.uninstall(ScheduleJob(
+            script=existing["script"],
+            cron=existing["cron"],
+            project_root=Path(existing["project_root"]),
+        ))
+
+    scheduler.install(job, lamia_bin)
+    job_id = save_job(job, lamia_bin)
+
+    schedule_desc = args.every if args.every else cron
+    print(f"Scheduled: {relative_script}")
+    print(f"  frequency: {schedule_desc}")
+    if cron != "@reboot":
+        print(f"  cron:      {cron}")
+        print(f"  timezone:  {job.timezone}")
+    print(f"  catch_up:  {job.catch_up}")
+    print(f"  id:        {job_id}")
+
+
+def _handle_list(args: argparse.Namespace) -> None:
+    jobs = list_jobs()
+    if not jobs:
+        print("No scheduled jobs.")
+        return
+
+    for job in jobs:
+        print(f"  [{job['id']}] {job['script']}")
+        cron_val = job['cron']
+        friendly = _cron_to_friendly(cron_val)
+        print(f"    schedule: {friendly}  timezone: {job.get('timezone', 'UTC')}  catch_up: {job.get('catch_up', True)}")
+        print(f"    path: {job['project_root']}")
+
+        last_run = job.get("last_run")
+        if last_run:
+            status_icon = "ok" if last_run.get("success") else "FAILED"
+            ts = last_run.get("timestamp", "unknown")
+            error_msg = last_run.get("error", "")
+            print(f"    last run: {ts}  status: {status_icon}")
+            if error_msg:
+                print(f"    error: {error_msg}")
+        else:
+            print(f"    last run: never")
+        print()
+
+
+def _cron_to_friendly(cron: str) -> str:
+    """Convert cron expression back to a friendly name if it matches a preset."""
+    for name, expr in EVERY_PRESETS.items():
+        if cron == expr:
+            return name
+    return cron
+
+
+def _handle_remove(args: argparse.Namespace) -> None:
+    job_id = args.id
+    job_data = load_job(job_id)
+
+    if not job_data:
+        print(f"Error: no schedule found with id '{job_id}'", file=sys.stderr)
+        sys.exit(1)
+
+    job = ScheduleJob(
+        script=job_data["script"],
+        cron=job_data["cron"],
+        timezone=job_data.get("timezone", "UTC"),
+        catch_up=job_data.get("catch_up", True),
+        project_root=Path(job_data["project_root"]),
+    )
+
+    scheduler = LocalScheduler()
+    scheduler.uninstall(job)
+    remove_job(job_id)
+    print(f"Removed schedule: {job_data['script']} [{job_id}]")
+
+
+def handle_schedule() -> None:
+    parser = argparse.ArgumentParser(
+        description="Manage scheduled Lamia script execution",
+        prog="lamia schedule",
+    )
+    subparsers = parser.add_subparsers(dest="action")
+
+    add_parser = subparsers.add_parser(
+        "add",
+        help="Schedule a script for recurring execution",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Defaults:\n"
+            "  --timezone UTC\n"
+            "  catch-up enabled (disable with --no-catch-up)\n\n"
+            "Exactly one of --every or --cron is required.\n\n"
+            "Examples:\n"
+            "  lamia schedule add daily_task.lm --every day\n"
+            "  lamia schedule add daily_task.lm --every on-wake\n"
+            "  lamia schedule add daily_task.lm --cron \"0 9 * * *\" --timezone Europe/Berlin\n\n"
+            f"Presets: {', '.join(EVERY_CHOICES)}\n"
+            f"Aliases: {', '.join(sorted(EVERY_ALIASES.keys()))}"
+        ),
+    )
+    add_parser.add_argument("script", help="Path to the .lm script file")
+    frequency_group = add_parser.add_mutually_exclusive_group(required=True)
+    frequency_group.add_argument(
+        "--every",
+        metavar="PRESET",
+        help=f"Schedule preset: {', '.join(EVERY_CHOICES)} (aliases supported)",
+    )
+    frequency_group.add_argument(
+        "--cron",
+        metavar="EXPR",
+        help='Custom cron expression (e.g. "0 9 * * *").',
+    )
+    add_parser.add_argument(
+        "--timezone",
+        default="UTC",
+        help="IANA timezone (default: UTC). Ignored for on-wake.",
+    )
+    add_parser.add_argument(
+        "--no-catch-up",
+        action="store_true",
+        help="Skip missed runs when machine wakes (default: catch up)",
+    )
+
+    subparsers.add_parser("list", help="List all scheduled jobs")
+
+    remove_parser = subparsers.add_parser("remove", help="Remove a scheduled job")
+    remove_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")
+
+    if len(sys.argv) >= 3 and sys.argv[2] == "add" and len(sys.argv) == 3:
+        add_parser.print_help()
+        sys.exit(2)
+
+    args = parser.parse_args(sys.argv[2:])
+
+    if args.action == "add":
+        _handle_add(args)
+    elif args.action == "list":
+        _handle_list(args)
+    elif args.action == "remove":
+        _handle_remove(args)
+    else:
+        parser.print_help()
+        sys.exit(1)

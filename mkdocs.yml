@@ -102,6 +102,7 @@ nav:
     - Using Lamia in Python: user-guide/python-library.md
     - Custom LLM Adapters: user-guide/custom-llm-adapters.md
     - Pydantic Models Guide: user-guide/pydantic-models.md
+    - Scheduling: user-guide/scheduling.md
   - Style Guides:
     - "LSG-1: .hu Files": style-guides/hu-style.md
     - "LSG-2: .lm Files": style-guides/lm-style.md

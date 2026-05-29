@@ -670,6 +670,11 @@ def main():
         _open_ide(sys.argv[1])
         return
 
+    if len(sys.argv) > 1 and sys.argv[1] == "schedule":
+        from lamia.scheduling.cli import handle_schedule
+        handle_schedule()
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] == "models":
         _handle_models_command()
         return
@@ -739,9 +744,18 @@ def main():
         parser = argparse.ArgumentParser(
             description="Lamia CLI",
             epilog="""
-            For help on a subcommand, run:
-            lamia <subcommand> --help
-            """
+Subcommands:
+  init          Initialize a new Lamia project
+  models        List available models
+  schedule      Manage scheduled script execution (add, list, remove)
+  eval          Evaluate model quality
+  inspect       Inspect .lm/.hu files
+  debug         Debug a script with breakpoints
+
+For help on a subcommand, run:
+  lamia <subcommand> --help
+            """,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         
         # Check if first arg is 'cache' subcommand
@@ -812,7 +826,11 @@ def main():
         parser.add_argument('--log-file', type=str, help='Custom path for the Lamia log file (default: .lamia/lamia.log)')
         parser.add_argument('--no-cache', action='store_true', help='Disable selector resolution cache (forces fresh resolution)')
         parser.add_argument('--json', action='store_true', help='Machine-readable JSON-line mode for IDE/tool integration')
+        parser.add_argument('--schedule-id', type=str, help=argparse.SUPPRESS)
         args = parser.parse_args()
+
+    global _active_schedule_id
+    _active_schedule_id = getattr(args, 'schedule_id', None)
 
     json_flag = getattr(args, 'json', False)
 
@@ -989,12 +1007,21 @@ def _install_sigint_handler() -> None:
         signal.signal(signal.SIGTERM, _handler)
 
 
+_active_schedule_id: 'Optional[str]' = None
+
+
 def _graceful_shutdown(lamia_instance: 'Optional[Lamia]', exit_code: int = 0) -> None:
     """Clean up resources and terminate the process.
 
     Use SystemExit so callers (including tests) can observe exit semantics
     without abruptly terminating the hosting Python process.
     """
+    if _active_schedule_id:
+        try:
+            from lamia.scheduling.registry import record_run
+            record_run(_active_schedule_id, exit_code)
+        except Exception:
+            pass
     if lamia_instance is not None:
         try:
             EventLoopManager.run_coroutine(lamia_instance._engine.cleanup())
