@@ -59,7 +59,6 @@ class TestLaunchdScheduler:
         return ScheduleJob(
             script="daily_task.lm",
             cron="0 9 * * *",
-            timezone="Europe/Berlin",
             project_root=Path("/Users/test/project"),
         )
 
@@ -85,13 +84,41 @@ class TestLaunchdScheduler:
         (tmp_path / ".lamia" / "logs").mkdir(parents=True)
         plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
         assert "--log-file" in plist
+        assert "/.lamia/logs/schedules/" in plist
+        assert "/schedule.log" in plist
 
-    def test_build_plist_contains_calendar_interval(self, scheduler, job, tmp_path, monkeypatch):
+    def test_build_plist_uses_start_calendar_interval(self, scheduler, job, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         (tmp_path / ".lamia" / "logs").mkdir(parents=True)
         plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
-        assert "<key>Hour</key><integer>9</integer>" in plist
-        assert "<key>Minute</key><integer>0</integer>" in plist
+        assert "<key>StartCalendarInterval</key>" in plist
+        assert "StartInterval" not in plist
+        assert "<key>Hour</key>" in plist
+        assert "<key>Minute</key>" in plist
+
+    def test_build_plist_catch_up_adds_run_at_load(self, scheduler, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        (tmp_path / ".lamia" / "logs").mkdir(parents=True)
+        job = ScheduleJob(
+            script="daily_task.lm",
+            cron="0 9 * * *",
+            catch_up=True,
+            project_root=Path("/Users/test/project"),
+        )
+        plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
+        assert "<key>RunAtLoad</key>" in plist
+
+    def test_build_plist_no_catch_up_omits_run_at_load(self, scheduler, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        (tmp_path / ".lamia" / "logs").mkdir(parents=True)
+        job = ScheduleJob(
+            script="daily_task.lm",
+            cron="0 9 * * *",
+            catch_up=False,
+            project_root=Path("/Users/test/project"),
+        )
+        plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
+        assert "<key>RunAtLoad</key>" not in plist
 
     def test_cron_to_calendar_interval_all_stars(self, scheduler):
         cron = {"minute": "*", "hour": "*", "day": "*", "month": "*", "weekday": "*"}

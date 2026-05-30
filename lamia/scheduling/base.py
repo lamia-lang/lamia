@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
 
 class JobStatus(Enum):
@@ -17,7 +16,6 @@ class JobStatus(Enum):
 class ScheduleJob:
     script: str
     cron: str
-    timezone: str = "UTC"
     catch_up: bool = True
     project_root: Path = field(default_factory=Path)
 

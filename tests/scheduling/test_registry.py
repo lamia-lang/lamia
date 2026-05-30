@@ -51,7 +51,6 @@ class TestSaveAndLoadJob:
         job = ScheduleJob(
             script="test.lm",
             cron="0 9 * * *",
-            timezone="Europe/Berlin",
             catch_up=True,
             project_root=Path("/home/user/myproject"),
         )
@@ -62,7 +61,6 @@ class TestSaveAndLoadJob:
         job = ScheduleJob(
             script="test.lm",
             cron="0 9 * * *",
-            timezone="Europe/Berlin",
             catch_up=False,
             project_root=Path("/home/user/myproject"),
         )
@@ -72,7 +70,6 @@ class TestSaveAndLoadJob:
         assert loaded is not None
         assert loaded["script"] == "test.lm"
         assert loaded["cron"] == "0 9 * * *"
-        assert loaded["timezone"] == "Europe/Berlin"
         assert loaded["catch_up"] is False
         assert loaded["project_root"] == "/home/user/myproject"
         assert loaded["lamia_bin"] == "/usr/local/bin/lamia"

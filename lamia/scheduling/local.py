@@ -29,6 +29,18 @@ def _parse_cron_fields(cron_expr: str) -> dict:
     }
 
 
+def _schedule_log_path(job: ScheduleJob) -> str:
+    """Return a single log file path for a schedule job.
+
+    Logs are grouped by schedule id for clarity:
+      ~/.lamia/logs/schedules/<job_id>/schedule.log
+    """
+    job_id = _generate_id(job.script, str(job.project_root))
+    log_dir = Path.home() / ".lamia" / "logs" / "schedules" / job_id
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return str(log_dir / "schedule.log")
+
+
 class LaunchdScheduler(BaseScheduler):
     """macOS launchd scheduler. Uses StartCalendarInterval for catch-up on wake."""
 
@@ -45,11 +57,7 @@ class LaunchdScheduler(BaseScheduler):
     def _build_plist(self, job: ScheduleJob, lamia_bin: str) -> str:
         script_path = str(job.project_root / job.script)
         working_dir = str(job.project_root)
-        log_dir = Path.home() / ".lamia" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        log_stem = job.script.replace("/", "_").replace(".lm", "")
-        log_file = str(log_dir / f"{log_stem}.log")
+        log_file = _schedule_log_path(job)
         job_id = _generate_id(job.script, str(job.project_root))
 
         lines = [
@@ -78,17 +86,19 @@ class LaunchdScheduler(BaseScheduler):
             lines.append('    <true/>')
         else:
             cron = _parse_cron_fields(job.cron)
-            calendar_dict = self._cron_to_calendar_interval(cron)
             lines.append('    <key>StartCalendarInterval</key>')
             lines.append('    <dict>')
-            lines.extend(calendar_dict)
+            lines.extend(self._cron_to_calendar_interval(cron))
             lines.append('    </dict>')
+            if job.catch_up:
+                lines.append('    <key>RunAtLoad</key>')
+                lines.append('    <true/>')
 
         lines.extend([
             '    <key>StandardOutPath</key>',
-            f'    <string>{log_dir / f"{log_stem}.stdout.log"}</string>',
+            f'    <string>{log_file}</string>',
             '    <key>StandardErrorPath</key>',
-            f'    <string>{log_dir / f"{log_stem}.stderr.log"}</string>',
+            f'    <string>{log_file}</string>',
             '</dict>',
             '</plist>',
         ])
@@ -168,7 +178,6 @@ class LaunchdScheduler(BaseScheduler):
         meta = {
             "script": job.script,
             "cron": job.cron,
-            "timezone": job.timezone,
             "catch_up": job.catch_up,
             "project_root": str(job.project_root),
             "lamia_bin": lamia_bin,
@@ -216,10 +225,7 @@ class SystemdScheduler(BaseScheduler):
         working_dir = str(job.project_root)
         svc_name = self._service_name(job)
 
-        log_dir = Path.home() / ".lamia" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_stem = job.script.replace("/", "_").replace(".lm", "")
-        log_file = str(log_dir / f"{log_stem}.log")
+        log_file = _schedule_log_path(job)
         job_id = _generate_id(job.script, str(job.project_root))
 
         service_content = (
@@ -310,7 +316,6 @@ class SystemdScheduler(BaseScheduler):
         meta = {
             "script": job.script,
             "cron": job.cron,
-            "timezone": job.timezone,
             "catch_up": job.catch_up,
             "project_root": str(job.project_root),
             "lamia_bin": lamia_bin,
@@ -361,10 +366,7 @@ class WindowsTaskScheduler(BaseScheduler):
         script_path = str(job.project_root / job.script)
         working_dir = str(job.project_root)
 
-        log_dir = Path.home() / ".lamia" / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_stem = job.script.replace("/", "_").replace("\\", "_").replace(".lm", "")
-        log_file = str(log_dir / f"{log_stem}.log")
+        log_file = _schedule_log_path(job)
         job_id = _generate_id(job.script, str(job.project_root))
 
         self.uninstall(job)
@@ -427,7 +429,6 @@ class WindowsTaskScheduler(BaseScheduler):
         meta = {
             "script": job.script,
             "cron": job.cron,
-            "timezone": job.timezone,
             "catch_up": job.catch_up,
             "project_root": str(job.project_root),
             "lamia_bin": lamia_bin,

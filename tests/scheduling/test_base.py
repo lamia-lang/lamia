@@ -36,7 +36,6 @@ class TestScheduleJob:
 
     def test_defaults(self):
         job = ScheduleJob(script="x.lm", cron="* * * * *")
-        assert job.timezone == "UTC"
         assert job.catch_up is True
         assert job.project_root == Path()
 

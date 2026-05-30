@@ -6,10 +6,12 @@ Usage:
     lamia schedule add <script.lm> --every weekday
     lamia schedule add <script.lm> --every week
     lamia schedule add <script.lm> --every on-wake
-    lamia schedule add <script.lm> --cron "0 9 * * *" --timezone Europe/Berlin
+    lamia schedule add <script.lm> --cron "0 9 * * *"
     lamia schedule list
     lamia schedule update <id> --every day
     lamia schedule remove <id>
+
+All times are interpreted as local machine time.
 """
 
 import argparse
@@ -94,7 +96,6 @@ def _handle_add(args: argparse.Namespace) -> None:
     job = ScheduleJob(
         script=relative_script,
         cron=cron,
-        timezone=args.timezone,
         catch_up=not args.no_catch_up,
         project_root=project_root,
     )
@@ -118,7 +119,6 @@ def _handle_add(args: argparse.Namespace) -> None:
     print(f"  frequency: {schedule_desc}")
     if cron != "@reboot":
         print(f"  cron:      {cron}")
-        print(f"  timezone:  {job.timezone}")
     print(f"  catch_up:  {job.catch_up}")
     print(f"  id:        {job_id}")
 
@@ -133,7 +133,7 @@ def _handle_list(args: argparse.Namespace) -> None:
         print(f"  [{job['id']}] {job['script']}")
         cron_val = job['cron']
         friendly = _cron_to_friendly(cron_val)
-        print(f"    schedule: {friendly}  timezone: {job.get('timezone', 'UTC')}  catch_up: {job.get('catch_up', True)}")
+        print(f"    schedule: {friendly}  catch_up: {job.get('catch_up', True)}")
         print(f"    path: {job['project_root']}")
 
         last_run = job.get("last_run")
@@ -168,7 +168,6 @@ def _handle_remove(args: argparse.Namespace) -> None:
     job = ScheduleJob(
         script=job_data["script"],
         cron=job_data["cron"],
-        timezone=job_data.get("timezone", "UTC"),
         catch_up=job_data.get("catch_up", True),
         project_root=Path(job_data["project_root"]),
     )
@@ -188,7 +187,6 @@ def _handle_update(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     cron = _resolve_cron(args)
-    timezone = args.timezone if args.timezone is not None else job_data.get("timezone", "UTC")
 
     if args.catch_up:
         catch_up = True
@@ -200,7 +198,6 @@ def _handle_update(args: argparse.Namespace) -> None:
     updated_job = ScheduleJob(
         script=job_data["script"],
         cron=cron,
-        timezone=timezone,
         catch_up=catch_up,
         project_root=Path(job_data["project_root"]),
     )
@@ -208,7 +205,6 @@ def _handle_update(args: argparse.Namespace) -> None:
     old_job = ScheduleJob(
         script=job_data["script"],
         cron=job_data["cron"],
-        timezone=job_data.get("timezone", "UTC"),
         catch_up=job_data.get("catch_up", True),
         project_root=Path(job_data["project_root"]),
     )
@@ -225,7 +221,6 @@ def _handle_update(args: argparse.Namespace) -> None:
     print(f"  frequency: {schedule_desc}")
     if cron != "@reboot":
         print(f"  cron:      {cron}")
-        print(f"  timezone:  {updated_job.timezone}")
     print(f"  catch_up:  {updated_job.catch_up}")
 
 
@@ -241,14 +236,14 @@ def handle_schedule() -> None:
         help="Schedule a script for recurring execution",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
+            "All times are local machine time.\n\n"
             "Defaults:\n"
-            "  --timezone UTC\n"
             "  catch-up enabled (disable with --no-catch-up)\n\n"
             "Exactly one of --every or --cron is required.\n\n"
             "Examples:\n"
             "  lamia schedule add daily_task.lm --every day\n"
             "  lamia schedule add daily_task.lm --every on-wake\n"
-            "  lamia schedule add daily_task.lm --cron \"0 9 * * *\" --timezone Europe/Berlin\n\n"
+            "  lamia schedule add daily_task.lm --cron \"0 9 * * *\"\n\n"
             f"Presets: {', '.join(EVERY_CHOICES)}\n"
             f"Aliases: {', '.join(sorted(EVERY_ALIASES.keys()))}"
         ),
@@ -263,12 +258,7 @@ def handle_schedule() -> None:
     frequency_group.add_argument(
         "--cron",
         metavar="EXPR",
-        help='Custom cron expression (e.g. "0 9 * * *").',
-    )
-    add_parser.add_argument(
-        "--timezone",
-        default="UTC",
-        help="IANA timezone (default: UTC). Ignored for on-wake.",
+        help='Custom cron expression (e.g. "0 9 * * *"). Times are local.',
     )
     add_parser.add_argument(
         "--no-catch-up",
@@ -288,7 +278,7 @@ def handle_schedule() -> None:
         epilog=(
             "Examples:\n"
             "  lamia schedule update <id> --every day\n"
-            "  lamia schedule update <id> --cron \"15 10 * * *\" --timezone Europe/Berlin\n"
+            "  lamia schedule update <id> --cron \"15 10 * * *\"\n"
             "  lamia schedule update <id> --every on-wake --no-catch-up\n"
         ),
     )
@@ -302,12 +292,7 @@ def handle_schedule() -> None:
     update_freq_group.add_argument(
         "--cron",
         metavar="EXPR",
-        help='Custom cron expression (e.g. "0 9 * * *").',
-    )
-    update_parser.add_argument(
-        "--timezone",
-        default=None,
-        help="IANA timezone. If omitted, keep current timezone.",
+        help='Custom cron expression (e.g. "0 9 * * *"). Times are local.',
     )
     update_catchup_group = update_parser.add_mutually_exclusive_group(required=False)
     update_catchup_group.add_argument(

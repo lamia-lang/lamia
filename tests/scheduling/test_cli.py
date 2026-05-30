@@ -53,7 +53,6 @@ class TestHandleAdd:
         args.script = str(script)
         args.every = "day"
         args.cron = None
-        args.timezone = "UTC"
         args.no_catch_up = False
 
         _handle_add(args)
@@ -69,7 +68,6 @@ class TestHandleAdd:
         args.script = str(script)
         args.every = None
         args.cron = "30 14 * * *"
-        args.timezone = "UTC"
         args.no_catch_up = False
 
         _handle_add(args)
@@ -82,7 +80,6 @@ class TestHandleAdd:
         args.script = str(tmp_path / "missing.lm")
         args.every = "day"
         args.cron = None
-        args.timezone = "UTC"
         args.no_catch_up = False
 
         with pytest.raises(SystemExit):
@@ -95,7 +92,6 @@ class TestHandleAdd:
         args.script = str(py_file)
         args.every = "day"
         args.cron = None
-        args.timezone = "UTC"
         args.no_catch_up = False
 
         with pytest.raises(SystemExit):
@@ -113,7 +109,7 @@ class TestHandleList:
     def test_list_shows_jobs(self, mock_registry, capsys, monkeypatch):
         monkeypatch.setattr("lamia.scheduling.cli.list_jobs", lambda: [
             {"id": "abc123", "script": "daily.lm", "cron": "0 9 * * *",
-             "timezone": "UTC", "catch_up": True, "project_root": "/home/user/proj"},
+             "catch_up": True, "project_root": "/home/user/proj"},
         ])
         args = MagicMock()
         _handle_list(args)
@@ -128,7 +124,6 @@ class TestHandleRemove:
             "id": "abc123",
             "script": "daily.lm",
             "cron": "0 9 * * *",
-            "timezone": "UTC",
             "catch_up": True,
             "project_root": "/home/user/proj",
         })
@@ -157,7 +152,6 @@ class TestHandleUpdate:
             "id": "abc123",
             "script": "daily.lm",
             "cron": "0 9 * * *",
-            "timezone": "UTC",
             "catch_up": True,
             "project_root": "/home/user/proj",
         })
@@ -167,7 +161,6 @@ class TestHandleUpdate:
         args.id = "abc123"
         args.every = None
         args.cron = "15 10 * * *"
-        args.timezone = "Europe/Berlin"
         args.catch_up = False
         args.no_catch_up = True
 
@@ -183,7 +176,6 @@ class TestHandleUpdate:
         args.id = "nope"
         args.every = "day"
         args.cron = None
-        args.timezone = None
         args.catch_up = False
         args.no_catch_up = False
 
@@ -256,3 +248,5 @@ class TestHandleScheduleDispatch:
         captured = capsys.readouterr()
         assert "usage: lamia schedule add" in captured.out
         assert "--every PRESET" in captured.out
+
+

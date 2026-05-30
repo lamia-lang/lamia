@@ -41,7 +41,6 @@ def save_job(job: ScheduleJob, lamia_bin: str) -> str:
         "id": job_id,
         "script": job.script,
         "cron": job.cron,
-        "timezone": job.timezone,
         "catch_up": job.catch_up,
         "project_root": str(job.project_root),
         "lamia_bin": lamia_bin,
@@ -148,7 +147,6 @@ def _normalize_job_data(path: Path, job_data: dict) -> Optional[dict]:
         job_id = _generate_id(script, project_root)
         job_data["id"] = job_id
 
-    job_data.setdefault("timezone", "UTC")
     job_data.setdefault("catch_up", True)
     job_data.setdefault("lamia_bin", "")
 

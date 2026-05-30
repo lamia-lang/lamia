@@ -209,6 +209,7 @@ def _format_history(messages: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+
 async def json_mode(lamia: Lamia) -> None:
     """Machine-readable JSON-line protocol for IDE integration.
 

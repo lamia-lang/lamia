@@ -2,6 +2,8 @@
 
 Lamia supports scheduling `.lm` scripts to run automatically on your local machine using the native OS scheduler (launchd on macOS, systemd timers on Linux, Windows Task Scheduler on Windows).
 
+All scheduled times are **local machine time**.
+
 ## Adding a Schedule
 
 The simplest way — use a preset:
@@ -19,7 +21,7 @@ lamia schedule add daily_task.lm --every on-wake
 For precise control, use a cron expression:
 
 ```bash
-lamia schedule add daily_task.lm --cron "0 9 * * *" --timezone Europe/Berlin
+lamia schedule add daily_task.lm --cron "0 9 * * *"
 ```
 
 The command resolves the script path and registers it with the OS scheduler. The script's parent directory becomes the working directory for execution.
@@ -40,7 +42,6 @@ The command resolves the script path and registers it with the OS scheduler. The
 |------|---------|-------------|
 | `--every` | — | Schedule preset (see above). Use this OR `--cron`. |
 | `--cron` | — | Standard 5-field cron expression. Use this OR `--every`. |
-| `--timezone` | `UTC` | IANA timezone (ignored for `on-wake`) |
 | `--no-catch-up` | off | If set, missed runs (machine was off) are skipped |
 
 By default, if the machine was off at the scheduled time, the missed run fires once when the machine wakes up. Pass `--no-catch-up` to disable this.
@@ -53,11 +54,11 @@ Legacy aliases are still accepted: `hourly`, `daily`, `weekdays`, `weekly`.
 lamia schedule list
 ```
 
-Shows all registered schedules with their cron, timezone, project path, and last run status:
+Shows all registered schedules with their cron, project path, and last run status:
 
 ```
   [a3f7c2e1b9d0] daily_task.lm
-    cron: 0 9 * * *  timezone: Europe/Berlin  catch_up: True
+    schedule: day  catch_up: True
     path: /Users/you/project/pinterest_pin_publisher
     last run: 2026-05-28T09:00:12+00:00  status: ok
 ```
@@ -83,7 +84,7 @@ lamia schedule update <id> --every day
 Or switch to a custom cron:
 
 ```bash
-lamia schedule update <id> --cron "15 10 * * *" --timezone Europe/Berlin
+lamia schedule update <id> --cron "15 10 * * *"
 ```
 
 You can also toggle catch-up behavior during update:
@@ -97,13 +98,13 @@ lamia schedule update <id> --every on-wake --no-catch-up
 Schedules are stored globally at `~/.lamia/schedules/` — one JSON file per job. The OS scheduler invokes:
 
 ```
-lamia --file /abs/path/to/script.lm --log-file ~/.lamia/logs/<script>.log --schedule-id <id>
+lamia --file /abs/path/to/script.lm --log-file ~/.lamia/logs/<id>/schedule.log --schedule-id <id>
 ```
 
 This means:
 
-- Lamia's internal logs go to `~/.lamia/logs/<script>.log`
-- Stdout/stderr from the script itself is captured to `.stdout.log` / `.stderr.log` in the same directory
+- Logs are grouped per schedule id under `~/.lamia/logs/schedules/<id>/`
+- A single combined log goes to `~/.lamia/logs/schedules/<id>/schedule.log`
 - After each run, exit status is recorded so `lamia schedule list` can display it
 
 ## Cron Expression Reference
@@ -122,16 +123,16 @@ Common patterns:
 
 | Expression | Meaning |
 |-----------|---------|
-| `0 9 * * *` | Daily at 9:00 |
+| `0 9 * * *` | Daily at 9:00 AM |
 | `0 */6 * * *` | Every 6 hours |
-| `30 8 * * 1-5` | Weekdays at 8:30 |
+| `30 8 * * 1-5` | Weekdays at 8:30 AM |
 | `0 0 1 * *` | First of each month at midnight |
 
 ## OS-Specific Behavior
 
 ### macOS (launchd)
 
-Creates a plist at `~/Library/LaunchAgents/com.lamia.schedule.<script>.plist`. Uses `StartCalendarInterval` which automatically catches up missed runs.
+Creates a plist at `~/Library/LaunchAgents/com.lamia.schedule.<script>.plist`. Uses `StartCalendarInterval` for time-based scheduling and `RunAtLoad` to catch up missed runs when the machine wakes.
 
 ### Linux (systemd)
 
@@ -144,5 +145,5 @@ Creates a task in `Lamia\<script>` via `schtasks.exe`. The task runs with the us
 ## Troubleshooting
 
 - **Script not found**: If you moved the project after scheduling, the job will fail. Use `lamia schedule list` to see the stale path, then `remove` and `add` with the new location.
-- **Check logs**: All output goes to `~/.lamia/logs/`. Check `<script>.log` for Lamia errors and `<script>.stdout.log` for script output.
+- **Check logs**: Use `lamia schedule list` to get the job id, then inspect `~/.lamia/logs/schedules/<id>/schedule.log`.
 - **Force fresh login**: If a web automation script's session expired, delete `.lamia_sessions/` and run the script manually once to re-authenticate before the next scheduled run.
