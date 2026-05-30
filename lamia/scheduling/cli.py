@@ -8,6 +8,7 @@ Usage:
     lamia schedule add <script.lm> --every on-wake
     lamia schedule add <script.lm> --cron "0 9 * * *" --timezone Europe/Berlin
     lamia schedule list
+    lamia schedule update <id> --every day
     lamia schedule remove <id>
 """
 
@@ -178,6 +179,56 @@ def _handle_remove(args: argparse.Namespace) -> None:
     print(f"Removed schedule: {job_data['script']} [{job_id}]")
 
 
+def _handle_update(args: argparse.Namespace) -> None:
+    job_id = args.id
+    job_data = load_job(job_id)
+
+    if not job_data:
+        print(f"Error: no schedule found with id '{job_id}'", file=sys.stderr)
+        sys.exit(1)
+
+    cron = _resolve_cron(args)
+    timezone = args.timezone if args.timezone is not None else job_data.get("timezone", "UTC")
+
+    if args.catch_up:
+        catch_up = True
+    elif args.no_catch_up:
+        catch_up = False
+    else:
+        catch_up = job_data.get("catch_up", True)
+
+    updated_job = ScheduleJob(
+        script=job_data["script"],
+        cron=cron,
+        timezone=timezone,
+        catch_up=catch_up,
+        project_root=Path(job_data["project_root"]),
+    )
+
+    old_job = ScheduleJob(
+        script=job_data["script"],
+        cron=job_data["cron"],
+        timezone=job_data.get("timezone", "UTC"),
+        catch_up=job_data.get("catch_up", True),
+        project_root=Path(job_data["project_root"]),
+    )
+
+    scheduler = LocalScheduler()
+    lamia_bin = _find_lamia_bin()
+
+    scheduler.uninstall(old_job)
+    scheduler.install(updated_job, lamia_bin)
+    save_job(updated_job, lamia_bin)
+
+    schedule_desc = args.every if args.every else cron
+    print(f"Updated schedule: {updated_job.script} [{job_id}]")
+    print(f"  frequency: {schedule_desc}")
+    if cron != "@reboot":
+        print(f"  cron:      {cron}")
+        print(f"  timezone:  {updated_job.timezone}")
+    print(f"  catch_up:  {updated_job.catch_up}")
+
+
 def handle_schedule() -> None:
     parser = argparse.ArgumentParser(
         description="Manage scheduled Lamia script execution",
@@ -230,6 +281,46 @@ def handle_schedule() -> None:
     remove_parser = subparsers.add_parser("remove", help="Remove a scheduled job")
     remove_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")
 
+    update_parser = subparsers.add_parser(
+        "update",
+        help="Update an existing scheduled job in one command",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  lamia schedule update <id> --every day\n"
+            "  lamia schedule update <id> --cron \"15 10 * * *\" --timezone Europe/Berlin\n"
+            "  lamia schedule update <id> --every on-wake --no-catch-up\n"
+        ),
+    )
+    update_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")
+    update_freq_group = update_parser.add_mutually_exclusive_group(required=True)
+    update_freq_group.add_argument(
+        "--every",
+        metavar="PRESET",
+        help=f"Schedule preset: {', '.join(EVERY_CHOICES)} (aliases supported)",
+    )
+    update_freq_group.add_argument(
+        "--cron",
+        metavar="EXPR",
+        help='Custom cron expression (e.g. "0 9 * * *").',
+    )
+    update_parser.add_argument(
+        "--timezone",
+        default=None,
+        help="IANA timezone. If omitted, keep current timezone.",
+    )
+    update_catchup_group = update_parser.add_mutually_exclusive_group(required=False)
+    update_catchup_group.add_argument(
+        "--catch-up",
+        action="store_true",
+        help="Enable catch-up on missed runs.",
+    )
+    update_catchup_group.add_argument(
+        "--no-catch-up",
+        action="store_true",
+        help="Disable catch-up on missed runs.",
+    )
+
     if len(sys.argv) >= 3 and sys.argv[2] == "add" and len(sys.argv) == 3:
         add_parser.print_help()
         sys.exit(2)
@@ -242,6 +333,8 @@ def handle_schedule() -> None:
         _handle_list(args)
     elif args.action == "remove":
         _handle_remove(args)
+    elif args.action == "update":
+        _handle_update(args)
     else:
         parser.print_help()
         sys.exit(1)

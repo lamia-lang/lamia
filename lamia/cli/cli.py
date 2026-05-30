@@ -866,12 +866,15 @@ For help on a subcommand, run:
         else:
             from pathlib import Path
             search_start = Path(prompt_file).resolve().parent if prompt_file else Path.cwd()
-            logger.error(
+            msg = (
                 f"fatal: no config.yaml found (searched upwards from {search_start}).\n"
                 f"Place a config.yaml in your project root, or pass --config <path>.\n"
                 f"Run 'lamia init' to create one."
             )
-            sys.exit(1)
+            logger.error(
+                msg
+            )
+            _graceful_shutdown(None, 1, error_msg=msg)
 
     if config_dict is not None:
         extensions_rel = config_dict.get('extensions_folder', 'extensions')
@@ -1010,7 +1013,11 @@ def _install_sigint_handler() -> None:
 _active_schedule_id: 'Optional[str]' = None
 
 
-def _graceful_shutdown(lamia_instance: 'Optional[Lamia]', exit_code: int = 0) -> None:
+def _graceful_shutdown(
+    lamia_instance: 'Optional[Lamia]',
+    exit_code: int = 0,
+    error_msg: str = "",
+) -> None:
     """Clean up resources and terminate the process.
 
     Use SystemExit so callers (including tests) can observe exit semantics
@@ -1019,7 +1026,7 @@ def _graceful_shutdown(lamia_instance: 'Optional[Lamia]', exit_code: int = 0) ->
     if _active_schedule_id:
         try:
             from lamia.scheduling.registry import record_run
-            record_run(_active_schedule_id, exit_code)
+            record_run(_active_schedule_id, exit_code, error=error_msg)
         except Exception:
             pass
     if lamia_instance is not None:

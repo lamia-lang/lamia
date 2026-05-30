@@ -14,6 +14,7 @@ from lamia.scheduling.cli import (
     _handle_add,
     _handle_list,
     _handle_remove,
+    _handle_update,
 )
 
 
@@ -148,6 +149,46 @@ class TestHandleRemove:
 
         with pytest.raises(SystemExit):
             _handle_remove(args)
+
+
+class TestHandleUpdate:
+    def test_update_existing_job(self, mock_scheduler, capsys, monkeypatch):
+        monkeypatch.setattr("lamia.scheduling.cli.load_job", lambda job_id: {
+            "id": "abc123",
+            "script": "daily.lm",
+            "cron": "0 9 * * *",
+            "timezone": "UTC",
+            "catch_up": True,
+            "project_root": "/home/user/proj",
+        })
+        monkeypatch.setattr("lamia.scheduling.cli.save_job", lambda *a: "abc123")
+
+        args = MagicMock()
+        args.id = "abc123"
+        args.every = None
+        args.cron = "15 10 * * *"
+        args.timezone = "Europe/Berlin"
+        args.catch_up = False
+        args.no_catch_up = True
+
+        _handle_update(args)
+        mock_scheduler.uninstall.assert_called_once()
+        mock_scheduler.install.assert_called_once()
+        captured = capsys.readouterr()
+        assert "Updated schedule" in captured.out
+
+    def test_update_nonexistent_exits(self, monkeypatch):
+        monkeypatch.setattr("lamia.scheduling.cli.load_job", lambda x: None)
+        args = MagicMock()
+        args.id = "nope"
+        args.every = "day"
+        args.cron = None
+        args.timezone = None
+        args.catch_up = False
+        args.no_catch_up = False
+
+        with pytest.raises(SystemExit):
+            _handle_update(args)
 
 
 class TestResolveCron:

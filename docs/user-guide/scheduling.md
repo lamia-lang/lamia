@@ -72,6 +72,26 @@ lamia schedule remove <id>
 
 The `<id>` is shown in `lamia schedule list` output. This unloads the OS scheduler entry and removes the job from the registry.
 
+## Updating a Schedule
+
+If you used a wrong cron expression or want to change cadence, update in one command:
+
+```bash
+lamia schedule update <id> --every day
+```
+
+Or switch to a custom cron:
+
+```bash
+lamia schedule update <id> --cron "15 10 * * *" --timezone Europe/Berlin
+```
+
+You can also toggle catch-up behavior during update:
+
+```bash
+lamia schedule update <id> --every on-wake --no-catch-up
+```
+
 ## How It Works
 
 Schedules are stored globally at `~/.lamia/schedules/` — one JSON file per job. The OS scheduler invokes:
