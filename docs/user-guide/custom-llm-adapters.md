@@ -22,7 +22,12 @@ lives in `mistral.py`.
 
 ```python
 # extensions/adapters/mistral.py
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
+from lamia.adapters.llm.base import (
+    BaseLLMAdapter,
+    LLMResponse,
+    raise_for_status,
+    raise_for_connection_error,
+)
 from typing import Optional, Type
 from pydantic import BaseModel
 from lamia import LLMModel
@@ -73,14 +78,21 @@ class MistralAdapter(BaseLLMAdapter):
             "model": model.get_model_name_without_provider(),
             "messages": [{"role": "user", "content": prompt}],
         }
-        async with self.session.post(self.API_URL, json=payload) as resp:
-            data = await resp.json()
-            return LLMResponse(
-                text=data["choices"][0]["message"]["content"],
-                raw_response=data,
-                usage=data.get("usage", {}),
-                model=model.name,
-            )
+        try:
+            async with self.session.post(self.API_URL, json=payload) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    raise_for_status(resp.status, error_text, "Mistral API error")
+
+                data = await resp.json()
+                return LLMResponse(
+                    text=data["choices"][0]["message"]["content"],
+                    raw_response=data,
+                    usage=data.get("usage", {}),
+                    model=model.name,
+                )
+        except aiohttp.ClientError as e:
+            raise_for_connection_error(e, "Failed to communicate with Mistral API")
 
     async def close(self) -> None:
         if self.session:
@@ -162,7 +174,12 @@ This pattern is similar to local adapters like Ollama: local runtime, no API key
 
 ```python
 # extensions/adapters/vllm.py
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
+from lamia.adapters.llm.base import (
+    BaseLLMAdapter,
+    LLMResponse,
+    raise_for_status,
+    raise_for_connection_error,
+)
 from typing import Optional, Type
 from pydantic import BaseModel
 from lamia import LLMModel
@@ -209,15 +226,22 @@ class VllmAdapter(BaseLLMAdapter):
             "model": model.get_model_name_without_provider(),
             "messages": [{"role": "user", "content": prompt}],
         }
-        async with self.session.post(f"{self.base_url}/chat/completions", json=payload) as resp:
-            data = await resp.json()
-            usage = data.get("usage", {})
-            return LLMResponse(
-                text=data["choices"][0]["message"]["content"],
-                raw_response=data,
-                usage=usage,
-                model=model.name,
-            )
+        try:
+            async with self.session.post(f"{self.base_url}/chat/completions", json=payload) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    raise_for_status(resp.status, error_text, "vLLM API error")
+
+                data = await resp.json()
+                usage = data.get("usage", {})
+                return LLMResponse(
+                    text=data["choices"][0]["message"]["content"],
+                    raw_response=data,
+                    usage=usage,
+                    model=model.name,
+                )
+        except aiohttp.ClientError as e:
+            raise_for_connection_error(e, "Failed to communicate with vLLM API")
 
     async def close(self) -> None:
         if self.session:
@@ -232,6 +256,30 @@ from lamia import Lamia
 
 lamia = Lamia("vllm:meta-llama/Llama-3.1-8B-Instruct")
 ```
+
+## Error handling contract (required for retries)
+
+Lamia retry logic only retries exceptions that inherit from `ExternalOperationError`.
+If your adapter raises plain `RuntimeError` for provider failures, retries are skipped.
+
+Use the helpers from `lamia.adapters.llm.base`:
+
+- `raise_for_status(status, error_text, prefix)` for non-200 HTTP responses
+- `raise_for_connection_error(error, prefix)` for SDK/network/client exceptions
+
+Classification rules:
+
+- HTTP `429` -> `ExternalOperationRateLimitError`
+- HTTP `4xx` (except `429`) -> `ExternalOperationPermanentError`
+- HTTP `5xx` -> `ExternalOperationTransientError`
+- connection/timeout/client failures -> `ExternalOperationTransientError`
+
+Do not raise plain `RuntimeError` for external provider/API failures.
+
+## Import style (global imports only)
+
+Keep imports at module top level. Do not use local imports inside methods
+for adapter implementations.
 
 ## Interface checklist
 

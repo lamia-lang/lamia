@@ -4,7 +4,7 @@ import logging
 import os
 import aiohttp
 from lamia import LLMModel
-from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error
+from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error
 from .anthropic_adapter import AnthropicAdapter
 from .openai_adapter import OpenAIAdapter
 from .local.ollama_adapter import OllamaAdapter
@@ -193,24 +193,15 @@ class LamiaAdapter(BaseLLMAdapter):
         
         try:
             async with self.session.post(endpoint_url, json=payload) as response:
-                if response.status == 401:
-                    raise RuntimeError("Invalid Lamia API key")
-                elif response.status == 400:
+                if response.status != 200:
                     error_text = await response.text()
-                    raise RuntimeError(f"Lamia API bad request: {sanitize_api_error(error_text)}")
-                elif response.status == 402:
-                    raise RuntimeError("Insufficient credits")
-                elif response.status != 200:
-                    error_text = await response.text()
-                    raise RuntimeError(f"Lamia API error ({response.status}): {sanitize_api_error(error_text)}")
-                    
+                    raise_for_status(response.status, error_text, "Lamia API error")
+
                 data = await response.json()
-                
-                # Parse response according to provider format
                 return self._parse_response(data, provider_name, model)
-                
+
         except aiohttp.ClientError as e:
-            raise RuntimeError(f"Failed to communicate with Lamia API: {sanitize_api_error(str(e))}")
+            raise_for_connection_error(e, "Failed to communicate with Lamia API")
 
     @classmethod
     async def models(cls, api_key: str = "") -> list[dict]:

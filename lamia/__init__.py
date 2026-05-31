@@ -65,7 +65,6 @@ from .facade.result_types import LamiaResult
 from .errors import (
     MissingAPIKeysError,
     ExternalOperationError,
-    ExternalOperationFailedError,
     ExternalOperationTransientError,
     ExternalOperationRateLimitError,
     ExternalOperationPermanentError,
@@ -84,7 +83,6 @@ __all__ = [
     "InputType",  # For form automation
     "MissingAPIKeysError", 
     "ExternalOperationError",
-    "ExternalOperationFailedError",
     "ExternalOperationTransientError", 
     "ExternalOperationRateLimitError",
     "ExternalOperationPermanentError",

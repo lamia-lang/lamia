@@ -427,6 +427,7 @@ class TestLamiaAdapterErrorHandling:
         # Mock HTTP error response
         mock_http_response = AsyncMock()
         mock_http_response.status = 401
+        mock_http_response.text = AsyncMock(return_value="Invalid API key")
         
         class MockPostContext:
             def __init__(self, response):
@@ -447,7 +448,8 @@ class TestLamiaAdapterErrorHandling:
         mock_model.name = "openai/gpt-3.5-turbo"
         mock_model.get_provider_name.return_value = "openai"
         
-        with pytest.raises(RuntimeError, match="Invalid Lamia API key"):
+        from lamia.errors import ExternalOperationPermanentError
+        with pytest.raises(ExternalOperationPermanentError):
             await adapter.generate("Hello", mock_model)
     
     @pytest.mark.asyncio
@@ -481,7 +483,8 @@ class TestLamiaAdapterErrorHandling:
         mock_model.name = "openai/gpt-3.5-turbo"
         mock_model.get_provider_name.return_value = "openai"
         
-        with pytest.raises(RuntimeError, match="Lamia API bad request: Bad request details"):
+        from lamia.errors import ExternalOperationPermanentError
+        with pytest.raises(ExternalOperationPermanentError):
             await adapter.generate("Hello", mock_model)
     
     @pytest.mark.asyncio
@@ -494,6 +497,7 @@ class TestLamiaAdapterErrorHandling:
         # Mock HTTP error response
         mock_http_response = AsyncMock()
         mock_http_response.status = 402
+        mock_http_response.text = AsyncMock(return_value="Insufficient credits")
         
         class MockPostContext:
             def __init__(self, response):
@@ -514,7 +518,8 @@ class TestLamiaAdapterErrorHandling:
         mock_model.name = "openai/gpt-3.5-turbo"
         mock_model.get_provider_name.return_value = "openai"
         
-        with pytest.raises(RuntimeError, match="Insufficient credits"):
+        from lamia.errors import ExternalOperationPermanentError
+        with pytest.raises(ExternalOperationPermanentError):
             await adapter.generate("Hello", mock_model)
     
     @pytest.mark.asyncio
@@ -534,7 +539,8 @@ class TestLamiaAdapterErrorHandling:
         mock_model.name = "openai/gpt-3.5-turbo"
         mock_model.get_provider_name.return_value = "openai"
         
-        with pytest.raises(RuntimeError, match="Failed to communicate with Lamia API: Network error"):
+        from lamia.errors import ExternalOperationTransientError
+        with pytest.raises(ExternalOperationTransientError):
             await adapter.generate("Hello", mock_model)
 
 

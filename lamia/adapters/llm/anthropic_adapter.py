@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, Type
 import aiohttp
 
-from .base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, sanitize_api_error
+from .base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error
 from pydantic import BaseModel
 
 try:
@@ -148,8 +148,8 @@ class AnthropicAdapter(BaseLLMAdapter):
         try:
             response = await self.client.messages.create(**request_kwargs)
         except Exception as e:
-            raise RuntimeError(f"Anthropic API error: {sanitize_api_error(str(e))}")
-        
+            raise_for_connection_error(e, "Anthropic API error")
+
         return LLMResponse(
             text=response.content[0].text,
             raw_response=response,
@@ -192,16 +192,16 @@ class AnthropicAdapter(BaseLLMAdapter):
             async with self.session.post(self.API_URL, json=payload) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    raise RuntimeError(f"Anthropic API error: {sanitize_api_error(error_text)}")
-                    
+                    raise_for_status(response.status, error_text, "Anthropic API error")
+
                 data = await response.json()
-                
+
                 return LLMResponse(
                     text=data["content"][0]["text"],
                     raw_response=data,
                     usage=data.get("usage", {}),
                     model=model.name,
                 )
-                
+
         except aiohttp.ClientError as e:
-            raise RuntimeError(f"Failed to communicate with Anthropic API: {sanitize_api_error(str(e))}")
+            raise_for_connection_error(e, "Failed to communicate with Anthropic API")

@@ -171,7 +171,6 @@ class Lamia:
             ExternalOperationPermanentError: If external service has permanent failure (API key issues, invalid requests)
             ExternalOperationRateLimitError: If external service rate limits are exceeded
             ExternalOperationTransientError: If external service has temporary failures (network issues, timeouts)
-            ExternalOperationFailedError: If external service fails with unclassified error
         """
         # Prepend existing file content as context for append operations
         if _append_context and isinstance(command, str):
@@ -281,7 +280,6 @@ class Lamia:
             ExternalOperationPermanentError: If external service has permanent failure (API key issues, invalid requests)
             ExternalOperationRateLimitError: If external service rate limits are exceeded
             ExternalOperationTransientError: If external service has temporary failures (network issues, timeouts)
-            ExternalOperationFailedError: If external service fails with unclassified error
             RuntimeError: If run() is called inside an async context
         """
         return EventLoopManager.run_coroutine(

@@ -6,7 +6,7 @@ from typing import Optional, TypeVar, Dict, List, Callable, Awaitable, Union
 import time
 import asyncio
 
-from lamia.errors import ExternalOperationError, ExternalOperationPermanentError, ExternalOperationRateLimitError, ExternalOperationTransientError, ExternalOperationFailedError
+from lamia.errors import ExternalOperationError, ExternalOperationPermanentError, ExternalOperationRateLimitError, ExternalOperationTransientError
 from .defaults import get_default_config_for_adapter
 from lamia.types import ExternalOperationRetryConfig
 from lamia.adapters.error_classifiers.categories import ErrorCategory

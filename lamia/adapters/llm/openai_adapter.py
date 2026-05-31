@@ -1,6 +1,6 @@
 from typing import Optional, Dict, Any, Type
 import aiohttp
-from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error
+from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error
 from lamia import LLMModel
 from pydantic import BaseModel
 
@@ -141,8 +141,8 @@ class OpenAIAdapter(BaseLLMAdapter):
             try:
                 response = await self.client.chat.completions.create(**request_kwargs)
             except Exception as e:
-                raise RuntimeError(f"OpenAI API error: {sanitize_api_error(str(e))}")
-            
+                raise_for_connection_error(e, "OpenAI API error")
+
             return LLMResponse(
                 text=response.choices[0].message.content,
                 raw_response=response,
@@ -167,24 +167,24 @@ class OpenAIAdapter(BaseLLMAdapter):
             }
             if response_format is not None:
                 payload["response_format"] = response_format
-            
+
             try:
                 async with self.session.post(self.API_URL, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        raise RuntimeError(f"OpenAI API error: {sanitize_api_error(error_text)}")
-                        
+                        raise_for_status(response.status, error_text, "OpenAI API error")
+
                     data = await response.json()
-                    
+
                     return LLMResponse(
                         text=data["choices"][0]["message"]["content"],
                         raw_response=data,
                         model=model.name,
                         usage=data.get("usage", {})
                     )
-                    
+
             except aiohttp.ClientError as e:
-                raise RuntimeError(f"Failed to communicate with OpenAI API: {sanitize_api_error(str(e))}")
+                raise_for_connection_error(e, "Failed to communicate with OpenAI API")
     
     async def close(self) -> None:
         """Cleanup any resources used by the adapter."""

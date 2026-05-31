@@ -233,7 +233,8 @@ class TestOpenAIAdapterGeneration:
             mock_model.presence_penalty = None
             mock_model.seed = None
 
-            with pytest.raises(RuntimeError) as exc:
+            from lamia.errors import ExternalOperationPermanentError
+            with pytest.raises(ExternalOperationPermanentError) as exc:
                 await adapter.generate("Hello", mock_model)
 
             msg = str(exc.value)

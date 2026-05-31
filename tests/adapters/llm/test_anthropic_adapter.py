@@ -184,7 +184,8 @@ class TestAnthropicAdapterGeneration:
             mock_model.top_p = 1.0
             mock_model.get_model_name_without_provider.return_value = "claude-3-sonnet"
 
-            with pytest.raises(RuntimeError) as exc:
+            from lamia.errors import ExternalOperationPermanentError
+            with pytest.raises(ExternalOperationPermanentError) as exc:
                 await adapter.generate("Hello", mock_model)
 
             msg = str(exc.value)
@@ -280,7 +281,8 @@ class TestAnthropicAdapterGeneration:
             
             # This will fail due to missing raw_response in HTTP implementation
             # But we test the error path first
-            with pytest.raises(RuntimeError, match="Anthropic API error: Bad Request Error"):
+            from lamia.errors import ExternalOperationPermanentError
+            with pytest.raises(ExternalOperationPermanentError, match="Anthropic API error"):
                 await adapter.generate("Test prompt", mock_model)
     
     @pytest.mark.asyncio
@@ -297,7 +299,8 @@ class TestAnthropicAdapterGeneration:
             adapter = AnthropicAdapter(api_key="test-key")
             mock_model = Mock(spec=LLMModel)
             
-            with pytest.raises(RuntimeError, match="Failed to communicate with Anthropic API: Network error"):
+            from lamia.errors import ExternalOperationTransientError
+            with pytest.raises(ExternalOperationTransientError, match="Failed to communicate with Anthropic API"):
                 await adapter.generate("Test prompt", mock_model)
 
 

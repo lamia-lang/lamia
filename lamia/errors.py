@@ -94,29 +94,6 @@ class ExternalOperationError(Exception):
         self.original_error = original_error
 
 
-class ExternalOperationFailedError(ExternalOperationError):
-    """Raised when external operation fails with unclassified error.
-    
-    This is the fallback error for failures that don't fit into specific
-    categories (permanent, rate limit, transient). It indicates the operation
-    failed but the exact cause couldn't be determined from error classification.
-    
-    What to do:
-    - Check the original_error for specific details
-    - Review retry_history to understand failure pattern  
-    - Consider if this is a service issue or request problem
-    - May require manual investigation of the underlying error
-    
-    Example:
-        try:
-            result = await lamia.run_async("Generate text")
-        except ExternalOperationFailedError as e:
-            print(f"Operation failed: {e.original_error}")
-            print(f"Attempts made: {len(e.retry_history)}")
-            # Investigate the specific error details
-    """
-    pass
-
 
 class ExternalOperationTransientError(ExternalOperationError):
     """Raised when an external operation fails due to a transient error.

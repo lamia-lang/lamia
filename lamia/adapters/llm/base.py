@@ -4,6 +4,11 @@ from typing import Any, Dict, Optional, Type
 import re
 from pydantic import BaseModel
 from lamia import LLMModel
+from lamia.errors import (
+    ExternalOperationTransientError,
+    ExternalOperationPermanentError,
+    ExternalOperationRateLimitError,
+)
 
 _SK_KEY_PATTERN = re.compile(r'sk-[\w*-]+')
 
@@ -11,6 +16,37 @@ _SK_KEY_PATTERN = re.compile(r'sk-[\w*-]+')
 def sanitize_api_error(message: str) -> str:
     """Replace sk-* secret key tokens in error messages with [REDACTED]."""
     return _SK_KEY_PATTERN.sub('[REDACTED]', message)
+
+
+def raise_for_status(status: int, error_text: str, prefix: str) -> None:
+    """Raise the appropriate ExternalOperationError subclass for an HTTP status."""
+    msg = f"{prefix} (status {status}): {sanitize_api_error(error_text)}"
+    if status == 429:
+        raise ExternalOperationRateLimitError(msg)
+    elif 400 <= status < 500:
+        raise ExternalOperationPermanentError(msg)
+    else:
+        raise ExternalOperationTransientError(msg)
+
+
+def raise_for_connection_error(error: Exception, prefix: str) -> None:
+    """Raise the appropriate ExternalOperationError for SDK/connection failures.
+
+    Attempts to extract an HTTP status code from the exception message
+    (SDKs like OpenAI/Anthropic embed them). Falls back to transient
+    if no status code is found (network issues are retryable).
+    """
+    msg = f"{prefix}: {sanitize_api_error(str(error))}"
+    status_match = re.search(r'\b([45]\d{2})\b', str(error))
+    if status_match:
+        status = int(status_match.group(1))
+        if status == 429:
+            raise ExternalOperationRateLimitError(msg)
+        elif 400 <= status < 500:
+            raise ExternalOperationPermanentError(msg)
+        else:
+            raise ExternalOperationTransientError(msg)
+    raise ExternalOperationTransientError(msg)
 
 
 def make_strict_schema(model: Type[BaseModel]) -> dict:

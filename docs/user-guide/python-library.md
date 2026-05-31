@@ -239,7 +239,6 @@ from lamia import (
     ExternalOperationPermanentError,
     ExternalOperationTransientError,
     ExternalOperationRateLimitError,
-    ExternalOperationFailedError,
     OllamaNotInstalledError,
 )
 
@@ -255,8 +254,6 @@ except ExternalOperationPermanentError as e:
     print(f"Permanent failure (bad key, invalid request): {e}")
 except ExternalOperationTransientError as e:
     print(f"Temporary failure (network, timeout): {e}")
-except ExternalOperationFailedError as e:
-    print(f"Unclassified failure: {e.original_error}")
 ```
 
 The exception hierarchy:
@@ -266,7 +263,6 @@ The exception hierarchy:
         - `OllamaNotInstalledError` — Ollama binary not found
     - `ExternalOperationTransientError` — temporary failures (network issues, timeouts)
     - `ExternalOperationRateLimitError` — API rate limits exceeded
-    - `ExternalOperationFailedError` — unclassified failure
 
 All `ExternalOperationError` subclasses carry `retry_history` (list of retry attempts) and `original_error` (the underlying exception).
 
