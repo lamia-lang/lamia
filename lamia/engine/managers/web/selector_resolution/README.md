@@ -21,12 +21,14 @@ selector_resolution/
 ├── response_parser.py                     # AI response parsing
 ├── ai_selector_cache.py                   # Caching layer
 ├── cache_manager.py                       # Cache management API
-├── strategy_based/                        # Strategy-based resolution
-│   ├── README.md                          # Strategy system docs
-│   ├── strategy_generator.py             # Generate selector strategies
+├── progressive/                           # Progressive strategy-based resolution
+│   ├── progressive_selector_strategy.py  # Define and rank selector strategies
 │   ├── strategy_resolver.py              # Try strategies progressively
 │   ├── relationship_validator.py         # Validate element relationships
-│   └── ambiguity_resolver.py             # Human-in-the-loop selection
+│   ├── element_ambiguity_resolver.py     # Base ambiguity resolution
+│   ├── human_assisted_ambiguity_resolver.py  # Human-in-the-loop selection
+│   ├── llm_ambiguity_resolver.py         # LLM-based ambiguity resolution
+│   └── unique_selector_extractor.py      # Extract unique selectors
 ├── suggestions/                           # AI suggestions on failure
 │   ├── README.md                          # Suggestion system docs
 │   └── suggestion_service.py             # Generate alternative selectors
@@ -56,16 +58,14 @@ resolved = await service.resolve_selector(
 # Returns: "button.btn-primary"
 ```
 
-### 2. Strategy-Based Resolution (`strategy_based/`)
+### 2. Progressive Resolution (`progressive/`)
 
 Modern approach for natural language selectors (99.8% cheaper than old approach):
 
 - **No HTML sent to LLM** - Only the description!
 - **Multiple strategies** - Tries specific → generic progressively
 - **Relationship validation** - Validates siblings, common ancestors
-- **Human-in-the-loop** - Interactive ambiguity resolution
-
-See [`strategy_based/README.md`](strategy_based/README.md) for details.
+- **Human-in-the-loop** - Interactive ambiguity resolution via `human_assisted_ambiguity_resolver.py`
 
 ### 3. AI Suggestions (`suggestions/`)
 

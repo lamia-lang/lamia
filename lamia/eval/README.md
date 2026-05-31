@@ -173,8 +173,8 @@ The `evaluate_prompt()` and `evaluate_script()` methods return an `EvaluationRes
 ```python
 @dataclass
 class EvaluationResult:
-    best_model: Optional[str]           # "openai:gpt-4o-mini" 
-    success: bool                       # True if any model worked
+    minimum_working_model: Optional[str]  # "openai:gpt-4o-mini" 
+    success: bool                         # True if any model worked
     validation_pass_rate: float         # 100.0 for successful evaluations
     attempts: List[Dict[str, Any]]      # Details of each model attempt
     cost: Optional[ModelCost]           # Cost of the best model
@@ -290,7 +290,7 @@ class MyApp:
         
         # Use the best model for production
         if result.success:
-            self.lamia.config_provider.set_model_chain([(result.best_model, 1)])
+            self.lamia.config_provider.set_model_chain([(result.minimum_working_model, 1)])
             
         return result
 ```

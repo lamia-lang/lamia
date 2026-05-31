@@ -5,14 +5,14 @@ Production-ready retry handling for external adapters with automatic configurati
 ## Quick Start
 
 ```python
-from lamia.adapters.retry import RetryHandler, RetryWrappedLLMAdapter
+from lamia.adapters.retry import RetryHandler, RetryingLLMAdapter
 
 # Direct usage
 handler = RetryHandler(adapter=my_adapter)
 result = await handler.execute(my_operation)
 
 # Wrapper usage  
-retry_adapter = RetryWrappedLLMAdapter(original_adapter)
+retry_adapter = RetryingLLMAdapter(original_adapter)
 response = await retry_adapter.generate("Hello world")
 ```
 
@@ -47,8 +47,8 @@ handler = RetryHandler(adapter=ollama_adapter)
 # Automatically gets: 3 attempts, 5-180s delays, self-hosted error classification
 
 # Filesystem adapter with automatic config
-s3_adapter = S3Adapter(bucket="...")
-handler = RetryHandler(adapter=s3_adapter)
+fs_adapter = LocalFSAdapter(base_path="/data")
+handler = RetryHandler(adapter=fs_adapter)
 # Automatically gets: 2 attempts, 0.5-5s delays, filesystem error classification
 ```
 
