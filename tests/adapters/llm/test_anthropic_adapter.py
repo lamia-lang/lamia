@@ -169,9 +169,14 @@ class TestAnthropicAdapterGeneration:
         with patch('lamia.adapters.llm.anthropic_adapter.AsyncAnthropic') as mock_anthropic:
             mock_client = AsyncMock()
             mock_anthropic.return_value = mock_client
+            class MockSdkError(Exception):
+                def __init__(self, message: str, status_code: int):
+                    super().__init__(message)
+                    self.status_code = status_code
             mock_client.messages.create = AsyncMock(
-                side_effect=RuntimeError(
-                    "Error code: 401 - {'error': {'message': 'invalid x-api-key sk-ant-api03-abcdefghijk'}}"
+                side_effect=MockSdkError(
+                    "invalid x-api-key sk-ant-api03-abcdefghijk",
+                    status_code=401,
                 )
             )
 

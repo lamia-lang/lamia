@@ -15,19 +15,18 @@ your-project/
 ```
 
 Lamia discovers these adapters automatically.  The file name should match
-the provider name returned by `name()` — for example, a `mistral` provider
-lives in `mistral.py`.
+the provider name returned by `name()`.
 
-## Full remote adapter example (Mistral)
+---
+
+## Example 1 — Zero-config (OpenAI-compatible API)
+
+For providers that use the OpenAI `/v1/chat/completions` convention, you
+only need to set `API_URL` and identity methods. Here's an example adapter for Mistral:
 
 ```python
 # extensions/adapters/mistral.py
-from lamia.adapters.llm.base import (
-    BaseLLMAdapter,
-    LLMResponse,
-    raise_for_status,
-    raise_for_connection_error,
-)
+from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from typing import Optional, Type
 from pydantic import BaseModel
 from lamia import LLMModel
@@ -36,7 +35,6 @@ import aiohttp
 
 class MistralAdapter(BaseLLMAdapter):
     API_URL = "https://api.mistral.ai/v1/chat/completions"
-    MODELS_URL = "https://api.mistral.ai/v1/models"
 
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -54,194 +52,126 @@ class MistralAdapter(BaseLLMAdapter):
     def is_remote(cls) -> bool:
         return True
 
-    @classmethod
-    async def models(cls, api_key: str = "") -> list[dict]:
-        headers = {"Authorization": f"Bearer {api_key}"}
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(cls.MODELS_URL) as resp:
-                data = await resp.json()
-                return [{"id": m["id"]} for m in data.get("data", [])]
-
-    async def async_initialize(self) -> None:
-        self.session = aiohttp.ClientSession(headers={
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        })
-
-    async def generate(
-        self,
-        prompt: str,
-        model: LLMModel,
-        response_model: Optional[Type[BaseModel]] = None,
-    ) -> LLMResponse:
-        payload = {
-            "model": model.get_model_name_without_provider(),
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        try:
-            async with self.session.post(self.API_URL, json=payload) as resp:
-                if resp.status != 200:
-                    error_text = await resp.text()
-                    raise_for_status(resp.status, error_text, "Mistral API error")
-
-                data = await resp.json()
-                return LLMResponse(
-                    text=data["choices"][0]["message"]["content"],
-                    raw_response=data,
-                    usage=data.get("usage", {}),
-                    model=model.name,
-                )
-        except aiohttp.ClientError as e:
-            raise_for_connection_error(e, "Failed to communicate with Mistral API")
-
     async def close(self) -> None:
         if self.session:
             await self.session.close()
             self.session = None
 ```
 
-## Critical properties
-
-These class methods define provider identity, credential lookup, and local/remote behavior:
-
-```python
-@classmethod
-def name(cls) -> str:
-    return "mistral"
-
-@classmethod
-def env_var_names(cls) -> list[str]:
-    return ["MISTRAL_API_KEY"]
-
-@classmethod
-def is_remote(cls) -> bool:
-    return True
-```
-
-- `name()` controls the provider prefix in model strings, for example `mistral:mistral-large-latest`.  It also determines the file name when Lamia Studio copies adapters to its internal folder (`mistral.py`).
-- `env_var_names()` controls which environment variables Lamia will try for credentials.
-- `is_remote()` tells Lamia whether this adapter calls a network API (`True`) or a local runtime (`False`).
-
-If `is_remote()` returns `True`, your adapter usually needs a key from one of `env_var_names()` to work.
-
-## Listing available models
-
-Every adapter inherits a `models` classmethod.  The default returns an
-empty list, but you can override it to query the provider API:
-
-```python
-@classmethod
-async def models(cls, api_key: str = "") -> list[dict]:
-    """Return dicts with at least an ``id`` key."""
-    headers = {"Authorization": f"Bearer {api_key}"}
-    async with aiohttp.ClientSession(headers=headers) as session:
-        async with session.get("https://api.example.com/v1/models") as resp:
-            data = await resp.json()
-            return [{"id": m["id"]} for m in data.get("data", [])]
-```
-
-All built-in adapters (Anthropic, OpenAI, Ollama) already implement this.
-
-Use the CLI to list models:
-
-```bash
-# List models from all providers that have API keys configured
-lamia models
-
-# List models from a specific provider
-lamia models --provider anthropic
-```
-
-## Example usage
-
-Use it with:
-
-```python
-from lamia import Lamia
-
-lamia = Lamia("mistral:mistral-large-latest")
-```
-
-Set credentials:
+That's it. The base class handles session creation, Bearer auth from
+`self.api_key`, the POST request, response parsing, and HTTP error
+classification. Use it with:
 
 ```bash
 export MISTRAL_API_KEY="..."
 ```
 
-## Local adapter example (vLLM OpenAI-compatible server)
+```python
+from lamia import Lamia
+lamia = Lamia("mistral:mistral-large-latest")
+```
 
-This pattern is similar to local adapters like Ollama: local runtime, no API key required, `is_remote() == False`.
+### LLM providers compatible with the default generate() (OpenAI convention)
+
+These providers all use the same `/v1/chat/completions` request/response
+format.  A zero-config adapter (just `API_URL` + identity) works for all:
+
+| Provider | API_URL | Notes |
+|----------|---------|-------|
+| Mistral | `https://api.mistral.ai/v1/chat/completions` | |
+| Groq | `https://api.groq.com/openai/v1/chat/completions` | |
+| Together AI | `https://api.together.xyz/v1/chat/completions` | |
+| Fireworks AI | `https://api.fireworks.ai/inference/v1/chat/completions` | |
+| Perplexity | `https://api.perplexity.ai/chat/completions` | |
+| DeepSeek | `https://api.deepseek.com/v1/chat/completions` | |
+| OpenRouter | `https://openrouter.ai/api/v1/chat/completions` | Aggregator |
+| Anyscale | `https://api.endpoints.anyscale.com/v1/chat/completions` | |
+| vLLM | `http://localhost:8000/v1/chat/completions` | Self-hosted |
+| Ollama | `http://localhost:11434/v1/chat/completions` | Local, OpenAI-compat mode |
+| LM Studio | `http://localhost:1234/v1/chat/completions` | Local |
+| LocalAI | `http://localhost:8080/v1/chat/completions` | Local |
+| text-generation-webui | `http://localhost:5000/v1/chat/completions` | Local, with OpenAI ext |
+
+---
+
+## Example 2 — Custom HTTP (Google Gemini API)
+
+When the API uses HTTP but has a different request or response structure,
+override `generate()`.  Use the public functions `raise_for_status()` and
+`raise_for_connection_error()` from `lamia.adapters.llm.base` to get
+automatic retry classification.
 
 ```python
-# extensions/adapters/vllm.py
+# extensions/adapters/gemini_http.py
 from lamia.adapters.llm.base import (
-    BaseLLMAdapter,
-    LLMResponse,
-    raise_for_status,
-    raise_for_connection_error,
+    BaseLLMAdapter, LLMResponse,
+    raise_for_status, raise_for_connection_error,
 )
-from typing import Optional, Type
-from pydantic import BaseModel
+from typing import Optional
 from lamia import LLMModel
 import aiohttp
 
 
-class VllmAdapter(BaseLLMAdapter):
-    def __init__(self, base_url: str = "http://localhost:8000/v1"):
-        self.base_url = base_url.rstrip("/")
+class GeminiHttpAdapter(BaseLLMAdapter):
+    """Direct Gemini HTTP adapter (/v1beta/models/*:generateContent)."""
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
         self.session: Optional[aiohttp.ClientSession] = None
 
     @classmethod
     def name(cls) -> str:
-        return "vllm"
+        return "gemini-http"
 
     @classmethod
     def env_var_names(cls) -> list[str]:
-        return []
+        return ["GEMINI_API_KEY"]
 
     @classmethod
     def is_remote(cls) -> bool:
-        return False
-
-    @classmethod
-    async def models(cls, api_key: str = "", base_url: str = "http://localhost:8000/v1") -> list[dict]:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{base_url}/models") as resp:
-                    data = await resp.json()
-                    return [{"id": m["id"]} for m in data.get("data", [])]
-        except aiohttp.ClientError:
-            return []
+        return True
 
     async def async_initialize(self) -> None:
-        self.session = aiohttp.ClientSession(headers={"Content-Type": "application/json"})
+        if self.session is None:
+            self.session = aiohttp.ClientSession(headers={"content-type": "application/json"})
 
-    async def generate(
-        self,
-        prompt: str,
-        model: LLMModel,
-        response_model: Optional[Type[BaseModel]] = None,
-    ) -> LLMResponse:
+    async def generate(self, prompt, model, response_model=None):
+        if self.session is None:
+            await self.async_initialize()
+
+        model_name = model.get_model_name_without_provider() or "gemini-pro"
         payload = {
-            "model": model.get_model_name_without_provider(),
-            "messages": [{"role": "user", "content": prompt}],
+            "contents": [{"parts": [{"text": prompt}]}],
         }
-        try:
-            async with self.session.post(f"{self.base_url}/chat/completions", json=payload) as resp:
-                if resp.status != 200:
-                    error_text = await resp.text()
-                    raise_for_status(resp.status, error_text, "vLLM API error")
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model_name}:generateContent?key={self.api_key}"
+        )
 
-                data = await resp.json()
-                usage = data.get("usage", {})
-                return LLMResponse(
-                    text=data["choices"][0]["message"]["content"],
-                    raw_response=data,
-                    usage=usage,
-                    model=model.name,
-                )
+        try:
+            async with self.session.post(url, json=payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise_for_status(response.status, error_text, "Gemini API error")
+                data = await response.json()
         except aiohttp.ClientError as e:
-            raise_for_connection_error(e, "Failed to communicate with vLLM API")
+            raise_for_connection_error(e, "Failed to communicate with Gemini API")
+
+        text = ""
+        for candidate in data.get("candidates", []):
+            for part in candidate.get("content", {}).get("parts", []):
+                if "text" in part:
+                    text = part["text"]
+                    break
+            if text:
+                break
+
+        return LLMResponse(
+            text=text,
+            raw_response=data,
+            usage=data.get("usage", {}),
+            model=model.name,
+        )
 
     async def close(self) -> None:
         if self.session:
@@ -249,23 +179,74 @@ class VllmAdapter(BaseLLMAdapter):
             self.session = None
 ```
 
-Use it with:
+Key points:
+- `raise_for_status(status, text, prefix)` — classifies 429/4xx/5xx automatically
+- `raise_for_connection_error(exc, prefix)` — marks network failures as transient
+- These are public functions, not private methods
+
+---
+
+## Example 3 — SDK adapter
+
+When the provider has a Python SDK, use it directly and map exceptions with
+`raise_for_sdk_error()`:
 
 ```python
-from lamia import Lamia
+# extensions/adapters/cohere.py
+from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, raise_for_sdk_error
+from lamia import LLMModel
+import cohere
 
-lamia = Lamia("vllm:meta-llama/Llama-3.1-8B-Instruct")
+
+class CohereAdapter(BaseLLMAdapter):
+
+    def __init__(self, api_key: str):
+        self.client = cohere.AsyncClientV2(api_key=api_key)
+
+    @classmethod
+    def name(cls) -> str:
+        return "cohere"
+
+    @classmethod
+    def env_var_names(cls) -> list[str]:
+        return ["COHERE_API_KEY"]
+
+    @classmethod
+    def is_remote(cls) -> bool:
+        return True
+
+    async def generate(self, prompt, model, response_model=None):
+        try:
+            response = await self.client.chat(
+                model=model.get_model_name_without_provider(),
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except Exception as e:
+            raise_for_sdk_error(e, "Cohere API error")
+
+        return LLMResponse(
+            text=response.message.content[0].text,
+            raw_response=response,
+            usage={"total_tokens": response.meta.tokens.input_tokens + response.meta.tokens.output_tokens},
+            model=model.name,
+        )
+
+    async def close(self) -> None:
+        pass
 ```
 
-## Error handling contract (required for retries)
+`raise_for_sdk_error(exc, prefix)` reads structured `status_code` / `status`
+fields from the exception object. No string parsing.
 
-Lamia retry logic only retries exceptions that inherit from `ExternalOperationError`.
-If your adapter raises plain `RuntimeError` for provider failures, retries are skipped.
+---
 
-Use the helpers from `lamia.adapters.llm.base`:
+## Error handling summary
 
-- `raise_for_status(status, error_text, prefix)` for non-200 HTTP responses
-- `raise_for_connection_error(error, prefix)` for SDK/network/client exceptions
+| Adapter type | How errors are classified |
+|---|---|
+| Zero-config (default `generate()`) | Fully automatic — base class handles it |
+| Custom HTTP (`generate()` override) | Call `raise_for_status()` and `raise_for_connection_error()` |
+| SDK (`generate()` override) | Call `raise_for_sdk_error()` |
 
 Classification rules:
 
@@ -274,25 +255,49 @@ Classification rules:
 - HTTP `5xx` -> `ExternalOperationTransientError`
 - connection/timeout/client failures -> `ExternalOperationTransientError`
 
-Do not raise plain `RuntimeError` for external provider/API failures.
+---
+
+## Contract checking
+
+When Lamia loads a custom adapter, it validates the implementation
+automatically. Violations are logged as warnings:
+
+- `name()` returns a non-empty string
+- `is_remote()` returns a boolean
+- `env_var_names()` returns a list of strings
+- `generate()` has the correct signature
+- `close()` exists and is callable
+
+If the adapter overrides `generate()` without defining `API_URL`, an info
+message reminds you to handle HTTP errors via the public helper functions.
+
+---
 
 ## Import style (global imports only)
 
-Keep imports at module top level. Do not use local imports inside methods
-for adapter implementations.
+Keep all imports at module top level. Do not use local imports inside methods.
+
+---
 
 ## Interface checklist
 
-Your adapter must implement:
+Must implement:
 
 - `name()`
 - `env_var_names()`
 - `is_remote()`
-- `generate(...)`
 - `close()`
 
-Optional but recommended:
+For zero-config adapters, also set:
 
-- `models()` — allows `lamia models --provider <name>` to show available models
-- `async_initialize()`
-- `supports_structured_output` property (set `True` only if your adapter truly supports native structured output)
+- `API_URL` (class attribute or property)
+
+For custom adapters, override:
+
+- `generate(prompt, model, response_model)` — full control over request/response
+
+Optional:
+
+- `models()` — allows `lamia models --provider <name>`
+- `async_initialize()` — custom startup (default auto-creates session when `API_URL` exists)
+- `supports_structured_output` property

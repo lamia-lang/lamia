@@ -1,6 +1,6 @@
 from typing import Optional, Dict, Any, Type
 import aiohttp
-from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error
+from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error, raise_for_sdk_error
 from lamia import LLMModel
 from pydantic import BaseModel
 
@@ -141,7 +141,7 @@ class OpenAIAdapter(BaseLLMAdapter):
             try:
                 response = await self.client.chat.completions.create(**request_kwargs)
             except Exception as e:
-                raise_for_connection_error(e, "OpenAI API error")
+                raise_for_sdk_error(e, "OpenAI API error")
 
             return LLMResponse(
                 text=response.choices[0].message.content,

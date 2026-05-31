@@ -259,23 +259,26 @@ class TestBaseLLMAdapterAbstractMethods:
         with pytest.raises(TypeError, match="Can't instantiate abstract class.*is_remote"):
             BadAdapter()
     
-    def test_missing_generate_method(self):
-        """Test that missing generate method prevents instantiation."""
-        
-        class BadAdapter(BaseLLMAdapter):
+    def test_default_generate_exists(self):
+        """Test that generate() is a non-abstract default implementation."""
+
+        class MinimalAdapter(BaseLLMAdapter):
+            API_URL = "http://test.example/v1/completions"
+
             @classmethod
             def name(cls) -> str:
-                return "bad"
-            
+                return "minimal"
+
             @classmethod
             def is_remote(cls) -> bool:
                 return True
-            
+
             async def close(self) -> None:
                 pass
-        
-        with pytest.raises(TypeError, match="Can't instantiate abstract class.*generate"):
-            BadAdapter()
+
+        adapter = MinimalAdapter()
+        assert hasattr(adapter, 'generate')
+        assert callable(adapter.generate)
     
     def test_missing_close_method(self):
         """Test that missing close method prevents instantiation."""

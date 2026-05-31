@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 from lamia.adapters.llm.base import BaseLLMAdapter
+from lamia.adapters.llm.contract_checker import check_and_warn
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,8 @@ class ProviderRegistry:
                                             f"or remove the duplicate file."
                                         )
                                     
+                                    check_and_warn(obj, str(file_path))
+
                                     self._adapter_map[adapter_name] = obj
                                     self._adapter_sources[adapter_name] = str(file_path)
 

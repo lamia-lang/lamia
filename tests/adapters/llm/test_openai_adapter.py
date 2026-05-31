@@ -214,9 +214,14 @@ class TestOpenAIAdapterGeneration:
         with patch('lamia.adapters.llm.openai_adapter.AsyncOpenAI') as mock_openai:
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
+            class MockSdkError(Exception):
+                def __init__(self, message: str, status_code: int):
+                    super().__init__(message)
+                    self.status_code = status_code
             mock_client.chat.completions.create = AsyncMock(
-                side_effect=RuntimeError(
-                    "Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-dsfsd*******fsdf.'}}"
+                side_effect=MockSdkError(
+                    "Incorrect API key provided: sk-dsfsd*******fsdf.",
+                    status_code=401,
                 )
             )
 

@@ -14,7 +14,6 @@ class RetryingLLMAdapter(BaseLLMAdapter):
     Automatically configures industry-standard retry settings optimized
     for LLM operations with rate limiting and error handling.
     """
-    
     def __init__(
         self,
         adapter: BaseLLMAdapter,
@@ -30,7 +29,7 @@ class RetryingLLMAdapter(BaseLLMAdapter):
         """
         self._adapter = adapter
         self._retry_handler = RetryHandler(
-            adapter=adapter,  # Pass adapter for intelligent defaults
+            adapter=adapter,
             config=retry_config,
             collect_stats=collect_stats
         )
@@ -39,17 +38,17 @@ class RetryingLLMAdapter(BaseLLMAdapter):
     def name(cls) -> str:
         """This method should not be called on the wrapper class."""
         raise NotImplementedError("This method should not be called on the wrapper class.")
-    
+
     @classmethod
     def env_var_names(cls) -> list[str]:
         """This method should not be called on the wrapper class."""
         raise NotImplementedError("This method should not be called on the wrapper class.")
-    
+
     @classmethod
     def is_remote(cls) -> bool:
         """This method should not be called on the wrapper class."""
         raise NotImplementedError("This method should not be called on the wrapper class.")
-    
+
     @property
     def supports_structured_output(self) -> bool:
         return self._adapter.supports_structured_output
@@ -58,7 +57,7 @@ class RetryingLLMAdapter(BaseLLMAdapter):
     def has_context_memory(self) -> bool:
         """Check if the adapter has context memory."""
         return self._adapter.has_context_memory
-    
+
     async def generate(
         self,
         prompt: str,
@@ -86,11 +85,11 @@ class RetryingLLMAdapter(BaseLLMAdapter):
             model=model,
             response_model=response_model,
         )
-    
+
     def get_stats(self):
         """Get retry statistics if enabled."""
         return self._retry_handler.get_stats()
-    
+
     async def close(self) -> None:
         """Close the retry wrapper."""
         await self._adapter.close()

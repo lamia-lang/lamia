@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, Type
 import aiohttp
 
-from .base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error
+from .base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error, raise_for_sdk_error
 from pydantic import BaseModel
 
 try:
@@ -148,7 +148,7 @@ class AnthropicAdapter(BaseLLMAdapter):
         try:
             response = await self.client.messages.create(**request_kwargs)
         except Exception as e:
-            raise_for_connection_error(e, "Anthropic API error")
+            raise_for_sdk_error(e, "Anthropic API error")
 
         return LLMResponse(
             text=response.content[0].text,
