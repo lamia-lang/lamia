@@ -1748,6 +1748,7 @@
 
 <h1 id="scheduling-scripts">Scheduling Scripts<a class="headerlink" href="#scheduling-scripts" title="Permanent link">&para;</a></h1>
 <p>Lamia supports scheduling <code>.lm</code> scripts to run automatically on your local machine using the native OS scheduler (launchd on macOS, systemd timers on Linux, Windows Task Scheduler on Windows).</p>
+<p>All scheduled times are <strong>local machine time</strong>.</p>
 <h2 id="adding-a-schedule">Adding a Schedule<a class="headerlink" href="#adding-a-schedule" title="Permanent link">&para;</a></h2>
 <p>The simplest way — use a preset:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>day
@@ -1756,7 +1757,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>on-wake
 </span></code></pre></div>
 <p>For precise control, use a cron expression:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--cron<span class="w"> </span><span class="s2">&quot;0 9 * * *&quot;</span><span class="w"> </span>--timezone<span class="w"> </span>Europe/Berlin
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--cron<span class="w"> </span><span class="s2">&quot;0 9 * * *&quot;</span>
 </span></code></pre></div>
 <p>The command resolves the script path and registers it with the OS scheduler. The script's parent directory becomes the working directory for execution.</p>
 <h3 id="presets-every">Presets (<code>--every</code>)<a class="headerlink" href="#presets-every" title="Permanent link">&para;</a></h3>
@@ -1811,11 +1812,6 @@
 <td>Standard 5-field cron expression. Use this OR <code>--every</code>.</td>
 </tr>
 <tr>
-<td><code>--timezone</code></td>
-<td><code>UTC</code></td>
-<td>IANA timezone (ignored for <code>on-wake</code>)</td>
-</tr>
-<tr>
 <td><code>--no-catch-up</code></td>
 <td>off</td>
 <td>If set, missed runs (machine was off) are skipped</td>
@@ -1827,9 +1823,9 @@
 <h2 id="listing-schedules">Listing Schedules<a class="headerlink" href="#listing-schedules" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>list
 </span></code></pre></div>
-<p>Shows all registered schedules with their cron, timezone, project path, and last run status:</p>
+<p>Shows all registered schedules with their cron, project path, and last run status:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>  [a3f7c2e1b9d0] daily_task.lm
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    cron: 0 9 * * *  timezone: Europe/Berlin  catch_up: True
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    schedule: day  catch_up: True
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    path: /Users/you/project/pinterest_pin_publisher
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    last run: 2026-05-28T09:00:12+00:00  status: ok
 </span></code></pre></div>
@@ -1843,19 +1839,19 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>update<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--every<span class="w"> </span>day
 </span></code></pre></div>
 <p>Or switch to a custom cron:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>update<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--cron<span class="w"> </span><span class="s2">&quot;15 10 * * *&quot;</span><span class="w"> </span>--timezone<span class="w"> </span>Europe/Berlin
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>update<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--cron<span class="w"> </span><span class="s2">&quot;15 10 * * *&quot;</span>
 </span></code></pre></div>
 <p>You can also toggle catch-up behavior during update:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>update<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--every<span class="w"> </span>on-wake<span class="w"> </span>--no-catch-up
 </span></code></pre></div>
 <h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
 <p>Schedules are stored globally at <code>~/.lamia/schedules/</code> — one JSON file per job. The OS scheduler invokes:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia --file /abs/path/to/script.lm --log-file ~/.lamia/logs/&lt;script&gt;.log --schedule-id &lt;id&gt;
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia --file /abs/path/to/script.lm --log-file ~/.lamia/logs/&lt;id&gt;/schedule.log --schedule-id &lt;id&gt;
 </span></code></pre></div>
 <p>This means:</p>
 <ul>
-<li>Lamia's internal logs go to <code>~/.lamia/logs/&lt;script&gt;.log</code></li>
-<li>Stdout/stderr from the script itself is captured to <code>.stdout.log</code> / <code>.stderr.log</code> in the same directory</li>
+<li>Logs are grouped per schedule id under <code>~/.lamia/logs/schedules/&lt;id&gt;/</code></li>
+<li>A single combined log goes to <code>~/.lamia/logs/schedules/&lt;id&gt;/schedule.log</code></li>
 <li>After each run, exit status is recorded so <code>lamia schedule list</code> can display it</li>
 </ul>
 <h2 id="cron-expression-reference">Cron Expression Reference<a class="headerlink" href="#cron-expression-reference" title="Permanent link">&para;</a></h2>
@@ -1878,7 +1874,7 @@
 <tbody>
 <tr>
 <td><code>0 9 * * *</code></td>
-<td>Daily at 9:00</td>
+<td>Daily at 9:00 AM</td>
 </tr>
 <tr>
 <td><code>0 */6 * * *</code></td>
@@ -1886,7 +1882,7 @@
 </tr>
 <tr>
 <td><code>30 8 * * 1-5</code></td>
-<td>Weekdays at 8:30</td>
+<td>Weekdays at 8:30 AM</td>
 </tr>
 <tr>
 <td><code>0 0 1 * *</code></td>
@@ -1896,7 +1892,7 @@
 </table>
 <h2 id="os-specific-behavior">OS-Specific Behavior<a class="headerlink" href="#os-specific-behavior" title="Permanent link">&para;</a></h2>
 <h3 id="macos-launchd">macOS (launchd)<a class="headerlink" href="#macos-launchd" title="Permanent link">&para;</a></h3>
-<p>Creates a plist at <code>~/Library/LaunchAgents/com.lamia.schedule.&lt;script&gt;.plist</code>. Uses <code>StartCalendarInterval</code> which automatically catches up missed runs.</p>
+<p>Creates a plist at <code>~/Library/LaunchAgents/com.lamia.schedule.&lt;script&gt;.plist</code>. Uses <code>StartCalendarInterval</code> for time-based scheduling and <code>RunAtLoad</code> to catch up missed runs when the machine wakes.</p>
 <h3 id="linux-systemd">Linux (systemd)<a class="headerlink" href="#linux-systemd" title="Permanent link">&para;</a></h3>
 <p>Creates a <code>.service</code> and <code>.timer</code> unit in <code>~/.config/systemd/user/</code>. Uses <code>Persistent=true</code> to catch up on missed runs after boot.</p>
 <h3 id="windows-task-scheduler">Windows (Task Scheduler)<a class="headerlink" href="#windows-task-scheduler" title="Permanent link">&para;</a></h3>
@@ -1904,7 +1900,7 @@
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Script not found</strong>: If you moved the project after scheduling, the job will fail. Use <code>lamia schedule list</code> to see the stale path, then <code>remove</code> and <code>add</code> with the new location.</li>
-<li><strong>Check logs</strong>: All output goes to <code>~/.lamia/logs/</code>. Check <code>&lt;script&gt;.log</code> for Lamia errors and <code>&lt;script&gt;.stdout.log</code> for script output.</li>
+<li><strong>Check logs</strong>: Use <code>lamia schedule list</code> to get the job id, then inspect <code>~/.lamia/logs/schedules/&lt;id&gt;/schedule.log</code>.</li>
 <li><strong>Force fresh login</strong>: If a web automation script's session expired, delete <code>.lamia_sessions/</code> and run the script manually once to re-authenticate before the next scheduled run.</li>
 </ul>
 
