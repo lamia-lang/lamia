@@ -19,7 +19,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from .base import ScheduleJob
+from .base import ScheduleJob, generate_schedule_id
 from .local import LocalScheduler
 from .registry import save_job, remove_job, list_jobs, load_job, find_job_by_script
 
@@ -58,6 +58,12 @@ def _resolve_cron(args: argparse.Namespace) -> str:
         return EVERY_PRESETS[preset]
 
     if args.cron:
+        from .local import _parse_cron_fields
+        try:
+            _parse_cron_fields(args.cron)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
         return args.cron
 
     print("Error: provide exactly one of --every <preset> or --cron <expression>.", file=sys.stderr)
@@ -92,10 +98,12 @@ def _handle_add(args: argparse.Namespace) -> None:
 
     project_root = script_path.parent
     relative_script = script_path.name
+    job_id = generate_schedule_id(relative_script, str(project_root))
 
     job = ScheduleJob(
         script=relative_script,
         cron=cron,
+        schedule_id=job_id,
         catch_up=not args.no_catch_up,
         project_root=project_root,
     )
@@ -108,6 +116,7 @@ def _handle_add(args: argparse.Namespace) -> None:
         scheduler.uninstall(ScheduleJob(
             script=existing["script"],
             cron=existing["cron"],
+            schedule_id=existing["id"],
             project_root=Path(existing["project_root"]),
         ))
 
@@ -168,6 +177,7 @@ def _handle_remove(args: argparse.Namespace) -> None:
     job = ScheduleJob(
         script=job_data["script"],
         cron=job_data["cron"],
+        schedule_id=job_id,
         catch_up=job_data.get("catch_up", True),
         project_root=Path(job_data["project_root"]),
     )
@@ -198,6 +208,7 @@ def _handle_update(args: argparse.Namespace) -> None:
     updated_job = ScheduleJob(
         script=job_data["script"],
         cron=cron,
+        schedule_id=job_id,
         catch_up=catch_up,
         project_root=Path(job_data["project_root"]),
     )
@@ -205,6 +216,7 @@ def _handle_update(args: argparse.Namespace) -> None:
     old_job = ScheduleJob(
         script=job_data["script"],
         cron=job_data["cron"],
+        schedule_id=job_id,
         catch_up=job_data.get("catch_up", True),
         project_root=Path(job_data["project_root"]),
     )

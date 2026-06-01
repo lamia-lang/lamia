@@ -1,9 +1,20 @@
 """Base scheduler interface and data models."""
 
+import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Optional
+
+
+def generate_schedule_id(script: str, project_root: str) -> str:
+    """Generate a stable short hash ID from project_root + script.
+
+    Called once when a job is first created. After that, the ID is stored
+    and never regenerated.
+    """
+    raw = f"{project_root}:{script}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 
 class JobStatus(Enum):
@@ -16,20 +27,14 @@ class JobStatus(Enum):
 class ScheduleJob:
     script: str
     cron: str
+    schedule_id: str
     catch_up: bool = True
     project_root: Path = field(default_factory=Path)
 
     @property
-    def job_id(self) -> str:
-        """Stable identifier derived from project root + script path."""
-        safe_root = str(self.project_root).replace("/", "_").replace("\\", "_").strip("_")
-        safe_script = self.script.replace("/", "_").replace("\\", "_").replace(".", "_")
-        return f"lamia_{safe_root}_{safe_script}"
-
-    @property
     def label(self) -> str:
-        """Human-readable label for OS scheduler entries."""
-        return f"com.lamia.schedule.{self.script.replace('/', '.').replace('.lm', '')}"
+        """OS scheduler entry label — based on schedule_id for uniqueness."""
+        return f"com.lamia.schedule.{self.schedule_id}"
 
 
 class BaseScheduler:

@@ -10,23 +10,57 @@ from pathlib import Path
 from typing import Optional
 
 from .base import BaseScheduler, JobStatus, ScheduleJob
-from .registry import _generate_id
 
 logger = logging.getLogger(__name__)
 
 
 def _parse_cron_fields(cron_expr: str) -> dict:
-    """Parse a 5-field cron expression into component parts."""
+    """Parse a 5-field cron expression into component parts with validation."""
     parts = cron_expr.strip().split()
     if len(parts) != 5:
         raise ValueError(f"Invalid cron expression (expected 5 fields): {cron_expr}")
+
+    minute, hour, day, month, weekday = parts
+    _validate_cron_field(minute, 0, 59, "minute")
+    _validate_cron_field(hour, 0, 23, "hour")
+    _validate_cron_field(day, 1, 31, "day")
+    _validate_cron_field(month, 1, 12, "month")
+    _validate_cron_field(weekday, 0, 7, "weekday")
+
     return {
-        "minute": parts[0],
-        "hour": parts[1],
-        "day": parts[2],
-        "month": parts[3],
-        "weekday": parts[4],
+        "minute": minute,
+        "hour": hour,
+        "day": day,
+        "month": month,
+        "weekday": weekday,
     }
+
+
+def _validate_cron_field(value: str, min_val: int, max_val: int, name: str) -> None:
+    """Validate a single cron field value is within allowed range."""
+    if value == "*":
+        return
+    for part in value.split(","):
+        part = part.split("/")[0]
+        if "-" in part:
+            low, high = part.split("-", 1)
+            try:
+                low_int, high_int = int(low), int(high)
+            except ValueError:
+                raise ValueError(f"Invalid {name} value in cron: {value}")
+            if low_int < min_val or high_int > max_val:
+                raise ValueError(
+                    f"Cron {name} out of range ({min_val}-{max_val}): {value}"
+                )
+        else:
+            try:
+                int_val = int(part)
+            except ValueError:
+                raise ValueError(f"Invalid {name} value in cron: {value}")
+            if int_val < min_val or int_val > max_val:
+                raise ValueError(
+                    f"Cron {name} out of range ({min_val}-{max_val}): {value}"
+                )
 
 
 def _schedule_log_path(job: ScheduleJob) -> str:
@@ -35,7 +69,7 @@ def _schedule_log_path(job: ScheduleJob) -> str:
     Logs are grouped by schedule id for clarity:
       ~/.lamia/logs/schedules/<job_id>/schedule.log
     """
-    job_id = _generate_id(job.script, str(job.project_root))
+    job_id = job.schedule_id
     log_dir = Path.home() / ".lamia" / "logs" / "schedules" / job_id
     log_dir.mkdir(parents=True, exist_ok=True)
     return str(log_dir / "schedule.log")
@@ -58,7 +92,7 @@ class LaunchdScheduler(BaseScheduler):
         script_path = str(job.project_root / job.script)
         working_dir = str(job.project_root)
         log_file = _schedule_log_path(job)
-        job_id = _generate_id(job.script, str(job.project_root))
+        job_id = job.schedule_id
 
         lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
@@ -90,9 +124,6 @@ class LaunchdScheduler(BaseScheduler):
             lines.append('    <dict>')
             lines.extend(self._cron_to_calendar_interval(cron))
             lines.append('    </dict>')
-            if job.catch_up:
-                lines.append('    <key>RunAtLoad</key>')
-                lines.append('    <true/>')
 
         lines.extend([
             '    <key>StandardOutPath</key>',
@@ -196,7 +227,7 @@ class SystemdScheduler(BaseScheduler):
         return Path.home() / ".config" / "systemd" / "user"
 
     def _service_name(self, job: ScheduleJob) -> str:
-        return f"lamia-{job.script.replace('/', '-').replace('.lm', '')}"
+        return f"lamia-{job.schedule_id}"
 
     def _service_path(self, job: ScheduleJob) -> Path:
         return self._unit_dir() / f"{self._service_name(job)}.service"
@@ -226,7 +257,7 @@ class SystemdScheduler(BaseScheduler):
         svc_name = self._service_name(job)
 
         log_file = _schedule_log_path(job)
-        job_id = _generate_id(job.script, str(job.project_root))
+        job_id = job.schedule_id
 
         service_content = (
             "[Unit]\n"
@@ -331,10 +362,10 @@ class WindowsTaskScheduler(BaseScheduler):
         return "windows"
 
     def _task_name(self, job: ScheduleJob) -> str:
-        return f"Lamia\\{job.script.replace('/', '_').replace('.lm', '')}"
+        return f"Lamia\\{job.schedule_id}"
 
     def _meta_path(self, job: ScheduleJob) -> Path:
-        return Path.home() / ".lamia" / "schedules-backend" / f"{job.script.replace('/', '_').replace('.lm', '')}.json"
+        return Path.home() / ".lamia" / "schedules-backend" / f"{job.schedule_id}.json"
 
     def _cron_to_schtasks_args(self, cron_expr: str) -> list:
         """Convert cron to schtasks /SC /MO /ST arguments (simplified mapping)."""
@@ -367,7 +398,7 @@ class WindowsTaskScheduler(BaseScheduler):
         working_dir = str(job.project_root)
 
         log_file = _schedule_log_path(job)
-        job_id = _generate_id(job.script, str(job.project_root))
+        job_id = job.schedule_id
 
         self.uninstall(job)
 
