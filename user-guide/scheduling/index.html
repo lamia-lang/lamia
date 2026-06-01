@@ -1120,6 +1120,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#best-practices-for-scheduled-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices for Scheduled Scripts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1668,6 +1679,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#best-practices-for-scheduled-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices for Scheduled Scripts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1845,14 +1867,15 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>update<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--every<span class="w"> </span>on-wake<span class="w"> </span>--no-catch-up
 </span></code></pre></div>
 <h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
-<p>Schedules are stored globally at <code>~/.lamia/schedules/</code> — one JSON file per job. The OS scheduler invokes:</p>
+<p>Schedules are stored globally at <code>~/.lamia/schedules/</code> — one JSON file per job (<code>&lt;id&gt;.json</code>). Each file holds both the job configuration (script, cron, catch_up, project_root) and the last run status (timestamp, exit code, error). The OS scheduler invokes:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia --file /abs/path/to/script.lm --log-file ~/.lamia/logs/&lt;id&gt;/schedule.log --schedule-id &lt;id&gt;
 </span></code></pre></div>
 <p>This means:</p>
 <ul>
+<li>One file per job — no companion status files, everything in <code>&lt;id&gt;.json</code></li>
 <li>Logs are grouped per schedule id under <code>~/.lamia/logs/schedules/&lt;id&gt;/</code></li>
-<li>A single combined log goes to <code>~/.lamia/logs/schedules/&lt;id&gt;/schedule.log</code></li>
-<li>After each run, exit status is recorded so <code>lamia schedule list</code> can display it</li>
+<li>After each run, exit status is written back into the job file so <code>lamia schedule list</code> can display it</li>
+<li>When you <code>lamia schedule remove &lt;id&gt;</code>, both the OS entry and the file are deleted</li>
 </ul>
 <h2 id="cron-expression-reference">Cron Expression Reference<a class="headerlink" href="#cron-expression-reference" title="Permanent link">&para;</a></h2>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>┌───── minute (0-59)
@@ -1892,11 +1915,45 @@
 </table>
 <h2 id="os-specific-behavior">OS-Specific Behavior<a class="headerlink" href="#os-specific-behavior" title="Permanent link">&para;</a></h2>
 <h3 id="macos-launchd">macOS (launchd)<a class="headerlink" href="#macos-launchd" title="Permanent link">&para;</a></h3>
-<p>Creates a plist at <code>~/Library/LaunchAgents/com.lamia.schedule.&lt;script&gt;.plist</code>. Uses <code>StartCalendarInterval</code> for time-based scheduling and <code>RunAtLoad</code> to catch up missed runs when the machine wakes.</p>
+<p>Creates a plist at <code>~/Library/LaunchAgents/com.lamia.schedule.&lt;id&gt;.plist</code>. Uses <code>StartCalendarInterval</code> for time-based scheduling. Catch-up of missed runs is handled by Lamia at runtime (comparing last run time to current time).</p>
 <h3 id="linux-systemd">Linux (systemd)<a class="headerlink" href="#linux-systemd" title="Permanent link">&para;</a></h3>
-<p>Creates a <code>.service</code> and <code>.timer</code> unit in <code>~/.config/systemd/user/</code>. Uses <code>Persistent=true</code> to catch up on missed runs after boot.</p>
+<p>Creates a <code>.service</code> and <code>.timer</code> unit in <code>~/.config/systemd/user/</code> named <code>lamia-schedule-&lt;id&gt;</code>. Uses <code>Persistent=true</code> to catch up on missed runs after boot.</p>
 <h3 id="windows-task-scheduler">Windows (Task Scheduler)<a class="headerlink" href="#windows-task-scheduler" title="Permanent link">&para;</a></h3>
-<p>Creates a task in <code>Lamia\&lt;script&gt;</code> via <code>schtasks.exe</code>. The task runs with the user's permissions.</p>
+<p>Creates a task in <code>Lamia\&lt;id&gt;</code> via <code>schtasks.exe</code>. The task runs with the user's permissions.</p>
+<h2 id="best-practices-for-scheduled-scripts">Best Practices for Scheduled Scripts<a class="headerlink" href="#best-practices-for-scheduled-scripts" title="Permanent link">&para;</a></h2>
+<p>Lamia tracks only the <strong>last run</strong> of each scheduled job — its timestamp, exit code, and error message. Previous run information is overwritten.</p>
+<p>If you want visibility into run history, keep your own per-run records in a persistent store (file, database, or API) so you can audit trends and troubleshoot faster.</p>
+<p>Example — use an f-string body to deterministically append a CSV row after each run:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">RunResult</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">timestamp</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">job_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">items_processed</span><span class="p">:</span> <span class="nb">int</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="n">success</span><span class="p">:</span> <span class="nb">bool</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="n">error</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">log_run</span><span class="p">(</span><span class="n">job_id</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">success</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">CSV</span><span class="p">[</span><span class="n">RunResult</span><span class="p">],</span> <span class="s2">&quot;runs/history.csv&quot;</span><span class="p">,</span> <span class="n">append</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">job_id</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">items</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">success</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">&quot;</span>
+</span></code></pre></div>
+<p>Recommended practices:</p>
+<ol>
+<li>
+<p><strong>Log each run's outcome</strong> — append to CSV rows or write to a database table. Include timestamps, what was processed, and success/failure per item.</p>
+</li>
+<li>
+<p><strong>Store the run timestamp and exit status</strong> alongside your data. Lamia keeps only the last one, so if you need a history view, maintain your own.</p>
+</li>
+<li>
+<p><strong>Use idempotent and resumable operations</strong> — catch-up can re-trigger a missed run, and a run can fail halfway. Design steps so retries do not duplicate side effects, and partial failures can resume safely from checkpoints.</p>
+</li>
+<li>
+<p><strong>Keep scripts self-contained</strong> — the scheduled script runs from its parent directory with no interactive terminal. Avoid prompts, ensure credentials are pre-configured, and handle network failures with retries.</p>
+</li>
+<li>
+<p><strong>Test manually first</strong> — run <code>lamia --file your_script.lm</code> by hand before scheduling. If it works interactively, it will work on schedule.</p>
+</li>
+</ol>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Script not found</strong>: If you moved the project after scheduling, the job will fail. Use <code>lamia schedule list</code> to see the stale path, then <code>remove</code> and <code>add</code> with the new location.</li>
