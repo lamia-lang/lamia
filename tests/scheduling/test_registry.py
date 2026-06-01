@@ -6,10 +6,9 @@ from unittest.mock import patch
 
 import pytest
 
-from lamia.scheduling.base import ScheduleJob
+from lamia.scheduling.base import ScheduleJob, generate_schedule_id
 from lamia.scheduling.registry import (
     SCHEDULES_DIR,
-    _generate_id,
     find_job_by_script,
     get_last_run_status,
     list_jobs,
@@ -31,18 +30,18 @@ def temp_schedules_dir(tmp_path, monkeypatch):
 
 class TestGenerateId:
     def test_produces_12_char_hex(self):
-        result = _generate_id("script.lm", "/home/user/project")
+        result = generate_schedule_id("script.lm", "/home/user/project")
         assert len(result) == 12
         assert all(c in "0123456789abcdef" for c in result)
 
     def test_deterministic(self):
-        a = _generate_id("x.lm", "/p")
-        b = _generate_id("x.lm", "/p")
+        a = generate_schedule_id("x.lm", "/p")
+        b = generate_schedule_id("x.lm", "/p")
         assert a == b
 
     def test_different_inputs_different_ids(self):
-        a = _generate_id("x.lm", "/p")
-        b = _generate_id("y.lm", "/p")
+        a = generate_schedule_id("x.lm", "/p")
+        b = generate_schedule_id("y.lm", "/p")
         assert a != b
 
 
@@ -51,6 +50,7 @@ class TestSaveAndLoadJob:
         job = ScheduleJob(
             script="test.lm",
             cron="0 9 * * *",
+            schedule_id=generate_schedule_id("test.lm", "/home/user/myproject"),
             catch_up=True,
             project_root=Path("/home/user/myproject"),
         )
@@ -61,6 +61,7 @@ class TestSaveAndLoadJob:
         job = ScheduleJob(
             script="test.lm",
             cron="0 9 * * *",
+            schedule_id=generate_schedule_id("test.lm", "/home/user/myproject"),
             catch_up=False,
             project_root=Path("/home/user/myproject"),
         )
@@ -85,7 +86,11 @@ class TestSaveAndLoadJob:
 
 class TestRemoveJob:
     def test_remove_existing(self, temp_schedules_dir):
-        job = ScheduleJob(script="r.lm", cron="0 0 * * *", project_root=Path("/p"))
+        job = ScheduleJob(
+            script="r.lm", cron="0 0 * * *",
+            schedule_id=generate_schedule_id("r.lm", "/p"),
+            project_root=Path("/p"),
+        )
         job_id = save_job(job, "/bin/lamia")
         assert remove_job(job_id) is True
         assert not (temp_schedules_dir / f"{job_id}.json").exists()
@@ -99,8 +104,16 @@ class TestListJobs:
         assert list_jobs() == []
 
     def test_lists_all_saved_jobs(self, temp_schedules_dir):
-        job1 = ScheduleJob(script="a.lm", cron="0 1 * * *", project_root=Path("/p1"))
-        job2 = ScheduleJob(script="b.lm", cron="0 2 * * *", project_root=Path("/p2"))
+        job1 = ScheduleJob(
+            script="a.lm", cron="0 1 * * *",
+            schedule_id=generate_schedule_id("a.lm", "/p1"),
+            project_root=Path("/p1"),
+        )
+        job2 = ScheduleJob(
+            script="b.lm", cron="0 2 * * *",
+            schedule_id=generate_schedule_id("b.lm", "/p2"),
+            project_root=Path("/p2"),
+        )
         save_job(job1, "/bin/lamia")
         save_job(job2, "/bin/lamia")
         jobs = list_jobs()
@@ -109,7 +122,11 @@ class TestListJobs:
         assert scripts == {"a.lm", "b.lm"}
 
     def test_skips_corrupted_files(self, temp_schedules_dir):
-        job = ScheduleJob(script="good.lm", cron="0 0 * * *", project_root=Path("/p"))
+        job = ScheduleJob(
+            script="good.lm", cron="0 0 * * *",
+            schedule_id=generate_schedule_id("good.lm", "/p"),
+            project_root=Path("/p"),
+        )
         save_job(job, "/bin/lamia")
         (temp_schedules_dir / "corrupt.json").write_text("{{bad")
         jobs = list_jobs()
@@ -141,9 +158,12 @@ class TestListJobs:
         assert not legacy_path.exists()
 
     def test_deduplicates_same_job_id(self, temp_schedules_dir):
-        job = ScheduleJob(script="dup_task.lm", cron="0 9 * * *", project_root=Path("/dup/project"))
+        job = ScheduleJob(
+            script="dup_task.lm", cron="0 9 * * *",
+            schedule_id=generate_schedule_id("dup_task.lm", "/dup/project"),
+            project_root=Path("/dup/project"),
+        )
         job_id = save_job(job, "/usr/local/bin/lamia")
-        # Simulate an extra legacy-style file with same logical job.
         legacy_path = temp_schedules_dir / "com.lamia.schedule.dup_task.json"
         legacy_path.write_text(
             json.dumps(
@@ -165,7 +185,11 @@ class TestListJobs:
 
 class TestFindJobByScript:
     def test_finds_existing(self, temp_schedules_dir):
-        job = ScheduleJob(script="find_me.lm", cron="0 5 * * *", project_root=Path("/proj"))
+        job = ScheduleJob(
+            script="find_me.lm", cron="0 5 * * *",
+            schedule_id=generate_schedule_id("find_me.lm", "/proj"),
+            project_root=Path("/proj"),
+        )
         save_job(job, "/bin/lamia")
         found = find_job_by_script("find_me.lm", "/proj")
         assert found is not None
@@ -177,6 +201,12 @@ class TestFindJobByScript:
 
 class TestRunStatus:
     def test_record_and_get_success(self, temp_schedules_dir):
+        job = ScheduleJob(
+            script="test.lm", cron="0 0 * * *",
+            schedule_id="testjob12345",
+            project_root=Path("/p"),
+        )
+        save_job(job, "/bin/lamia")
         record_run("testjob12345", exit_code=0)
         status = get_last_run_status("testjob12345")
         assert status is not None
@@ -185,6 +215,12 @@ class TestRunStatus:
         assert "timestamp" in status
 
     def test_record_and_get_failure(self, temp_schedules_dir):
+        job = ScheduleJob(
+            script="fail.lm", cron="0 0 * * *",
+            schedule_id="failjob12345",
+            project_root=Path("/p"),
+        )
+        save_job(job, "/bin/lamia")
         record_run("failjob12345", exit_code=1, error="script not found")
         status = get_last_run_status("failjob12345")
         assert status is not None
@@ -196,7 +232,11 @@ class TestRunStatus:
         assert get_last_run_status("nope") is None
 
     def test_list_jobs_includes_last_run(self, temp_schedules_dir):
-        job = ScheduleJob(script="tracked.lm", cron="0 0 * * *", project_root=Path("/p"))
+        job = ScheduleJob(
+            script="tracked.lm", cron="0 0 * * *",
+            schedule_id=generate_schedule_id("tracked.lm", "/p"),
+            project_root=Path("/p"),
+        )
         job_id = save_job(job, "/bin/lamia")
         record_run(job_id, exit_code=0)
         jobs = list_jobs()
@@ -205,7 +245,11 @@ class TestRunStatus:
         assert jobs[0]["last_run"]["success"] is True
 
     def test_remove_job_also_removes_status(self, temp_schedules_dir):
-        job = ScheduleJob(script="bye.lm", cron="0 0 * * *", project_root=Path("/p"))
+        job = ScheduleJob(
+            script="bye.lm", cron="0 0 * * *",
+            schedule_id=generate_schedule_id("bye.lm", "/p"),
+            project_root=Path("/p"),
+        )
         job_id = save_job(job, "/bin/lamia")
         record_run(job_id, exit_code=0)
         remove_job(job_id)

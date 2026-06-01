@@ -24,17 +24,20 @@ def fetch_data() -> JSON:
     "https://api.example.com/data"
 ```
 
-Users must be careful, because unlike Python, Lamia functions must skip return statements. See the example below:
+Function bodies in Lamia can work in three modes:
 
 ```python
-# The return statement makes this a Python function which returns the string "Write a short story about a robot discovering emotions"
-def generate_story():
-   return "Write a short story about a robot discovering emotions"
+# 1) LLM prompt (plain string body)
+def generate_story() -> Markdown:
+    "Write a short story about a robot discovering emotions"
 
-# This function is a Lamia function which sends the string "Write a short story about a robot discovering emotions" to the AI.
-def generate_story():
-   "Write a short story about a robot discovering emotions"
+# 2) LLM prompt (dynamic f-string body)
+def summarize(topic) -> Markdown:
+    f"Summarize latest updates about {topic}"
 
+# 3) Deterministic result (return expression, no LLM call)
+def build_csv_line(ts, job_id) -> CSV:
+    return f"{ts},{job_id},ok"
 ```
 
 Lamia uses `->` syntax to return data. In Python `->` is used to define the return type of the function. In Lamia it is used to actually return a value or stream data.
@@ -120,6 +123,45 @@ for ticker in ["AAPL", "NVDA", "GOOG"]:
 # Or with simpler syntax
 for ticker in ["AAPL", "NVDA", "GOOG"]:
     "extract the stock quote data https://finance.yahoo.com/quote/{ticker}" -> File(CSV[StockQuote], "stocks.csv", append=True)
+```
+
+## Function Body Semantics
+
+Function body syntax chooses execution mode:
+
+- Bare string or bare f-string body: LLM prompt mode
+- `return <expr>` body: deterministic mode (Python evaluation, no LLM call)
+- Path-like string body (`"./x.json"`): file-read mode
+
+```python
+def llm_mode(topic) -> Markdown:
+    f"Write a short brief about {topic}"
+
+def deterministic_mode(ts, job_id) -> File(CSV, "runs.csv", append=True):
+    return f"{ts},{job_id},ok"
+
+def read_mode() -> JSON:
+    "./config.json"
+```
+
+`return`-based deterministic mode works with `CSV`, `JSON`, `YAML`, `XML`, `HTML`, `Markdown`, `str`, and `File(...)`.
+
+## F-strings
+
+F-strings are supported in Lamia syntax:
+
+- Function bodies
+- Inline `-> Type` and `-> File(...)` expressions
+- Function parameters and global-scope variables
+
+```python
+ENV = "prod"
+
+def prompt(topic) -> Markdown:
+    f"[{ENV}] summarize {topic}"
+
+def deterministic_row(ts, status) -> CSV:
+    return f"{ts},{status}"
 ```
 
 ## File Operations

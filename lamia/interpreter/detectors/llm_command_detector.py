@@ -54,6 +54,9 @@ class LLMFunctionInfo:
     parameters: List[FunctionParameter]
     is_async: bool
     node: ast.AST
+    command_node: Optional[ast.expr] = None
+    is_deterministic: bool = False
+    deterministic_node: Optional[ast.expr] = None
 
 
 class LLMCommandDetector(ast.NodeVisitor):
@@ -121,42 +124,95 @@ class LLMCommandDetector(ast.NodeVisitor):
     def _process_function(self, node, is_async: bool):
         """Process both sync and async function definitions."""
         command = self._extract_command_from_function(node)
-        
-        if command is None:
-            # Not a pattern we recognize, skip
+        command_node = self._extract_fstring_node(node)
+        deterministic_node = self._extract_deterministic_return(node)
+
+        if command is None and command_node is None and deterministic_node is None:
             return
-            
+
         return_type = self._extract_return_type(node)
         parameters = self._extract_parameters(node)
-        
+
         self.llm_functions[node.name] = LLMFunctionInfo(
-            command=command,
+            command=command or "",
             return_type=return_type,
             parameters=parameters,
             is_async=is_async,
             node=node,
+            command_node=command_node,
+            is_deterministic=deterministic_node is not None,
+            deterministic_node=deterministic_node,
         )
     
     def _extract_command_from_function(self, node) -> Optional[str]:
-        """Extract string command from function body."""
-        # Check if function body contains a single string literal (expression statement)
-        if (len(node.body) == 1 and 
-            isinstance(node.body[0], ast.Expr) and
-            isinstance(node.body[0].value, (ast.Constant, ast.Str))):
-            
-            # Single string literal case
-            return self._extract_string_value(node.body[0].value)
-                
-        # Check if function has docstring + string literal (2 statements)
-        elif (len(node.body) == 2 and
-              isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, (ast.Constant, ast.Str)) and
-              isinstance(node.body[1], ast.Expr) and isinstance(node.body[1].value, (ast.Constant, ast.Str))):
-            
-            # Docstring + command case - use the second string as the command
-            return self._extract_string_value(node.body[1].value)
-        
+        """Extract string command from function body.
+
+        Supports both plain string literals and f-strings (ast.JoinedStr).
+        """
+        if len(node.body) == 1 and isinstance(node.body[0], ast.Expr):
+            value = node.body[0].value
+            if isinstance(value, (ast.Constant, ast.Str)):
+                return self._extract_string_value(value)
+            if isinstance(value, ast.JoinedStr):
+                return None  # signal handled via command_node in _process_function
+
+        elif (len(node.body) == 2
+              and isinstance(node.body[0], ast.Expr)
+              and isinstance(node.body[1], ast.Expr)):
+            first, second = node.body[0].value, node.body[1].value
+            if isinstance(first, (ast.Constant, ast.Str)):
+                if isinstance(second, (ast.Constant, ast.Str)):
+                    return self._extract_string_value(second)
+                if isinstance(second, ast.JoinedStr):
+                    return None  # signal handled via command_node
+
         return None
     
+    def _extract_fstring_node(self, node) -> Optional[ast.JoinedStr]:
+        """Extract f-string AST node from function body if present."""
+        if len(node.body) == 1 and isinstance(node.body[0], ast.Expr):
+            if isinstance(node.body[0].value, ast.JoinedStr):
+                return node.body[0].value
+
+        elif (len(node.body) == 2
+              and isinstance(node.body[0], ast.Expr)
+              and isinstance(node.body[1], ast.Expr)):
+            if isinstance(node.body[1].value, ast.JoinedStr):
+                return node.body[1].value
+
+        return None
+
+    def _extract_deterministic_return(self, node) -> Optional[ast.expr]:
+        """Detect `return <literal>` body — deterministic content, no LLM call.
+
+        Only triggers when:
+        - Function has a return type annotation (-> Type or -> File(...))
+        - The return expression is a string constant or f-string (not a call)
+        - Function body is just [optional docstring +] return statement
+        """
+        if node.returns is None:
+            return None
+
+        last_stmt = node.body[-1] if node.body else None
+        if not isinstance(last_stmt, ast.Return) or last_stmt.value is None:
+            return None
+
+        ret_value = last_stmt.value
+        if not isinstance(ret_value, (ast.JoinedStr, ast.Constant)):
+            return None
+        if isinstance(ret_value, ast.Constant) and not isinstance(ret_value.value, str):
+            return None
+
+        body_without_return = node.body[:-1]
+        if len(body_without_return) > 1:
+            return None
+        if len(body_without_return) == 1:
+            stmt = body_without_return[0]
+            if not (isinstance(stmt, ast.Expr) and isinstance(stmt.value, (ast.Constant, ast.Str))):
+                return None
+
+        return ret_value
+
     def _extract_string_value(self, string_node) -> Optional[str]:
         """Extract string value from AST node."""
         if isinstance(string_node, ast.Constant) and isinstance(string_node.value, str):

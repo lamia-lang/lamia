@@ -14,12 +14,13 @@ import re
 import hashlib
 from typing import Dict, Tuple
 
-# Shared sub-pattern matching any single- or triple-quoted string literal.
+# Shared sub-pattern matching any single- or triple-quoted string literal,
+# optionally prefixed with f/F for f-strings.
 _QUOTED_STRING = (
-    r'(\"\"\"[^\"]*\"\"\"|'   # triple-double-quoted string
-    r"'''[^']*'''|"            # triple-single-quoted string
-    r'"[^"\n]*"|'              # double-quoted string
-    r"'[^'\n]*')"              # single-quoted string
+    r'([fF]?\"\"\"[^\"]*\"\"\"|'   # triple-double-quoted string
+    r"[fF]?'''[^']*'''|"            # triple-single-quoted string
+    r'[fF]?"[^"\n]*"|'              # double-quoted string
+    r"[fF]?'[^'\n]*')"              # single-quoted string
 )
 
 

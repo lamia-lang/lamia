@@ -282,3 +282,202 @@ async def generate_async() -> File(HTML, "output.html"):
         assert result['generate_async'].is_async is True
         rt = result['generate_async'].return_type
         assert isinstance(rt, FileWriteReturnType)
+
+
+class TestFStringLLMDetection:
+    """Test bare f-string body detection in LLM mode."""
+
+    def setup_method(self):
+        self.detector = LLMCommandDetector()
+
+    def test_fstring_body_detected(self):
+        """Function with f-string body is detected."""
+        source = '''
+def log_result(job_id) -> CSV:
+    f"{job_id},ok"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'log_result' in result
+        info = result['log_result']
+        assert info.command_node is not None
+        assert info.command == ""
+
+    def test_fstring_body_with_return_type(self):
+        """f-string body preserves return type extraction."""
+        source = '''
+def render(name) -> HTML:
+    f"<h1>Hello {name}</h1>"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'render' in result
+        rt = result['render'].return_type
+        assert isinstance(rt, SimpleReturnType)
+        assert rt.base_type == 'HTML'
+
+    def test_fstring_body_with_parametric_return_type(self):
+        """f-string body with parametric return type like JSON[Model]."""
+        source = '''
+def build_json(data) -> JSON[MyModel]:
+    f'{{"key": "{data}"}}'
+'''
+        result = self.detector.detect_commands(source)
+        assert 'build_json' in result
+        rt = result['build_json'].return_type
+        assert isinstance(rt, ParametricReturnType)
+        assert rt.base_type == 'JSON'
+        assert rt.inner_type == 'MyModel'
+
+    def test_fstring_body_with_file_write(self):
+        """f-string body with File(..., append=True) return type."""
+        source = '''
+def log_run(ts, job_id) -> File(CSV, "log.csv", append=True):
+    f"{ts},{job_id},ok"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'log_run' in result
+        rt = result['log_run'].return_type
+        assert isinstance(rt, FileWriteReturnType)
+        assert rt.path == 'log.csv'
+        assert rt.append is True
+
+    def test_docstring_plus_fstring_body(self):
+        """Function with docstring followed by f-string body."""
+        source = '''
+def greet(name) -> str:
+    "Builds a greeting"
+    f"Hello, {name}!"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'greet' in result
+        assert result['greet'].command_node is not None
+
+    def test_async_fstring_body(self):
+        """Async function with f-string body."""
+        source = '''
+async def async_log(status) -> JSON:
+    f'{{"status": "{status}"}}'
+'''
+        result = self.detector.detect_commands(source)
+        assert 'async_log' in result
+        assert result['async_log'].is_async is True
+        assert result['async_log'].command_node is not None
+
+    def test_fstring_parameters_extracted(self):
+        """Parameters are extracted from f-string body functions."""
+        source = '''
+def build(name: str, count: int = 5) -> CSV:
+    f"{name},{count}"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'build' in result
+        params = result['build'].parameters
+        assert len(params) == 2
+        assert params[0].name == 'name'
+        assert params[1].name == 'count'
+        assert params[1].default == 5
+
+    def test_regular_code_body_not_detected_as_fstring(self):
+        """Code body with f-string in assignment is NOT detected."""
+        source = '''
+def compute(x):
+    result = f"value: {x}"
+    return result
+'''
+        result = self.detector.detect_commands(source)
+        assert 'compute' not in result
+
+
+class TestDeterministicReturnDetection:
+    """Test return-based deterministic content detection."""
+
+    def setup_method(self):
+        self.detector = LLMCommandDetector()
+
+    def test_return_fstring_detected_as_deterministic(self):
+        """return f-string with return type is deterministic."""
+        source = '''
+def log(ts, job_id) -> CSV:
+    return f"{ts},{job_id},ok"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'log' in result
+        info = result['log']
+        assert info.is_deterministic is True
+        assert info.deterministic_node is not None
+
+    def test_return_string_constant_detected(self):
+        """return string constant with return type is deterministic."""
+        source = '''
+def header() -> CSV:
+    return "name,status,timestamp"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'header' in result
+        assert result['header'].is_deterministic is True
+
+    def test_return_fstring_file_write(self):
+        """return f-string with File() return type is deterministic."""
+        source = '''
+def log_run(ts) -> File(CSV, "log.csv", append=True):
+    return f"{ts},ok"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'log_run' in result
+        info = result['log_run']
+        assert info.is_deterministic is True
+        assert isinstance(info.return_type, FileWriteReturnType)
+        assert info.return_type.append is True
+
+    def test_return_call_not_deterministic(self):
+        """return with a function call is NOT deterministic."""
+        source = '''
+def scrape() -> File(HTML, "out.html"):
+    return web.get_text(".content")
+'''
+        result = self.detector.detect_commands(source)
+        info = result.get('scrape')
+        if info:
+            assert info.is_deterministic is False
+
+    def test_return_without_type_annotation_not_detected(self):
+        """return f-string without -> Type is NOT detected."""
+        source = '''
+def plain(x):
+    return f"hello {x}"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'plain' not in result
+
+    def test_docstring_plus_return_fstring(self):
+        """Docstring + return f-string is deterministic."""
+        source = '''
+def log(ts) -> YAML:
+    "Logs a timestamp entry"
+    return f"ts: {ts}"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'log' in result
+        assert result['log'].is_deterministic is True
+
+    def test_async_return_fstring(self):
+        """Async function with return f-string is deterministic."""
+        source = '''
+async def log(ts) -> JSON:
+    return f'{{"ts": "{ts}"}}'
+'''
+        result = self.detector.detect_commands(source)
+        assert 'log' in result
+        info = result['log']
+        assert info.is_deterministic is True
+        assert info.is_async is True
+
+    def test_bare_fstring_not_deterministic(self):
+        """Bare f-string (no return) is LLM, not deterministic."""
+        source = '''
+def ask(topic) -> str:
+    f"Tell me about {topic}"
+'''
+        result = self.detector.detect_commands(source)
+        assert 'ask' in result
+        assert result['ask'].is_deterministic is False
+        assert result['ask'].command_node is not None

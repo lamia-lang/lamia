@@ -56,22 +56,25 @@ class TestLaunchdScheduler:
 
     @pytest.fixture
     def job(self):
+        from lamia.scheduling.base import generate_schedule_id
+        sid = generate_schedule_id("daily_task.lm", "/Users/test/project")
         return ScheduleJob(
             script="daily_task.lm",
             cron="0 9 * * *",
+            schedule_id=sid,
             project_root=Path("/Users/test/project"),
         )
 
     def test_plist_path(self, scheduler, job):
         path = scheduler._plist_path(job)
-        assert path.name == "com.lamia.schedule.daily_task.plist"
+        assert path.name == f"com.lamia.schedule.{job.schedule_id}.plist"
         assert "LaunchAgents" in str(path)
 
     def test_build_plist_contains_label(self, scheduler, job, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         (tmp_path / ".lamia" / "logs").mkdir(parents=True)
         plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
-        assert "com.lamia.schedule.daily_task" in plist
+        assert f"com.lamia.schedule.{job.schedule_id}" in plist
 
     def test_build_plist_contains_script_path(self, scheduler, job, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -102,11 +105,12 @@ class TestLaunchdScheduler:
         job = ScheduleJob(
             script="daily_task.lm",
             cron="0 9 * * *",
+            schedule_id="test_catchup_1",
             catch_up=True,
             project_root=Path("/Users/test/project"),
         )
         plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
-        assert "<key>RunAtLoad</key>" in plist
+        assert "<key>RunAtLoad</key>" not in plist
 
     def test_build_plist_no_catch_up_omits_run_at_load(self, scheduler, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -114,6 +118,7 @@ class TestLaunchdScheduler:
         job = ScheduleJob(
             script="daily_task.lm",
             cron="0 9 * * *",
+            schedule_id="test_no_catchup",
             catch_up=False,
             project_root=Path("/Users/test/project"),
         )
@@ -138,6 +143,7 @@ class TestLaunchdScheduler:
         job = ScheduleJob(
             script="wake.lm",
             cron="@reboot",
+            schedule_id="test_wake_id",
             project_root=Path("/Users/test/project"),
         )
         plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
@@ -151,12 +157,12 @@ class TestSystemdScheduler:
         return SystemdScheduler()
 
     def test_service_name(self, scheduler):
-        job = ScheduleJob(script="daily.lm", cron="0 0 * * *", project_root=Path("/p"))
-        assert scheduler._service_name(job) == "lamia-daily"
+        job = ScheduleJob(script="daily.lm", cron="0 0 * * *", schedule_id="abc123def456", project_root=Path("/p"))
+        assert scheduler._service_name(job) == "lamia-abc123def456"
 
     def test_service_name_with_path(self, scheduler):
-        job = ScheduleJob(script="scripts/run.lm", cron="0 0 * * *", project_root=Path("/p"))
-        assert scheduler._service_name(job) == "lamia-scripts-run"
+        job = ScheduleJob(script="scripts/run.lm", cron="0 0 * * *", schedule_id="xyz789aaa111", project_root=Path("/p"))
+        assert scheduler._service_name(job) == "lamia-xyz789aaa111"
 
     def test_cron_to_oncalendar_daily_9am(self, scheduler):
         result = scheduler._cron_to_oncalendar("0 9 * * *")
@@ -173,8 +179,8 @@ class TestWindowsTaskScheduler:
         return WindowsTaskScheduler()
 
     def test_task_name(self, scheduler):
-        job = ScheduleJob(script="daily.lm", cron="0 0 * * *", project_root=Path("/p"))
-        assert scheduler._task_name(job) == "Lamia\\daily"
+        job = ScheduleJob(script="daily.lm", cron="0 0 * * *", schedule_id="win_task_id12", project_root=Path("/p"))
+        assert scheduler._task_name(job) == "Lamia\\win_task_id12"
 
     def test_cron_to_schtasks_daily(self, scheduler):
         args = scheduler._cron_to_schtasks_args("0 9 * * *")

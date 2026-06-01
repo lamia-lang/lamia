@@ -433,18 +433,122 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         return self.generic_visit(node)
     
     def _transform_llm_function(self, node, is_async: bool):
-        """Transform function with LLM string command."""
+        """Transform function with LLM string command, f-string body, or deterministic return."""
         func_info = self.detector.llm_functions[node.name]
 
-        # Process command for parameter substitution
-        processed_command = self._create_parameter_substitution_logic(
-            func_info.command, func_info.parameters,
-        )
-        
-        # Generate lamia.run() call (works for both LLM and web commands)
+        if func_info.is_deterministic:
+            return self._build_deterministic_function(node, func_info, is_async)
+
+        if func_info.command_node is not None:
+            processed_command = func_info.command_node
+        else:
+            processed_command = self._create_parameter_substitution_logic(
+                func_info.command, func_info.parameters,
+            )
+
         return self._create_lamia_call_function(
             node, processed_command, func_info.return_type, is_async,
         )
+
+    def _build_deterministic_function(self, node, func_info: LLMFunctionInfo, is_async: bool):
+        """Build a function that returns content directly without LLM invocation.
+
+        For -> Type: evaluate expression, validate, return.
+        For -> File(...): evaluate expression, write to file, return.
+        """
+        return_type = func_info.return_type
+        content_expr = func_info.deterministic_node
+
+        if isinstance(return_type, FileWriteReturnType):
+            body = self._build_deterministic_file_write_body(content_expr, return_type)
+        else:
+            body = [ast.Return(value=content_expr, lineno=1, col_offset=0)]
+
+        if is_async:
+            return ast.AsyncFunctionDef(
+                name=node.name,
+                args=node.args,
+                body=body,
+                decorator_list=node.decorator_list,
+                returns=None,
+                type_comment=getattr(node, 'type_comment', None),
+                lineno=getattr(node, 'lineno', 1),
+                col_offset=getattr(node, 'col_offset', 0),
+            )
+        return ast.FunctionDef(
+            name=node.name,
+            args=node.args,
+            body=body,
+            decorator_list=node.decorator_list,
+            returns=None,
+            type_comment=getattr(node, 'type_comment', None),
+            lineno=getattr(node, 'lineno', 1),
+            col_offset=getattr(node, 'col_offset', 0),
+        )
+
+    def _build_deterministic_file_write_body(
+        self, content_expr: ast.expr, file_return_type: FileWriteReturnType,
+    ) -> List[ast.stmt]:
+        """Build body that writes deterministic content to a file.
+
+        Generated:
+            __lamia_content__ = str(<content_expr>)
+            lamia.run(FileCommand(action=WRITE|APPEND, path=..., content=__lamia_content__))
+            return __lamia_content__
+        """
+        tmp_var = '__lamia_content__'
+        action = 'APPEND' if file_return_type.append else 'WRITE'
+        path = file_return_type.path
+        encoding = file_return_type.encoding
+
+        str_call = ast.Call(
+            func=ast.Name(id='str', ctx=ast.Load()),
+            args=[content_expr],
+            keywords=[],
+        )
+        assign = ast.Assign(
+            targets=[ast.Name(id=tmp_var, ctx=ast.Store())],
+            value=str_call,
+            lineno=1, col_offset=0,
+        )
+
+        file_command = ast.Call(
+            func=ast.Name(id='FileCommand', ctx=ast.Load()),
+            args=[],
+            keywords=[
+                ast.keyword(
+                    arg='action',
+                    value=ast.Attribute(
+                        value=ast.Name(id='FileActionType', ctx=ast.Load()),
+                        attr=action,
+                        ctx=ast.Load(),
+                    ),
+                ),
+                ast.keyword(arg='path', value=ast.Constant(value=path)),
+                ast.keyword(
+                    arg='content',
+                    value=ast.Name(id=tmp_var, ctx=ast.Load()),
+                ),
+                ast.keyword(arg='encoding', value=ast.Constant(value=encoding)),
+            ],
+        )
+
+        write_call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                attr='run',
+                ctx=ast.Load(),
+            ),
+            args=[file_command],
+            keywords=[],
+        )
+
+        write_stmt = ast.Expr(value=write_call, lineno=1, col_offset=0)
+        return_stmt = ast.Return(
+            value=ast.Name(id=tmp_var, ctx=ast.Load()),
+            lineno=1, col_offset=0,
+        )
+        return [assign, write_stmt, return_stmt]
 
     def _is_web_return_type_expression(self, node) -> bool:
         """Check if expression is preprocessed web return type expression."""

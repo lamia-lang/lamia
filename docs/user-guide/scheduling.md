@@ -95,7 +95,7 @@ lamia schedule update <id> --every on-wake --no-catch-up
 
 ## How It Works
 
-Schedules are stored globally at `~/.lamia/schedules/` — one JSON file per job. The OS scheduler invokes:
+Schedules are stored globally at `~/.lamia/schedules/` — one JSON file per job (`<id>.json`). Each file holds both the job configuration (script, cron, catch_up, project_root) and the last run status (timestamp, exit code, error). The OS scheduler invokes:
 
 ```
 lamia --file /abs/path/to/script.lm --log-file ~/.lamia/logs/<id>/schedule.log --schedule-id <id>
@@ -103,9 +103,10 @@ lamia --file /abs/path/to/script.lm --log-file ~/.lamia/logs/<id>/schedule.log -
 
 This means:
 
+- One file per job — no companion status files, everything in `<id>.json`
 - Logs are grouped per schedule id under `~/.lamia/logs/schedules/<id>/`
-- A single combined log goes to `~/.lamia/logs/schedules/<id>/schedule.log`
-- After each run, exit status is recorded so `lamia schedule list` can display it
+- After each run, exit status is written back into the job file so `lamia schedule list` can display it
+- When you `lamia schedule remove <id>`, both the OS entry and the file are deleted
 
 ## Cron Expression Reference
 
@@ -132,15 +133,49 @@ Common patterns:
 
 ### macOS (launchd)
 
-Creates a plist at `~/Library/LaunchAgents/com.lamia.schedule.<script>.plist`. Uses `StartCalendarInterval` for time-based scheduling and `RunAtLoad` to catch up missed runs when the machine wakes.
+Creates a plist at `~/Library/LaunchAgents/com.lamia.schedule.<id>.plist`. Uses `StartCalendarInterval` for time-based scheduling. Catch-up of missed runs is handled by Lamia at runtime (comparing last run time to current time).
 
 ### Linux (systemd)
 
-Creates a `.service` and `.timer` unit in `~/.config/systemd/user/`. Uses `Persistent=true` to catch up on missed runs after boot.
+Creates a `.service` and `.timer` unit in `~/.config/systemd/user/` named `lamia-schedule-<id>`. Uses `Persistent=true` to catch up on missed runs after boot.
 
 ### Windows (Task Scheduler)
 
-Creates a task in `Lamia\<script>` via `schtasks.exe`. The task runs with the user's permissions.
+Creates a task in `Lamia\<id>` via `schtasks.exe`. The task runs with the user's permissions.
+
+## Best Practices for Scheduled Scripts
+
+Lamia tracks only the **last run** of each scheduled job — its timestamp, exit code, and error message. Previous run information is overwritten.
+
+If you want visibility into run history, keep your own per-run records in a persistent store (file, database, or API) so you can audit trends and troubleshoot faster.
+
+Example — use an f-string body to deterministically append a CSV row after each run:
+
+```python
+from datetime import datetime
+
+class RunResult(BaseModel):
+    timestamp: str
+    job_id: str
+    items_processed: int
+    success: bool
+    error: str
+
+def log_run(job_id, items, success, error="") -> File(CSV[RunResult], "runs/history.csv", append=True):
+    return f"{datetime.now().isoformat()},{job_id},{items},{success},{error}"
+```
+
+Recommended practices:
+
+1. **Log each run's outcome** — append to CSV rows or write to a database table. Include timestamps, what was processed, and success/failure per item.
+
+2. **Store the run timestamp and exit status** alongside your data. Lamia keeps only the last one, so if you need a history view, maintain your own.
+
+3. **Use idempotent and resumable operations** — catch-up can re-trigger a missed run, and a run can fail halfway. Design steps so retries do not duplicate side effects, and partial failures can resume safely from checkpoints.
+
+4. **Keep scripts self-contained** — the scheduled script runs from its parent directory with no interactive terminal. Avoid prompts, ensure credentials are pre-configured, and handle network failures with retries.
+
+5. **Test manually first** — run `lamia --file your_script.lm` by hand before scheduling. If it works interactively, it will work on schedule.
 
 ## Troubleshooting
 

@@ -645,3 +645,262 @@ class TestFileNamespaceTransformer:
         """web.method() should still use WebCommand, not generic wrapping."""
         result = self.transformer.transform_code('web.click("#btn")')
         assert "WebCommand" in result
+
+
+class TestFStringLLMTransformation:
+    """Test bare f-string body transformation in LLM mode."""
+
+    def setup_method(self):
+        self.transformer = HybridSyntaxTransformer()
+
+    def test_fstring_function_body_becomes_lamia_run(self):
+        """f-string body transforms to lamia.run(f'...')."""
+        source = '''
+def log_result(job_id) -> CSV:
+    f"{job_id},ok"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run(f'" in result
+        assert "return_type=CSV" in result
+        assert "def log_result(job_id)" in result
+
+    def test_fstring_file_append(self):
+        """f-string body with File(CSV, ..., append=True)."""
+        source = '''
+def log_run(ts, job_id) -> File(CSV, "log.csv", append=True):
+    f"{ts},{job_id},ok"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run(f'" in result
+        assert "FileActionType.APPEND" in result
+        assert "log.csv" in result
+
+    def test_fstring_file_write(self):
+        """f-string body with File(JSON, ...) (write mode)."""
+        source = '''
+def build_config(name) -> File(JSON, "config.json"):
+    f'{{"app": "{name}"}}'
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run(f'" in result or "lamia.run(f\"" in result
+        assert "FileActionType.WRITE" in result
+
+    def test_fstring_html_return_type(self):
+        """f-string with HTML return type."""
+        source = '''
+def render(title) -> HTML:
+    f"<h1>{title}</h1>"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run(f'" in result
+        assert "return_type=HTML" in result
+
+    def test_fstring_json_return_type(self):
+        """f-string with JSON return type."""
+        source = '''
+def to_json(key, val) -> JSON:
+    f'{{"{ key}": "{val}"}}'
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run(" in result
+        assert "return_type=JSON" in result
+
+    def test_fstring_yaml_return_type(self):
+        """f-string with YAML return type."""
+        source = '''
+def to_yaml(name, port) -> YAML:
+    f"name: {name}\\nport: {port}"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run(f'" in result
+        assert "return_type=YAML" in result
+
+    def test_fstring_xml_return_type(self):
+        """f-string with XML return type."""
+        source = '''
+def to_xml(tag, content) -> XML:
+    f"<{tag}>{content}</{tag}>"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run(f'" in result
+        assert "return_type=XML" in result
+
+    def test_fstring_markdown_return_type(self):
+        """f-string with Markdown return type."""
+        source = '''
+def to_md(title, body) -> Markdown:
+    f"# {title}\\n\\n{body}"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run(f'" in result
+        assert "return_type=Markdown" in result
+
+    def test_async_fstring_uses_run_async(self):
+        """Async f-string function uses lamia.run_async()."""
+        source = '''
+async def async_log(msg) -> JSON:
+    f'{{"message": "{msg}"}}'
+'''
+        result = self.transformer.transform_code(source)
+        assert "run_async" in result
+        assert "await" in result
+
+    def test_fstring_no_parameter_substitution(self):
+        """f-string should NOT go through .format() substitution."""
+        source = '''
+def build(name) -> str:
+    f"Hello {name}"
+'''
+        result = self.transformer.transform_code(source)
+        assert ".format(" not in result
+        assert "f'" in result
+
+    def test_inline_fstring_to_type(self):
+        """Inline f-string -> Type syntax (requires full parser pipeline)."""
+        from lamia.interpreter.hybrid_syntax_parser import HybridSyntaxParser
+        parser = HybridSyntaxParser()
+        source = '''name = "World"
+result = f"Hello {name}" -> HTML
+'''
+        result = parser.transform(source)
+        assert "lamia.run(f'" in result
+        assert "return_type=HTML" in result
+
+    def test_inline_fstring_to_file(self):
+        """Inline f-string -> File(...) syntax (requires full parser pipeline)."""
+        from lamia.interpreter.hybrid_syntax_parser import HybridSyntaxParser
+        parser = HybridSyntaxParser()
+        source = '''job_id = "abc"
+f"{job_id},ok" -> File(CSV, "runs.csv", append=True)
+'''
+        result = parser.transform(source)
+        assert "lamia.run(f'" in result
+        assert "FileActionType.APPEND" in result
+        assert "runs.csv" in result
+
+
+class TestDeterministicReturnTransformation:
+    """Test return-based deterministic content — bypasses lamia.run()."""
+
+    def setup_method(self):
+        self.transformer = HybridSyntaxTransformer()
+
+    def test_return_fstring_csv_no_lamia_run(self):
+        """return f-string -> CSV evaluates directly (no LLM)."""
+        source = '''
+def log(ts, job_id) -> CSV:
+    return f"{ts},{job_id},ok"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" not in result
+        assert "return f'" in result
+
+    def test_return_fstring_json(self):
+        """return f-string -> JSON evaluates directly."""
+        source = '''
+def build(key, val) -> JSON:
+    return f'{{"key":"{key}","val":"{val}"}}'
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" not in result
+        assert "return f'" in result or "return f\"" in result
+
+    def test_return_fstring_yaml(self):
+        """return f-string -> YAML evaluates directly."""
+        source = '''
+def cfg(name, port) -> YAML:
+    return f"name: {name}\\nport: {port}"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" not in result
+
+    def test_return_fstring_xml(self):
+        """return f-string -> XML evaluates directly."""
+        source = '''
+def item(tag, content) -> XML:
+    return f"<{tag}>{content}</{tag}>"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" not in result
+
+    def test_return_fstring_html(self):
+        """return f-string -> HTML evaluates directly."""
+        source = '''
+def page(title) -> HTML:
+    return f"<h1>{title}</h1>"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" not in result
+
+    def test_return_fstring_markdown(self):
+        """return f-string -> Markdown evaluates directly."""
+        source = '''
+def doc(title, body) -> Markdown:
+    return f"# {title}\\n\\n{body}"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" not in result
+
+    def test_return_fstring_str(self):
+        """return f-string -> str evaluates directly."""
+        source = '''
+def msg(name) -> str:
+    return f"Hello, {name}"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" not in result
+        assert "return f'" in result
+
+    def test_return_fstring_file_append(self):
+        """return f-string -> File(CSV, append=True) writes without LLM."""
+        source = '''
+def log_run(ts, job_id) -> File(CSV, "log.csv", append=True):
+    return f"{ts},{job_id},ok"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" in result  # lamia.run(FileCommand(...)) for file write
+        assert "FileCommand" in result
+        assert "FileActionType.APPEND" in result
+        assert "__lamia_content__" in result
+        assert "return_type" not in result  # no LLM return_type kwarg
+
+    def test_return_fstring_file_write(self):
+        """return f-string -> File(JSON, ...) writes without LLM."""
+        source = '''
+def save(data) -> File(JSON, "out.json"):
+    return f'{{"data": "{data}"}}'
+'''
+        result = self.transformer.transform_code(source)
+        assert "FileCommand" in result
+        assert "FileActionType.WRITE" in result
+        assert "__lamia_content__" in result
+
+    def test_async_return_fstring(self):
+        """async return f-string is deterministic."""
+        source = '''
+async def log(ts) -> JSON:
+    return f'{{"ts": "{ts}"}}'
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" not in result
+        assert "async def log" in result
+        assert "return f'" in result or "return f\"" in result
+
+    def test_return_constant_string_deterministic(self):
+        """return plain string constant is deterministic."""
+        source = '''
+def header() -> CSV:
+    return "name,status,timestamp"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run" not in result
+        assert "return 'name,status,timestamp'" in result
+
+    def test_bare_fstring_still_uses_llm(self):
+        """Bare f-string (no return) still goes to LLM — not deterministic."""
+        source = '''
+def ask(topic) -> str:
+    f"Tell me about {topic}"
+'''
+        result = self.transformer.transform_code(source)
+        assert "lamia.run(f'" in result
