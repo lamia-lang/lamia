@@ -46,6 +46,10 @@ class FSManager(Manager[FileCommand]):
                 is_valid=True, typed_result=command.content, error_message=None
             )
 
+        encoding_result = self._check_encoding(command.content, command.encoding)
+        if encoding_result is not None:
+            return encoding_result
+
         self._ensure_parent_dirs(command.path)
         with open(command.path, "w", encoding=command.encoding) as f:
             f.write(command.content)
@@ -75,10 +79,33 @@ class FSManager(Manager[FileCommand]):
                 is_valid=True, typed_result=command.content, error_message=None
             )
 
+        encoding_result = self._check_encoding(final_content, command.encoding)
+        if encoding_result is not None:
+            return encoding_result
+
         self._ensure_parent_dirs(command.path)
         with open(command.path, "w", encoding=command.encoding) as f:
             f.write(final_content)
         return validation_result
+
+    def _check_encoding(self, content: str, encoding: str) -> Optional[ValidationResult]:
+        """Return a failed ValidationResult if content is not encodable, else None."""
+        try:
+            content.encode(encoding)
+        except UnicodeEncodeError as e:
+            char = content[e.start]
+            return ValidationResult(
+                is_valid=False,
+                error_message=(
+                    f"Content contains characters not encodable in {encoding}: "
+                    f"{e.reason} at position {e.start}"
+                ),
+                hint=(
+                    f"Avoid characters outside the {encoding} character set. "
+                    f"The problematic character is: {char!r} (U+{ord(char):04X})"
+                ),
+            )
+        return None
 
     def _ensure_parent_dirs(self, path: str) -> None:
         parent = os.path.dirname(path)

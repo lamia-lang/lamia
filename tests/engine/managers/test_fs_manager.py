@@ -503,6 +503,139 @@ class TestFSManagerErrorHandling:
 
 
 # ---------------------------------------------------------------------------
+# Encoding validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestEncodingValidation:
+    """Encoding check rejects unencodable content and prevents file write."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    # --- Rejection cases (unhappy paths) ---
+
+    async def test_ascii_rejects_yen_sign(self) -> None:
+        """¥ (U+00A5) is not encodable in ASCII."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(
+                FileActionType.WRITE, path, content="price: 100¥", encoding="ascii"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert not result.is_valid
+            assert "ascii" in result.error_message
+            assert "U+00A5" in result.hint
+            assert not os.path.exists(path)
+
+    async def test_ascii_rejects_accented_chars(self) -> None:
+        """é (U+00E9) is not encodable in ASCII."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(
+                FileActionType.WRITE, path, content="café", encoding="ascii"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert not result.is_valid
+            assert "ascii" in result.error_message
+            assert not os.path.exists(path)
+
+    async def test_latin1_rejects_emoji(self) -> None:
+        """🎉 (U+1F389) is not encodable in latin-1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(
+                FileActionType.WRITE, path, content="done 🎉", encoding="latin-1"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert not result.is_valid
+            assert "latin-1" in result.error_message
+            assert not os.path.exists(path)
+
+    async def test_latin1_rejects_cjk(self) -> None:
+        """日 (U+65E5) is not encodable in latin-1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(
+                FileActionType.WRITE, path, content="日本語", encoding="latin-1"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert not result.is_valid
+            assert "latin-1" in result.error_message
+
+    async def test_ascii_rejects_euro_sign(self) -> None:
+        """€ (U+20AC) is not encodable in ASCII."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(
+                FileActionType.WRITE, path, content="50€", encoding="ascii"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert not result.is_valid
+            assert "U+20AC" in result.hint
+            assert not os.path.exists(path)
+
+    async def test_append_rejects_unencodable_and_preserves_file(self) -> None:
+        """Append with unencodable content must NOT corrupt existing file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            with open(path, "w", encoding="latin-1") as f:
+                f.write("existing")
+            cmd = _make_command(
+                FileActionType.APPEND, path, content=" 🚀", encoding="latin-1"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert not result.is_valid
+            with open(path, "r", encoding="latin-1") as f:
+                assert f.read() == "existing"
+
+    async def test_hint_shows_exact_codepoint(self) -> None:
+        """Hint must identify the problematic character with U+XXXX."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(
+                FileActionType.WRITE, path, content="a→b", encoding="ascii"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert not result.is_valid
+            assert "U+2192" in result.hint
+
+    async def test_error_message_includes_position(self) -> None:
+        """Error message must report the character position."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(
+                FileActionType.WRITE, path, content="abc¥", encoding="ascii"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert not result.is_valid
+            assert "position 3" in result.error_message
+
+    # --- Happy paths (sanity checks that valid content writes successfully) ---
+
+    async def test_utf8_accepts_all(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(
+                FileActionType.WRITE, path, content="¥€🎉日本語", encoding="utf-8"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert result.is_valid
+            assert os.path.exists(path)
+
+    async def test_latin1_accepts_within_range(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "out.txt")
+            cmd = _make_command(
+                FileActionType.WRITE, path, content="café ¥ résumé", encoding="latin-1"
+            )
+            result = await self.fs_manager.execute(cmd)
+            assert result.is_valid
+            assert os.path.exists(path)
+
+
+# ---------------------------------------------------------------------------
 # Resource cleanup
 # ---------------------------------------------------------------------------
 
