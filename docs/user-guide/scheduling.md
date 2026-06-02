@@ -145,11 +145,11 @@ Creates a task in `Lamia\<id>` via `schtasks.exe`. The task runs with the user's
 
 ## Best Practices for Scheduled Scripts
 
-Lamia tracks only the **last run** of each scheduled job — its timestamp, exit code, and error message. Previous run information is overwritten.
+Lamia tracks only the **last run** of each scheduled job — its timestamp, exit code, and error message. Previous run information is overwritten. You can access the schedule ID via `schedule.id` in your script to store it in a persistent store.
 
 If you want visibility into run history, keep your own per-run records in a persistent store (file, database, or API) so you can audit trends and troubleshoot faster.
 
-Example — use an f-string body to deterministically append a CSV row after each run:
+Example — deterministic CSV append (no LLM call):
 
 ```python
 from datetime import datetime
@@ -163,6 +163,28 @@ class RunResult(BaseModel):
 
 def log_run(job_id, items, success, error="") -> File(CSV[RunResult], "runs/history.csv", append=True):
     return f"{datetime.now().isoformat()},{job_id},{items},{success},{error}"
+```
+
+You can also chain file-read mode with deterministic append:
+
+```python
+from datetime import datetime
+
+class RunResult(BaseModel):
+    timestamp: str
+    job_id: str
+    items_processed: int
+    success: bool
+    error: str
+
+job_id = schedule.id # schedule.id is the ID of the scheduled job provided by Lamia
+items_processed = 100 # Should be set by your script
+success = True # Should be set by your script
+error = None # Should be set by your script
+
+def append_history(payload: JSON) -> File(CSV[RunResult], "runs/history.csv", append=True):
+    return f"{datetime.now().isoformat()},{job_id},{items_processed},{success},{error:None}"
+
 ```
 
 Recommended practices:

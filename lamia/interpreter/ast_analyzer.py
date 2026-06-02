@@ -191,8 +191,9 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
         execution_globals['capture_files_context'] = capture_files_context
     
     # Always inject InputType for form automation
-    from lamia.types import InputType
+    from lamia.types import InputType, schedule
     execution_globals['InputType'] = InputType
+    execution_globals['schedule'] = schedule
     # Always inject pydantic and typing essentials for .hu model definitions
     execution_globals['BaseModel'] = BaseModel
     execution_globals['Field'] = Field

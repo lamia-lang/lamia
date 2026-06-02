@@ -160,3 +160,28 @@ class TEXT(BaseType[T, S]):
 
 
 TXT = TEXT
+
+
+class ScheduleContext:
+    """Runtime context for scheduled scripts.
+
+    Available as `schedule` in .lm scripts without import.
+    When the script is not running on a schedule, `schedule.id` is None.
+    """
+
+    def __init__(self):
+        self._id: Optional[str] = None
+
+    @property
+    def id(self) -> Optional[str]:
+        """The schedule job ID, or None if not running on schedule."""
+        return self._id
+
+    def _set_id(self, schedule_id: Optional[str]):
+        self._id = schedule_id
+
+    def __repr__(self):
+        return f"ScheduleContext(id={self._id!r})"
+
+
+schedule = ScheduleContext()

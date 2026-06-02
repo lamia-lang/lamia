@@ -833,6 +833,10 @@ For help on a subcommand, run:
     global _active_schedule_id
     _active_schedule_id = getattr(args, 'schedule_id', None)
 
+    if _active_schedule_id:
+        from lamia.types import schedule
+        schedule._set_id(_active_schedule_id)
+
     json_flag = getattr(args, 'json', False)
 
     setup_cli_logging(
