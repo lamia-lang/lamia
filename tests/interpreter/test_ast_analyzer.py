@@ -720,3 +720,39 @@ def generate() -> File(HTML, "output.html"):
 
         assert globals_dict['FileCommand'] is FileCommand
         assert globals_dict['FileActionType'] is FileActionType
+
+
+class TestScheduleContextInjection:
+    """Test that schedule context is always available in script namespace."""
+
+    def test_schedule_always_injected(self):
+        """schedule is available even with empty namespaces/types."""
+        globals_dict = create_execution_globals(set(), set())
+        assert 'schedule' in globals_dict
+
+    def test_schedule_id_none_by_default(self):
+        """schedule.id is None when no --schedule-id was passed."""
+        from lamia.types import ScheduleContext
+        ctx = ScheduleContext()
+        assert ctx.id is None
+
+    def test_schedule_id_set_via_internal_method(self):
+        """schedule._set_id() stores the job ID."""
+        from lamia.types import ScheduleContext
+        ctx = ScheduleContext()
+        ctx._set_id("9b8e56a16d6a")
+        assert ctx.id == "9b8e56a16d6a"
+
+    def test_schedule_id_reset_to_none(self):
+        """schedule._set_id(None) clears the ID."""
+        from lamia.types import ScheduleContext
+        ctx = ScheduleContext()
+        ctx._set_id("abc")
+        ctx._set_id(None)
+        assert ctx.id is None
+
+    def test_schedule_is_same_singleton_in_globals(self):
+        """The injected schedule object is the module-level singleton."""
+        from lamia.types import schedule as module_schedule
+        globals_dict = create_execution_globals(set(), set())
+        assert globals_dict['schedule'] is module_schedule

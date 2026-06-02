@@ -116,8 +116,8 @@ class BaseValidator(ABC):
 
         Subclasses override to implement format-specific behaviour:
         - DocumentStructureValidator returns *new_content* only (overwrite).
-        - CSVStructureValidator strips duplicate headers using the model.
-        - MarkdownStructureValidator concatenates (true append).
+        - CSVStructureValidator strips duplicate headers and normalizes newlines.
+        - MarkdownStructureValidator inserts newline boundary.
 
         The default concatenates existing and new (plain text append).
         """

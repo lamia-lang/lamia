@@ -334,6 +334,39 @@ class TestFSManagerAppend:
 
 
 # ---------------------------------------------------------------------------
+# Text append is raw concatenation (no forced newlines)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestAppendRawConcat:
+    """Text append is raw concatenation — users control separators."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_raw_concat_no_separator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "log.txt")
+            with open(path, "w") as f:
+                f.write("hello")
+            cmd = _make_command(FileActionType.APPEND, path, content=" world")
+            await self.fs_manager.execute(cmd)
+            with open(path, "r") as f:
+                assert f.read() == "hello world"
+
+    async def test_user_controls_newlines(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "log.txt")
+            cmd = _make_command(FileActionType.APPEND, path, content="line1\n")
+            await self.fs_manager.execute(cmd)
+            cmd = _make_command(FileActionType.APPEND, path, content="line2\n")
+            await self.fs_manager.execute(cmd)
+            with open(path, "r") as f:
+                assert f.read() == "line1\nline2\n"
+
+
+# ---------------------------------------------------------------------------
 # Common: encoding for READ and WRITE
 # ---------------------------------------------------------------------------
 

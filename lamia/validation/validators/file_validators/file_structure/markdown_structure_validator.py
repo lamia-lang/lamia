@@ -141,7 +141,11 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         return "markdown"
 
     def prepare_content_for_write(self, existing_content: str, new_content: str) -> str:
-        return existing_content + new_content
+        if not existing_content:
+            return new_content
+        if not new_content.strip():
+            return existing_content
+        return existing_content.rstrip("\n") + "\n" + new_content.lstrip("\n")
 
     # Properties
     @property

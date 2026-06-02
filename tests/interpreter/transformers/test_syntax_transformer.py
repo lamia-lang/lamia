@@ -863,6 +863,7 @@ def log_run(ts, job_id) -> File(CSV, "log.csv", append=True):
         assert "FileActionType.APPEND" in result
         assert "__lamia_content__" in result
         assert "return_type" not in result  # no LLM return_type kwarg
+        assert "endswith" in result  # CSV trailing newline normalization
 
     def test_return_fstring_file_write(self):
         """return f-string -> File(JSON, ...) writes without LLM."""

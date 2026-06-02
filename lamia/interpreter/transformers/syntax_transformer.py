@@ -493,6 +493,8 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
         Generated:
             __lamia_content__ = str(<content_expr>)
+            # For CSV append: ensure trailing newline so rows don't merge
+            if not __lamia_content__.endswith('\\n'): __lamia_content__ += '\\n'
             lamia.run(FileCommand(action=WRITE|APPEND, path=..., content=__lamia_content__))
             return __lamia_content__
         """
@@ -511,6 +513,19 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             value=str_call,
             lineno=1, col_offset=0,
         )
+
+        stmts: List[ast.stmt] = [assign]
+
+        is_csv = (
+            file_return_type.append
+            and file_return_type.inner_return_type is not None
+            and getattr(file_return_type.inner_return_type, 'base_type', '') == 'CSV'
+        )
+        if is_csv:
+            newline_fix = ast.parse(
+                f"if not {tmp_var}.endswith('\\n'): {tmp_var} += '\\n'"
+            ).body[0]
+            stmts.append(newline_fix)
 
         file_command = ast.Call(
             func=ast.Name(id='FileCommand', ctx=ast.Load()),
@@ -543,12 +558,12 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             keywords=[],
         )
 
-        write_stmt = ast.Expr(value=write_call, lineno=1, col_offset=0)
-        return_stmt = ast.Return(
+        stmts.append(ast.Expr(value=write_call, lineno=1, col_offset=0))
+        stmts.append(ast.Return(
             value=ast.Name(id=tmp_var, ctx=ast.Load()),
             lineno=1, col_offset=0,
-        )
-        return [assign, write_stmt, return_stmt]
+        ))
+        return stmts
 
     def _is_web_return_type_expression(self, node) -> bool:
         """Check if expression is preprocessed web return type expression."""
