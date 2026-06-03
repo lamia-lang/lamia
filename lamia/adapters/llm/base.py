@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Type
+import asyncio
 import re
 import aiohttp
 from pydantic import BaseModel
@@ -230,7 +231,7 @@ class BaseLLMAdapter(ABC):
                     error_text = await response.text()
                     raise_for_status(response.status, error_text, prefix)
                 return await response.json()
-        except aiohttp.ClientError as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             raise_for_connection_error(e, f"Failed to communicate with {self.name()} API")
 
     # ─── Context manager protocol ───────────────────────────────────────

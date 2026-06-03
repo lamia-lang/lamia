@@ -918,25 +918,25 @@ For help on a subcommand, run:
                     _graceful_shutdown(lamia, 0)
                 except ExternalOperationTransientError as e:
                     _log_external_error("External operation failed after all retries", e)
-                    _graceful_shutdown(lamia, 1)
+                    _graceful_shutdown(lamia, 1, error_msg=str(e))
                 except ExternalOperationPermanentError as e:
                     _log_external_error("Permanent failure", e)
-                    _graceful_shutdown(lamia, 1)
+                    _graceful_shutdown(lamia, 1, error_msg=str(e))
                 except ExternalOperationRateLimitError as e:
                     _log_external_error("Rate limit exceeded", e)
-                    _graceful_shutdown(lamia, 1)
+                    _graceful_shutdown(lamia, 1, error_msg=str(e))
                 except SyntaxError as e:
                     logger.error(f"Syntax error in hybrid file: {e}")
                     logger.error(f"Line {e.lineno}: {e.text}")
                     logger.debug(traceback.format_exc())
-                    _graceful_shutdown(lamia, 1)
+                    _graceful_shutdown(lamia, 1, error_msg=str(e))
                 except ImportError as e:
                     logger.error(f"Missing dependency: {e}")
                     logger.debug(traceback.format_exc())
-                    _graceful_shutdown(lamia, 1)
+                    _graceful_shutdown(lamia, 1, error_msg=str(e))
                 except MissingAPIKeysError as e:
                     logger.error(str(e))
-                    _graceful_shutdown(lamia, 1)
+                    _graceful_shutdown(lamia, 1, error_msg=str(e))
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
@@ -947,7 +947,7 @@ For help on a subcommand, run:
                         location = _extract_user_error_location(e)
                         logger.error(f"Runtime error: {e}{location}")
                     logger.debug(traceback.format_exc())
-                    _graceful_shutdown(lamia, 1)
+                    _graceful_shutdown(lamia, 1, error_msg=str(e))
             else:
                 # Regular Python file — inject Lamia builtins so types like
                 # HTML, web, InputType are available without explicit imports.
@@ -956,14 +956,14 @@ For help on a subcommand, run:
                     _graceful_shutdown(lamia, 0)
                 except MissingAPIKeysError as e:
                     logger.error(str(e))
-                    _graceful_shutdown(lamia, 1)
+                    _graceful_shutdown(lamia, 1, error_msg=str(e))
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
                     location = _extract_user_error_location(e)
                     logger.error(f"Runtime error: {e}{location}")
                     logger.debug(traceback.format_exc())
-                    _graceful_shutdown(lamia, 1)
+                    _graceful_shutdown(lamia, 1, error_msg=str(e))
         elif json_flag:
             async def run_json():
                 try:
