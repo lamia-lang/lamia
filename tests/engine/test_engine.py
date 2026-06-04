@@ -27,6 +27,7 @@ def _make_llm_command() -> MagicMock:
     """Create a mock LLM command."""
     cmd = MagicMock()
     cmd.command_type = CommandType.LLM
+    cmd.target_encoding = None
     return cmd
 
 
@@ -34,6 +35,7 @@ def _make_web_command() -> MagicMock:
     """Create a mock web command."""
     cmd = MagicMock()
     cmd.command_type = CommandType.WEB
+    cmd.target_encoding = None
     return cmd
 
 

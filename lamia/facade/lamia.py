@@ -151,6 +151,7 @@ class Lamia:
         models: Optional[List[ModelWithRetries]] = None,
         _full_result: bool = False,
         _append_context: Optional[str] = None,
+        _target_encoding: Optional[str] = None,
     ) -> Union[Any, LamiaResult]:
         """
         Generate a response, trying Python code first, then LLM.
@@ -190,6 +191,9 @@ class Lamia:
             parsed_command, python_result = process_string_command(command)
             if python_result is not None:
                 return python_result
+
+        if _target_encoding:
+            parsed_command.target_encoding = _target_encoding
 
         normalized_models = _normalize_models(models)
         if normalized_models is not None:
@@ -261,6 +265,7 @@ class Lamia:
         models: Optional[List[ModelWithRetries]] = None,
         _full_result: bool = False,
         _append_context: Optional[str] = None,
+        _target_encoding: Optional[str] = None,
     ) -> Union[Any, LamiaResult]:
         """
         Run a command synchronously.
@@ -291,6 +296,7 @@ class Lamia:
                 models=models,
                 _append_context=_append_context,
                 _full_result=_full_result,
+                _target_encoding=_target_encoding,
             )
         )
 

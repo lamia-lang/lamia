@@ -1162,6 +1162,13 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 ast.keyword(arg='_full_result', value=ast.Constant(value=True)),
             ]
 
+        # Forward target encoding so the LLM retry loop can reject
+        # characters that are outside the file's encoding before the write.
+        if encoding.lower() != "utf-8":
+            keywords = list(keywords) + [
+                ast.keyword(arg='_target_encoding', value=ast.Constant(value=encoding)),
+            ]
+
         # Step 0 – for append, read existing file to provide LLM context
         if append:
             stmts.extend(self._build_file_context_read(ctx_var, path, encoding))
@@ -1348,6 +1355,11 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         ]
         if inner_rt_node is not None:
             keywords.insert(0, ast.keyword(arg='return_type', value=inner_rt_node))
+
+        if encoding.lower() != "utf-8":
+            keywords.append(
+                ast.keyword(arg='_target_encoding', value=ast.Constant(value=encoding)),
+            )
 
         # For append: read existing file to provide LLM context
         if append:

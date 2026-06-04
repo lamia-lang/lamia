@@ -1,3 +1,5 @@
+import codecs
+import logging
 from typing import Optional, Dict, Any, List, Type
 
 from lamia.interpreter.commands import Command
@@ -7,10 +9,9 @@ from .factories import ManagerFactory, ValidatorFactory
 from .validation_manager import ValidationStatsTracker
 from lamia.interpreter.command_types import CommandType
 from lamia.validation.base import ValidationResult, BaseValidator
+from lamia.validation.encoding import EncodingValidatorWrapper
 from lamia.validation.validator_registry import ValidatorRegistry
 from lamia.types import BaseType
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,12 @@ class LamiaEngine:
                 passed, violations = self.validator_registry.check_validator(validator_type)
                 if not passed:
                     raise ValueError(f"Validator {validator_type.__name__} does not pass contract checks: {violations}")
+
+                # Wrap with encoding check when target encoding is not UTF-8.
+                # Done after contract check so the checker sees the real validator.
+                encoding = command.target_encoding
+                if encoding and codecs.lookup(encoding).name != "utf-8":
+                    validator = EncodingValidatorWrapper(validator, encoding)
             else:
                 validator = None
             

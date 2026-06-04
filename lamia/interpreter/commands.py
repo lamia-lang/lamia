@@ -1,6 +1,6 @@
 """Command objects for structured communication between parser, engine, and managers."""
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, Union, List
 from enum import Enum
@@ -41,6 +41,7 @@ class FileActionType(Enum):
 class Command(ABC):
     """Base class for all command objects."""
     command_type: CommandType
+    target_encoding: Optional[str] = None
 
     def __init__(self, command_type: CommandType):
         self.command_type = command_type
@@ -50,7 +51,8 @@ class Command(ABC):
 class LLMCommand(Command):
     """Command for LLM operations."""
     prompt: str
-    
+    target_encoding: Optional[str] = None
+
     def __post_init__(self):
         super().__init__(CommandType.LLM)
 
