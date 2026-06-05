@@ -124,6 +124,9 @@ class LaunchdScheduler(BaseScheduler):
             lines.append('    <dict>')
             lines.extend(self._cron_to_calendar_interval(cron))
             lines.append('    </dict>')
+            if job.catch_up:
+                lines.append('    <key>RunAtLoad</key>')
+                lines.append('    <true/>')
 
         lines.extend([
             '    <key>StandardOutPath</key>',

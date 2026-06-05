@@ -836,6 +836,8 @@ For help on a subcommand, run:
     if _active_schedule_id:
         from lamia.types import schedule
         schedule._set_id(_active_schedule_id)
+        if _should_skip_catchup_run(_active_schedule_id):
+            sys.exit(0)
 
     json_flag = getattr(args, 'json', False)
 
@@ -984,11 +986,11 @@ For help on a subcommand, run:
     except MissingAPIKeysError as e:
         logger.error(f"Missing API Keys: {str(e)}")
         logger.error("Please check your .env file or config.yaml for required API keys.")
-        _graceful_shutdown(lamia, 1)
+        _graceful_shutdown(lamia, 1, error_msg=str(e))
     except Exception as e:
         logger.error(f"Error: {e}")
         logger.debug(traceback.format_exc())
-        _graceful_shutdown(lamia, 1)
+        _graceful_shutdown(lamia, 1, error_msg=str(e))
     except KeyboardInterrupt:
         _graceful_shutdown(lamia)
 
@@ -1016,6 +1018,57 @@ def _install_sigint_handler() -> None:
 
 
 _active_schedule_id: 'Optional[str]' = None
+
+
+def _should_skip_catchup_run(job_id: str) -> bool:
+    """Return True if this RunAtLoad invocation should be skipped (already ran this interval).
+
+    When catch_up=True, both RunAtLoad and StartCalendarInterval fire the job.
+    This guard prevents double-runs by checking if last_run is more recent than
+    the most recent scheduled time.
+    """
+    from datetime import datetime, timedelta
+    from lamia.scheduling.registry import load_job
+
+    try:
+        job_data = load_job(job_id)
+        if not job_data:
+            return False
+
+        if not job_data.get("catch_up", True):
+            return False
+
+        last_run_data = job_data.get("last_run")
+        if not last_run_data:
+            return False
+
+        cron = job_data.get("cron", "")
+        parts = cron.split()
+        if len(parts) != 5:
+            return False
+
+        minute_s, hour_s = parts[0], parts[1]
+        if minute_s == "*" or hour_s == "*":
+            return False
+
+        now = datetime.now()
+        scheduled_today = now.replace(
+            hour=int(hour_s), minute=int(minute_s), second=0, microsecond=0
+        )
+
+        if now >= scheduled_today:
+            last_scheduled = scheduled_today
+        else:
+            last_scheduled = scheduled_today - timedelta(days=1)
+
+        last_run_iso = last_run_data.get("timestamp", "")
+        last_run = datetime.fromisoformat(last_run_iso)
+        if last_run.tzinfo:
+            last_run = last_run.astimezone().replace(tzinfo=None)
+
+        return last_run >= last_scheduled
+    except Exception:
+        return False
 
 
 def _graceful_shutdown(

@@ -110,7 +110,8 @@ class TestLaunchdScheduler:
             project_root=Path("/Users/test/project"),
         )
         plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
-        assert "<key>RunAtLoad</key>" not in plist
+        assert "<key>RunAtLoad</key>" in plist
+        assert "<key>StartCalendarInterval</key>" in plist
 
     def test_build_plist_no_catch_up_omits_run_at_load(self, scheduler, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
