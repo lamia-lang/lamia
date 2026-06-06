@@ -13,6 +13,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Set, Any, Optional
 from .hybrid_syntax_parser import HybridSyntaxParser
+from lamia.hooks.runner import HookRunner
+from lamia.hooks.discovery import _extract_hooks_from_source
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +31,14 @@ EXCLUDED_DIRS: Set[str] = {
 class LazyLoader:
     """Handles lazy loading of .lm files when functions are not found."""
 
-    def __init__(self, lamia_instance=None, search_directory=None):
+    def __init__(self, lamia_instance=None, search_directory=None, hook_runner: Optional[HookRunner] = None):
         self.lamia = lamia_instance
         self.search_directory = search_directory or "."
         self.loaded_lm_files: Set[str] = set()
         self.function_registry: Dict[str, str] = {}
         self.scanned_directories: Set[str] = set()
         self._parser = HybridSyntaxParser() if lamia_instance else None
+        self._hook_runner = hook_runner
 
     def scan_directory_for_functions(self, directory: str, recursive: bool = True) -> None:
         """Scan *directory* for .lm files and catalog their functions/classes."""
@@ -56,7 +59,7 @@ class LazyLoader:
             self._catalog_lm_file(lm_file)
 
     def _catalog_lm_file(self, lm_file: Path) -> None:
-        """Catalog functions and classes in a .lm file."""
+        """Catalog functions and classes in a .lm file. Also registers hooks."""
         try:
             resolved_path = lm_file.resolve()
 
@@ -81,6 +84,11 @@ class LazyLoader:
                                 self.function_registry[n.name] = str(resolved_path)
                 except SyntaxError:
                     pass
+
+            # Discover and register hooks from this file
+            if self._hook_runner:
+                for hook in _extract_hooks_from_source(content, str(resolved_path)):
+                    self._hook_runner.register(hook)
 
         except Exception as e:
             logger.warning(f"Could not parse .lm file {lm_file}: {e}")
@@ -162,6 +170,9 @@ def create_lazy_loading_globals(lamia_instance, base_globals: Optional[Dict[str,
     Both the hybrid (``.lm``) and human (``.hu``) lazy loaders are wired
     in.  The hybrid loader scans first; then the human loader scans and
     checks for name collisions against the hybrid registry.
+
+    Hooks are discovered during the same scan and registered into the
+    engine's HookRunner (no separate discovery pass needed).
     """
     from .human_files_lazy_loader import HumanFilesLazyLoader
 
@@ -170,7 +181,13 @@ def create_lazy_loading_globals(lamia_instance, base_globals: Optional[Dict[str,
 
     search_dir = str(Path(file_path).parent) if file_path else "."
 
-    loader = LazyLoader(lamia_instance, search_dir)
+    hook_runner = lamia_instance._engine.hook_runner if lamia_instance else None
+    loader = LazyLoader(lamia_instance, search_dir, hook_runner=hook_runner)
+    if hook_runner is not None:
+        # Hooks must be available before the first LLM call; eager scan keeps
+        # hook registration on the same .lm scanner path as normal symbols.
+        loader.scan_directory_for_functions(search_dir, recursive=True)
+        loader.scanned_directories.add(str(Path(search_dir).expanduser().resolve()))
     hu_loader = HumanFilesLazyLoader(lamia_instance)
 
     class LazyGlobals(dict):

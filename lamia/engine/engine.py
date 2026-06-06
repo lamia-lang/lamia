@@ -12,6 +12,7 @@ from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.validation.encoding import EncodingValidatorWrapper
 from lamia.validation.validator_registry import ValidatorRegistry
 from lamia.types import BaseType
+from lamia.hooks.runner import HookRunner
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,9 @@ class LamiaEngine:
         
         # Initialize validation stats tracker for centralized coordination and statistics
         self.validation_manager = ValidationStatsTracker()
+
+        # HookRunner starts empty — hooks are registered by LazyLoader during project scan
+        self.hook_runner = HookRunner()
 
     async def execute(
         self,
@@ -70,6 +74,7 @@ class LamiaEngine:
             
             # Get the appropriate manager
             manager = self.manager_factory.get_manager(command.command_type)
+            manager.hook_runner = self.hook_runner
             
             # Execute validation directly
             validation_result = await manager.execute(command, validator)
@@ -101,4 +106,4 @@ class LamiaEngine:
         # - Adapters clean themselves up via the resource manager
         # - ValidationManager handles its own cleanup
         # - Factories handle their own cleanup
-        pass 
+        pass

@@ -14,6 +14,7 @@ from lamia.interpreter.commands import LLMCommand
 from .files_context_manager import get_active_files_context, get_current_source_file, resolve_standalone_file_references
 from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
 from lamia.validation.validators.object_validator import ObjectValidator
+from lamia.hooks import POST_LLM
 import logging
 
 logger = logging.getLogger(__name__)
@@ -350,6 +351,9 @@ class LLMManager(Manager):
             logger.info(f"[Lamia][Answer][Attempt {attempts}] Received response from model '{model.name}'")
             logger.debug(f"Response: {response.text}")
             
+            # Apply post_llm hooks before validation (context already set by facade)
+            response_text = self.hook_runner.apply_transform(POST_LLM, response.text)
+
             # Validate the response
             if validator is not None:
                 # Create execution context for tracking
@@ -360,7 +364,7 @@ class LLMManager(Manager):
                 )
                 
                 validation_result = await validator.validate(
-                    response.text, 
+                    response_text,
                     execution_context=tracking_context
                 )
                 if validation_result.is_valid:
@@ -376,7 +380,7 @@ class LLMManager(Manager):
                 return ValidationResult(
                     is_valid=True,
                     raw_text=response.text,
-                    validated_text=response.text,
+                    validated_text=response_text,
                     execution_context=execution_context
                 )
             

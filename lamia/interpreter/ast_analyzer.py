@@ -194,6 +194,11 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
     from lamia.types import InputType, schedule
     execution_globals['InputType'] = InputType
     execution_globals['schedule'] = schedule
+    # Inject Hook type and event constants for hook definitions
+    from lamia.hooks import Hook, HookEvent, POST_LLM
+    execution_globals['Hook'] = Hook
+    execution_globals['HookEvent'] = HookEvent
+    execution_globals['post_llm'] = POST_LLM
     # Always inject pydantic and typing essentials for .hu model definitions
     execution_globals['BaseModel'] = BaseModel
     execution_globals['Field'] = Field

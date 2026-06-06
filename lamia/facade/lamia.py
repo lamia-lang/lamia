@@ -195,6 +195,10 @@ class Lamia:
         if _target_encoding:
             parsed_command.target_encoding = _target_encoding
 
+        self._engine.hook_runner.set_context(
+            return_type=return_type.__name__ if return_type else None,
+        )
+
         normalized_models = _normalize_models(models)
         if normalized_models is not None:
             self._engine.config_provider.override_model_chain_with(normalized_models)
