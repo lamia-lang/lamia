@@ -23,7 +23,7 @@ def _job_file(job_id: str) -> Path:
     return SCHEDULES_DIR / f"{job_id}.json"
 
 
-def save_job(job: ScheduleJob, lamia_bin: str) -> str:
+def save_job(job: ScheduleJob, lamia_bin: str, *, backend: str = "local") -> str:
     """Persist a job to the global registry. Returns the job ID."""
     _ensure_dir()
     path = _job_file(job.schedule_id)
@@ -42,6 +42,7 @@ def save_job(job: ScheduleJob, lamia_bin: str) -> str:
         "catch_up": job.catch_up,
         "project_root": str(job.project_root),
         "lamia_bin": lamia_bin,
+        "backend": backend,
     }
     if "last_run" in existing:
         data["last_run"] = existing["last_run"]

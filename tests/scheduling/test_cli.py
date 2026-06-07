@@ -54,6 +54,7 @@ class TestHandleAdd:
         args.every = "day"
         args.cron = None
         args.no_catch_up = False
+        args.remote = False
 
         _handle_add(args)
         mock_scheduler.install.assert_called_once()
@@ -69,6 +70,7 @@ class TestHandleAdd:
         args.every = None
         args.cron = "30 14 * * *"
         args.no_catch_up = False
+        args.remote = False
 
         _handle_add(args)
         mock_scheduler.install.assert_called_once()
@@ -155,7 +157,7 @@ class TestHandleUpdate:
             "catch_up": True,
             "project_root": "/home/user/proj",
         })
-        monkeypatch.setattr("lamia.scheduling.cli.save_job", lambda *a: "abc123")
+        monkeypatch.setattr("lamia.scheduling.cli.save_job", lambda *a, **kw: "abc123")
 
         args = MagicMock()
         args.id = "abc123"

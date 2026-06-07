@@ -46,6 +46,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+"lamia-cloud" = [
+    "lamia-cloud>=0.1.0",
+]
+cloud = [
+    "lamia-cloud>=0.1.0",
+]
 dev = [
     "pytest>=7.0.0",
     "black>=22.0.0",

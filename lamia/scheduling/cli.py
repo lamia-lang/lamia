@@ -2,16 +2,14 @@
 
 Usage:
     lamia schedule add <script.lm> --every day
-    lamia schedule add <script.lm> --every hour
-    lamia schedule add <script.lm> --every weekday
-    lamia schedule add <script.lm> --every week
-    lamia schedule add <script.lm> --every on-wake
+    lamia schedule add <script.lm> --every day --remote
     lamia schedule add <script.lm> --cron "0 9 * * *"
     lamia schedule list
     lamia schedule update <id> --every day
     lamia schedule remove <id>
 
-All times are interpreted as local machine time.
+Local schedules use OS scheduler (launchd/systemd/schtasks).
+Remote schedules use lamia-cloud (pip install "lamia-lang[cloud]").
 """
 
 import argparse
@@ -19,7 +17,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from .base import ScheduleJob, generate_schedule_id
+from .base import BaseScheduler, ScheduleJob, generate_schedule_id
 from .local import LocalScheduler
 from .registry import save_job, remove_job, list_jobs, load_job, find_job_by_script
 
@@ -82,6 +80,38 @@ def _find_lamia_bin() -> str:
     return f"{sys.executable} -m lamia"
 
 
+def _get_cloud_scheduler(project_root: Path) -> BaseScheduler:
+    """Load the cloud scheduler from the lamia-cloud package.
+
+    The lamia-cloud package is responsible for reading config.yaml,
+    selecting the provider, and returning a configured BaseScheduler instance.
+    """
+    try:
+        from lamia_cloud import get_scheduler
+    except ImportError:
+        print(
+            "Error: cloud scheduling requires the lamia-cloud package.\n"
+            "Install with: pip install \"lamia-lang[cloud]\"\n"
+            "See: https://lamia-lang.github.io/lamia/advanced/lamia-cloud/",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    try:
+        return get_scheduler(project_root)
+    except Exception as e:
+        print(f"Error: cloud scheduler configuration failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _scheduler_for_job(job_data: dict, project_root: Path) -> BaseScheduler:
+    """Return the appropriate scheduler based on job backend metadata."""
+    backend = job_data.get("backend", "local")
+    if backend == "cloud":
+        return _get_cloud_scheduler(Path(project_root))
+    return LocalScheduler()
+
+
 def _handle_add(args: argparse.Namespace) -> None:
     script = args.script
     script_path = Path(script).resolve()
@@ -109,11 +139,19 @@ def _handle_add(args: argparse.Namespace) -> None:
     )
 
     lamia_bin = _find_lamia_bin()
-    scheduler = LocalScheduler()
+    remote = getattr(args, "remote", False)
+    backend = "cloud" if remote else "local"
+
+    if remote:
+        scheduler = _get_cloud_scheduler(project_root)
+        job.catch_up = False
+    else:
+        scheduler = LocalScheduler()
 
     existing = find_job_by_script(relative_script, str(project_root))
     if existing:
-        scheduler.uninstall(ScheduleJob(
+        old_scheduler = _scheduler_for_job(existing, project_root)
+        old_scheduler.uninstall(ScheduleJob(
             script=existing["script"],
             cron=existing["cron"],
             schedule_id=existing["id"],
@@ -121,10 +159,11 @@ def _handle_add(args: argparse.Namespace) -> None:
         ))
 
     scheduler.install(job, lamia_bin)
-    job_id = save_job(job, lamia_bin)
+    job_id = save_job(job, lamia_bin, backend=backend)
 
     schedule_desc = args.every if args.every else cron
     print(f"Scheduled: {relative_script}")
+    print(f"  backend:   {backend}")
     print(f"  frequency: {schedule_desc}")
     if cron != "@reboot":
         print(f"  cron:      {cron}")
@@ -139,7 +178,9 @@ def _handle_list(args: argparse.Namespace) -> None:
         return
 
     for job in jobs:
+        backend = job.get("backend", "local")
         print(f"  [{job['id']}] {job['script']}")
+        print(f"    backend: {backend}")
         cron_val = job['cron']
         friendly = _cron_to_friendly(cron_val)
         print(f"    schedule: {friendly}  catch_up: {job.get('catch_up', True)}")
@@ -182,7 +223,7 @@ def _handle_remove(args: argparse.Namespace) -> None:
         project_root=Path(job_data["project_root"]),
     )
 
-    scheduler = LocalScheduler()
+    scheduler = _scheduler_for_job(job_data, Path(job_data["project_root"]))
     scheduler.uninstall(job)
     remove_job(job_id)
     print(f"Removed schedule: {job_data['script']} [{job_id}]")
@@ -221,15 +262,17 @@ def _handle_update(args: argparse.Namespace) -> None:
         project_root=Path(job_data["project_root"]),
     )
 
-    scheduler = LocalScheduler()
+    backend = job_data.get("backend", "local")
+    scheduler = _scheduler_for_job(job_data, Path(job_data["project_root"]))
     lamia_bin = _find_lamia_bin()
 
     scheduler.uninstall(old_job)
     scheduler.install(updated_job, lamia_bin)
-    save_job(updated_job, lamia_bin)
+    save_job(updated_job, lamia_bin, backend=backend)
 
     schedule_desc = args.every if args.every else cron
     print(f"Updated schedule: {updated_job.script} [{job_id}]")
+    print(f"  backend:   {backend}")
     print(f"  frequency: {schedule_desc}")
     if cron != "@reboot":
         print(f"  cron:      {cron}")
@@ -276,6 +319,11 @@ def handle_schedule() -> None:
         "--no-catch-up",
         action="store_true",
         help="Skip missed runs when machine wakes (default: catch up)",
+    )
+    add_parser.add_argument(
+        "--remote",
+        action="store_true",
+        help="Use cloud scheduler instead of local OS scheduler. Requires lamia cloud extra.",
     )
 
     subparsers.add_parser("list", help="List all scheduled jobs")

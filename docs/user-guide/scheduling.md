@@ -199,8 +199,21 @@ Recommended practices:
 
 5. **Test manually first** — run `lamia --file your_script.lm` by hand before scheduling. If it works interactively, it will work on schedule.
 
+## Cloud Scheduling
+
+For always-on schedules that don't depend on your local machine being awake, use cloud scheduling with the `--remote` flag:
+
+```bash
+lamia schedule add daily_task.lm --every day --remote
+```
+
+Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (`list`, `update`, `remove`) automatically detect whether a job is local or cloud.
+
+Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package. See the [lamia-cloud setup guide](../advanced/lamia-cloud.md) for installation and configuration.
+
 ## Troubleshooting
 
 - **Script not found**: If you moved the project after scheduling, the job will fail. Use `lamia schedule list` to see the stale path, then `remove` and `add` with the new location.
 - **Check logs**: Use `lamia schedule list` to get the job id, then inspect `~/.lamia/logs/schedules/<id>/schedule.log`.
 - **Force fresh login**: If a web automation script's session expired, delete `.lamia_sessions/` and run the script manually once to re-authenticate before the next scheduled run.
+- **Cloud: "requires lamia-cloud"**: Run `pip install "lamia-lang[cloud]"`. See [lamia-cloud docs](../advanced/lamia-cloud.md).
