@@ -1124,3 +1124,76 @@ class SeleniumAdapter(BaseBrowserAdapter):
             logger.error(f"JavaScript execution failed: {e}")
             raise
 
+    async def get_accessibility_tree(self, depth: Optional[int] = None) -> str:
+        """Get AXTree using Chrome DevTools Protocol.
+
+        Uses Accessibility.getFullAXTree via CDP, then formats the flat
+        node array into an indented YAML-like representation.
+        """
+        if not self.initialized:
+            raise RuntimeError("SeleniumAdapter not initialized")
+
+        try:
+            self.driver.execute_cdp_cmd("Accessibility.enable", {})
+            params: Dict[str, Any] = {}
+            if depth is not None:
+                params["depth"] = depth
+            result = self.driver.execute_cdp_cmd("Accessibility.getFullAXTree", params)
+            nodes = result.get("nodes", [])
+            return self._format_ax_nodes(nodes)
+        except Exception as e:
+            logger.warning(f"SeleniumAdapter: CDP AXTree failed ({e}), falling back to page source")
+            source = self.driver.page_source
+            if len(source) > 80_000:
+                source = source[:80_000] + "\n<!-- truncated -->"
+            return source
+
+    def _format_ax_nodes(self, nodes: list) -> str:
+        """Convert CDP flat AX node list to indented tree format."""
+        SKIP_ROLES = {"none", "generic", "InlineTextBox", "LineBreak", "ignored"}
+
+        node_map: Dict[str, Dict[str, Any]] = {}
+        root_ids: List[str] = []
+
+        for node in nodes:
+            node_id = node.get("nodeId", "")
+            role_data = node.get("role", {})
+            role = role_data.get("value", "unknown") if isinstance(role_data, dict) else str(role_data)
+            name_data = node.get("name", {})
+            name = name_data.get("value", "") if isinstance(name_data, dict) else str(name_data)
+            parent_id = node.get("parentId")
+            child_ids = node.get("childIds", [])
+
+            node_map[node_id] = {
+                "role": role,
+                "name": name,
+                "children": child_ids,
+                "parent": parent_id,
+            }
+
+            if not parent_id:
+                root_ids.append(node_id)
+
+        lines: List[str] = []
+
+        def render(nid: str, indent: int) -> None:
+            info = node_map.get(nid)
+            if not info:
+                return
+            if info["role"] in SKIP_ROLES and not info["name"]:
+                for child_id in info["children"]:
+                    render(child_id, indent)
+                return
+
+            prefix = "  " * indent + "- "
+            name_part = f' "{info["name"]}"' if info["name"] else ""
+            lines.append(f'{prefix}{info["role"]}{name_part} [ref={nid}]')
+
+            for child_id in info["children"]:
+                render(child_id, indent + 1)
+
+        for root_id in root_ids:
+            render(root_id, 0)
+
+        return "\n".join(lines)
+

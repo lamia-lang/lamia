@@ -205,3 +205,19 @@ class BaseBrowserAdapter(ABC):
     async def get_options(self, params: BrowserActionParams) -> List[str]:
         """Get available options from a select/dropdown element."""
         pass
+
+    @abstractmethod
+    async def get_accessibility_tree(self, depth: Optional[int] = None) -> str:
+        """Get the accessibility tree (AXTree) of the current page.
+
+        Returns a compact structured representation of interactive elements
+        with their roles, labels, and reference IDs. Much smaller than full
+        HTML and optimized for AI consumption.
+
+        Args:
+            depth: Maximum tree depth to return. None means no limit.
+
+        Returns:
+            String representation of the accessibility tree.
+        """
+        pass

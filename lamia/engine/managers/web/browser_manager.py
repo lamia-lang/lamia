@@ -122,6 +122,7 @@ class BrowserManager:
             WebActionType.IS_ENABLED: BrowserActionType.IS_ENABLED,
             WebActionType.IS_CHECKED: BrowserActionType.IS_CHECKED,
             WebActionType.UPLOAD_FILE: BrowserActionType.UPLOAD_FILE,
+            WebActionType.ACCESSIBILITY_TREE: BrowserActionType.ACCESSIBILITY_TREE,
         }
         
         browser_action_type = action_type_mapping.get(command.action)
@@ -372,6 +373,9 @@ class BrowserManager:
             return await adapter.get_attribute(action.params)
         elif action.action == BrowserActionType.UPLOAD_FILE:
             return await adapter.upload_file(action.params)
+        elif action.action == BrowserActionType.ACCESSIBILITY_TREE:
+            depth = int(action.params.timeout) if action.params.timeout else None
+            return await adapter.get_accessibility_tree(depth=depth)
         elif action.action == BrowserActionType.GET_ELEMENTS:
             # Get list of element handles from adapter
             element_handles = await adapter.get_elements(action.params)

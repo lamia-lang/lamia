@@ -948,4 +948,29 @@ class PlaywrightAdapter(BaseBrowserAdapter):
             logger.error(f"JavaScript execution failed: {e}")
             raise
 
+    async def get_accessibility_tree(self, depth: Optional[int] = None) -> str:
+        """Get AXTree using Playwright's aria_snapshot API (v1.59+).
+
+        Uses mode="ai" for output optimized for AI consumption with
+        element references like [ref=eN].
+        """
+        if not self.initialized:
+            raise RuntimeError("PlaywrightAdapter not initialized")
+
+        kwargs: dict[str, Any] = {"mode": "ai"}
+        if depth is not None:
+            kwargs["depth"] = depth
+
+        try:
+            return await self.page.aria_snapshot(**kwargs)
+        except AttributeError:
+            logger.warning(
+                "PlaywrightAdapter: page.aria_snapshot() not available. "
+                "Requires Playwright >= 1.59. Falling back to page source truncation."
+            )
+            source = await self.page.content()
+            if len(source) > 80_000:
+                source = source[:80_000] + "\n<!-- truncated -->"
+            return source
+
 

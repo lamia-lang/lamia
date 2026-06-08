@@ -46,6 +46,7 @@ class ToolName(str, enum.Enum):
     BROWSER_GET_TEXT = "browser_get_text"
     BROWSER_SCREENSHOT = "browser_screenshot"
     BROWSER_WAIT = "browser_wait"
+    BROWSER_GET_ACCESSIBILITY_TREE = "get_accessibility_tree"
     LINT_CODE = "lint_code"
 
 
@@ -80,6 +81,7 @@ TOOL_LABELS: dict[str, tuple[str, str]] = {
     ToolName.BROWSER_GET_TEXT:   ("Reading page text",   "selector"),
     ToolName.BROWSER_SCREENSHOT: ("Taking screenshot",   ""),
     ToolName.BROWSER_WAIT:       ("Waiting for",         "selector"),
+    ToolName.BROWSER_GET_ACCESSIBILITY_TREE: ("Investigating page structure", ""),
     ToolName.LINT_CODE:          ("Linting code",        "file_type"),
 }
 
@@ -121,6 +123,8 @@ TOPIC_TO_FILE = {
     "scheduling": "user-guide/scheduling.md",
     "schedule": "user-guide/scheduling.md",
     "cron": "user-guide/scheduling.md",
+    "cloud": "advanced/lamia-cloud.md",
+    "lamia-cloud": "advanced/lamia-cloud.md",
 }
 
 _DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))
@@ -468,6 +472,24 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": ToolName.BROWSER_GET_ACCESSIBILITY_TREE.value,
+        "description": (
+            "Get the accessibility tree (AXTree) of the current page. "
+            "Returns a compact structured view of all interactive elements with their roles "
+            "and labels. Use this to discover page structure and selectors for automation scripts. "
+            "Much smaller than full HTML. Call browser_navigate first to load the page."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "depth": {
+                    "type": "integer",
+                    "description": "Max tree depth (default: no limit). Use 3-5 for large pages.",
+                },
+            },
+        },
+    },
+    {
         "name": ToolName.LINT_CODE.value,
         "description": (
             "Lint Lamia code without writing to disk. Use this to validate "
@@ -574,7 +596,7 @@ def _execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
         result = lint_code(args.get("content", ""), args.get("file_type", ""), cwd)
         import json as _json
         return _json.dumps(result, ensure_ascii=False)
-    elif name.startswith("browser_"):
+    elif name.startswith("browser_") or name == ToolName.BROWSER_GET_ACCESSIBILITY_TREE:
         return _browser_tool(name, args, cwd, lamia)
     else:
         return f"Unknown tool: {name}"
@@ -1411,6 +1433,18 @@ def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
         if isinstance(result, str) and result.startswith("Browser error"):
             return result
         return f"Element found: {selector}"
+
+    elif name == ToolName.BROWSER_GET_ACCESSIBILITY_TREE:
+        depth = args.get("depth")
+        timeout_val = float(depth) if depth else None
+        result = _run_web(
+            WebCommand(action=WebActionType.ACCESSIBILITY_TREE, timeout=timeout_val),
+            lamia
+        )
+        if isinstance(result, str) and result.startswith("Browser error"):
+            return result
+        text = str(result) if result else "(empty page)"
+        return text
 
     return f"Unknown browser tool: {name}"
 

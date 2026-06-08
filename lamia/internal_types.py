@@ -26,6 +26,7 @@ class BrowserActionType(str, Enum):
     IS_ENABLED = "is_enabled"
     IS_CHECKED = "is_checked"  # Check if checkbox/radio is checked
     UPLOAD_FILE = "upload_file"
+    ACCESSIBILITY_TREE = "accessibility_tree"
 
 
 class HttpActionType(str, Enum):

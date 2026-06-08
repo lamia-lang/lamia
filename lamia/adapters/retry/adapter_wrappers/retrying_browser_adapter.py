@@ -100,3 +100,6 @@ class RetryingBrowserAdapter(BaseBrowserAdapter):
 
     async def get_options(self, params: BrowserActionParams) -> List[str]:
         return await self.retry_handler.execute(self.adapter.get_options, params)
+
+    async def get_accessibility_tree(self, depth: Optional[int] = None) -> str:
+        return await self.retry_handler.execute(self.adapter.get_accessibility_tree, depth)

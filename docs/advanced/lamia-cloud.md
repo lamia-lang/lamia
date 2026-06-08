@@ -1,23 +1,11 @@
 # lamia-cloud
 
-Cloud scheduling and cloud-triggered execution for Lamia scripts. Currently supports GCP (Google Cloud Platform).
+Cloud scheduling for Lamia scripts. Scripts run entirely in the cloud — no local machine needed. Currently supports GCP.
 
 ## Installation
 
 ```bash
 pip install "lamia-lang[cloud]"
-```
-
-To always have the latest version (e.g. during development):
-
-```bash
-pip install --upgrade "lamia-lang[cloud]"
-```
-
-Or install directly from git for the bleeding-edge version:
-
-```bash
-pip install git+https://github.com/lamia-lang/lamia-cloud.git
 ```
 
 ## Configuration
@@ -29,15 +17,13 @@ cloud:
   provider: gcp
   project_id: my-gcp-project
   location: us-central1
-  target_url: https://my-cloud-run-service.run.app/schedule
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `provider` | yes | Cloud provider (`gcp`) |
 | `project_id` | yes | Your GCP project ID |
-| `location` | yes | Cloud Scheduler region (e.g. `us-central1`) |
-| `target_url` | yes | HTTP endpoint that receives schedule triggers and runs the script |
+| `location` | yes | Region for scheduling and execution (e.g. `us-central1`) |
 
 ## Authentication
 
@@ -47,45 +33,61 @@ lamia-cloud uses Application Default Credentials. Authenticate once:
 gcloud auth application-default login
 ```
 
-For production (Cloud Run, GKE, etc.), the service account attached to the compute environment is used automatically — no manual auth needed.
+For CI/CD environments, use a service account with the following roles:
+- `roles/cloudfunctions.developer`
+- `roles/cloudscheduler.admin`
+- `roles/iam.serviceAccountUser`
 
 ## Usage
-
-Once installed and configured, use the standard lamia CLI with `--remote`:
 
 ```bash
 lamia schedule add daily_task.lm --every day --remote
 ```
 
-All other schedule commands work transparently:
+That's it. lamia-cloud handles the full deployment:
+1. Packages your `.lm` script and its project directory
+2. Deploys a Cloud Function with the lamia runtime
+3. Creates a Cloud Scheduler job that triggers the function on your cron schedule
+
+All other commands work transparently:
 
 ```bash
 lamia schedule list          # shows both local and cloud jobs
 lamia schedule update <id> --cron "0 12 * * *"
-lamia schedule remove <id>   # removes the cloud scheduler job
+lamia schedule remove <id>   # tears down the cloud function + scheduler job
 ```
 
 ## How It Works
 
-1. `lamia schedule add --remote` delegates to `lamia-cloud` which creates a Cloud Scheduler job
-2. Cloud Scheduler POSTs to your `target_url` on the configured cron schedule
-3. The POST body contains `{"schedule_id": "...", "script": "...", "project_root": "..."}`
-4. Your Cloud Run service receives the request and executes the `.lm` script with lamia
-5. `lamia schedule list` shows cloud jobs alongside local jobs, with backend indicated
+1. `lamia schedule add --remote` packages your script into a Cloud Function deployment
+2. The function includes the `lamia` runtime — your script runs identically to local execution
+3. Cloud Scheduler triggers the function on the configured cron
+4. Logs (stdout/stderr) go to Cloud Logging under the function's log stream
+5. Exit status is reported back to the local lamia registry so `lamia schedule list` shows it
+
+## Logs
+
+View execution logs:
+
+```bash
+lamia schedule logs <id>
+```
+
+Or directly in GCP Console under Cloud Functions > lamia-schedule-<id> > Logs.
 
 ## API Enablement
 
-lamia-cloud automatically enables the Cloud Scheduler API on first use if your credentials have sufficient permissions. If auto-enablement fails, enable it manually:
+lamia-cloud automatically enables the required APIs (`cloudfunctions`, `cloudscheduler`, `cloudbuild`) on first use if your credentials have sufficient permissions. If auto-enablement fails:
 
 ```bash
-gcloud services enable cloudscheduler.googleapis.com --project=my-gcp-project
+gcloud services enable cloudfunctions.googleapis.com cloudscheduler.googleapis.com cloudbuild.googleapis.com --project=my-gcp-project
 ```
 
 ## Limitations
 
 - Cloud schedules ignore the `catch_up` flag (Cloud Scheduler guarantees execution)
-- `@reboot` / `on-wake` presets fall back to hourly in cloud mode
-- Requires a running Cloud Run (or equivalent) service to execute the scripts
+- `@reboot` / `on-wake` presets are not supported in cloud mode
+- Scripts using browser automation (Selenium) require additional configuration for headless Chrome in the cloud environment
 - Only GCP is supported currently; additional providers may be added in future versions
 
 ## Releasing New Versions

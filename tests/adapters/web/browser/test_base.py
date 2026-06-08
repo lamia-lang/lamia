@@ -142,6 +142,9 @@ class MockBrowserAdapter(BaseBrowserAdapter):
     async def is_checked(self, params: BrowserActionParams) -> bool:
         return False
 
+    async def get_accessibility_tree(self, depth=None) -> str:
+        return "- document \"Test Page\""
+
 
 @pytest.mark.asyncio
 class TestBaseBrowserAdapterImplementation:
