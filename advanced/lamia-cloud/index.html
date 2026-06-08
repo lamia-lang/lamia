@@ -1368,6 +1368,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#api-enablement" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1429,23 +1440,16 @@
 
 
 <h1 id="lamia-cloud">lamia-cloud<a class="headerlink" href="#lamia-cloud" title="Permanent link">&para;</a></h1>
-<p>Cloud scheduling and cloud-triggered execution for Lamia scripts. Currently supports GCP (Google Cloud Platform).</p>
+<p>Cloud scheduling for Lamia scripts. Scripts run entirely in the cloud — no local machine needed. Currently supports GCP.</p>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;lamia-lang[cloud]&quot;</span>
 </span></code></pre></div>
-<p>To always have the latest version (e.g. during development):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span><span class="s2">&quot;lamia-lang[cloud]&quot;</span>
-</span></code></pre></div>
-<p>Or install directly from git for the bleeding-edge version:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>git+https://github.com/lamia-lang/lamia-cloud.git
-</span></code></pre></div>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p>Add a <code>cloud</code> section to your project's <code>config.yaml</code>:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">cloud</span><span class="p">:</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gcp</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">project_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-gcp-project</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">location</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">us-central1</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">target_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://my-cloud-run-service.run.app/schedule</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">cloud</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gcp</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">project_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-gcp-project</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">location</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">us-central1</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -1469,52 +1473,58 @@
 <tr>
 <td><code>location</code></td>
 <td>yes</td>
-<td>Cloud Scheduler region (e.g. <code>us-central1</code>)</td>
-</tr>
-<tr>
-<td><code>target_url</code></td>
-<td>yes</td>
-<td>HTTP endpoint that receives schedule triggers and runs the script</td>
+<td>Region for scheduling and execution (e.g. <code>us-central1</code>)</td>
 </tr>
 </tbody>
 </table>
 <h2 id="authentication">Authentication<a class="headerlink" href="#authentication" title="Permanent link">&para;</a></h2>
 <p>lamia-cloud uses Application Default Credentials. Authenticate once:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>gcloud<span class="w"> </span>auth<span class="w"> </span>application-default<span class="w"> </span>login
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>gcloud<span class="w"> </span>auth<span class="w"> </span>application-default<span class="w"> </span>login
 </span></code></pre></div>
-<p>For production (Cloud Run, GKE, etc.), the service account attached to the compute environment is used automatically — no manual auth needed.</p>
+<p>For CI/CD environments, use a service account with the following roles:
+- <code>roles/cloudfunctions.developer</code>
+- <code>roles/cloudscheduler.admin</code>
+- <code>roles/iam.serviceAccountUser</code></p>
 <h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
-<p>Once installed and configured, use the standard lamia CLI with <code>--remote</code>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>day<span class="w"> </span>--remote
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>day<span class="w"> </span>--remote
 </span></code></pre></div>
-<p>All other schedule commands work transparently:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>list<span class="w">          </span><span class="c1"># shows both local and cloud jobs</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>update<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--cron<span class="w"> </span><span class="s2">&quot;0 12 * * *&quot;</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>remove<span class="w"> </span>&lt;id&gt;<span class="w">   </span><span class="c1"># removes the cloud scheduler job</span>
+<p>That's it. lamia-cloud handles the full deployment:
+1. Packages your <code>.lm</code> script and its project directory
+2. Deploys a Cloud Function with the lamia runtime
+3. Creates a Cloud Scheduler job that triggers the function on your cron schedule</p>
+<p>All other commands work transparently:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>list<span class="w">          </span><span class="c1"># shows both local and cloud jobs</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>update<span class="w"> </span>&lt;id&gt;<span class="w"> </span>--cron<span class="w"> </span><span class="s2">&quot;0 12 * * *&quot;</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>remove<span class="w"> </span>&lt;id&gt;<span class="w">   </span><span class="c1"># tears down the cloud function + scheduler job</span>
 </span></code></pre></div>
 <h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
 <ol>
-<li><code>lamia schedule add --remote</code> delegates to <code>lamia-cloud</code> which creates a Cloud Scheduler job</li>
-<li>Cloud Scheduler POSTs to your <code>target_url</code> on the configured cron schedule</li>
-<li>The POST body contains <code>{"schedule_id": "...", "script": "...", "project_root": "..."}</code></li>
-<li>Your Cloud Run service receives the request and executes the <code>.lm</code> script with lamia</li>
-<li><code>lamia schedule list</code> shows cloud jobs alongside local jobs, with backend indicated</li>
+<li><code>lamia schedule add --remote</code> packages your script into a Cloud Function deployment</li>
+<li>The function includes the <code>lamia</code> runtime — your script runs identically to local execution</li>
+<li>Cloud Scheduler triggers the function on the configured cron</li>
+<li>Logs (stdout/stderr) go to Cloud Logging under the function's log stream</li>
+<li>Exit status is reported back to the local lamia registry so <code>lamia schedule list</code> shows it</li>
 </ol>
+<h2 id="logs">Logs<a class="headerlink" href="#logs" title="Permanent link">&para;</a></h2>
+<p>View execution logs:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>logs<span class="w"> </span>&lt;id&gt;
+</span></code></pre></div>
+<p>Or directly in GCP Console under Cloud Functions &gt; lamia-schedule-<id> &gt; Logs.</p>
 <h2 id="api-enablement">API Enablement<a class="headerlink" href="#api-enablement" title="Permanent link">&para;</a></h2>
-<p>lamia-cloud automatically enables the Cloud Scheduler API on first use if your credentials have sufficient permissions. If auto-enablement fails, enable it manually:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>gcloud<span class="w"> </span>services<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>cloudscheduler.googleapis.com<span class="w"> </span>--project<span class="o">=</span>my-gcp-project
+<p>lamia-cloud automatically enables the required APIs (<code>cloudfunctions</code>, <code>cloudscheduler</code>, <code>cloudbuild</code>) on first use if your credentials have sufficient permissions. If auto-enablement fails:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>gcloud<span class="w"> </span>services<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>cloudfunctions.googleapis.com<span class="w"> </span>cloudscheduler.googleapis.com<span class="w"> </span>cloudbuild.googleapis.com<span class="w"> </span>--project<span class="o">=</span>my-gcp-project
 </span></code></pre></div>
 <h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Cloud schedules ignore the <code>catch_up</code> flag (Cloud Scheduler guarantees execution)</li>
-<li><code>@reboot</code> / <code>on-wake</code> presets fall back to hourly in cloud mode</li>
-<li>Requires a running Cloud Run (or equivalent) service to execute the scripts</li>
+<li><code>@reboot</code> / <code>on-wake</code> presets are not supported in cloud mode</li>
+<li>Scripts using browser automation (Selenium) require additional configuration for headless Chrome in the cloud environment</li>
 <li>Only GCP is supported currently; additional providers may be added in future versions</li>
 </ul>
 <h2 id="releasing-new-versions">Releasing New Versions<a class="headerlink" href="#releasing-new-versions" title="Permanent link">&para;</a></h2>
 <p>lamia-cloud uses git tags for versioning. To release:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.2.0
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.2.0
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.2.0
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.2.0
 </span></code></pre></div>
 <p>The CI pipeline automatically builds and publishes to PyPI on tagged pushes.</p>
 
