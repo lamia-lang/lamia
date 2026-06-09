@@ -542,6 +542,7 @@ WEB_METHOD_TRANSFORM_CASES = [
     ("is_visible", 'web.is_visible("#el")', "IS_VISIBLE", {"selector": "#el"}),
     ("is_enabled", 'web.is_enabled("#el")', "IS_ENABLED", {"selector": "#el"}),
     ("upload_file", 'web.upload_file("#file", "/path/to/file.txt")', "UPLOAD_FILE", {"selector": "#file", "value": "/path/to/file.txt"}),
+    ("get_accessibility_tree", 'web.get_accessibility_tree()', "ACCESSIBILITY_TREE", {}),
 ]
 
 

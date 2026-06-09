@@ -140,7 +140,8 @@ WEB_METHOD_TO_ACTION = {
     'screenshot': BrowserActionType.SCREENSHOT,
     'is_visible': BrowserActionType.IS_VISIBLE,
     'is_enabled': BrowserActionType.IS_ENABLED,
-    'upload_file': BrowserActionType.UPLOAD_FILE
+    'upload_file': BrowserActionType.UPLOAD_FILE,
+    'get_accessibility_tree': BrowserActionType.ACCESSIBILITY_TREE,
 }
 
 # Actions where the second argument is a value (not a fallback selector)
