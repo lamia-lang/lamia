@@ -20,11 +20,28 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _load_cloud_adapter() -> Optional[Type[BaseLLMAdapter]]:
+    """Try to load the cloud LLM adapter from lamia-cloud package.
+
+    Returns the adapter class if running in a cloud environment with
+    lamia-cloud installed, None otherwise.
+    """
+    try:
+        from lamia_cloud import is_on_cloud, CloudLLMAdapter
+        if is_on_cloud():
+            return CloudLLMAdapter
+    except ImportError:
+        pass
+    return None
+
+
 class LLMManager(Manager):
     """Manages LLM adapters and only loads the ones that are actually needed."""
     
     def __init__(self, config_provider: ConfigProvider):
         self.config_provider = config_provider
+        self._cloud_adapter_class = _load_cloud_adapter()
+
         # Determine which providers are needed based on config
         needed_providers = self._get_needed_providers() 
 
@@ -42,8 +59,11 @@ class LLMManager(Manager):
         self._adapter_cache = {}
         self._lamia_supported_providers_cache: Optional[Set[str]] = None
         
-        # Check that all required API keys are present
-        self._check_all_required_api_keys(needed_providers)
+        # On cloud, all LLM calls route through the cloud adapter — no API keys needed
+        if self._cloud_adapter_class is not None:
+            logger.info("Cloud environment detected — routing LLM calls through cloud adapter")
+        else:
+            self._check_all_required_api_keys(needed_providers)
 
     def _get_lamia_supported_providers(self) -> Set[str]:
         if self._lamia_supported_providers_cache is None:
@@ -177,9 +197,20 @@ class LLMManager(Manager):
             return self._adapter_cache[cache_key]
 
         provider_name = model.get_provider_name()
+
+        # On cloud, all calls go through the cloud adapter
+        if self._cloud_adapter_class is not None:
+            adapter = self._cloud_adapter_class()
+            await adapter.async_initialize()
+            if with_retries:
+                retry_config = self.config_provider.get_retry_config()
+                adapter_with_retries = RetriableAdapterFactory.create_llm_adapter(adapter, retry_config)
+                self._adapter_cache[cache_key] = adapter_with_retries
+                return adapter_with_retries
+            return adapter
+
         api_key, use_lamia_adapter = self._resolve_api_key(provider_name)
 
-        # Get the adapter class
         if use_lamia_adapter:
             from lamia.adapters.llm.lamia_adapter import LamiaAdapter
             adapter_class = LamiaAdapter
