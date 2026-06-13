@@ -1,4 +1,4 @@
-"""Tests for lamia.scheduling.local module."""
+"""Tests for lamia.scheduling.local_scheduler module."""
 
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from lamia.scheduling.base import ScheduleJob
-from lamia.scheduling.local import (
+from lamia.scheduling.local_scheduler import (
     LaunchdScheduler,
     LocalScheduler,
     SystemdScheduler,
@@ -206,17 +206,17 @@ class TestWindowsTaskScheduler:
 
 
 class TestLocalScheduler:
-    @patch("lamia.scheduling.local.platform.system", return_value="Darwin")
+    @patch("lamia.scheduling.local_scheduler.platform.system", return_value="Darwin")
     def test_macos_uses_launchd(self, mock_system):
         scheduler = LocalScheduler()
         assert isinstance(scheduler._backend, LaunchdScheduler)
 
-    @patch("lamia.scheduling.local.platform.system", return_value="Linux")
+    @patch("lamia.scheduling.local_scheduler.platform.system", return_value="Linux")
     def test_linux_uses_systemd(self, mock_system):
         scheduler = LocalScheduler()
         assert isinstance(scheduler._backend, SystemdScheduler)
 
-    @patch("lamia.scheduling.local.platform.system", return_value="Windows")
+    @patch("lamia.scheduling.local_scheduler.platform.system", return_value="Windows")
     def test_windows_uses_task_scheduler(self, mock_system):
         scheduler = LocalScheduler()
         assert isinstance(scheduler._backend, WindowsTaskScheduler)

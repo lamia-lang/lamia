@@ -18,7 +18,8 @@ import sys
 from pathlib import Path
 
 from .base import BaseScheduler, ScheduleJob, generate_schedule_id
-from .local import LocalScheduler
+from .cloud_scheduler import get_cloud_scheduler
+from .local_scheduler import LocalScheduler
 from .registry import save_job, remove_job, list_jobs, load_job, find_job_by_script
 
 EVERY_PRESETS = {
@@ -56,12 +57,6 @@ def _resolve_cron(args: argparse.Namespace) -> str:
         return EVERY_PRESETS[preset]
 
     if args.cron:
-        from .local import _parse_cron_fields
-        try:
-            _parse_cron_fields(args.cron)
-        except ValueError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
         return args.cron
 
     print("Error: provide exactly one of --every <preset> or --cron <expression>.", file=sys.stderr)
@@ -80,35 +75,11 @@ def _find_lamia_bin() -> str:
     return f"{sys.executable} -m lamia"
 
 
-def _get_cloud_scheduler(project_root: Path) -> BaseScheduler:
-    """Load the cloud scheduler from the lamia-cloud package.
-
-    The lamia-cloud package is responsible for reading config.yaml,
-    selecting the provider, and returning a configured BaseScheduler instance.
-    """
-    try:
-        from lamia_cloud import get_scheduler
-    except ImportError:
-        print(
-            "Error: cloud scheduling requires the lamia-cloud package.\n"
-            "Install with: pip install \"lamia-lang[cloud]\"\n"
-            "See: https://lamia-lang.github.io/lamia/advanced/lamia-cloud/",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    try:
-        return get_scheduler(project_root)
-    except Exception as e:
-        print(f"Error: cloud scheduler configuration failed: {e}", file=sys.stderr)
-        sys.exit(1)
-
-
 def _scheduler_for_job(job_data: dict, project_root: Path) -> BaseScheduler:
     """Return the appropriate scheduler based on job backend metadata."""
     backend = job_data.get("backend", "local")
     if backend == "cloud":
-        return _get_cloud_scheduler(Path(project_root))
+        return get_cloud_scheduler(Path(project_root))
     return LocalScheduler()
 
 
@@ -143,7 +114,7 @@ def _handle_add(args: argparse.Namespace) -> None:
     backend = "cloud" if remote else "local"
 
     if remote:
-        scheduler = _get_cloud_scheduler(project_root)
+        scheduler = get_cloud_scheduler(project_root)
         job.catch_up = False
     else:
         scheduler = LocalScheduler()
@@ -158,7 +129,11 @@ def _handle_add(args: argparse.Namespace) -> None:
             project_root=Path(existing["project_root"]),
         ))
 
-    scheduler.install(job, lamia_bin)
+    try:
+        scheduler.install(job, lamia_bin)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     job_id = save_job(job, lamia_bin, backend=backend)
 
     schedule_desc = args.every if args.every else cron
@@ -267,7 +242,11 @@ def _handle_update(args: argparse.Namespace) -> None:
     lamia_bin = _find_lamia_bin()
 
     scheduler.uninstall(old_job)
-    scheduler.install(updated_job, lamia_bin)
+    try:
+        scheduler.install(updated_job, lamia_bin)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     save_job(updated_job, lamia_bin, backend=backend)
 
     schedule_desc = args.every if args.every else cron
