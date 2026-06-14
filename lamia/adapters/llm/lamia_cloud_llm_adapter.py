@@ -1,7 +1,7 @@
 """Cloud LLM adapter — calls lamia-cloud's independent interface.
 
 Similar to OllamaAdapter calling the local ollama server, this adapter
-calls lamia-cloud's CloudService interface. lamia-cloud is treated as an
+calls lamia-cloud's CloudLLM interface. lamia-cloud is treated as an
 external plugin that knows nothing about lamia's internals.
 
 The adapter is activated when lamia-cloud is installed AND the environment
@@ -17,7 +17,7 @@ from lamia.adapters.llm.base import BaseLLMAdapter, LLMModel, LLMResponse, make_
 logger = logging.getLogger(__name__)
 
 try:
-    from lamia_cloud import get_cloud_service, is_on_cloud, CloudLLMRequest
+    from lamia_cloud import get_cloud_llm, is_on_cloud, CloudLLMRequest
     LAMIA_CLOUD_AVAILABLE = True
 except ImportError:
     LAMIA_CLOUD_AVAILABLE = False
@@ -31,7 +31,7 @@ def cloud_is_available() -> bool:
 
 
 class LamiaCloudLLMAdapter(BaseLLMAdapter):
-    """Adapter that routes LLM calls through lamia-cloud's CloudService.
+    """Adapter that routes LLM calls through lamia-cloud's CloudLLM.
 
     Translates between lamia's types (LLMModel, LLMResponse) and
     lamia-cloud's independent types (CloudLLMRequest, CloudLLMResponse).
@@ -54,13 +54,13 @@ class LamiaCloudLLMAdapter(BaseLLMAdapter):
         return True
 
     def __init__(self, api_key: str = ""):
-        self._service = get_cloud_service()
+        self._llm = get_cloud_llm()
 
     async def async_initialize(self) -> None:
         pass
 
     async def close(self) -> None:
-        await self._service.close()
+        await self._llm.close()
 
     async def generate(
         self,
@@ -83,7 +83,7 @@ class LamiaCloudLLMAdapter(BaseLLMAdapter):
             response_schema=schema,
         )
 
-        response = await self._service.generate(request)
+        response = await self._llm.generate(request)
 
         return LLMResponse(
             text=response.text,
