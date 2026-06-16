@@ -146,32 +146,97 @@ def _handle_add(args: argparse.Namespace) -> None:
     print(f"  id:        {job_id}")
 
 
+def _fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
+    """Fetch last execution statuses from Cloud Scheduler for all cloud jobs at once."""
+    results = {}
+    try:
+        from lamia.scheduling.cloud_scheduler import LAMIA_CLOUD_AVAILABLE
+        if not LAMIA_CLOUD_AVAILABLE:
+            return results
+        from lamia_cloud import get_scheduler, CloudScheduleJob
+        from pathlib import Path
+
+        by_project: dict[str, list[dict]] = {}
+        for job in cloud_jobs:
+            by_project.setdefault(job["project_root"], []).append(job)
+
+        for project_root, jobs in by_project.items():
+            try:
+                scheduler = get_scheduler(Path(project_root))
+                for job in jobs:
+                    config = scheduler.get_installed_config(
+                        CloudScheduleJob(
+                            script=job["script"],
+                            cron=job["cron"],
+                            schedule_id=job["id"],
+                            project_root=Path(project_root),
+                        )
+                    )
+                    if config and config.get("last_attempt_time"):
+                        state = config.get("state", "UNKNOWN")
+                        results[job["id"]] = {
+                            "timestamp": config["last_attempt_time"],
+                            "success": state == "ENABLED",
+                            "state": state,
+                        }
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return results
+
+
+def _print_job(job: dict, last_run: dict | None = None) -> None:
+    """Print a single job entry."""
+    backend = job.get("backend", "local")
+    print(f"  [{job['id']}] {job['script']}")
+    print(f"    backend: {backend}")
+    cron_val = job['cron']
+    friendly = _cron_to_friendly(cron_val)
+    print(f"    schedule: {friendly}  catch_up: {job.get('catch_up', True)}")
+    print(f"    path: {job['project_root']}")
+
+    if last_run is None:
+        last_run = job.get("last_run")
+
+    if last_run:
+        status_icon = "ok" if last_run.get("success") else "FAILED"
+        ts = last_run.get("timestamp", "unknown")
+        error_msg = last_run.get("error", "")
+        print(f"    last run: {ts}  status: {status_icon}")
+        if error_msg:
+            print(f"    error: {error_msg}")
+    else:
+        print(f"    last run: never")
+    print()
+
+
 def _handle_list(args: argparse.Namespace) -> None:
     jobs = list_jobs()
     if not jobs:
         print("No scheduled jobs.")
         return
 
-    for job in jobs:
-        backend = job.get("backend", "local")
-        print(f"  [{job['id']}] {job['script']}")
-        print(f"    backend: {backend}")
-        cron_val = job['cron']
-        friendly = _cron_to_friendly(cron_val)
-        print(f"    schedule: {friendly}  catch_up: {job.get('catch_up', True)}")
-        print(f"    path: {job['project_root']}")
+    cloud_jobs = [j for j in jobs if j.get("backend") == "cloud"]
+    local_jobs = [j for j in jobs if j.get("backend", "local") != "cloud"]
 
-        last_run = job.get("last_run")
-        if last_run:
-            status_icon = "ok" if last_run.get("success") else "FAILED"
-            ts = last_run.get("timestamp", "unknown")
-            error_msg = last_run.get("error", "")
-            print(f"    last run: {ts}  status: {status_icon}")
-            if error_msg:
-                print(f"    error: {error_msg}")
-        else:
-            print(f"    last run: never")
-        print()
+    for job in local_jobs:
+        _print_job(job)
+
+    if not cloud_jobs:
+        return
+
+    sys.stderr.write("  fetching cloud status...")
+    sys.stderr.flush()
+    cloud_statuses = _fetch_cloud_statuses(cloud_jobs)
+    sys.stderr.write("\r\033[K")
+    sys.stderr.flush()
+
+    if not cloud_statuses and cloud_jobs:
+        print("  (could not fetch cloud status)\n")
+
+    for job in cloud_jobs:
+        _print_job(job, last_run=cloud_statuses.get(job["id"]))
 
 
 def _cron_to_friendly(cron: str) -> str:
