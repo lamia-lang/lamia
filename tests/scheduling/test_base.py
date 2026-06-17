@@ -8,10 +8,14 @@ from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob, generat
 
 
 class TestGenerateScheduleId:
-    def test_produces_12_char_hex(self):
+    def test_produces_slug_with_hash_suffix(self):
         result = generate_schedule_id("script.lm", "/home/user/project")
-        assert len(result) == 12
-        assert all(c in "0123456789abcdef" for c in result)
+        assert result.startswith("script-")
+        assert len(result.split("-")[-1]) == 4
+
+    def test_descriptive_name(self):
+        result = generate_schedule_id("publish_pins.lm", "/home/user/project")
+        assert result.startswith("publish-pins-")
 
     def test_deterministic(self):
         a = generate_schedule_id("x.lm", "/p")
@@ -27,6 +31,17 @@ class TestGenerateScheduleId:
         a = generate_schedule_id("a.lm", "/p1")
         b = generate_schedule_id("a.lm", "/p2")
         assert a != b
+
+    def test_special_characters_sanitized(self):
+        result = generate_schedule_id("My Script (v2).lm", "/path")
+        assert " " not in result
+        assert "(" not in result
+        assert result.startswith("my-script-v2-")
+
+    def test_long_names_truncated(self):
+        long_name = "a" * 100 + ".lm"
+        result = generate_schedule_id(long_name, "/p")
+        assert len(result) <= 21
 
 
 class TestScheduleJob:

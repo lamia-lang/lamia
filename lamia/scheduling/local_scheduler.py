@@ -197,6 +197,18 @@ class LaunchdScheduler(BaseScheduler):
         )
         return JobStatus.ACTIVE if result.returncode == 0 else JobStatus.INACTIVE
 
+    def pause(self, job: ScheduleJob) -> None:
+        plist_path = self._plist_path(job)
+        if plist_path.exists():
+            subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
+            logger.info(f"Paused: {job.label}")
+
+    def resume(self, job: ScheduleJob) -> None:
+        plist_path = self._plist_path(job)
+        if plist_path.exists():
+            subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True)
+            logger.info(f"Resumed: {job.label}")
+
     def get_installed_config(self, job: ScheduleJob) -> Optional[dict]:
         meta_path = self._meta_path(job)
         if not meta_path.exists():
@@ -335,6 +347,22 @@ class SystemdScheduler(BaseScheduler):
         )
         return JobStatus.ACTIVE if result.stdout.strip() == "active" else JobStatus.INACTIVE
 
+    def pause(self, job: ScheduleJob) -> None:
+        svc_name = self._service_name(job)
+        subprocess.run(
+            ["systemctl", "--user", "stop", f"{svc_name}.timer"],
+            capture_output=True,
+        )
+        logger.info(f"Paused: {svc_name}.timer")
+
+    def resume(self, job: ScheduleJob) -> None:
+        svc_name = self._service_name(job)
+        subprocess.run(
+            ["systemctl", "--user", "start", f"{svc_name}.timer"],
+            capture_output=True,
+        )
+        logger.info(f"Resumed: {svc_name}.timer")
+
     def get_installed_config(self, job: ScheduleJob) -> Optional[dict]:
         meta_path = self._meta_path(job)
         if not meta_path.exists():
@@ -448,6 +476,22 @@ class WindowsTaskScheduler(BaseScheduler):
             return JobStatus.INACTIVE
         return JobStatus.ACTIVE
 
+    def pause(self, job: ScheduleJob) -> None:
+        task_name = self._task_name(job)
+        subprocess.run(
+            ["schtasks", "/Change", "/TN", task_name, "/DISABLE"],
+            capture_output=True,
+        )
+        logger.info(f"Paused: {task_name}")
+
+    def resume(self, job: ScheduleJob) -> None:
+        task_name = self._task_name(job)
+        subprocess.run(
+            ["schtasks", "/Change", "/TN", task_name, "/ENABLE"],
+            capture_output=True,
+        )
+        logger.info(f"Resumed: {task_name}")
+
     def get_installed_config(self, job: ScheduleJob) -> Optional[dict]:
         meta_path = self._meta_path(job)
         if not meta_path.exists():
@@ -500,3 +544,9 @@ class LocalScheduler(BaseScheduler):
 
     def get_installed_config(self, job: ScheduleJob) -> Optional[dict]:
         return self._backend.get_installed_config(job)
+
+    def pause(self, job: ScheduleJob) -> None:
+        self._backend.pause(job)
+
+    def resume(self, job: ScheduleJob) -> None:
+        self._backend.resume(job)

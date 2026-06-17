@@ -102,14 +102,15 @@ The router stores its OAuth tokens in .oauth-tokens.json relative to the
 working directory, so all commands below use ~ as a stable anchor.
 """
 
+import asyncio
 import logging
 from typing import Optional, Type
 
 import aiohttp
-from pydantic import BaseModel
 
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, make_strict_schema
+from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, raise_for_status, raise_for_connection_error
 from lamia import LLMModel
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,7 @@ DEFAULT_BASE_URL = "http://127.0.0.1:3000"
 
 
 class ClaudeMaxAdapter(BaseLLMAdapter):
-    """Adapter for anthropic-max-router using the native Anthropic endpoint."""
+    """Adapter for a local claude-max-api proxy (OpenAI-compatible, no streaming)."""
 
     @classmethod
     def name(cls) -> str:
@@ -130,10 +131,6 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
     @classmethod
     def is_remote(cls) -> bool:
         return False
-
-    @property
-    def supports_structured_output(self) -> bool:
-        return True
 
     def __init__(self, base_url: str = DEFAULT_BASE_URL):
         self.base_url = base_url.rstrip("/")
@@ -161,52 +158,46 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
         payload: dict = {
             "model": model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": model.max_tokens or 64000,
-            "temperature": model.temperature or 0.7,
+            "stream": False,
         }
 
+        if model.temperature is not None:
+            payload["temperature"] = model.temperature
+        if model.max_tokens is not None:
+            payload["max_tokens"] = model.max_tokens
         if model.top_p is not None:
             payload["top_p"] = model.top_p
-
         if response_model is not None:
-            payload["output_config"] = {
-                "format": {
-                    "type": "json_schema",
-                    "schema": make_strict_schema(response_model),
-                }
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "schema": response_model.model_json_schema(),
+                    "strict": True,
+                },
             }
 
-        url = f"{self.base_url}/v1/messages"
+        url = f"{self.base_url}/v1/chat/completions"
         logger.debug("Requesting %s with model=%s", url, model_name)
 
-        async with self.session.post(url, json=payload) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                raise RuntimeError(
-                    f"claude-max-api error (status {response.status}): {error_text}"
-                )
-
-            data = await response.json()
-
-        content = data.get("content", [])
-        text = ""
-        for block in content:
-            if block.get("type") == "text":
-                text = block["text"]
-                break
+        try:
+            async with self.session.post(url, json=payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise_for_status(response.status, error_text, "claude-max-api error")
+                data = await response.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            raise_for_connection_error(e, "claude-max-api connection error")
 
         usage_data = data.get("usage", {})
 
         return LLMResponse(
-            text=text,
+            text=data["choices"][0]["message"]["content"],
             raw_response=data,
             usage={
-                "input_tokens": usage_data.get("input_tokens", 0),
-                "output_tokens": usage_data.get("output_tokens", 0),
-                "total_tokens": (
-                    usage_data.get("input_tokens", 0)
-                    + usage_data.get("output_tokens", 0)
-                ),
+                "prompt_tokens": usage_data.get("prompt_tokens", 0),
+                "completion_tokens": usage_data.get("completion_tokens", 0),
+                "total_tokens": usage_data.get("total_tokens", 0),
             },
             model=model_name,
         )
@@ -215,8 +206,6 @@ class ClaudeMaxAdapter(BaseLLMAdapter):
         if self.session:
             await self.session.close()
             self.session = None
-
-
 ```
 
 ## Module Documentation

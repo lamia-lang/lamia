@@ -59,6 +59,12 @@ class CloudSchedulerBridge(BaseScheduler):
     def get_installed_config(self, job: ScheduleJob) -> Optional[dict]:
         return self._scheduler.get_installed_config(_to_cloud_job(job))
 
+    def pause(self, job: ScheduleJob) -> None:
+        self._scheduler.pause(_to_cloud_job(job))
+
+    def resume(self, job: ScheduleJob) -> None:
+        self._scheduler.resume(_to_cloud_job(job))
+
 
 def get_cloud_scheduler(project_root: Path) -> BaseScheduler:
     """Load the cloud scheduler from lamia-cloud and wrap it as BaseScheduler.

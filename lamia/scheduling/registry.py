@@ -4,6 +4,7 @@ Each scheduled job is persisted as a single JSON file (<id>.json) that holds
 both the job configuration and its last run status.
 """
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,9 +94,16 @@ def list_jobs() -> list[dict]:
 
 
 def find_job_by_script(script: str, project_root: str) -> Optional[dict]:
-    """Find an existing job by script + project_root combo."""
+    """Find an existing job by script + project_root combo.
+
+    Checks both the current ID format and legacy hash-based IDs.
+    """
     job_id = generate_schedule_id(script, project_root)
-    return load_job(job_id)
+    result = load_job(job_id)
+    if result:
+        return result
+    legacy_id = hashlib.sha256(f"{project_root}:{script}".encode()).hexdigest()[:12]
+    return load_job(legacy_id)
 
 
 def record_run(job_id: str, exit_code: int, error: str = "") -> None:
@@ -117,6 +125,20 @@ def record_run(job_id: str, exit_code: int, error: str = "") -> None:
         "error": error,
     }
     path.write_text(json.dumps(data, indent=2))
+
+
+def set_paused(job_id: str, paused: bool) -> bool:
+    """Set the paused flag on a job. Returns True if job exists."""
+    path = _job_file(job_id)
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return False
+    data["paused"] = paused
+    path.write_text(json.dumps(data, indent=2))
+    return True
 
 
 def get_last_run_status(job_id: str) -> Optional[dict]:

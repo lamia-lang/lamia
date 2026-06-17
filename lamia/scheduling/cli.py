@@ -20,7 +20,7 @@ from pathlib import Path
 from .base import BaseScheduler, ScheduleJob, generate_schedule_id
 from .cloud_scheduler import get_cloud_scheduler
 from .local_scheduler import LocalScheduler
-from .registry import save_job, remove_job, list_jobs, load_job, find_job_by_script
+from .registry import save_job, remove_job, list_jobs, load_job, find_job_by_script, set_paused
 
 EVERY_PRESETS = {
     "hour": "0 * * * *",
@@ -172,13 +172,17 @@ def _fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
                             project_root=Path(project_root),
                         )
                     )
-                    if config and config.get("last_attempt_time"):
+                    if config:
                         state = config.get("state", "UNKNOWN")
-                        results[job["id"]] = {
-                            "timestamp": config["last_attempt_time"],
-                            "success": state == "ENABLED",
-                            "state": state,
-                        }
+                        if state == "PAUSED":
+                            set_paused(job["id"], True)
+                        last_attempt = config.get("last_attempt_time")
+                        if last_attempt:
+                            results[job["id"]] = {
+                                "timestamp": last_attempt,
+                                "success": state == "ENABLED",
+                                "state": state,
+                            }
             except Exception:
                 pass
     except Exception:
@@ -189,7 +193,9 @@ def _fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
 def _print_job(job: dict, last_run: dict | None = None) -> None:
     """Print a single job entry."""
     backend = job.get("backend", "local")
-    print(f"  [{job['id']}] {job['script']}")
+    paused = job.get("paused", False)
+    status_label = " [PAUSED]" if paused else ""
+    print(f"  [{job['id']}] {job['script']}{status_label}")
     print(f"    backend: {backend}")
     cron_val = job['cron']
     friendly = _cron_to_friendly(cron_val)
@@ -231,9 +237,6 @@ def _handle_list(args: argparse.Namespace) -> None:
     cloud_statuses = _fetch_cloud_statuses(cloud_jobs)
     sys.stderr.write("\r\033[K")
     sys.stderr.flush()
-
-    if not cloud_statuses and cloud_jobs:
-        print("  (could not fetch cloud status)\n")
 
     for job in cloud_jobs:
         _print_job(job, last_run=cloud_statuses.get(job["id"]))
@@ -323,6 +326,58 @@ def _handle_update(args: argparse.Namespace) -> None:
     print(f"  catch_up:  {updated_job.catch_up}")
 
 
+def _handle_pause(args: argparse.Namespace) -> None:
+    job_id = args.id
+    job_data = load_job(job_id)
+
+    if not job_data:
+        print(f"Error: no schedule found with id '{job_id}'", file=sys.stderr)
+        sys.exit(1)
+
+    if job_data.get("paused"):
+        print(f"Already paused: {job_data['script']} [{job_id}]")
+        return
+
+    job = ScheduleJob(
+        script=job_data["script"],
+        cron=job_data["cron"],
+        schedule_id=job_id,
+        catch_up=job_data.get("catch_up", True),
+        project_root=Path(job_data["project_root"]),
+    )
+
+    scheduler = _scheduler_for_job(job_data, Path(job_data["project_root"]))
+    scheduler.pause(job)
+    set_paused(job_id, True)
+    print(f"Paused: {job_data['script']} [{job_id}]")
+
+
+def _handle_resume(args: argparse.Namespace) -> None:
+    job_id = args.id
+    job_data = load_job(job_id)
+
+    if not job_data:
+        print(f"Error: no schedule found with id '{job_id}'", file=sys.stderr)
+        sys.exit(1)
+
+    if not job_data.get("paused"):
+        print(f"Already active: {job_data['script']} [{job_id}]")
+        return
+
+    job = ScheduleJob(
+        script=job_data["script"],
+        cron=job_data["cron"],
+        schedule_id=job_id,
+        catch_up=job_data.get("catch_up", True),
+        project_root=Path(job_data["project_root"]),
+    )
+
+    scheduler = _scheduler_for_job(job_data, Path(job_data["project_root"]))
+    scheduler.resume(job)
+    set_paused(job_id, False)
+    print(f"Resumed: {job_data['script']} [{job_id}]")
+
+
 def handle_schedule() -> None:
     parser = argparse.ArgumentParser(
         description="Manage scheduled Lamia script execution",
@@ -375,6 +430,12 @@ def handle_schedule() -> None:
     remove_parser = subparsers.add_parser("remove", help="Remove a scheduled job")
     remove_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")
 
+    pause_parser = subparsers.add_parser("pause", help="Pause a scheduled job")
+    pause_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")
+
+    resume_parser = subparsers.add_parser("resume", help="Resume a paused job")
+    resume_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")
+
     update_parser = subparsers.add_parser(
         "update",
         help="Update an existing scheduled job in one command",
@@ -424,6 +485,10 @@ def handle_schedule() -> None:
         _handle_remove(args)
     elif args.action == "update":
         _handle_update(args)
+    elif args.action == "pause":
+        _handle_pause(args)
+    elif args.action == "resume":
+        _handle_resume(args)
     else:
         parser.print_help()
         sys.exit(1)

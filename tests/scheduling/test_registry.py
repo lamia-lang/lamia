@@ -29,10 +29,10 @@ def temp_schedules_dir(tmp_path, monkeypatch):
 
 
 class TestGenerateId:
-    def test_produces_12_char_hex(self):
+    def test_produces_descriptive_slug(self):
         result = generate_schedule_id("script.lm", "/home/user/project")
-        assert len(result) == 12
-        assert all(c in "0123456789abcdef" for c in result)
+        assert result.startswith("script-")
+        assert len(result.split("-")[-1]) == 4
 
     def test_deterministic(self):
         a = generate_schedule_id("x.lm", "/p")
