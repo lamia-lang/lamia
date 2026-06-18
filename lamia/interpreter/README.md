@@ -122,6 +122,10 @@ file.append("/var/log/app.log", "New log entry\n")
 # Check existence before reading
 if file.exists("config.json"):
     config = file.read("config.json")
+
+# Find multiple files by pattern
+for path in file.glob("./data/*.csv"):
+    content = file.read(path)
 ```
 
 #### File Write Syntax Reference

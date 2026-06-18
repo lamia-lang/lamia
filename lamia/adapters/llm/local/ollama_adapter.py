@@ -1,4 +1,5 @@
 from typing import Optional, Dict, Any, List, Type
+import asyncio
 import aiohttp
 import json
 import logging
@@ -9,7 +10,7 @@ import sys
 import weakref
 import atexit
 import threading
-from ..base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema
+from ..base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, raise_for_connection_error
 from lamia.errors import OllamaNotInstalledError
 from pydantic import BaseModel
 
@@ -238,8 +239,8 @@ class OllamaAdapter(BaseLLMAdapter):
                 model=model.name
             )
 
-        except aiohttp.ClientError as e:
-            raise ConnectionError(f"Failed to communicate with Ollama server: {str(e)}") from e
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ConnectionError) as e:
+            raise_for_connection_error(e, "Failed to communicate with Ollama server")
 
     def _is_ollama_running(self) -> bool:
         return self.is_ollama_running(base_url=self.base_url)

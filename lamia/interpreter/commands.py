@@ -39,6 +39,7 @@ class FileActionType(Enum):
     WRITE = "write"
     APPEND = "append"
     EXISTS = "exists"
+    GLOB = "glob"
 
 class Command(ABC):
     """Base class for all command objects."""

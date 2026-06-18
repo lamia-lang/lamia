@@ -4,7 +4,7 @@ import pytest
 import asyncio
 from datetime import datetime
 from unittest.mock import Mock, AsyncMock, patch
-from lamia.adapters.retry.retry_handler import RetryHandler, RetryStats
+from lamia.adapters.retry.retry_handler import RetryHandler, RetryStats, _is_network_error
 from lamia.adapters.retry.strategies import RetryStrategy
 from lamia.adapters.error_classifiers.categories import ErrorCategory
 from lamia.adapters.llm.base import BaseLLMAdapter
@@ -320,3 +320,146 @@ class TestRetryHandlerEdgeCases:
         )
         
         assert result == "success-test-param"
+
+
+class TestIsNetworkError:
+    """Test _is_network_error detection for common network failures."""
+
+    def test_connection_error(self):
+        assert _is_network_error(ConnectionError("Connection refused"))
+
+    def test_connection_reset_error(self):
+        assert _is_network_error(ConnectionResetError("Connection reset by peer"))
+
+    def test_timeout_error(self):
+        assert _is_network_error(TimeoutError("timed out"))
+
+    def test_broken_pipe(self):
+        err = OSError(32, "Broken pipe")
+        assert _is_network_error(err)
+
+    def test_connection_refused_oserror(self):
+        err = OSError(111, "Connection refused")
+        assert _is_network_error(err)
+
+    def test_macos_connection_reset(self):
+        err = OSError(54, "Connection reset by peer")
+        assert _is_network_error(err)
+
+    def test_server_disconnected_by_type_name(self):
+        class ServerDisconnectedError(Exception):
+            pass
+        assert _is_network_error(ServerDisconnectedError("Server disconnected"))
+
+    def test_message_pattern_disconnected(self):
+        assert _is_network_error(Exception("Server disconnected"))
+
+    def test_message_pattern_timeout(self):
+        assert _is_network_error(Exception("Request timed out"))
+
+    def test_message_pattern_connection_reset(self):
+        assert _is_network_error(Exception("Connection reset by peer"))
+
+    def test_message_pattern_eof(self):
+        assert _is_network_error(Exception("EOF occurred in violation of protocol"))
+
+    def test_programming_error_not_detected(self):
+        assert not _is_network_error(ValueError("bad value"))
+
+    def test_key_error_not_detected(self):
+        assert not _is_network_error(KeyError("missing_key"))
+
+    def test_type_error_not_detected(self):
+        assert not _is_network_error(TypeError("wrong type"))
+
+    def test_runtime_error_not_detected(self):
+        assert not _is_network_error(RuntimeError("some internal bug"))
+
+
+class TestRetryHandlerNetworkErrors:
+    """Test that network errors are wrapped and retried, not treated as programming bugs."""
+
+    def setup_method(self):
+        self.mock_adapter = MockLLMAdapter()
+        config = ExternalOperationRetryConfig(
+            max_attempts=3,
+            base_delay=0.01,
+            max_delay=0.1,
+            exponential_base=2.0,
+            max_total_duration=timedelta(seconds=10),
+        )
+        self.handler = RetryHandler(self.mock_adapter, config=config)
+
+    @pytest.mark.asyncio
+    async def test_server_disconnected_is_retried(self):
+        """ServerDisconnectedError should be wrapped as transient and retried."""
+        class ServerDisconnectedError(Exception):
+            pass
+
+        mock_op = AsyncMock(side_effect=[
+            ServerDisconnectedError("Server disconnected"),
+            "success",
+        ])
+
+        result = await self.handler.execute(mock_op)
+
+        assert result == "success"
+        assert mock_op.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_connection_reset_is_retried(self):
+        mock_op = AsyncMock(side_effect=[
+            ConnectionResetError("Connection reset by peer"),
+            "success",
+        ])
+
+        result = await self.handler.execute(mock_op)
+
+        assert result == "success"
+        assert mock_op.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_is_retried(self):
+        mock_op = AsyncMock(side_effect=[
+            TimeoutError("Request timed out"),
+            "success",
+        ])
+
+        result = await self.handler.execute(mock_op)
+
+        assert result == "success"
+        assert mock_op.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_broken_pipe_is_retried(self):
+        mock_op = AsyncMock(side_effect=[
+            OSError(32, "Broken pipe"),
+            "success",
+        ])
+
+        result = await self.handler.execute(mock_op)
+
+        assert result == "success"
+        assert mock_op.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_network_error_exhausts_retries(self):
+        """When all retries fail with network errors, the wrapped transient error is raised."""
+        mock_op = AsyncMock(
+            side_effect=ConnectionResetError("Connection reset by peer"),
+        )
+
+        with pytest.raises(ExternalOperationTransientError, match="Network error"):
+            await self.handler.execute(mock_op)
+
+        assert mock_op.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_value_error_still_not_retried(self):
+        """Programming errors should still not be retried."""
+        mock_op = AsyncMock(side_effect=ValueError("bad value"))
+
+        with pytest.raises(ValueError, match="bad value"):
+            await self.handler.execute(mock_op)
+
+        mock_op.assert_called_once()

@@ -200,7 +200,7 @@ class LamiaAdapter(BaseLLMAdapter):
                 data = await response.json()
                 return self._parse_response(data, provider_name, model)
 
-        except aiohttp.ClientError as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ConnectionError) as e:
             raise_for_connection_error(e, "Failed to communicate with Lamia API")
 
     @classmethod

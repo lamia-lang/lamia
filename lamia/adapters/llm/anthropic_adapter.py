@@ -1,8 +1,12 @@
 from typing import Optional, Dict, Any, Type
+import asyncio
 import aiohttp
+import logging
 
 from .base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error, raise_for_sdk_error
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 try:
     from anthropic import AsyncAnthropic
@@ -96,12 +100,30 @@ class AnthropicAdapter(BaseLLMAdapter):
                 }
             )
             
+    async def _recover_session(self) -> None:
+        """Recreate the HTTP session after a connection failure (HTTP path only)."""
+        if self._use_sdk:
+            return
+        logger.warning("Recovering aiohttp session after connection failure")
+        try:
+            if self.session and not self.session.closed:
+                await self.session.close()
+        except Exception:
+            pass
+        self.session = aiohttp.ClientSession(
+            headers={
+                "x-api-key": self.api_key,
+                "anthropic-version": self.API_VERSION,
+                "Content-Type": "application/json"
+            }
+        )
+
     async def close(self):
         if self._use_sdk and self.client:
             await self.client.close()
         elif self.session:
             await self.session.close()
-            
+
     async def generate(
         self,
         prompt: str,
@@ -203,5 +225,6 @@ class AnthropicAdapter(BaseLLMAdapter):
                     model=model.name,
                 )
 
-        except aiohttp.ClientError as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ConnectionError) as e:
+            await self._recover_session()
             raise_for_connection_error(e, "Failed to communicate with Anthropic API")

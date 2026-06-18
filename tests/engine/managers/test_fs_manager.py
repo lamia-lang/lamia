@@ -380,6 +380,55 @@ class TestFSManagerExists:
 
 
 # ---------------------------------------------------------------------------
+# GLOB
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestFSManagerGlob:
+    """Test GLOB operation."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_glob_finds_matching_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["a.csv", "b.csv", "c.txt"]:
+                open(os.path.join(tmpdir, name), "w").close()
+            cmd = _make_command(FileActionType.GLOB, os.path.join(tmpdir, "*.csv"))
+            result = await self.fs_manager.execute(cmd)
+            assert result.is_valid
+            assert len(result.typed_result) == 2
+            assert all(p.endswith(".csv") for p in result.typed_result)
+
+    async def test_glob_returns_empty_list_for_no_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd = _make_command(FileActionType.GLOB, os.path.join(tmpdir, "*.xyz"))
+            result = await self.fs_manager.execute(cmd)
+            assert result.is_valid
+            assert result.typed_result == []
+
+    async def test_glob_recursive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sub = os.path.join(tmpdir, "sub")
+            os.makedirs(sub)
+            open(os.path.join(tmpdir, "top.json"), "w").close()
+            open(os.path.join(sub, "nested.json"), "w").close()
+            cmd = _make_command(FileActionType.GLOB, os.path.join(tmpdir, "**/*.json"))
+            result = await self.fs_manager.execute(cmd)
+            assert result.is_valid
+            assert len(result.typed_result) == 2
+
+    async def test_glob_results_are_sorted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["z.txt", "a.txt", "m.txt"]:
+                open(os.path.join(tmpdir, name), "w").close()
+            cmd = _make_command(FileActionType.GLOB, os.path.join(tmpdir, "*.txt"))
+            result = await self.fs_manager.execute(cmd)
+            assert result.typed_result == sorted(result.typed_result)
+
+
+# ---------------------------------------------------------------------------
 # Text append is raw concatenation (no forced newlines)
 # ---------------------------------------------------------------------------
 

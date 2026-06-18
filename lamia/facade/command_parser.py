@@ -12,7 +12,7 @@ from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import Command, LLMCommand, WebCommand, FileCommand, WebActionType, FileActionType
 from lamia.validation.base import BaseValidator
 
-_FILE_PROTOCOL_RE = re.compile(r'^file://(read|write|append|exists):(.+)')
+_FILE_PROTOCOL_RE = re.compile(r'^file://(read|write|append|exists|glob):(.+)')
 _FILE_KV_RE = re.compile(r'(encoding|content):(.+)')
 
 class CommandParser:
@@ -87,6 +87,7 @@ class CommandParser:
             file://write:path content:"..." [encoding:enc]
             file://append:path content:"..." [encoding:enc]
             file://exists:path
+            file://glob:pattern
         """
         stripped = command.strip()
         m = _FILE_PROTOCOL_RE.match(stripped)
@@ -101,6 +102,7 @@ class CommandParser:
             'write': FileActionType.WRITE,
             'append': FileActionType.APPEND,
             'exists': FileActionType.EXISTS,
+            'glob': FileActionType.GLOB,
         }
         action = action_map[action_str]
 

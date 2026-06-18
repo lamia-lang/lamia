@@ -1,8 +1,12 @@
 from typing import Optional, Dict, Any, Type
+import asyncio
 import aiohttp
+import logging
 from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error, raise_for_sdk_error
 from lamia import LLMModel
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 # Try to import OpenAI SDK at module level
 try:
@@ -183,9 +187,27 @@ class OpenAIAdapter(BaseLLMAdapter):
                         usage=data.get("usage", {})
                     )
 
-            except aiohttp.ClientError as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ConnectionError) as e:
+                await self._recover_session()
                 raise_for_connection_error(e, "Failed to communicate with OpenAI API")
-    
+
+    async def _recover_session(self) -> None:
+        """Recreate the HTTP session after a connection failure (HTTP path only)."""
+        if self._use_sdk:
+            return
+        logger.warning("Recovering aiohttp session after connection failure")
+        try:
+            if self.session and not self.session.closed:
+                await self.session.close()
+        except Exception:
+            pass
+        self.session = aiohttp.ClientSession(
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+        )
+
     async def close(self) -> None:
         """Cleanup any resources used by the adapter."""
         if self._use_sdk and self.client:

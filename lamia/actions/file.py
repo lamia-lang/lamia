@@ -6,7 +6,7 @@ import json
 class FileActions:
     """File system operations with excellent IntelliSense support.
 
-    Access via: file.read(), file.write(), file.append(), file.exists()
+    Access via: file.read(), file.write(), file.append(), file.exists(), file.glob()
     """
 
     def read(self, path: str, encoding: str = "utf-8") -> str:
@@ -84,6 +84,24 @@ class FileActions:
                 file.write("config.json", "{}")
         """
         return f"file://exists:{path}"
+
+    def glob(self, pattern: str) -> str:
+        """Find files matching a glob pattern.
+
+        Args:
+            pattern: Glob pattern (e.g. "*.csv", "data/**/*.json", "reports/*.md")
+
+        Returns:
+            Command string for lamia.run() to execute (resolves to list[str])
+
+        Example:
+            csv_files = file.glob("./data/*.csv")
+            for path in csv_files:
+                content = file.read(path)
+
+            all_configs = file.glob("./**/*.json")
+        """
+        return f"file://glob:{pattern}"
 
 # Create singleton instance for import
 file = FileActions()

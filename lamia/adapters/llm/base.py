@@ -231,7 +231,7 @@ class BaseLLMAdapter(ABC):
                     error_text = await response.text()
                     raise_for_status(response.status, error_text, prefix)
                 return await response.json()
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ConnectionError) as e:
             raise_for_connection_error(e, f"Failed to communicate with {self.name()} API")
 
     # ─── Context manager protocol ───────────────────────────────────────

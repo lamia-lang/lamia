@@ -62,6 +62,17 @@ class TestFileActions:
         result = self.file_actions.exists("./relative/path.json")
         assert result == "file://exists:./relative/path.json"
 
+    def test_glob(self):
+        """Test file glob command generation."""
+        result = self.file_actions.glob("*.csv")
+        assert result == "file://glob:*.csv"
+
+        result = self.file_actions.glob("./data/**/*.json")
+        assert result == "file://glob:./data/**/*.json"
+
+        result = self.file_actions.glob("/absolute/path/*.txt")
+        assert result == "file://glob:/absolute/path/*.txt"
+
     def test_content_encoding_handling(self):
         """Test proper JSON encoding of content."""
         # Test content with special characters

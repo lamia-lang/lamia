@@ -18,6 +18,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_NETWORK_ERROR_PATTERNS = [
+    "disconnected", "connection reset", "connection refused",
+    "connection aborted", "broken pipe", "network unreachable",
+    "timed out", "timeout", "eof occurred",
+]
+
 T = TypeVar('T')
 
 @dataclass
@@ -122,10 +128,42 @@ class RetryHandler:
                 await asyncio.sleep(delay)
                 
             except Exception as e:
-                # Non-ExternalOperationError exceptions are programming bugs
-                # and should never be retried - let them bubble up immediately
-                logger.debug(f"Programming error detected (not ExternalOperationError): {type(e).__name__}: {e}")
-                raise
+                if not _is_network_error(e):
+                    logger.debug(f"Programming error detected (not ExternalOperationError): {type(e).__name__}: {e}")
+                    raise
+
+                logger.info(f"Network error detected ({type(e).__name__}): {e} — treating as transient for retry")
+                wrapped = ExternalOperationTransientError(
+                    f"Network error: {e}", original_error=e
+                )
+                attempts += 1
+                retry_history.append(f"Attempt {attempts}: {type(e).__name__}: {str(e)}")
+
+                if self.stats:
+                    error_type = type(e).__name__
+                    self.stats.errors_by_type[error_type] = (
+                        self.stats.errors_by_type.get(error_type, 0) + 1
+                    )
+                    self.stats.last_error_time = datetime.now()
+                    self.stats.error_history.append({
+                        'time': self.stats.last_error_time,
+                        'error_type': error_type,
+                        'error_message': str(e),
+                        'attempt': attempts
+                    })
+
+                if attempts >= self.config.max_attempts:
+                    if self.stats:
+                        self.stats.total_operations += 1
+                        self.stats.failed_operations += 1
+                        self.stats.total_retries += attempts - 1
+                        self.stats.total_operation_time += time.time() - start_time
+                    _update_retry_history(wrapped, retry_history)
+                    raise wrapped from e
+
+                delay = self._calculate_delay(attempts, ErrorCategory.TRANSIENT)
+                logger.info(f"Retrying in {delay:.2f}s due to network error (attempt {attempts}/{self.config.max_attempts})")
+                await asyncio.sleep(delay)
 
     def get_stats(self) -> Optional[RetryStats]:
         """Get current retry statistics if enabled."""
@@ -184,6 +222,40 @@ def _get_error_classifier_for_adapter(adapter):
         return BrowserErrorClassifier()  # Browser automation
     else:
         return HttpErrorClassifier()
+
+
+def _is_network_error(exc: Exception) -> bool:
+    """Detect network/transport errors that should be retried, not treated as bugs.
+
+    Covers aiohttp disconnection errors, stdlib connection errors, and common
+    transport failures that can occur during HTTP requests to LLM providers
+    or local proxies.
+    """
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    if isinstance(exc, OSError) and exc.errno in (
+        104,  # ECONNRESET
+        111,  # ECONNREFUSED
+        32,   # EPIPE (broken pipe)
+        54,   # macOS ECONNRESET
+        61,   # macOS ECONNREFUSED
+    ):
+        return True
+
+    type_name = type(exc).__name__.lower()
+    network_type_fragments = [
+        "disconnected", "connection", "timeout",
+        "clienterror", "clientconnection", "clientresponse",
+        "serverdisconnected", "serverconnection", "servertimeout",
+    ]
+    if any(fragment in type_name for fragment in network_type_fragments):
+        return True
+
+    msg = str(exc).lower()
+    if any(pat in msg for pat in _NETWORK_ERROR_PATTERNS):
+        return True
+
+    return False
 
 
 def _update_retry_history(error: ExternalOperationError, retry_history: List[str]) -> None:

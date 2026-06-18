@@ -1,10 +1,13 @@
 # File Operations
 
-Lamia provides a `file` namespace for direct filesystem operations: reading, writing, appending, and checking file existence programmatically without involving an LLM.
+Lamia provides a `file` namespace for direct filesystem operations: reading, writing, appending, checking existence, and finding files by pattern — all without involving an LLM.
 
 ## Overview
 
 ```python
+# Find files by pattern
+csv_files = file.glob("./data/*.csv")
+
 # Check if a file exists
 if file.exists("./config.json"):
     content = file.read("./config.json")
@@ -75,6 +78,29 @@ file.append("./results.csv", "new_row,data,here\n")
 | `content` | str   | required  | Content to append        |
 | `encoding`| str   | `"utf-8"` | File encoding            |
 
+### `file.glob(pattern)`
+
+Find files matching a glob pattern. Returns a sorted list of matching file paths.
+
+```python
+csv_files = file.glob("./data/*.csv")
+all_configs = file.glob("./**/*.json")
+logs = file.glob("/var/log/app-*.log")
+```
+
+**Parameters:**
+
+| Parameter  | Type  | Default   | Description              |
+|-----------|-------|-----------|--------------------------|
+| `pattern` | str   | required  | Glob pattern (`*`, `**`, `?` supported) |
+
+**Returns:** Sorted list of matching file paths (empty list if no matches).
+
+**Pattern syntax:**
+- `*` — matches any characters within a single directory
+- `**` — matches across directories (recursive)
+- `?` — matches a single character
+
 ### `file.exists(path)`
 
 Check if a file exists. Returns `True` if the file exists, `False` otherwise.
@@ -95,6 +121,24 @@ else:
 **Returns:** `True` if the file exists, `False` otherwise.
 
 ## Patterns
+
+### Batch file processing
+
+Use `file.glob()` to find and process multiple files at once:
+
+```python
+# Process all CSV files in a directory
+for path in file.glob("./reports/*.csv"):
+    content = file.read(path)
+    # process each file...
+
+# Find all JSON configs recursively
+configs = file.glob("./**/*.json")
+
+# Check if any matching files exist
+if file.glob("./inbox/*.txt"):
+    # process inbox...
+```
 
 ### Conditional file operations
 
@@ -139,11 +183,11 @@ else:
 **Do NOT use Python's built-in `open()` or `with open()`** — Lamia scripts use the `file.*` API:
 
 ```python
-# ❌ WRONG — will not work in .lm scripts
+# ❌ NOT RECOMMENDED — Lamia syntax is preferred
 with open("data.txt", "r") as f:
     content = f.read()
 
-# ❌ WRONG — try/except for existence checks
+# ❌ NOT RECOMMENDED — Lamia syntax is preferred
 try:
     content = file.read("data.txt")
 except FileNotFoundError:
@@ -168,13 +212,13 @@ Lamia has three ways to work with files, each for a different purpose:
 
 | Mechanism | Purpose | Example |
 |-----------|---------|---------|
-| `file.exists/read/write/append` | Direct filesystem I/O | `file.write("out.txt", data)` |
+| `file.glob/exists/read/write/append` | Direct filesystem I/O | `file.write("out.txt", data)` |
 | `-> File(...)` | LLM-generated content saved to disk | `def report() -> File(HTML, "report.html")` |
 | `with files(...)` | Inject file content into LLM prompts | `{@resume.pdf}` |
 
 ### When to use `file.*`
 
-Use `file.exists()`, `file.read()`, `file.write()`, `file.append()` when you have content already and want to perform straightforward filesystem operations — no LLM involved.
+Use `file.glob()`, `file.exists()`, `file.read()`, `file.write()`, `file.append()` when you have content already and want to perform straightforward filesystem operations — no LLM involved.
 
 ```python
 # Read a queue, modify it, write it back
