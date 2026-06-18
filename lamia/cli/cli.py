@@ -38,6 +38,7 @@ HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
 
 logger = logging.getLogger(__name__)
+IDE_API_VERSION = "0.1"
 
 async def interactive_mode(lamia: Lamia):
     """Run Lamia in interactive mode, processing user prompts."""
@@ -228,7 +229,7 @@ async def json_mode(lamia: Lamia) -> None:
     MAX_TOOL_ROUNDS = 50
     tools_prompt = get_tools_system_prompt()
 
-    _json_write({"type": "ready"})
+    _json_write({"type": "ready", "ide_api": IDE_API_VERSION})
 
     loop = asyncio.get_event_loop()
     reader = asyncio.StreamReader(limit=10 * 1024 * 1024)
@@ -660,7 +661,11 @@ def main():
 
     if len(sys.argv) > 1 and sys.argv[1] == "--version":
         from lamia._version import __version__
-        print(f"lamia {__version__}")
+        if "--json" in sys.argv:
+            import json
+            print(json.dumps({"version": __version__, "ide_api": IDE_API_VERSION}))
+        else:
+            print(f"lamia {__version__}")
         return
 
     if len(sys.argv) > 1 and sys.argv[1] == ".":
