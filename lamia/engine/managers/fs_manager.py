@@ -21,6 +21,8 @@ class FSManager(Manager[FileCommand]):
             return await self._write(command, validator)
         if action == FileActionType.APPEND:
             return await self._append(command, validator)
+        if action == FileActionType.EXISTS:
+            return self._exists(command)
         raise ValueError(f"Unsupported file action: {action}")
 
     async def _read(
@@ -87,6 +89,11 @@ class FSManager(Manager[FileCommand]):
         with open(command.path, "w", encoding=command.encoding) as f:
             f.write(final_content)
         return validation_result
+
+    def _exists(self, command: FileCommand) -> ValidationResult:
+        """Check if a file exists. Returns ValidationResult with typed_result=bool."""
+        exists = os.path.exists(command.path)
+        return ValidationResult(is_valid=True, typed_result=exists, error_message=None)
 
     def _check_encoding(self, content: str, encoding: str) -> Optional[ValidationResult]:
         """Return a failed ValidationResult if content is not encodable, else None."""

@@ -334,6 +334,52 @@ class TestFSManagerAppend:
 
 
 # ---------------------------------------------------------------------------
+# EXISTS
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestFSManagerExists:
+    """Test EXISTS operation."""
+
+    def setup_method(self) -> None:
+        self.fs_manager = FSManager(Mock(spec=ConfigProvider))
+
+    async def test_exists_returns_true_for_existing_file(self) -> None:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as f:
+            f.write(b"content")
+            path = f.name
+        try:
+            cmd = _make_command(FileActionType.EXISTS, path)
+            result = await self.fs_manager.execute(cmd)
+            assert isinstance(result, ValidationResult)
+            assert result.is_valid
+            assert result.typed_result is True
+        finally:
+            os.unlink(path)
+
+    async def test_exists_returns_false_for_missing_file(self) -> None:
+        cmd = _make_command(FileActionType.EXISTS, "/nonexistent/path/file.txt")
+        result = await self.fs_manager.execute(cmd)
+        assert isinstance(result, ValidationResult)
+        assert result.is_valid
+        assert result.typed_result is False
+
+    async def test_exists_returns_true_for_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd = _make_command(FileActionType.EXISTS, tmpdir)
+            result = await self.fs_manager.execute(cmd)
+            assert result.is_valid
+            assert result.typed_result is True
+
+    async def test_exists_ignores_validator(self) -> None:
+        cmd = _make_command(FileActionType.EXISTS, "/nonexistent")
+        result = await self.fs_manager.execute(cmd)
+        assert result.is_valid
+        assert result.typed_result is False
+
+
+# ---------------------------------------------------------------------------
 # Text append is raw concatenation (no forced newlines)
 # ---------------------------------------------------------------------------
 

@@ -1,10 +1,14 @@
 # File Operations
 
-Lamia provides a `file` namespace for direct filesystem operations: reading, writing, and appending files programmatically without involving an LLM.
+Lamia provides a `file` namespace for direct filesystem operations: reading, writing, appending, and checking file existence programmatically without involving an LLM.
 
 ## Overview
 
 ```python
+# Check if a file exists
+if file.exists("./config.json"):
+    content = file.read("./config.json")
+
 # Read a file
 content = file.read("./config.json")
 
@@ -71,19 +75,106 @@ file.append("./results.csv", "new_row,data,here\n")
 | `content` | str   | required  | Content to append        |
 | `encoding`| str   | `"utf-8"` | File encoding            |
 
+### `file.exists(path)`
+
+Check if a file exists. Returns `True` if the file exists, `False` otherwise.
+
+```python
+if file.exists("./data.csv"):
+    data = file.read("./data.csv")
+else:
+    file.write("./data.csv", "header1,header2\n")
+```
+
+**Parameters:**
+
+| Parameter  | Type  | Default   | Description              |
+|-----------|-------|-----------|--------------------------|
+| `path`    | str   | required  | File path to check       |
+
+**Returns:** `True` if the file exists, `False` otherwise.
+
+## Patterns
+
+### Conditional file operations
+
+Use `file.exists()` to branch logic based on whether a file is already present:
+
+```python
+if file.exists("./output.csv"):
+    file.append("./output.csv", f"{name},{score}\n")
+else:
+    file.write("./output.csv", "name,score\n")
+    file.append("./output.csv", f"{name},{score}\n")
+```
+
+### CSV operations
+
+```python
+csv_path = "./results.csv"
+
+# Initialize CSV with headers if it doesn't exist
+if not file.exists(csv_path):
+    file.write(csv_path, "timestamp,status,message\n")
+
+# Append rows
+file.append(csv_path, f"{timestamp},success,Completed\n")
+```
+
+### Safe config loading
+
+```python
+config_path = "./config.json"
+
+if file.exists(config_path):
+    raw = file.read(config_path)
+    # parse and use config
+else:
+    # use defaults or create initial config
+    file.write(config_path, '{"retries": 3}')
+```
+
+## Common Mistakes
+
+**Do NOT use Python's built-in `open()` or `with open()`** — Lamia scripts use the `file.*` API:
+
+```python
+# ❌ WRONG — will not work in .lm scripts
+with open("data.txt", "r") as f:
+    content = f.read()
+
+# ❌ WRONG — try/except for existence checks
+try:
+    content = file.read("data.txt")
+except FileNotFoundError:
+    content = ""
+
+# ✅ CORRECT
+if file.exists("data.txt"):
+    content = file.read("data.txt")
+else:
+    content = ""
+
+# ✅ CORRECT — simple read
+content = file.read("data.txt")
+
+# ✅ CORRECT — write
+file.write("data.txt", "hello")
+```
+
 ## Comparison with Other File Mechanisms
 
 Lamia has three ways to work with files, each for a different purpose:
 
 | Mechanism | Purpose | Example |
 |-----------|---------|---------|
-| `file.read/write/append` | Direct filesystem I/O | `file.write("out.txt", data)` |
+| `file.exists/read/write/append` | Direct filesystem I/O | `file.write("out.txt", data)` |
 | `-> File(...)` | LLM-generated content saved to disk | `def report() -> File(HTML, "report.html")` |
 | `with files(...)` | Inject file content into LLM prompts | `{@resume.pdf}` |
 
 ### When to use `file.*`
 
-Use `file.read()`, `file.write()`, `file.append()` when you have content already and want to perform straightforward filesystem operations — no LLM involved.
+Use `file.exists()`, `file.read()`, `file.write()`, `file.append()` when you have content already and want to perform straightforward filesystem operations — no LLM involved.
 
 ```python
 # Read a queue, modify it, write it back

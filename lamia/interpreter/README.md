@@ -118,6 +118,10 @@ You can also use the `file` action API for programmatic writes:
 file.write("/path/to/file.txt", "Hello, World!")
 file.write("output.json", json.dumps(data))
 file.append("/var/log/app.log", "New log entry\n")
+
+# Check existence before reading
+if file.exists("config.json"):
+    config = file.read("config.json")
 ```
 
 #### File Write Syntax Reference

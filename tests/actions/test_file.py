@@ -54,6 +54,14 @@ class TestFileActions:
         expected = f"file://append:/path/to/file.txt content:{json.dumps(content)} encoding:latin1"
         assert result == expected
     
+    def test_exists(self):
+        """Test file exists command generation."""
+        result = self.file_actions.exists("/path/to/file.txt")
+        assert result == "file://exists:/path/to/file.txt"
+
+        result = self.file_actions.exists("./relative/path.json")
+        assert result == "file://exists:./relative/path.json"
+
     def test_content_encoding_handling(self):
         """Test proper JSON encoding of content."""
         # Test content with special characters

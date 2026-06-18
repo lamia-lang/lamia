@@ -6,7 +6,7 @@ import json
 class FileActions:
     """File system operations with excellent IntelliSense support.
 
-    Access via: file.read(), file.write(), file.append()
+    Access via: file.read(), file.write(), file.append(), file.exists()
     """
 
     def read(self, path: str, encoding: str = "utf-8") -> str:
@@ -67,6 +67,23 @@ class FileActions:
         if encoding != "utf-8":
             cmd_parts.append(f"encoding:{encoding}")
         return " ".join(cmd_parts)
+
+    def exists(self, path: str) -> str:
+        """Check if a file exists.
+
+        Args:
+            path: File path to check
+
+        Returns:
+            Command string for lamia.run() to execute (resolves to bool)
+
+        Example:
+            if file.exists("config.json"):
+                config = file.read("config.json")
+            else:
+                file.write("config.json", "{}")
+        """
+        return f"file://exists:{path}"
 
 # Create singleton instance for import
 file = FileActions()
