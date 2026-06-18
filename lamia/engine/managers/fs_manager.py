@@ -99,9 +99,12 @@ class FSManager(Manager[FileCommand]):
         return ValidationResult(is_valid=True, typed_result=exists, error_message=None)
 
     def _glob(self, command: FileCommand) -> ValidationResult:
-        """Find files matching a glob pattern. Returns ValidationResult with typed_result=list[str]."""
-        matches = sorted(glob.glob(command.path, recursive=True))
-        return ValidationResult(is_valid=True, typed_result=matches, error_message=None)
+        """Find files matching a glob pattern. Supports | as OR."""
+        seen: set[str] = set()
+        for sub in command.path.split("|"):
+            for match in glob.glob(sub.strip(), recursive=True):
+                seen.add(match)
+        return ValidationResult(is_valid=True, typed_result=sorted(seen), error_message=None)
 
     def _check_encoding(self, content: str, encoding: str) -> Optional[ValidationResult]:
         """Return a failed ValidationResult if content is not encodable, else None."""

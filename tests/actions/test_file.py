@@ -73,6 +73,14 @@ class TestFileActions:
         result = self.file_actions.glob("/absolute/path/*.txt")
         assert result == "file://glob:/absolute/path/*.txt"
 
+    def test_glob_or_pattern(self):
+        """Test file glob with OR pattern."""
+        result = self.file_actions.glob("*.ts|*.tsx")
+        assert result == "file://glob:*.ts|*.tsx"
+
+        result = self.file_actions.glob("config.json|settings.yaml")
+        assert result == "file://glob:config.json|settings.yaml"
+
     def test_content_encoding_handling(self):
         """Test proper JSON encoding of content."""
         # Test content with special characters

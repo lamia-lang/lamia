@@ -86,10 +86,10 @@ class FileActions:
         return f"file://exists:{path}"
 
     def glob(self, pattern: str) -> str:
-        """Find files matching a glob pattern.
+        """Find files matching a glob pattern. Use | for OR.
 
         Args:
-            pattern: Glob pattern (e.g. "*.csv", "data/**/*.json", "reports/*.md")
+            pattern: Glob pattern, use | for OR (e.g. "*.csv", "**/*.lm|**/*.hu")
 
         Returns:
             Command string for lamia.run() to execute (resolves to list[str])
@@ -99,7 +99,8 @@ class FileActions:
             for path in csv_files:
                 content = file.read(path)
 
-            all_configs = file.glob("./**/*.json")
+            scripts = file.glob("./**/*.lm|./**/*.hu")
+            specific = file.glob("config.json|settings.yaml|.env")
         """
         return f"file://glob:{pattern}"
 

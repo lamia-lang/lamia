@@ -80,19 +80,20 @@ file.append("./results.csv", "new_row,data,here\n")
 
 ### `file.glob(pattern)`
 
-Find files matching a glob pattern. Returns a sorted list of matching file paths.
+Find files matching a glob pattern. Returns a sorted list of matching file paths. Use `|` to OR multiple patterns.
 
 ```python
 csv_files = file.glob("./data/*.csv")
-all_configs = file.glob("./**/*.json")
-logs = file.glob("/var/log/app-*.log")
+configs = file.glob("./**/*.json|./**/*.yaml")
+scripts = file.glob("./**/*.lm|./**/*.hu")
+specific = file.glob("config.json|settings.yaml|.env")
 ```
 
 **Parameters:**
 
 | Parameter  | Type  | Default   | Description              |
 |-----------|-------|-----------|--------------------------|
-| `pattern` | str   | required  | Glob pattern (`*`, `**`, `?` supported) |
+| `pattern` | str   | required  | Glob pattern, use `\|` for OR |
 
 **Returns:** Sorted list of matching file paths (empty list if no matches).
 
@@ -100,6 +101,7 @@ logs = file.glob("/var/log/app-*.log")
 - `*` — matches any characters within a single directory
 - `**` — matches across directories (recursive)
 - `?` — matches a single character
+- `|` — OR: combines multiple patterns (`"*.lm|*.hu|config.json"`)
 
 ### `file.exists(path)`
 
@@ -132,8 +134,11 @@ for path in file.glob("./reports/*.csv"):
     content = file.read(path)
     # process each file...
 
-# Find all JSON configs recursively
-configs = file.glob("./**/*.json")
+# Find multiple file types at once
+configs = file.glob("./**/*.json|./**/*.yaml")
+
+# Find specific files by name
+important = file.glob("config.json|settings.yaml|.env|README.md")
 
 # Check if any matching files exist
 if file.glob("./inbox/*.txt"):

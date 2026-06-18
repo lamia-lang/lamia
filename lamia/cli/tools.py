@@ -9,6 +9,7 @@ execution logic.
 import enum
 import json
 import fnmatch
+import glob
 import os
 import logging
 import re
@@ -120,6 +121,8 @@ TOPIC_TO_FILE = {
     "file.read": "user-guide/file-operations.md",
     "file.write": "user-guide/file-operations.md",
     "file.append": "user-guide/file-operations.md",
+    "file.exists": "user-guide/file-operations.md",
+    "file.glob": "user-guide/file-operations.md",
     "scheduling": "user-guide/scheduling.md",
     "schedule": "user-guide/scheduling.md",
     "cron": "user-guide/scheduling.md",
@@ -348,13 +351,16 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": ToolName.GLOB.value,
-        "description": "Find files matching a glob pattern. Returns file paths sorted by modification time.",
+        "description": (
+            "Find files matching a glob pattern. Returns file paths sorted by modification time. "
+            "Use | to combine multiple patterns: '*.ts|*.tsx|config.json'."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "pattern": {
                     "type": "string",
-                    "description": "Glob pattern (e.g. '**/*.py', 'src/**/*.lm', '*.yaml')",
+                    "description": "Glob pattern, use | for OR (e.g. '**/*.py', '*.lm|*.hu', 'config.json|*.yaml')",
                 },
                 "directory": {
                     "type": "string",
@@ -1301,17 +1307,25 @@ def _glob(pattern: str, directory: str, cwd: str) -> str:
         return f"Directory not found: {search_dir}"
 
     MAX_RESULTS = 200
-    matches: list[tuple[float, str]] = []
+    seen: set[str] = set()
+    for sub in pattern.split("|"):
+        for match in glob.glob(sub.strip(), root_dir=str(search_dir), recursive=True):
+            seen.add(match)
 
-    for path in search_dir.rglob(pattern.lstrip("*/")):
-        if path.is_file() and not any(p in _SKIP_DIRS or p.startswith(".") for p in path.parts):
-            try:
-                mtime = path.stat().st_mtime
-            except OSError:
-                mtime = 0
-            matches.append((mtime, str(path.relative_to(cwd if os.path.isabs(cwd) else Path.cwd()))))
-            if len(matches) >= MAX_RESULTS:
-                break
+    matches: list[tuple[float, str]] = []
+    for rel_match in sorted(seen):
+        if any(p in _SKIP_DIRS or p.startswith(".") for p in Path(rel_match).parts):
+            continue
+        abs_path = search_dir / rel_match
+        if not abs_path.is_file():
+            continue
+        try:
+            mtime = abs_path.stat().st_mtime
+        except OSError:
+            mtime = 0
+        matches.append((mtime, os.path.relpath(str(abs_path), cwd)))
+        if len(matches) >= MAX_RESULTS:
+            break
 
     if not matches:
         return f"No files matching '{pattern}' in {search_dir}"

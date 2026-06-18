@@ -427,6 +427,31 @@ class TestFSManagerGlob:
             result = await self.fs_manager.execute(cmd)
             assert result.typed_result == sorted(result.typed_result)
 
+    async def test_glob_or_pattern(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["a.ts", "b.tsx", "c.py", "d.js"]:
+                open(os.path.join(tmpdir, name), "w").close()
+            pattern = f"{tmpdir}/*.ts|{tmpdir}/*.tsx"
+            cmd = _make_command(FileActionType.GLOB, pattern)
+            result = await self.fs_manager.execute(cmd)
+            assert result.is_valid
+            assert len(result.typed_result) == 2
+            names = [os.path.basename(p) for p in result.typed_result]
+            assert "a.ts" in names
+            assert "b.tsx" in names
+            assert "c.py" not in names
+
+    async def test_glob_or_specific_filenames(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name in ["config.json", "settings.yaml", "readme.md", "other.txt"]:
+                open(os.path.join(tmpdir, name), "w").close()
+            pattern = f"{tmpdir}/config.json|{tmpdir}/settings.yaml|{tmpdir}/readme.md"
+            cmd = _make_command(FileActionType.GLOB, pattern)
+            result = await self.fs_manager.execute(cmd)
+            assert len(result.typed_result) == 3
+            names = [os.path.basename(p) for p in result.typed_result]
+            assert "other.txt" not in names
+
 
 # ---------------------------------------------------------------------------
 # Text append is raw concatenation (no forced newlines)
