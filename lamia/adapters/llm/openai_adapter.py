@@ -158,7 +158,8 @@ class OpenAIAdapter(BaseLLMAdapter):
                 },
             )
         else:
-            # HTTP fallback
+            if self.session is None or self.session.closed:
+                await self.async_initialize()
             payload = {
                 "model": model.get_model_name_without_provider(),
                 "messages": [{"role": "user", "content": prompt}],
@@ -188,25 +189,19 @@ class OpenAIAdapter(BaseLLMAdapter):
                     )
 
             except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ConnectionError) as e:
-                await self._recover_session()
+                await self._close_session()
                 raise_for_connection_error(e, "Failed to communicate with OpenAI API")
 
-    async def _recover_session(self) -> None:
-        """Recreate the HTTP session after a connection failure (HTTP path only)."""
+    async def _close_session(self) -> None:
+        """Close the stale session so the next retry lazily creates a fresh one."""
         if self._use_sdk:
             return
-        logger.warning("Recovering aiohttp session after connection failure")
         try:
             if self.session and not self.session.closed:
                 await self.session.close()
         except Exception:
             pass
-        self.session = aiohttp.ClientSession(
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-        )
+        self.session = None
 
     async def close(self) -> None:
         """Cleanup any resources used by the adapter."""

@@ -87,12 +87,16 @@ TOOL_LABELS: dict[str, tuple[str, str]] = {
 }
 
 
+_SUPPRESS_DETAIL_VALUES = {"body", "html", "page"}
+
 def tool_progress_label(tool: str, args: dict) -> str:
     entry = TOOL_LABELS.get(tool)
     if not entry:
         return tool.replace("_", " ")
     verb, arg_key = entry
     detail = str(args.get(arg_key, "")) if arg_key else ""
+    if detail.strip().lower() in _SUPPRESS_DETAIL_VALUES:
+        detail = ""
     return f"{verb}: {detail}" if detail else verb
 
 TOPIC_TO_FILE = {

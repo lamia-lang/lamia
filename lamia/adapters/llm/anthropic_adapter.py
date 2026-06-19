@@ -100,23 +100,16 @@ class AnthropicAdapter(BaseLLMAdapter):
                 }
             )
             
-    async def _recover_session(self) -> None:
-        """Recreate the HTTP session after a connection failure (HTTP path only)."""
+    async def _close_session(self) -> None:
+        """Close the stale session so the next retry lazily creates a fresh one."""
         if self._use_sdk:
             return
-        logger.warning("Recovering aiohttp session after connection failure")
         try:
             if self.session and not self.session.closed:
                 await self.session.close()
         except Exception:
             pass
-        self.session = aiohttp.ClientSession(
-            headers={
-                "x-api-key": self.api_key,
-                "anthropic-version": self.API_VERSION,
-                "Content-Type": "application/json"
-            }
-        )
+        self.session = None
 
     async def close(self):
         if self._use_sdk and self.client:
@@ -190,6 +183,14 @@ class AnthropicAdapter(BaseLLMAdapter):
         response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
         """Generate response using direct HTTP calls."""
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession(
+                headers={
+                    "x-api-key": self.api_key,
+                    "anthropic-version": self.API_VERSION,
+                    "Content-Type": "application/json"
+                }
+            )
         payload = {
             "model": model.get_model_name_without_provider(),
             "messages": [{"role": "user", "content": prompt}],
@@ -226,5 +227,5 @@ class AnthropicAdapter(BaseLLMAdapter):
                 )
 
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ConnectionError) as e:
-            await self._recover_session()
+            await self._close_session()
             raise_for_connection_error(e, "Failed to communicate with Anthropic API")
