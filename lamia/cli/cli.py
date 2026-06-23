@@ -832,6 +832,7 @@ For help on a subcommand, run:
         parser.add_argument('--log-file', type=str, help='Custom path for the Lamia log file (default: .lamia/lamia.log)')
         parser.add_argument('--no-cache', action='store_true', help='Disable selector resolution cache (forces fresh resolution)')
         parser.add_argument('--json', action='store_true', help='Machine-readable JSON-line mode for IDE/tool integration')
+        parser.add_argument('--remote', action='store_true', help='Execute script on cloud (requires lamia-lang[cloud])')
         parser.add_argument('--schedule-id', type=str, help=argparse.SUPPRESS)
         args = parser.parse_args()
 
@@ -891,6 +892,16 @@ For help on a subcommand, run:
     if config_dict is not None:
         extensions_rel = config_dict.get('extensions_folder', 'extensions')
         config_dict['extensions_folder'] = os.path.join(project_root, extensions_rel)
+
+    if getattr(args, 'remote', False):
+        from lamia.cli.remote import handle_remote_run
+        handle_remote_run(
+            script=prompt_file,
+            project_root=project_root,
+            config=config_dict,
+            verbose=getattr(args, 'verbose', False),
+        )
+        return
 
     # Note: Lazy loading is now handled by HybridExecutor for .hu files
     # Python files still need sys.path management for regular execution
