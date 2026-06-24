@@ -54,6 +54,26 @@ class TestLamiaLifecycle:
             # Engine should have been created with a config provider
             MockEngine.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_run_async_sets_hook_context_with_function_name(self):
+        """run_async should preserve the transformed function name for hook matching."""
+        with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:
+            mock_engine = MagicMock()
+            mock_engine.execute = AsyncMock(
+                return_value=MockValidationResult(is_valid=True, raw_text="ok", typed_result="ok")
+            )
+            mock_engine.config_provider = MagicMock()
+            mock_engine.hook_runner = MagicMock()
+            MockEngine.return_value = mock_engine
+
+            lamia = Lamia()
+            await lamia.run_async("hello", _function_name="generate_description")
+
+            mock_engine.hook_runner.set_context.assert_called_once_with(
+                function_name="generate_description",
+                return_type=None,
+            )
+
     def test_initialization_custom_models(self):
         """Test initialization with custom model names."""
         with patch('lamia.facade.lamia.LamiaEngine') as MockEngine:

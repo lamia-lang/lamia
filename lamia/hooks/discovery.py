@@ -114,8 +114,11 @@ def _compile_hook_function(node: ast.FunctionDef, source: str, filepath: str):
 
     imports = [n for n in ast.iter_child_nodes(module)
                if isinstance(n, (ast.Import, ast.ImportFrom))]
-    top_level_assigns = [n for n in ast.iter_child_nodes(module)
-                         if isinstance(n, (ast.Assign, ast.AnnAssign))]
+    top_level_assigns = [
+        n
+        for n in ast.iter_child_nodes(module)
+        if isinstance(n, (ast.Assign, ast.AnnAssign)) and _is_safe_top_level_assignment(n)
+    ]
 
     func_copy = ast.copy_location(
         ast.FunctionDef(
@@ -143,3 +146,40 @@ def _compile_hook_function(node: ast.FunctionDef, source: str, filepath: str):
     except Exception as e:
         logger.warning(f"Failed to compile hook '{node.name}' from {filepath}: {e}")
         return None
+
+
+def _is_safe_top_level_assignment(node: ast.stmt) -> bool:
+    """Allow only literal assignments so hook discovery never executes side effects."""
+    if isinstance(node, ast.Assign):
+        if not all(isinstance(target, ast.Name) for target in node.targets):
+            return False
+        return _is_literal_expression(node.value)
+
+    if isinstance(node, ast.AnnAssign):
+        if not isinstance(node.target, ast.Name):
+            return False
+        if node.value is None:
+            return True
+        return _is_literal_expression(node.value)
+
+    return False
+
+
+def _is_literal_expression(node: ast.AST) -> bool:
+    """Check whether expression can be evaluated without executing code."""
+    if isinstance(node, ast.Constant):
+        return True
+
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return all(_is_literal_expression(element) for element in node.elts)
+
+    if isinstance(node, ast.Dict):
+        return all(
+            (key is None or _is_literal_expression(key)) and _is_literal_expression(value)
+            for key, value in zip(node.keys, node.values)
+        )
+
+    if isinstance(node, ast.UnaryOp):
+        return isinstance(node.op, (ast.UAdd, ast.USub)) and _is_literal_expression(node.operand)
+
+    return False

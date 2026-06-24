@@ -152,6 +152,7 @@ class Lamia:
         _full_result: bool = False,
         _append_context: Optional[str] = None,
         _target_encoding: Optional[str] = None,
+        _function_name: Optional[str] = None,
     ) -> Union[Any, LamiaResult]:
         """
         Generate a response, trying Python code first, then LLM.
@@ -196,6 +197,7 @@ class Lamia:
             parsed_command.target_encoding = _target_encoding
 
         self._engine.hook_runner.set_context(
+            function_name=_function_name,
             return_type=return_type.__name__ if return_type else None,
         )
 
@@ -270,6 +272,7 @@ class Lamia:
         _full_result: bool = False,
         _append_context: Optional[str] = None,
         _target_encoding: Optional[str] = None,
+        _function_name: Optional[str] = None,
     ) -> Union[Any, LamiaResult]:
         """
         Run a command synchronously.
@@ -301,6 +304,7 @@ class Lamia:
                 _append_context=_append_context,
                 _full_result=_full_result,
                 _target_encoding=_target_encoding,
+                _function_name=_function_name,
             )
         )
 

@@ -1001,6 +1001,8 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
     
     def _build_async_lamia_function(self, node, args, keywords) -> ast.AsyncFunctionDef:
         """Build async function with lamia.run_async() call."""
+        call_keywords = list(keywords)
+        call_keywords.append(ast.keyword(arg='_function_name', value=ast.Constant(value=node.name)))
         lamia_call = ast.Await(
             value=ast.Call(
                 func=ast.Attribute(
@@ -1009,13 +1011,10 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                     ctx=ast.Load()
                 ),
                 args=args,
-                keywords=keywords
+                keywords=call_keywords
             )
         )
-        body: List[ast.stmt] = [
-            self._build_hook_context_stmt(node.name),
-            ast.Return(value=lamia_call),
-        ]
+        body: List[ast.stmt] = [ast.Return(value=lamia_call)]
         if self._current_files_ctx_var:
             body = self._build_files_context_wrapped_body(body, self._current_files_ctx_var)
         return ast.AsyncFunctionDef(
@@ -1031,6 +1030,8 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
     def _build_sync_lamia_function(self, node, args, keywords) -> ast.FunctionDef:
         """Build sync function with lamia.run() call."""
+        call_keywords = list(keywords)
+        call_keywords.append(ast.keyword(arg='_function_name', value=ast.Constant(value=node.name)))
         lamia_call = ast.Call(
             func=ast.Attribute(
                 value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
@@ -1038,12 +1039,9 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 ctx=ast.Load()
             ),
             args=args,
-            keywords=keywords
+            keywords=call_keywords
         )
-        body: List[ast.stmt] = [
-            self._build_hook_context_stmt(node.name),
-            ast.Return(value=lamia_call),
-        ]
+        body: List[ast.stmt] = [ast.Return(value=lamia_call)]
         if self._current_files_ctx_var:
             body = self._build_files_context_wrapped_body(body, self._current_files_ctx_var)
         return ast.FunctionDef(
@@ -1056,26 +1054,6 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             lineno=getattr(node, 'lineno', 1),
             col_offset=getattr(node, 'col_offset', 0)
         )
-
-    def _build_hook_context_stmt(self, function_name: str) -> ast.Expr:
-        """Generate: lamia._engine.hook_runner.set_context(function_name='...')"""
-        return ast.Expr(value=ast.Call(
-            func=ast.Attribute(
-                value=ast.Attribute(
-                    value=ast.Attribute(
-                        value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
-                        attr='_engine',
-                        ctx=ast.Load(),
-                    ),
-                    attr='hook_runner',
-                    ctx=ast.Load(),
-                ),
-                attr='set_context',
-                ctx=ast.Load(),
-            ),
-            args=[],
-            keywords=[ast.keyword(arg='function_name', value=ast.Constant(value=function_name))],
-        ))
 
     # ── File write helpers (-> File(...) syntax) ──────────────────────────
 

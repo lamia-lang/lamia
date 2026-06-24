@@ -101,6 +101,20 @@ class TestHookDiscovery:
         hooks = _extract_hooks_from_source(source, "test.lm")
         assert len(hooks) == 0
 
+    def test_discovery_skips_runtime_top_level_assignments(self):
+        source = textwrap.dedent("""\
+            def clean(content) -> Hook(post_llm):
+                return content.replace('—', '--')
+
+            def generate_description():
+                return "x"
+
+            output = generate_description()
+        """)
+        hooks = _extract_hooks_from_source(source, "test.lm")
+        assert len(hooks) == 1
+        assert hooks[0].name == "clean"
+
     def test_discover_from_project_directory(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             p = Path(tmpdir)

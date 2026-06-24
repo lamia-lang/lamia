@@ -22,6 +22,7 @@ def get_page():
         result = self.transformer.transform_code(source)
 
         assert "lamia.run" in result
+        assert "_function_name='get_page'" in result
         assert "Click the login button" in result
         assert "def get_page" in result
 
@@ -46,6 +47,7 @@ async def fetch_data():
         result = self.transformer.transform_code(source)
 
         assert "lamia.run_async" in result
+        assert "_function_name='fetch_data'" in result
         assert "async def fetch_data" in result
         assert "await" in result
 
