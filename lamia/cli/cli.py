@@ -851,6 +851,7 @@ For help on a subcommand, run:
         level=args.log_level.upper(),
         verbose=getattr(args, 'verbose', False) and not json_flag,
         log_file=args.log_file,
+        schedule_id=_active_schedule_id,
     )
 
     if json_flag:
@@ -1025,6 +1026,7 @@ def _install_sigint_handler() -> None:
         logging.getLogger("urllib3").setLevel(logging.CRITICAL)
         logging.getLogger("selenium").setLevel(logging.CRITICAL)
         logging.getLogger("lamia").setLevel(logging.CRITICAL)
+        _record_run_on_signal(signum)
         _force_kill_browser(_atexit_lamia_ref)
         os._exit(0)
 
@@ -1034,6 +1036,27 @@ def _install_sigint_handler() -> None:
 
 
 _active_schedule_id: 'Optional[str]' = None
+_run_recorded: bool = False
+
+
+def _record_run_on_signal(signum: int) -> None:
+    """Best-effort record_run from inside a signal handler.
+
+    Called before os._exit so the registry reflects the outcome even when
+    the process is killed by SIGTERM (e.g. launchd stopping the job on sleep).
+    Uses the _run_recorded flag to avoid double-recording when _graceful_shutdown
+    already persisted the result.
+    """
+    global _run_recorded
+    if _run_recorded or not _active_schedule_id:
+        return
+    try:
+        from lamia.scheduling.registry import record_run
+        exit_code = 0 if signum == signal.SIGTERM else 1
+        record_run(_active_schedule_id, exit_code, error=f"killed by signal {signum}")
+        _run_recorded = True
+    except Exception:
+        pass
 
 
 def _should_skip_catchup_run(job_id: str) -> bool:
@@ -1097,12 +1120,14 @@ def _graceful_shutdown(
     Use SystemExit so callers (including tests) can observe exit semantics
     without abruptly terminating the hosting Python process.
     """
-    if _active_schedule_id:
+    global _run_recorded
+    if _active_schedule_id and not _run_recorded:
         try:
             from lamia.scheduling.registry import record_run
             record_run(_active_schedule_id, exit_code, error=error_msg)
-        except Exception:
-            pass
+            _run_recorded = True
+        except Exception as exc:
+            logger.warning(f"Failed to record schedule run: {exc}")
     if lamia_instance is not None:
         try:
             EventLoopManager.run_coroutine(lamia_instance._engine.cleanup())

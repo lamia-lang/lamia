@@ -9,6 +9,7 @@ import pytest
 from lamia.scheduling.base import ScheduleJob, generate_schedule_id
 from lamia.scheduling.registry import (
     SCHEDULES_DIR,
+    _atomic_write,
     find_job_by_script,
     get_last_run_status,
     list_jobs,
@@ -254,3 +255,35 @@ class TestRunStatus:
         record_run(job_id, exit_code=0)
         remove_job(job_id)
         assert get_last_run_status(job_id) is None
+
+
+class TestAtomicWrite:
+    def test_writes_content(self, tmp_path):
+        target = tmp_path / "out.json"
+        _atomic_write(target, '{"key": "value"}')
+        assert json.loads(target.read_text()) == {"key": "value"}
+
+    def test_overwrites_existing(self, tmp_path):
+        target = tmp_path / "out.json"
+        target.write_text('{"old": true}')
+        _atomic_write(target, '{"new": true}')
+        assert json.loads(target.read_text()) == {"new": True}
+
+    def test_no_leftover_temp_files(self, tmp_path):
+        target = tmp_path / "out.json"
+        _atomic_write(target, "hello")
+        tmp_files = list(tmp_path.glob("*.tmp"))
+        assert tmp_files == []
+
+    def test_record_run_preserves_job_fields(self, temp_schedules_dir):
+        job = ScheduleJob(
+            script="atomic.lm", cron="0 0 * * *",
+            schedule_id="atomic-test1",
+            project_root=Path("/p"),
+        )
+        save_job(job, "/bin/lamia")
+        record_run("atomic-test1", exit_code=0)
+        data = load_job("atomic-test1")
+        assert data is not None
+        assert data["script"] == "atomic.lm"
+        assert data["last_run"]["success"] is True

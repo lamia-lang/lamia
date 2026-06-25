@@ -58,6 +58,7 @@ def setup_cli_logging(
     level: str = "INFO",
     verbose: bool = False,
     log_file: str | None = None,
+    schedule_id: str | None = None,
 ) -> None:
     """Configure logging for CLI execution.
 
@@ -66,8 +67,15 @@ def setup_cli_logging(
                at this level and above).  Defaults to INFO.
         verbose: When True, the console also shows all log levels.
         log_file: Custom path for the log file.  Defaults to .lamia/lamia.log.
+        schedule_id: When set, prefixes log messages with the schedule id so
+                     concurrent runs are distinguishable in a shared log file.
     """
     file_level = getattr(logging, level.upper(), logging.INFO)
+
+    if schedule_id:
+        fmt = f"%(asctime)s [{schedule_id}] %(name)s - %(levelname)s - %(message)s"
+    else:
+        fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
     # Silence all third-party loggers at the root — any library that propagates
     # to root is covered without hardcoding package names.
@@ -88,15 +96,11 @@ def setup_cli_logging(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     file_handler = logging.FileHandler(str(log_path), encoding="utf-8")
     file_handler.setLevel(file_level)
-    file_handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
+    file_handler.setFormatter(logging.Formatter(fmt))
     lamia_logger.addHandler(file_handler)
 
     # --- Console (stderr) handler -------------------------------------------
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(file_level if verbose else logging.WARNING)
-    console_handler.setFormatter(
-        ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
+    console_handler.setFormatter(ColoredFormatter(fmt))
     lamia_logger.addHandler(console_handler)
