@@ -33,6 +33,7 @@ from lamia.interpreter.human.parser import parse_hu_file
 from lamia.interpreter.human.executor import HuCallable
 from lamia.adapters.llm.base import sanitize_api_error
 from lamia.errors import LLMProviderError
+from lamia.scheduling.registry import record_run, load_job
 
 HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
@@ -1051,7 +1052,6 @@ def _record_run_on_signal(signum: int) -> None:
     if _run_recorded or not _active_schedule_id:
         return
     try:
-        from lamia.scheduling.registry import record_run
         exit_code = 0 if signum == signal.SIGTERM else 1
         record_run(_active_schedule_id, exit_code, error=f"killed by signal {signum}")
         _run_recorded = True
@@ -1067,7 +1067,6 @@ def _should_skip_catchup_run(job_id: str) -> bool:
     the most recent scheduled time.
     """
     from datetime import datetime, timedelta
-    from lamia.scheduling.registry import load_job
 
     try:
         job_data = load_job(job_id)
@@ -1123,7 +1122,6 @@ def _graceful_shutdown(
     global _run_recorded
     if _active_schedule_id and not _run_recorded:
         try:
-            from lamia.scheduling.registry import record_run
             record_run(_active_schedule_id, exit_code, error=error_msg)
             _run_recorded = True
         except Exception as exc:

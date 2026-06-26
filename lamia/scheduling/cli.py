@@ -190,6 +190,31 @@ def _fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
     return results
 
 
+def _format_error_line(error_msg: str, job: dict) -> str:
+    """Truncate a potentially huge error to a single readable line.
+
+    If the error is multi-line or longer than 120 chars, show only the first
+    meaningful line and append a pointer to the full log file.
+    """
+    first_line = error_msg.split("\n", 1)[0].strip()
+    max_len = 120
+    truncated = len(first_line) > max_len or "\n" in error_msg
+
+    if len(first_line) > max_len:
+        first_line = first_line[:max_len] + "..."
+
+    if not truncated:
+        return first_line
+
+    backend = job.get("backend", "local")
+    if backend == "local":
+        job_id = job.get("id", "")
+        log_path = Path.home() / ".lamia" / "logs" / "schedules" / job_id / "schedule.log"
+        return f"{first_line}  (see {log_path})"
+
+    return f"{first_line}  (see cloud logs)"
+
+
 def _print_job(job: dict, last_run: dict | None = None) -> None:
     """Print a single job entry."""
     backend = job.get("backend", "local")
@@ -211,7 +236,7 @@ def _print_job(job: dict, last_run: dict | None = None) -> None:
         error_msg = last_run.get("error", "")
         print(f"    last run: {ts}  status: {status_icon}")
         if error_msg:
-            print(f"    error: {error_msg}")
+            print(f"    error: {_format_error_line(error_msg, job)}")
     else:
         print(f"    last run: never")
     print()
