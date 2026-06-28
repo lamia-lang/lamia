@@ -1395,6 +1395,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/lamia-cloud/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lamia Cloud
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1996,10 +2024,15 @@
 </ol>
 <h2 id="cloud-scheduling">Cloud Scheduling<a class="headerlink" href="#cloud-scheduling" title="Permanent link">&para;</a></h2>
 <p>For always-on schedules that don't depend on your local machine being awake, use cloud scheduling with the <code>--remote</code> flag:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>day<span class="w"> </span>--remote
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>lamia<span class="w"> </span>daily_task.lm<span class="w"> </span>--remote
+</span></code></pre></div>
+<p>Run this one-time cloud invocation first to verify cloud permissions and runtime behavior.
+Then create the schedule:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>day<span class="w"> </span>--remote
 </span></code></pre></div>
 <p>Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (<code>list</code>, <code>update</code>, <code>remove</code>) automatically detect whether a job is local or cloud.</p>
-<p>Cloud scheduling requires the <a href="../../advanced/lamia-cloud/"><code>lamia-cloud</code></a> package. See the <a href="../../advanced/lamia-cloud/">lamia-cloud setup guide</a> for installation and configuration.</p>
+<p>Cloud scheduling requires the <a href="../../advanced/lamia-cloud/"><code>lamia-cloud</code></a> package.<br />
+See the <a href="../../advanced/lamia-cloud/">lamia-cloud user guide</a> for installation, one-time cloud runs, and scheduler setup.</p>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Script not found</strong>: If you moved the project after scheduling, the job will fail. Use <code>lamia schedule list</code> to see the stale path, then <code>remove</code> and <code>add</code> with the new location.</li>
