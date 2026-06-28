@@ -109,6 +109,7 @@ nav:
     - "LSG-3: Project Structure": style-guides/project-structure.md
   - Advanced:
     - Lamia Debugger: advanced/debugger.md
+    - Lamia Cloud: advanced/lamia-cloud.md
   - Reference:
     - Selector Usage Guide: validation/selector-usage-guide.md
     - API Reference: reference/

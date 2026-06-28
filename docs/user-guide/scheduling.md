@@ -204,12 +204,20 @@ Recommended practices:
 For always-on schedules that don't depend on your local machine being awake, use cloud scheduling with the `--remote` flag:
 
 ```bash
+lamia daily_task.lm --remote
+```
+
+Run this one-time cloud invocation first to verify cloud permissions and runtime behavior.
+Then create the schedule:
+
+```bash
 lamia schedule add daily_task.lm --every day --remote
 ```
 
 Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (`list`, `update`, `remove`) automatically detect whether a job is local or cloud.
 
-Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package. See the [lamia-cloud setup guide](../advanced/lamia-cloud.md) for installation and configuration.
+Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package.  
+See the [lamia-cloud user guide](../advanced/lamia-cloud.md) for installation, one-time cloud runs, and scheduler setup.
 
 ## Troubleshooting
 

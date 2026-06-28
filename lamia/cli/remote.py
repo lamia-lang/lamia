@@ -1,9 +1,73 @@
 """Handle `lamia <script> --remote` — one-shot remote cloud execution."""
 
+import ast
 import hashlib
 import sys
+from dataclasses import dataclass, asdict, fields
 from pathlib import Path
 from typing import Optional
+
+from lamia.interpreter.detectors import LLMCommandDetector
+from lamia.interpreter.ast_analyzer import ActionNamespaceAnalyzer
+from lamia.interpreter.commands import WebCommand, FileCommand
+
+SCRIPT_CAPABILITY_FIELDS = (
+    "uses_llm",
+    "uses_browser",
+    "uses_files",
+    "uses_file_context",
+)
+
+
+@dataclass
+class ScriptCapabilities:
+    """Cloud-agnostic metadata about what a .lm script uses."""
+
+    uses_llm: bool = False
+    uses_browser: bool = False
+    uses_files: bool = False
+    uses_file_context: bool = False
+
+
+def script_capability_field_names() -> tuple[str, ...]:
+    """Return ordered ScriptCapabilities field names for contract tests."""
+    return tuple(field.name for field in fields(ScriptCapabilities))
+
+
+def analyze_script(script_path: Path) -> ScriptCapabilities:
+    """Analyze a .lm script using existing Lamia AST infrastructure.
+
+    Uses LLMCommandDetector to find resolved LLM commands and
+    ActionNamespaceAnalyzer to detect web/file namespace usage.
+    """
+    try:
+        source = script_path.read_text()
+    except OSError:
+        return ScriptCapabilities()
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return ScriptCapabilities()
+
+    llm_functions = LLMCommandDetector().detect_commands(source)
+
+    ns_analyzer = ActionNamespaceAnalyzer()
+    ns_analyzer.visit(tree)
+
+    return ScriptCapabilities(
+        uses_llm=len(llm_functions) > 0,
+        uses_browser=(
+            WebCommand.__name__ in ns_analyzer.used_types
+            or "web" in ns_analyzer.used_namespaces
+            or "session" in ns_analyzer.used_namespaces
+        ),
+        uses_files=(
+            FileCommand.__name__ in ns_analyzer.used_types
+            or "file" in ns_analyzer.used_namespaces
+        ),
+        uses_file_context="files" in ns_analyzer.used_namespaces,
+    )
 
 
 def handle_remote_run(
@@ -20,6 +84,7 @@ def handle_remote_run(
     try:
         from lamia_cloud.gcp.deployer import (
             collect_project_files, deployment_name, deploy, run_job, fetch_execution_logs,
+            get_deployed_source_hash, set_deployed_source_hash,
         )
     except ImportError:
         print(
@@ -48,8 +113,10 @@ def handle_remote_run(
 
     print(f"Remote execution: {script_name}", file=sys.stderr)
 
+    capabilities = analyze_script(root / script_name)
+
     source_hash = _compute_source_hash(root, collect_project_files)
-    deployed_hash = _get_deployed_hash(project_id, location, target)
+    deployed_hash = get_deployed_source_hash(project_id, location, target)
 
     if source_hash == deployed_hash:
         print("  Container up to date, skipping build.", file=sys.stderr)
@@ -61,8 +128,9 @@ def handle_remote_run(
             project_root=root,
             script_name=script_name,
             name=run_name,
+            capabilities=asdict(capabilities),
         )
-        _set_deployed_hash(project_id, location, target, source_hash)
+        set_deployed_source_hash(project_id, location, target, source_hash)
 
     print("  Running...", file=sys.stderr)
     result = run_job(
@@ -110,28 +178,3 @@ def _compute_source_hash(project_root: Path, collect_fn) -> str:
     return hasher.hexdigest()[:16]
 
 
-def _get_deployed_hash(project_id: str, location: str, target: str) -> Optional[str]:
-    """Read source hash from deployed container metadata."""
-    try:
-        from google.cloud import run_v2
-        client = run_v2.JobsClient()
-        resource = f"projects/{project_id}/locations/{location}/jobs/{target}"
-        job = client.get_job(request={"name": resource})
-        return (job.labels or {}).get("lamia-source-hash")
-    except Exception:
-        return None
-
-
-def _set_deployed_hash(project_id: str, location: str, target: str, hash_val: str) -> None:
-    """Store source hash in deployed container metadata."""
-    try:
-        from google.cloud import run_v2
-        client = run_v2.JobsClient()
-        resource = f"projects/{project_id}/locations/{location}/jobs/{target}"
-        job = client.get_job(request={"name": resource})
-        if job.labels is None:
-            job.labels = {}
-        job.labels["lamia-source-hash"] = hash_val
-        client.update_job(job=job)
-    except Exception:
-        pass

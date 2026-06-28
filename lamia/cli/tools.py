@@ -132,6 +132,10 @@ TOPIC_TO_FILE = {
     "cron": "user-guide/scheduling.md",
     "cloud": "advanced/lamia-cloud.md",
     "lamia-cloud": "advanced/lamia-cloud.md",
+    "remote": "advanced/lamia-cloud.md",
+    "--remote": "advanced/lamia-cloud.md",
+    "cloud-scheduler": "advanced/lamia-cloud.md",
+    "cloud-trigger": "advanced/lamia-cloud.md",
 }
 
 _DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))
