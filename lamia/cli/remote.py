@@ -19,7 +19,7 @@ def handle_remote_run(
 
     try:
         from lamia_cloud.gcp.deployer import (
-            _collect_project_files, _job_name, deploy, run_job, fetch_execution_logs,
+            collect_project_files, deployment_name, deploy, run_job, fetch_execution_logs,
         )
     except ImportError:
         print(
@@ -43,13 +43,13 @@ def handle_remote_run(
 
     root = Path(project_root)
     script_name = Path(script).name
-    schedule_id = f"run-{_slugify(script_name)}"
-    job_name = _job_name(schedule_id)
+    run_name = _slugify(script_name)
+    target = deployment_name(run_name)
 
     print(f"Remote execution: {script_name}", file=sys.stderr)
 
-    source_hash = _compute_source_hash(root, _collect_project_files)
-    deployed_hash = _get_deployed_hash(project_id, location, job_name)
+    source_hash = _compute_source_hash(root, collect_project_files)
+    deployed_hash = _get_deployed_hash(project_id, location, target)
 
     if source_hash == deployed_hash:
         print("  Container up to date, skipping build.", file=sys.stderr)
@@ -60,21 +60,21 @@ def handle_remote_run(
             location=location,
             project_root=root,
             script_name=script_name,
-            schedule_id=schedule_id,
+            name=run_name,
         )
-        _set_deployed_hash(project_id, location, job_name, source_hash)
+        _set_deployed_hash(project_id, location, target, source_hash)
 
     print("  Running...", file=sys.stderr)
     result = run_job(
         project_id=project_id,
         location=location,
-        job_name=job_name,
+        target=target,
         verbose=verbose,
     )
 
     stdout, stderr = fetch_execution_logs(
         project_id=project_id,
-        job_name=job_name,
+        target=target,
         execution_name=result.get("execution_name", ""),
     )
 
@@ -110,25 +110,25 @@ def _compute_source_hash(project_root: Path, collect_fn) -> str:
     return hasher.hexdigest()[:16]
 
 
-def _get_deployed_hash(project_id: str, location: str, job_name: str) -> Optional[str]:
+def _get_deployed_hash(project_id: str, location: str, target: str) -> Optional[str]:
     """Read source hash from deployed container metadata."""
     try:
         from google.cloud import run_v2
         client = run_v2.JobsClient()
-        name = f"projects/{project_id}/locations/{location}/jobs/{job_name}"
-        job = client.get_job(request={"name": name})
+        resource = f"projects/{project_id}/locations/{location}/jobs/{target}"
+        job = client.get_job(request={"name": resource})
         return (job.labels or {}).get("lamia-source-hash")
     except Exception:
         return None
 
 
-def _set_deployed_hash(project_id: str, location: str, job_name: str, hash_val: str) -> None:
+def _set_deployed_hash(project_id: str, location: str, target: str, hash_val: str) -> None:
     """Store source hash in deployed container metadata."""
     try:
         from google.cloud import run_v2
         client = run_v2.JobsClient()
-        name = f"projects/{project_id}/locations/{location}/jobs/{job_name}"
-        job = client.get_job(request={"name": name})
+        resource = f"projects/{project_id}/locations/{location}/jobs/{target}"
+        job = client.get_job(request={"name": resource})
         if job.labels is None:
             job.labels = {}
         job.labels["lamia-source-hash"] = hash_val
