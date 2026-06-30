@@ -17,8 +17,6 @@ class ManagerFactory:
     
     def _register_managers(self):
         """Register available manager implementations."""
-        # Import here to avoid circular imports
-        
         self._manager_registry[CommandType.LLM] = LLMManager
         self._manager_registry[CommandType.FILESYSTEM] = FSManager
         self._manager_registry[CommandType.WEB] = WebManager

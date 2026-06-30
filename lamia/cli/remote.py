@@ -7,16 +7,21 @@ from dataclasses import dataclass, asdict, fields
 from pathlib import Path
 from typing import Optional
 
-from lamia.interpreter.detectors import LLMCommandDetector
-from lamia.interpreter.ast_analyzer import ActionNamespaceAnalyzer
-from lamia.interpreter.commands import WebCommand, FileCommand
-
-SCRIPT_CAPABILITY_FIELDS = (
-    "uses_llm",
-    "uses_browser",
-    "uses_files",
-    "uses_file_context",
+from lamia_cloud.contracts import SCRIPT_CAPABILITY_FIELDS
+from lamia_cloud.file_sync import build_file_sync_plan
+from lamia_cloud.gcp.deployer import (
+    collect_project_files,
+    deployment_name,
+    deploy,
+    fetch_execution_logs,
+    get_deployed_source_hash,
+    run_job,
+    set_deployed_source_hash,
+    sync_runtime_files,
 )
+from lamia.interpreter.detectors import LLMCommandDetector
+from lamia.interpreter.ast_analyzer import ActionNamespaceAnalyzer, extract_script_file_refs
+from lamia.interpreter.commands import WebCommand, FileCommand
 
 
 @dataclass
@@ -81,19 +86,6 @@ def handle_remote_run(
         print("Error: --remote requires a script file", file=sys.stderr)
         sys.exit(1)
 
-    try:
-        from lamia_cloud.gcp.deployer import (
-            collect_project_files, deployment_name, deploy, run_job, fetch_execution_logs,
-            get_deployed_source_hash, set_deployed_source_hash,
-        )
-    except ImportError:
-        print(
-            'Error: lamia-cloud not installed.\n'
-            'Install with: pip install "lamia-lang[cloud]"',
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
     cloud_cfg = (config or {}).get("cloud", {})
     project_id = cloud_cfg.get("project_id")
     location = cloud_cfg.get("location", "us-central1")
@@ -114,9 +106,35 @@ def handle_remote_run(
     print(f"Remote execution: {script_name}", file=sys.stderr)
 
     capabilities = analyze_script(root / script_name)
+    try:
+        entries = build_file_sync_plan(
+            files_context_paths=extract_script_file_refs(root / script_name),
+            project_root=root,
+            local_home=Path.home(),
+        )
+    except Exception as exc:
+        print(f"Error: file sync planning failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+    _warn_about_file_uploads(entries)
 
-    source_hash = _compute_source_hash(root, collect_project_files)
+    sync_feedback = sync_runtime_files(
+        project_id=project_id,
+        location=location,
+        entries=entries,
+    )
+    for overwrite in sync_feedback.get("overwrite_warnings", []):
+        print(f"  Warning: {overwrite}", file=sys.stderr)
+    if sync_feedback.get("uploaded", 0):
+        print(
+            f"  Synced files: uploaded={sync_feedback['uploaded']}, "
+            f"skipped={sync_feedback.get('skipped', 0)}",
+            file=sys.stderr,
+        )
+
+    source_hash = _compute_source_hash(root)
     deployed_hash = get_deployed_source_hash(project_id, location, target)
+
+    uses_files = capabilities.uses_files or capabilities.uses_file_context
 
     if source_hash == deployed_hash:
         print("  Container up to date, skipping build.", file=sys.stderr)
@@ -129,6 +147,7 @@ def handle_remote_run(
             script_name=script_name,
             name=run_name,
             capabilities=asdict(capabilities),
+            uses_files=uses_files,
         )
         set_deployed_source_hash(project_id, location, target, source_hash)
 
@@ -169,12 +188,20 @@ def _slugify(name: str) -> str:
     return slug[:20]
 
 
-def _compute_source_hash(project_root: Path, collect_fn) -> str:
-    """SHA256 of all project source files for change detection."""
+def _compute_source_hash(project_root: Path) -> str:
     hasher = hashlib.sha256()
-    for f in sorted(collect_fn(project_root)):
+    for f in sorted(collect_project_files(project_root)):
         hasher.update(str(f.relative_to(project_root)).encode())
         hasher.update(f.read_bytes())
     return hasher.hexdigest()[:16]
+
+
+def _warn_about_file_uploads(entries: list) -> None:
+    if not entries:
+        return
+    unique_paths = sorted({e.raw_path for e in entries})
+    print("  Warning: this remote run will upload local files to cloud storage.", file=sys.stderr)
+    for raw in unique_paths:
+        print(f"    - {raw}", file=sys.stderr)
 
 

@@ -3,6 +3,7 @@
 import ast
 import asyncio
 import logging
+from pathlib import Path
 from typing import Set, Dict, Any, List, Optional
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,7 @@ from lamia.interpreter.command_types import CommandType
 
 logger = logging.getLogger(__name__)
 
+FILES_NAMESPACE = "files"
 
 class ActionNamespaceAnalyzer(ast.NodeVisitor):
     """Analyzes AST to detect which action namespaces are used."""
@@ -52,8 +54,8 @@ class ActionNamespaceAnalyzer(ast.NodeVisitor):
         if node.id in ['session']:
             self.used_namespaces.add('session')
         # Add 'files' context manager to used namespaces
-        if node.id in ['files']:
-            self.used_namespaces.add('files')
+        if node.id == FILES_NAMESPACE:
+            self.used_namespaces.add(FILES_NAMESPACE)
         
         self.generic_visit(node)
     
@@ -185,9 +187,9 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
         from lamia.actions import file
         execution_globals['file'] = file
     
-    if 'files' in used_namespaces:
+    if FILES_NAMESPACE in used_namespaces:
         from lamia.engine.managers.llm.files_context_manager import files, capture_files_context
-        execution_globals['files'] = files
+        execution_globals[FILES_NAMESPACE] = files
         execution_globals['capture_files_context'] = capture_files_context
     
     # Always inject InputType for form automation
@@ -241,3 +243,24 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
     #     execution_globals['db'] = db
     
     return execution_globals
+
+
+def extract_script_file_refs(script_path: Path) -> list[str]:
+    """Return with files(...) paths from a .lm script for cloud sync planning."""
+    paths: list[str] = []
+    for node in ast.walk(ast.parse(script_path.read_text())):
+        if not isinstance(node, ast.With):
+            continue
+        for item in node.items:
+            expr = item.context_expr
+            if (
+                isinstance(expr, ast.Call)
+                and isinstance(expr.func, ast.Name)
+                and expr.func.id == FILES_NAMESPACE
+            ):
+                for arg in expr.args:
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        paths.append(arg.value)
+                    else:
+                        raise ValueError("with files() arguments must be literal strings for cloud sync")
+    return paths
