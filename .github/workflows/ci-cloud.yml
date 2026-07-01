@@ -1,0 +1,40 @@
+name: CI Cloud Integration
+
+on:
+  push:
+    branches: [main]
+    paths: &cloud-paths
+      - lamia/cli/remote.py
+      - lamia/interpreter/ast_analyzer.py
+      - lamia/interpreter/commands.py
+      - lamia/interpreter/command_types.py
+      - lamia/interpreter/detectors/__init__.py
+      - lamia/interpreter/detectors/llm_command_detector.py
+      - tests/cli/test_remote.py
+      - .github/workflows/ci-cloud.yml
+  pull_request:
+    branches: [main]
+    paths: *cloud-paths
+  workflow_dispatch:
+
+jobs:
+  test-cloud:
+    runs-on: ubuntu-latest
+    name: Cloud integration tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install "lamia-cloud @ git+https://github.com/lamia-lang/lamia-cloud.git"
+          pip install -e ".[dev]"
+
+      - name: Run cloud integration tests
+        run: pytest tests/cli/test_remote.py --tb=short -q

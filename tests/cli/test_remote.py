@@ -1,6 +1,8 @@
 import pytest
 from pathlib import Path
 
+pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+
 from lamia_cloud.contracts import FileSyncEntry
 from lamia.cli.remote import (
     ScriptCapabilities,
