@@ -8,6 +8,8 @@ from lamia.validation.base import ValidationResult, BaseValidator
 from lamia.interpreter.commands import WebCommand, WebActionType
 from lamia.internal_types import BrowserAction, BrowserActionType, BrowserActionParams
 from lamia.adapters.web.browser.base import BaseBrowserAdapter
+from lamia.adapters.web.browser.selenium_adapter import SeleniumAdapter
+from lamia.adapters.web.browser.playwright_adapter import PlaywrightAdapter
 
 
 class TestBrowserManagerInitialization:
@@ -636,3 +638,89 @@ class TestBrowserManagerStaleCacheInvalidation:
                 with patch.object(self.manager, '_get_current_page_url', return_value='https://example.com'):
                     with pytest.raises(ExternalOperationPermanentError):
                         await self.manager.execute(command)
+
+
+class TestBrowserManagerCloudHeadlessOverride:
+    """Test that cloud environment forces headless mode for browser adapters."""
+
+    def _make_manager(self, headless: bool = False, engine: str = "selenium") -> BrowserManager:
+        config = {
+            "web_config": {
+                "browser_engine": engine,
+                "browser_options": {"headless": headless},
+            }
+        }
+        return BrowserManager(ConfigProvider(config))
+
+    @pytest.mark.asyncio
+    async def test_cloud_forces_headless_for_selenium(self):
+        """When on cloud, Selenium adapter must receive headless=True even if config says False."""
+        manager = self._make_manager(headless=False, engine="selenium")
+
+        with patch("lamia.engine.managers.web.browser_manager._is_on_cloud", return_value=True), \
+             patch.object(SeleniumAdapter, "initialize", new_callable=AsyncMock):
+            adapter = await manager._get_browser_adapter()
+            base = adapter.adapter if hasattr(adapter, "adapter") else adapter
+            assert base.headless is True
+
+    @pytest.mark.asyncio
+    async def test_cloud_forces_headless_for_playwright(self):
+        """When on cloud, Playwright adapter must receive headless=True even if config says False."""
+        manager = self._make_manager(headless=False, engine="playwright")
+
+        captured_headless = {}
+
+        original_init = PlaywrightAdapter.__init__
+
+        def capturing_init(self_adapter, *args, **kwargs):
+            captured_headless["value"] = kwargs.get("headless", args[0] if args else None)
+            original_init(self_adapter, *args, **kwargs)
+
+        with patch("lamia.engine.managers.web.browser_manager._is_on_cloud", return_value=True), \
+             patch.object(PlaywrightAdapter, "__init__", capturing_init), \
+             patch.object(PlaywrightAdapter, "__abstractmethods__", frozenset()), \
+             patch.object(PlaywrightAdapter, "initialize", new_callable=AsyncMock):
+            adapter = await manager._get_browser_adapter()
+            assert captured_headless["value"] is True
+
+    @pytest.mark.asyncio
+    async def test_local_does_not_force_headless(self):
+        """When NOT on cloud, headless=False from config must be preserved."""
+        manager = self._make_manager(headless=False, engine="selenium")
+
+        with patch("lamia.engine.managers.web.browser_manager._is_on_cloud", return_value=False), \
+             patch.object(SeleniumAdapter, "initialize", new_callable=AsyncMock):
+            adapter = await manager._get_browser_adapter()
+            base = adapter.adapter if hasattr(adapter, "adapter") else adapter
+            assert base.headless is False
+
+    @pytest.mark.asyncio
+    async def test_cloud_respects_explicit_headless_true(self):
+        """When config already says headless=True, cloud override is a no-op."""
+        manager = self._make_manager(headless=True, engine="playwright")
+
+        captured_headless = {}
+
+        original_init = PlaywrightAdapter.__init__
+
+        def capturing_init(self_adapter, *args, **kwargs):
+            captured_headless["value"] = kwargs.get("headless", args[0] if args else None)
+            original_init(self_adapter, *args, **kwargs)
+
+        with patch("lamia.engine.managers.web.browser_manager._is_on_cloud", return_value=True), \
+             patch.object(PlaywrightAdapter, "__init__", capturing_init), \
+             patch.object(PlaywrightAdapter, "__abstractmethods__", frozenset()), \
+             patch.object(PlaywrightAdapter, "initialize", new_callable=AsyncMock):
+            adapter = await manager._get_browser_adapter()
+            assert captured_headless["value"] is True
+
+    @pytest.mark.asyncio
+    async def test_local_respects_explicit_headless_true(self):
+        """When user explicitly sets headless=True locally, it must stay True."""
+        manager = self._make_manager(headless=True, engine="selenium")
+
+        with patch("lamia.engine.managers.web.browser_manager._is_on_cloud", return_value=False), \
+             patch.object(SeleniumAdapter, "initialize", new_callable=AsyncMock):
+            adapter = await manager._get_browser_adapter()
+            base = adapter.adapter if hasattr(adapter, "adapter") else adapter
+            assert base.headless is True

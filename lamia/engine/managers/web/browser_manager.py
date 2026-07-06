@@ -17,6 +17,12 @@ from .selector_resolution.all_selectors_failed_handler import AllSelectorsFailed
 from typing import Optional, Any
 import logging
 
+try:
+    from lamia_cloud import is_on_cloud as _is_on_cloud
+except ImportError:
+    def _is_on_cloud() -> bool:
+        return False
+
 logger = logging.getLogger(__name__)
 
 
@@ -409,9 +415,16 @@ class BrowserManager:
             
             # Create browser adapter WITHOUT loading any cookies initially
             logger.info("Creating clean browser adapter (no cookies loaded yet)")
+            headless = self._browser_options.get("headless", False)
+            if not headless and _is_on_cloud():
+                headless = True
+                logger.info(
+                    "Cloud environment detected — forcing headless mode "
+                    "(headed browsers are not supported in cloud containers)"
+                )
             if self._browser_engine == "selenium":
                 base_adapter = SeleniumAdapter(
-                    headless=self._browser_options.get("headless", False),
+                    headless=headless,
                     timeout=self._browser_options.get("timeout", 10.0),
                     session_config=session_config,
                     profile_name=self._active_profile,
@@ -419,7 +432,7 @@ class BrowserManager:
                 )
             elif self._browser_engine == "playwright":
                 base_adapter = PlaywrightAdapter(
-                    headless=self._browser_options.get("headless", False),
+                    headless=headless,
                     timeout=self._browser_options.get("timeout", 10.0),
                     session_config=session_config,
                     profile_name=self._active_profile,
