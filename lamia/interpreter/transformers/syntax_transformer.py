@@ -134,7 +134,11 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         # Check if this expression is a web.method() call
         if self._is_web_method_call(node):
             return self._transform_web_expression(node)
-        
+
+        # Check if this is a trigger.method() call — transform to variable assignments
+        if self._is_trigger_call(node):
+            return self._transform_trigger_call(node)
+
         # Not a web expression, continue normal processing
         return self.generic_visit(node)
     
@@ -669,7 +673,73 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         
         # Return new expression statement with lamia.run()
         return ast.Expr(value=lamia_call)
-    
+
+    def _is_trigger_call(self, node) -> bool:
+        """Check if expression is a trigger.method() call."""
+        return (isinstance(node.value, ast.Call) and
+                isinstance(node.value.func, ast.Attribute) and
+                isinstance(node.value.func.value, ast.Name) and
+                node.value.func.value.id == 'trigger')
+
+    def _transform_trigger_call(self, node):
+        """Transform trigger.method(param1, param2, key="val") into variable assignments.
+
+        Bare names (ast.Name) become output bindings — local variables assigned from event data.
+        String literal kwargs are config params (used by deploy for filters, not at runtime).
+
+        trigger.email_received(sender, subject, body)
+        becomes:
+            _trigger_data = trigger._resolve("email_received")
+            sender = _trigger_data["sender"]
+            subject = _trigger_data["subject"]
+            body = _trigger_data["body"]
+        """
+        call_node = node.value
+        method_name = call_node.func.attr
+
+        output_bindings: list[str] = []
+        for arg in call_node.args:
+            if isinstance(arg, ast.Name):
+                output_bindings.append(arg.id)
+        for kw in call_node.keywords:
+            if kw.arg and isinstance(kw.value, ast.Name):
+                output_bindings.append(kw.value.id)
+            elif kw.arg and isinstance(kw.value, ast.Constant):
+                pass
+
+        resolve_call = ast.Assign(
+            targets=[ast.Name(id='_trigger_data', ctx=ast.Store())],
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id='trigger', ctx=ast.Load()),
+                    attr='_resolve',
+                    ctx=ast.Load(),
+                ),
+                args=[ast.Constant(value=method_name)],
+                keywords=[],
+            ),
+            lineno=node.lineno,
+            col_offset=node.col_offset,
+        )
+        ast.fix_missing_locations(resolve_call)
+
+        stmts = [resolve_call]
+        for binding in output_bindings:
+            assign = ast.Assign(
+                targets=[ast.Name(id=binding, ctx=ast.Store())],
+                value=ast.Subscript(
+                    value=ast.Name(id='_trigger_data', ctx=ast.Load()),
+                    slice=ast.Constant(value=binding),
+                    ctx=ast.Load(),
+                ),
+                lineno=node.lineno,
+                col_offset=node.col_offset,
+            )
+            ast.fix_missing_locations(assign)
+            stmts.append(assign)
+
+        return stmts
+
     _RUNNABLE_NAMESPACES = frozenset(('file', 'http'))
 
     def _is_web_call(self, node) -> bool:

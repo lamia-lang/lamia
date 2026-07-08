@@ -7,7 +7,7 @@ Run Lamia scripts in the cloud with the same `.lm` workflow you use locally.
 - one-time cloud execution with `--remote`
 - cloud scheduling with Cloud Scheduler
 - Cloud Run Job execution with logs in Cloud Logging
-- upcoming cloud triggers support
+- event-driven triggers (see [Triggers](../user-guide/triggers.md))
 
 ## Installation
 

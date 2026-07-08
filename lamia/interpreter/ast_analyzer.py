@@ -237,6 +237,10 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
                 raise Exception("Session validation requires a Lamia instance but none was provided")
             execution_globals['validate_session_result'] = no_lamia_validator"""
     
+    if 'trigger' in used_namespaces:
+        from lamia.actions import trigger
+        execution_globals['trigger'] = trigger
+
     # Future namespaces can be added here
     # if 'db' in used_namespaces:
     #     from lamia.actions import db

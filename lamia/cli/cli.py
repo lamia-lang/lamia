@@ -682,6 +682,11 @@ def main():
         handle_schedule()
         return
 
+    if len(sys.argv) > 1 and sys.argv[1] == "trigger":
+        from lamia.triggers.cli import handle_trigger
+        handle_trigger()
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] == "models":
         _handle_models_command()
         return
