@@ -1341,10 +1341,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#syntax" class="md-nav__link">
+  <a href="#writing-a-triggered-script" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Syntax
+        Writing a Triggered Script
       
     </span>
   </a>
@@ -1352,22 +1352,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#supported-events" class="md-nav__link">
+  <a href="#available-events" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Supported Events
+        Available Events
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Supported Events">
+    <nav class="md-nav" aria-label="Available Events">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#triggeremail_received" class="md-nav__link">
+  <a href="#email-received" class="md-nav__link">
     <span class="md-ellipsis">
       
-        trigger.email_received(...)
+        Email received
       
     </span>
   </a>
@@ -1375,21 +1375,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#triggerfile_created" class="md-nav__link">
+  <a href="#file-created-modified-deleted" class="md-nav__link">
     <span class="md-ellipsis">
       
-        trigger.file_created(...)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#triggerfile_modified-triggerfile_deleted" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        trigger.file_modified(...) / trigger.file_deleted(...)
+        File created / modified / deleted
       
     </span>
   </a>
@@ -1402,22 +1391,44 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#deploying-triggers" class="md-nav__link">
+  <a href="#deploying" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Deploying Triggers
+        Deploying
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Deploying Triggers">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a Mode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Choosing a Mode">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#managing-triggers" class="md-nav__link">
+  <a href="#reactive-mode" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Managing triggers
+        Reactive mode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scheduled-mode-similar-to-how-an-employee-would-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scheduled mode (similar to how an employee would work)
       
     </span>
   </a>
@@ -1430,10 +1441,38 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#multi-trigger-scripts" class="md-nav__link">
+  <a href="#multi-step-scripts" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Multi-Trigger Scripts
+        Multi-Step Scripts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi-Step Scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#example-enterprise-pricing-approval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example: Enterprise Pricing Approval
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-isolation-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Isolation Works
       
     </span>
   </a>
@@ -1441,10 +1480,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#testing-locally" class="md-nav__link">
+  <a href="#listing-triggers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Testing Locally
+        Listing Triggers
       
     </span>
   </a>
@@ -1491,62 +1530,115 @@
 
 
 <h1 id="triggers">Triggers<a class="headerlink" href="#triggers" title="Permanent link">&para;</a></h1>
-<p>Triggers let you run Lamia scripts automatically when events happen — like receiving an email or a file being changed.</p>
-<h2 id="syntax">Syntax<a class="headerlink" href="#syntax" title="Permanent link">&para;</a></h2>
-<p>Use <code>trigger.&lt;event_type&gt;(output_vars, config_key="value")</code> at the top of your script:</p>
+<p>Triggers make your Lamia scripts react to real-world events automatically.
+Instead of running a script manually, you define what should start it — an
+incoming email, a new file appearing, etc.</p>
+<h2 id="writing-a-triggered-script">Writing a Triggered Script<a class="headerlink" href="#writing-a-triggered-script" title="Permanent link">&para;</a></h2>
+<p>Add a <code>trigger</code> line at the point in your script where you want to wait for
+an event. The parameters you list will be filled in with information from that
+event:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># From here on, sender/subject/body are available as regular variables.</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">reply_to_lead</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
 </span></code></pre></div>
+<p>String keyword arguments are configuration (they tell Lamia <em>where</em> to listen, what to filter out, etc.):</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;sales/pricing&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Here <code>name</code> and <code>size</code> will come from the event, while <code>path</code> tells Lamia
+which folder to watch.</p>
+<h2 id="available-events">Available Events<a class="headerlink" href="#available-events" title="Permanent link">&para;</a></h2>
+<h3 id="email-received">Email received<a class="headerlink" href="#email-received" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Fields you can request: <code>sender</code>, <code>subject</code>, <code>body</code>, <code>html_body</code>, <code>message_id</code>,
+<code>thread_id</code>, <code>timestamp</code>, <code>attachments</code>, <code>labels</code>.</p>
+<h3 id="file-created-modified-deleted">File created / modified / deleted<a class="headerlink" href="#file-created-modified-deleted" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">content_type</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;reports/incoming&quot;</span><span class="p">)</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_modified</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;shared/data&quot;</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_deleted</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;archive/temp&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Fields: <code>name</code>, <code>size</code>, <code>content_type</code>, <code>timestamp</code>, <code>metadata</code>.</p>
+<p>The <code>path</code> parameter specifies the folder or location to monitor.</p>
+<h2 id="deploying">Deploying<a class="headerlink" href="#deploying" title="Permanent link">&para;</a></h2>
+<p>When you deploy a script that contains <code>trigger.*</code> calls, Lamia automatically
+sets up the event infrastructure for you.</p>
+<h2 id="choosing-a-mode">Choosing a Mode<a class="headerlink" href="#choosing-a-mode" title="Permanent link">&para;</a></h2>
+<h3 id="reactive-mode">Reactive mode<a class="headerlink" href="#reactive-mode" title="Permanent link">&para;</a></h3>
+<p>Each event starts its own independent script execution right away.</p>
+<p>Best for: notifications that must be handled immediately (order confirmations,
+alerts, time-sensitive replies).</p>
+<p>To deploy a script that contains <code>trigger.*</code>s in reactive mode use:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>lamia<span class="w"> </span>pricing_reply.lm<span class="w"> </span>--remote
+</span></code></pre></div>
+<h3 id="scheduled-mode-similar-to-how-an-employee-would-work">Scheduled mode (similar to how an employee would work)<a class="headerlink" href="#scheduled-mode-similar-to-how-an-employee-would-work" title="Permanent link">&para;</a></h3>
+<p>Events accumulate. At the scheduled time, the script wakes up, processes every
+pending event in parallel (one script execution per event), then sleeps until
+the next scheduled time.</p>
+<p>Best for: tasks where you want to appear human
+(answering emails in the morning, processing daily uploads).</p>
+<p>To deploy a script that contains <code>trigger.*</code>s in scheduled mode use:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>pricing_reply.lm<span class="w"> </span>--remote<span class="w"> </span>--cron<span class="w"> </span><span class="s2">&quot;33 9 * * *&quot;</span>
+</span></code></pre></div>
+<p>This will deploy the script to the cloud and set up a cron job to run the script at 9:33 AM every day.</p>
+<h2 id="multi-step-scripts">Multi-Step Scripts<a class="headerlink" href="#multi-step-scripts" title="Permanent link">&para;</a></h2>
+<p>A script can wait for more than one event. Each additional <code>trigger.*</code> call
+pauses the script until that event arrives (up to 72 hours).</p>
+<p>Every script execution is parallel and fully <strong>isolated</strong>. Each execution waits for its own event and runs independently.</p>
+<h3 id="example-enterprise-pricing-approval">Example: Enterprise Pricing Approval<a class="headerlink" href="#example-enterprise-pricing-approval" title="Permanent link">&para;</a></h3>
+<p>Below is a complete script that handles pricing inquiries. Regular requests
+get an automated response. Enterprise requests need a human to prepare custom
+pricing, so the script waits for that file to appear.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># AI classifies the request</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">classification</span> <span class="o">=</span> <span class="n">classify_lead</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">classification</span><span class="p">[</span><span class="s2">&quot;enterprise&quot;</span><span class="p">]:</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="c1"># Standard request — send public pricing immediately</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">pricing_page</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">&quot;https://ourcompany.com/pricing&quot;</span><span class="p">)</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">compose_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">pricing_page</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">&quot;drafts/reply.txt&quot;</span><span class="p">)</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="k">else</span><span class="p">:</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="c1"># Enterprise request — notify the team and wait for human input.</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="c1"># The sales team places a custom pricing document at this path</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="c1"># within 72 hours. The file name should reference the request</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="c1"># (e.g. &quot;bigcorp-2026-07.pdf&quot;).</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>    <span class="n">notify_sales_team</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>    <span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;sales/custom-pricing&quot;</span><span class="p">)</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>    <span class="c1"># Script resumes here once the file appears.</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>    <span class="n">compose_custom_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">&quot;drafts/reply.txt&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>How this works at runtime:</p>
+<ol>
+<li>An email arrives. Lamia starts a new, isolated execution of the script.</li>
+<li>The AI classifies the request.</li>
+<li><strong>Standard request</strong>: reply is sent immediately, execution finishes.</li>
+<li><strong>Enterprise request</strong>: the script pauses and waits (up to 72 hours) for a
+   file to appear at <code>sales/custom-pricing</code>.</li>
+<li>Meanwhile, other emails can arrive and start their own independent
+   executions — they do not interfere with each other.</li>
+<li>When a team member uploads the pricing file, the waiting execution resumes
+   and sends the custom reply.</li>
+</ol>
+<p>If no file appears within 72 hours, the execution times out gracefully.</p>
+<h2 id="how-isolation-works">How Isolation Works<a class="headerlink" href="#how-isolation-works" title="Permanent link">&para;</a></h2>
+<p>Each script execution that reaches a waiting point creates its own private
+event listener. This means:</p>
 <ul>
-<li><strong>Bare names</strong> (<code>sender</code>, <code>subject</code>, <code>body</code>) become local variables populated with event data</li>
-<li><strong>String kwargs</strong> (<code>path="path/to/my/file"</code>) are config params that control which events to listen to</li>
+<li>There is no queue contention — concurrent waits run in full isolation.</li>
+<li>Finished executions clean up their listeners automatically.</li>
 </ul>
-<h2 id="supported-events">Supported Events<a class="headerlink" href="#supported-events" title="Permanent link">&para;</a></h2>
-<h3 id="triggeremail_received"><code>trigger.email_received(...)</code><a class="headerlink" href="#triggeremail_received" title="Permanent link">&para;</a></h3>
-<p>Fires when a new email arrives (via Gmail push notifications).</p>
-<p>Available fields: <code>sender</code>, <code>subject</code>, <code>body</code>, <code>html_body</code>, <code>message_id</code>, <code>thread_id</code>, <code>timestamp</code>, <code>attachments</code>, <code>labels</code></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">classify_email</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">[</span><span class="n">Category</span><span class="p">]</span>
-</span></code></pre></div>
-<h3 id="triggerfile_created"><code>trigger.file_created(...)</code><a class="headerlink" href="#triggerfile_created" title="Permanent link">&para;</a></h3>
-<p>Fires when a file is created in a storage bucket.</p>
-<p>Config params: <code>path</code></p>
-<p>Available fields: <code>name</code>, <code>size</code>, <code>content_type</code>, <code>timestamp</code>, <code>metadata</code></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">content_type</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;invoices-bucket&quot;</span><span class="p">)</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.pdf&quot;</span><span class="p">):</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">process_invoice</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">[</span><span class="n">Invoice</span><span class="p">]</span>
-</span></code></pre></div>
-<h3 id="triggerfile_modified-triggerfile_deleted"><code>trigger.file_modified(...)</code> / <code>trigger.file_deleted(...)</code><a class="headerlink" href="#triggerfile_modified-triggerfile_deleted" title="Permanent link">&para;</a></h3>
-<p>Same fields as <code>file_created</code>, fires on modification or deletion.</p>
-<h2 id="deploying-triggers">Deploying Triggers<a class="headerlink" href="#deploying-triggers" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>add<span class="w"> </span>email_handler.lm<span class="w"> </span>--remote
-</span></code></pre></div>
-<p>This single command:
-1. Builds and deploys your script as a Cloud Run Job
-2. Creates the orchestration workflow
-3. Sets up event routing (Eventarc)</p>
-<h3 id="managing-triggers">Managing triggers<a class="headerlink" href="#managing-triggers" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list<span class="w">                    </span><span class="c1"># List all triggers with status</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>remove<span class="w"> </span>&lt;id&gt;<span class="w">             </span><span class="c1"># Remove a trigger</span>
-</span></code></pre></div>
-<h2 id="multi-trigger-scripts">Multi-Trigger Scripts<a class="headerlink" href="#multi-trigger-scripts" title="Permanent link">&para;</a></h2>
-<p>Scripts can have multiple triggers (sequential stages):</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">classification</span> <span class="o">=</span> <span class="n">classify_email</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">[</span><span class="n">Category</span><span class="p">]</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;attachments-bucket&quot;</span><span class="p">)</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">process_attachment</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">classification</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">[</span><span class="n">Report</span><span class="p">]</span>
-</span></code></pre></div>
-<p>Each trigger boundary creates a new execution stage. The workflow waits for the next event before proceeding.</p>
-<h2 id="testing-locally">Testing Locally<a class="headerlink" href="#testing-locally" title="Permanent link">&para;</a></h2>
-<p>Set the <code>LAMIA_TRIGGER_EVENT</code> environment variable with JSON data:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">LAMIA_TRIGGER_EVENT</span><span class="o">=</span><span class="s1">&#39;{&quot;sender&quot;:&quot;test@example.com&quot;,&quot;subject&quot;:&quot;Test&quot;,&quot;body&quot;:&quot;Hello&quot;}&#39;</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>lamia<span class="w"> </span>email_handler.lm
+<h2 id="listing-triggers">Listing Triggers<a class="headerlink" href="#listing-triggers" title="Permanent link">&para;</a></h2>
+<p>To see what triggers are configured:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list
 </span></code></pre></div>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Cloud triggers require <code>lamia-lang[cloud]</code> (<code>pip install "lamia-lang[cloud]"</code>)</li>
-<li>A GCP project with <code>project_id</code> in your <code>config.yaml</code></li>
-<li>Eventarc, Workflows, and Cloud Run APIs enabled</li>
+<li>Currently triggers are only supported in remote mode (<code>--remote</code>).</li>
+<li>Install cloud support: <code>pip install "lamia-lang[cloud]"</code></li>
+<li>Set <code>cloud.project_id</code> in your project <code>config.yaml</code>.</li>
 </ul>
 
 
