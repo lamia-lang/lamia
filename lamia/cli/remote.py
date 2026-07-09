@@ -19,9 +19,12 @@ from lamia_cloud.gcp.deployer import (
     set_deployed_source_hash,
     sync_runtime_files,
 )
+from lamia_cloud.gcp.trigger_provider import GCPTriggerProvider
+from lamia_cloud.types import TriggerDeploymentPlan
 from lamia.interpreter.detectors import LLMCommandDetector
 from lamia.interpreter.ast_analyzer import ActionNamespaceAnalyzer, extract_script_file_refs
 from lamia.interpreter.commands import WebCommand, FileCommand
+from lamia.triggers.cli import extract_all_triggers
 
 
 @dataclass
@@ -81,7 +84,7 @@ def handle_remote_run(
     config: Optional[dict],
     verbose: bool,
 ) -> None:
-    """Execute a .lm script remotely and report results."""
+    """Execute a .lm script remotely, or deploy trigger infrastructure if script has triggers."""
     if not script:
         print("Error: --remote requires a script file", file=sys.stderr)
         sys.exit(1)
@@ -99,7 +102,17 @@ def handle_remote_run(
         sys.exit(1)
 
     root = Path(project_root)
-    script_name = Path(script).name
+    script_path = Path(script)
+    if script_path.is_absolute():
+        script_name = str(script_path.relative_to(root))
+    else:
+        script_name = str(script_path)
+
+    stages = extract_all_triggers(root / script_name)
+    if stages:
+        _deploy_trigger(script_name, root, cloud_cfg, stages)
+        return
+
     run_name = _slugify(script_name)
     target = deployment_name(run_name)
 
@@ -180,6 +193,35 @@ def handle_remote_run(
         print(f"  Logs: {logs_url}", file=sys.stderr)
 
     sys.exit(exit_code)
+
+
+def _deploy_trigger(
+    script_name: str,
+    project_root: Path,
+    cloud_cfg: dict,
+    stages: list,
+) -> None:
+    """Deploy always-reactive trigger infrastructure for a script with trigger.* calls."""
+    name = _slugify(script_name)
+    capabilities = analyze_script(project_root / script_name)
+
+    plan = TriggerDeploymentPlan(
+        name=name,
+        stages=stages,
+        capabilities=asdict(capabilities),
+        mode="reactive",
+    )
+
+    provider = GCPTriggerProvider.from_config(cloud_cfg)
+
+    print(f"Deploying trigger: {script_name} ({len(stages)} stage(s))...", file=sys.stderr)
+    print(f"  mode: always-reactive (event -> immediate execution)", file=sys.stderr)
+    for i, stage in enumerate(stages):
+        print(f"  stage {i}: {stage.trigger_method}", file=sys.stderr)
+
+    deployment_id = provider.deploy(plan)
+    print(f"\nDeployed: {deployment_id}", file=sys.stderr)
+    print(f"View triggers: lamia trigger list", file=sys.stderr)
 
 
 def _slugify(name: str) -> str:

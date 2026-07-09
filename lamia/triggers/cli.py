@@ -1,9 +1,7 @@
 """CLI handler for `lamia trigger` commands.
 
 Usage:
-    lamia trigger add <script.lm> --remote
     lamia trigger list
-    lamia trigger remove <id>
 """
 
 import argparse
@@ -20,82 +18,15 @@ def handle_trigger() -> None:
         prog="lamia trigger",
     )
     subparsers = parser.add_subparsers(dest="action")
-
-    add_parser = subparsers.add_parser(
-        "add",
-        help="Deploy a triggered script",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "The script must contain at least one trigger.* call.\n\n"
-            "Examples:\n"
-            "  lamia trigger add email_handler.lm --remote\n"
-            "  lamia trigger add invoice_processor.lm --remote\n"
-        ),
-    )
-    add_parser.add_argument("script", help="Path to the .lm script file")
-    add_parser.add_argument(
-        "--remote",
-        action="store_true",
-        help="Deploy to cloud (requires lamia-lang[cloud]).",
-    )
-
     subparsers.add_parser("list", help="List all deployed triggers")
-
-    remove_parser = subparsers.add_parser("remove", help="Remove a deployed trigger")
-    remove_parser.add_argument("id", help="Trigger ID (from 'lamia trigger list')")
-
-    if len(sys.argv) >= 3 and sys.argv[2] == "add" and len(sys.argv) == 3:
-        add_parser.print_help()
-        sys.exit(2)
 
     args = parser.parse_args(sys.argv[2:])
 
-    if args.action == "add":
-        _handle_add(args)
-    elif args.action == "list":
+    if args.action == "list":
         _handle_list()
-    elif args.action == "remove":
-        _handle_remove(args)
     else:
         parser.print_help()
         sys.exit(1)
-
-
-def _handle_add(args: argparse.Namespace) -> None:
-    script_path = Path(args.script).resolve()
-    if not script_path.exists():
-        print(f"Error: script not found: {script_path}", file=sys.stderr)
-        sys.exit(1)
-
-    stages = extract_all_triggers(script_path)
-    if not stages:
-        print(
-            f"Error: no trigger.* call found in {script_path.name}.\n"
-            "The script must contain at least one trigger call, e.g.:\n"
-            "  trigger.email_received(sender, subject, body)",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    if not args.remote:
-        print(
-            "Error: local triggers are not yet supported.\n"
-            "Use --remote to deploy to cloud.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    name = script_path.stem.replace("_", "-")
-    project_root = script_path.parent
-
-    provider = _get_cloud_provider(project_root)
-
-    from lamia_cloud.types import TriggerDeploymentPlan
-    plan = TriggerDeploymentPlan(name=name, stages=stages)
-
-    print(f"Deploying trigger: {script_path.name} ({len(stages)} stage(s))...")
-    deployment_id = provider.deploy(plan)
-    print(f"Deployed: {deployment_id}")
 
 
 def _handle_list() -> None:
@@ -109,18 +40,11 @@ def _handle_list() -> None:
         status_str = d.get("last_status", "never run")
         print(f"  [{d['name']}] {d.get('script', '?')}")
         print(f"    event: {d.get('trigger_method', '?')}")
+        print(f"    mode: {d.get('mode', 'reactive')}")
         print(f"    last run: {d.get('last_run', 'never')}  status: {status_str}")
         if d.get("logs_url"):
             print(f"    logs: {d['logs_url']}")
         print()
-
-
-def _handle_remove(args: argparse.Namespace) -> None:
-    name = args.id
-    project_root = Path.cwd()
-    provider = _get_cloud_provider(project_root)
-    provider.undeploy(name)
-    print(f"Removed: {name}")
 
 
 def _get_cloud_provider(project_root: Path):
