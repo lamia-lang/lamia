@@ -2,7 +2,7 @@
 
 Triggers make your Lamia scripts react to real-world events automatically.
 Instead of running a script manually, you define what should start it — an
-incoming email, a new file appearing, etc. — and Lamia takes care of the rest.
+incoming email, a new file appearing, etc.
 
 ## Writing a Triggered Script
 
@@ -17,7 +17,7 @@ trigger.email_received(sender, subject, body)
 reply_to_lead(sender, subject, body)
 ```
 
-String keyword arguments are configuration (they tell Lamia *where* to listen):
+String keyword arguments are configuration (they tell Lamia *where* to listen, what to filter out, etc.):
 
 ```python
 trigger.file_created(name, size, path="sales/pricing")
@@ -54,51 +54,44 @@ The `path` parameter specifies the folder or location to monitor.
 When you deploy a script that contains `trigger.*` calls, Lamia automatically
 sets up the event infrastructure for you.
 
-**Immediate reaction** — the script runs every time the event happens:
-
-```bash
-lamia pricing_reply.lm --remote
-```
-
-**Scheduled (employee mode)** — events collect overnight and the script
-processes them all at a set time:
-
-```bash
-lamia schedule add pricing_reply.lm --remote --every day
-```
-
-To see what is deployed:
-
-```bash
-lamia trigger list
-```
-
 ## Choosing a Mode
 
-### Always-reactive
+### Reactive mode
 
 Each event starts its own independent script execution right away.
 
 Best for: notifications that must be handled immediately (order confirmations,
 alerts, time-sensitive replies).
 
-### Employee mode (scheduled)
+To deploy a script that contains `trigger.*`s in reactive mode use:
+
+```bash
+lamia pricing_reply.lm --remote
+```
+
+### Scheduled mode (similar to how an employee would work)
 
 Events accumulate. At the scheduled time, the script wakes up, processes every
 pending event in parallel (one script execution per event), then sleeps until
 the next scheduled time.
 
-Best for: tasks where batching is acceptable or where you want to appear human
+Best for: tasks where you want to appear human
 (answering emails in the morning, processing daily uploads).
+
+To deploy a script that contains `trigger.*`s in scheduled mode use:
+
+```bash
+lamia schedule add pricing_reply.lm --remote --cron "33 9 * * *"
+```
+
+This will deploy the script to the cloud and set up a cron job to run the script at 9:33 AM every day.
 
 ## Multi-Step Scripts
 
 A script can wait for more than one event. Each additional `trigger.*` call
 pauses the script until that event arrives (up to 72 hours).
 
-Every script execution is fully **isolated** — if 10 emails arrive and each
-starts waiting for a file, they all wait independently. One execution receiving
-its file does not affect the others.
+Every script execution is parallel and fully **isolated**. Each execution waits for its own event and runs independently.
 
 ### Example: Enterprise Pricing Approval
 
@@ -148,13 +141,19 @@ If no file appears within 72 hours, the execution times out gracefully.
 Each script execution that reaches a waiting point creates its own private
 event listener. This means:
 
-- Execution A waiting for a file will not accidentally consume a file meant
-  for Execution B.
 - There is no queue contention — concurrent waits run in full isolation.
 - Finished executions clean up their listeners automatically.
 
+## Listing Triggers
+
+To see what triggers are configured:
+
+```bash
+lamia trigger list
+```
+
 ## Requirements
 
-- Triggers run in remote mode (`--remote`).
+- Currently triggers are only supported in remote mode (`--remote`).
 - Install cloud support: `pip install "lamia-lang[cloud]"`
 - Set `cloud.project_id` in your project `config.yaml`.
