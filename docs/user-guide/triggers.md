@@ -100,41 +100,105 @@ get an automated response. Enterprise requests need a human to prepare custom
 pricing, so the script waits for that file to appear.
 
 ```python
-trigger.email_received(sender, subject, body)
+from enum import Enum
+from pydantic import BaseModel, Field
 
-# AI classifies the request
-classification = classify_lead(sender, subject, body) -> JSON
 
-if not classification["enterprise"]:
-    # Standard request — send public pricing immediately
+class LeadType(str, Enum):
+    ENTERPRISE = "enterprise"
+    STANDARD = "standard"
+
+
+class LeadClassification(BaseModel):
+    lead_type: LeadType = Field(description="Whether this is an enterprise or standard lead")
+    company_slug: str = Field(description="Short lowercase identifier for the company, e.g. 'bigcorp'")
+
+
+trigger.email_received(sender, subject, body, to="pricing@ourcompany.com")
+
+classification = classify_lead(sender, subject, body) -> LeadClassification
+
+if classification.lead_type == LeadType.STANDARD:
     pricing_page = web.get_text("https://ourcompany.com/pricing")
     compose_reply(sender, subject, pricing_page) -> File("drafts/reply.txt")
 else:
-    # Enterprise request — notify the team and wait for human input.
-    # The sales team places a custom pricing document at this path
-    # within 72 hours. The file name should reference the request
-    # (e.g. "bigcorp-2026-07.pdf").
-    notify_sales_team(sender, subject, body)
+    notify_sales_team(sender, subject, classification.company_slug)
 
     trigger.file_created(name, timestamp, path="sales/custom-pricing")
 
-    # Script resumes here once the file appears.
-    compose_custom_reply(sender, name) -> File("drafts/reply.txt")
+    if not name.startswith(classification.company_slug):
+        trigger.reject()
+    else:
+        pricing_content = file.read(f"sales/custom-pricing/{name}")
+        compose_custom_reply(sender, name, pricing_content) -> File("drafts/reply.txt")
 ```
 
 How this works at runtime:
 
-1. An email arrives. Lamia starts a new, isolated execution of the script.
-2. The AI classifies the request.
-3. **Standard request**: reply is sent immediately, execution finishes.
-4. **Enterprise request**: the script pauses and waits (up to 72 hours) for a
-   file to appear at `sales/custom-pricing`.
-5. Meanwhile, other emails can arrive and start their own independent
-   executions — they do not interfere with each other.
-6. When a team member uploads the pricing file, the waiting execution resumes
-   and sends the custom reply.
+1. An email arrives to `pricing@ourcompany.com`. Lamia starts a new, isolated
+   execution of the script. Emails to other addresses are filtered out at the
+   infrastructure level and never start the script.
+2. The AI classifies the lead with a validated return type — you get a typed
+   `LeadClassification` object with `lead_type` and `company_slug`.
+3. **Standard lead**: reply is composed immediately, execution finishes.
+4. **Enterprise lead**: the script notifies the sales team and pauses (up to
+   72 hours) waiting for a file in `sales/custom-pricing`.
+5. When a team member uploads a file, the waiting execution resumes and checks
+   whether the filename starts with the expected company slug.
+6. **Wrong file**: `trigger.reject()` skips this event and the script keeps
+   waiting for the next file event.
+7. **Correct file**: reads the content and sends the custom reply.
 
 If no file appears within 72 hours, the execution times out gracefully.
+
+## Best Practices
+
+### Use keyword filters to avoid unnecessary execution
+
+Any keyword argument with a string value acts as an infrastructure-level
+filter. The script never starts for events that don't match. You can combine
+multiple filters on a single trigger:
+
+```python
+trigger.email_received(sender, subject, body,
+                       to="pricing@ourcompany.com",
+                       from_domain="enterprise.com")
+
+trigger.file_created(name, size, path="sales/invoices")
+```
+
+Filters are the most efficient approach — they prevent the job from launching
+entirely, saving both time and cost.
+
+### Use `trigger.reject()` when filtering depends on runtime data
+
+When the filter can't be known at deploy time (e.g. it depends on a value
+computed earlier in the script), use `trigger.reject()` to skip the event
+and keep waiting for a different one:
+
+```python
+trigger.file_created(name, timestamp, path="sales/custom-pricing")
+
+if not name.startswith(expected_prefix):
+    trigger.reject()
+```
+
+`trigger.reject()` applies to the most recent trigger. It acknowledges the
+event (so it won't come back to this execution) and the script continues
+waiting for the next event on its private listener.
+
+Since each execution has its own isolated listener, rejecting an event in one
+execution does not affect other concurrent executions — they each receive
+their own independent copy of every event.
+
+### Unhandled exceptions
+
+If your script raises an unhandled exception after a trigger resumes, the
+event is retried automatically (up to 5 attempts). After all retries are
+exhausted, the event is moved to a dead-letter queue where it can be
+inspected via `lamia trigger list`.
+
+Dead-letter events are retained until you explicitly clear them.
 
 ## How Isolation Works
 
@@ -146,10 +210,27 @@ event listener. This means:
 
 ## Listing Triggers
 
-To see what triggers are configured:
+To see what triggers are configured (including dead-letter counts):
 
 ```bash
 lamia trigger list
+```
+
+Example output:
+
+```
+  [pricing-reply] pricing_reply.lm
+    event: email_received
+    mode: reactive
+    last run: 2026-07-09  status: ok
+    dead letter: 2 failed event(s)
+```
+
+If there are dead-letter events, review and fix the underlying issue, then
+clear them:
+
+```bash
+lamia trigger clear-dead-letter pricing-reply
 ```
 
 ## Requirements

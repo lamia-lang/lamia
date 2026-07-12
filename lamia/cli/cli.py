@@ -33,6 +33,7 @@ from lamia.interpreter.human.parser import parse_hu_file
 from lamia.interpreter.human.executor import HuCallable
 from lamia.adapters.llm.base import sanitize_api_error
 from lamia.errors import LLMProviderError
+from lamia.actions.trigger import TriggerRejectError, TRIGGER_REJECT_EXIT_CODE
 from lamia.scheduling.registry import record_run, load_job
 
 HYBRID_EXTENSIONS = {'.lm'}
@@ -962,6 +963,8 @@ For help on a subcommand, run:
                 except MissingAPIKeysError as e:
                     logger.error(str(e))
                     _graceful_shutdown(lamia, 1, error_msg=str(e))
+                except TriggerRejectError:
+                    _graceful_shutdown(lamia, TRIGGER_REJECT_EXIT_CODE)
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
@@ -982,6 +985,8 @@ For help on a subcommand, run:
                 except MissingAPIKeysError as e:
                     logger.error(str(e))
                     _graceful_shutdown(lamia, 1, error_msg=str(e))
+                except TriggerRejectError:
+                    _graceful_shutdown(lamia, TRIGGER_REJECT_EXIT_CODE)
                 except KeyboardInterrupt:
                     _graceful_shutdown(lamia)
                 except Exception as e:
