@@ -1,4 +1,7 @@
-"""Unit tests for script analysis utilities (no cloud deps)."""
+"""Unit tests for script analysis utilities (no cloud deps), plus integration
+tests for the remote/trigger deploy paths with the lamia_cloud boundary mocked."""
+
+from unittest import mock
 
 import pytest
 from pathlib import Path
@@ -206,3 +209,70 @@ def test_warn_about_file_uploads_prints_warning(capsys):
     assert "will upload local files" in stderr
     assert "docs/a.txt" in stderr
     assert "docs/b.txt" in stderr
+
+
+@pytest.mark.integration
+def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_path, capsys):
+    """_deploy_trigger is lamia's side of the link to lamia_cloud: it must build the
+    right TriggerDeploymentPlan and call provider.deploy(). What GCPTriggerProvider
+    does with that plan belongs to the lamia-cloud test suite, not here."""
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    from lamia_cloud.types import TriggerDeploymentPlan, TriggerStage
+    import lamia.cli.remote as remote
+
+    stages = [
+        TriggerStage(
+            stage_index=0,
+            trigger_method="email_received",
+            trigger_config={"to": "pricing@company.com"},
+            output_bindings=[],
+            script_source="",
+        )
+    ]
+
+    mock_provider = mock.MagicMock()
+    mock_provider.deploy.return_value = "lamia-trigger-task"
+    mock_provider_cls = mock.MagicMock()
+    mock_provider_cls.from_config.return_value = mock_provider
+    monkeypatch.setattr(remote, "GCPTriggerProvider", mock_provider_cls)
+
+    remote._deploy_trigger("task.lm", tmp_path, {"project_id": "proj"}, stages)
+
+    mock_provider_cls.from_config.assert_called_once_with({"project_id": "proj"})
+    plan = mock_provider.deploy.call_args[0][0]
+    assert isinstance(plan, TriggerDeploymentPlan)
+    assert plan.name == "task"
+    assert plan.mode == "reactive"
+    assert plan.stages == stages
+
+    stderr = capsys.readouterr().err
+    assert "Deployed: lamia-trigger-task" in stderr
+
+
+@pytest.mark.integration
+def test_handle_remote_run_routes_to_deploy_trigger_when_script_has_triggers(monkeypatch, tmp_path):
+    """handle_remote_run must detect trigger.* calls and hand off to _deploy_trigger
+    instead of the one-shot run path — this is the routing decision lamia owns."""
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    import lamia.cli.remote as remote
+
+    _write_script(tmp_path, "task.lm", "trigger.email_received(sender)")
+
+    fake_stages = [mock.sentinel.stage]
+    monkeypatch.setattr(remote, "extract_all_triggers", lambda path: fake_stages)
+    deploy_calls = []
+    monkeypatch.setattr(
+        remote, "_deploy_trigger", lambda *args, **kwargs: deploy_calls.append((args, kwargs))
+    )
+
+    remote.handle_remote_run(
+        "task.lm", str(tmp_path), {"cloud": {"project_id": "proj"}}, verbose=False
+    )
+
+    assert len(deploy_calls) == 1
+    args, _ = deploy_calls[0]
+    script_name, project_root, cloud_cfg, stages = args
+    assert script_name == "task.lm"
+    assert project_root == tmp_path
+    assert cloud_cfg == {"project_id": "proj"}
+    assert stages == fake_stages
