@@ -21,7 +21,7 @@ def test_handle_list_prints_no_triggers_deployed(monkeypatch, capsys):
     assert "No triggers deployed." in capsys.readouterr().out
 
 
-def test_handle_list_prints_dead_letter_count_when_present(monkeypatch, capsys):
+def test_handle_list_prints_failed_event_count(monkeypatch, capsys):
     mock_provider = mock.MagicMock()
     mock_provider.list_deployments.return_value = [
         {
@@ -31,7 +31,7 @@ def test_handle_list_prints_dead_letter_count_when_present(monkeypatch, capsys):
             "mode": "reactive",
             "last_run": "2026-07-01",
             "last_status": "success",
-            "dead_letter_count": 3,
+            "failed_event_count": 3,
         }
     ]
     monkeypatch.setattr(triggers_cli, "_get_cloud_provider", lambda root: mock_provider)
@@ -39,10 +39,10 @@ def test_handle_list_prints_dead_letter_count_when_present(monkeypatch, capsys):
     triggers_cli._handle_list()
 
     out = capsys.readouterr().out
-    assert "dead letter: 3 failed event(s)" in out
+    assert "failed events: 3" in out
 
 
-def test_handle_list_omits_dead_letter_line_when_zero(monkeypatch, capsys):
+def test_handle_list_verbose_shows_event_payloads(monkeypatch, capsys):
     mock_provider = mock.MagicMock()
     mock_provider.list_deployments.return_value = [
         {
@@ -52,14 +52,40 @@ def test_handle_list_omits_dead_letter_line_when_zero(monkeypatch, capsys):
             "mode": "reactive",
             "last_run": "2026-07-01",
             "last_status": "success",
-            "dead_letter_count": 0,
+            "failed_event_count": 1,
+        }
+    ]
+    mock_provider.get_failed_events.return_value = [
+        {"payload": {"sender": "a@b.com", "subject": "test"}, "timestamp": "2026-07-01T10:00:00Z"},
+    ]
+    monkeypatch.setattr(triggers_cli, "_get_cloud_provider", lambda root: mock_provider)
+
+    triggers_cli._handle_list(verbose=True)
+
+    out = capsys.readouterr().out
+    assert "failed events: 1" in out
+    assert "a@b.com" in out
+    assert "2026-07-01T10:00:00Z" in out
+
+
+def test_handle_list_omits_failed_line_when_zero(monkeypatch, capsys):
+    mock_provider = mock.MagicMock()
+    mock_provider.list_deployments.return_value = [
+        {
+            "name": "task",
+            "script": "task.lm",
+            "trigger_method": "email_received",
+            "mode": "reactive",
+            "last_run": "2026-07-01",
+            "last_status": "success",
+            "failed_event_count": 0,
         }
     ]
     monkeypatch.setattr(triggers_cli, "_get_cloud_provider", lambda root: mock_provider)
 
     triggers_cli._handle_list()
 
-    assert "dead letter" not in capsys.readouterr().out
+    assert "failed events" not in capsys.readouterr().out
 
 
 @pytest.mark.integration

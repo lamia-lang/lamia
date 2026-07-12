@@ -195,10 +195,11 @@ their own independent copy of every event.
 
 If your script raises an unhandled exception after a trigger resumes, the
 event is retried automatically (up to 5 attempts). After all retries are
-exhausted, the event is moved to a dead-letter queue where it can be
-inspected via `lamia trigger list`.
+exhausted, the event is saved as a **failed event** and can be inspected
+via `lamia trigger list --verbose`.
 
-Dead-letter events are retained until you explicitly clear them.
+Failed events expire automatically after a retention period — there is no
+manual clearing step.
 
 ## How Isolation Works
 
@@ -210,7 +211,7 @@ event listener. This means:
 
 ## Listing Triggers
 
-To see what triggers are configured (including dead-letter counts):
+To see what triggers are configured:
 
 ```bash
 lamia trigger list
@@ -223,15 +224,17 @@ Example output:
     event: email_received
     mode: reactive
     last run: 2026-07-09  status: ok
-    dead letter: 2 failed event(s)
+    failed events: 2
 ```
 
-If there are dead-letter events, review and fix the underlying issue, then
-clear them:
+To see details of failed events (what data they contained):
 
 ```bash
-lamia trigger clear-dead-letter pricing-reply
+lamia trigger list --verbose
 ```
+
+This shows the actual event payload and timestamp for each failure, so you
+can understand what went wrong and take action.
 
 ## Requirements
 

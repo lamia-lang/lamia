@@ -1,11 +1,12 @@
 """CLI handler for `lamia trigger` commands.
 
 Usage:
-    lamia trigger list
+    lamia trigger list [--verbose]
 """
 
 import argparse
 import ast
+import json
 import sys
 from pathlib import Path
 from typing import Optional
@@ -18,18 +19,23 @@ def handle_trigger() -> None:
         prog="lamia trigger",
     )
     subparsers = parser.add_subparsers(dest="action")
-    subparsers.add_parser("list", help="List all deployed triggers")
+
+    list_parser = subparsers.add_parser("list", help="List all deployed triggers")
+    list_parser.add_argument(
+        "--verbose", "-v", action="store_true",
+        help="Show details of failed events",
+    )
 
     args = parser.parse_args(sys.argv[2:])
 
     if args.action == "list":
-        _handle_list()
+        _handle_list(verbose=args.verbose)
     else:
         parser.print_help()
         sys.exit(1)
 
 
-def _handle_list() -> None:
+def _handle_list(verbose: bool = False) -> None:
     project_root = Path.cwd()
     provider = _get_cloud_provider(project_root)
     deployments = provider.list_deployments()
@@ -38,10 +44,20 @@ def _handle_list() -> None:
         return
     for d in deployments:
         status_str = d.get("last_status", "never run")
+        failed_count = d.get("failed_event_count", 0)
         print(f"  [{d['name']}] {d.get('script', '?')}")
         print(f"    event: {d.get('trigger_method', '?')}")
         print(f"    mode: {d.get('mode', 'reactive')}")
         print(f"    last run: {d.get('last_run', 'never')}  status: {status_str}")
+        if failed_count > 0:
+            print(f"    failed events: {failed_count}")
+            if verbose:
+                events = provider.get_failed_events(d["name"])
+                for i, evt in enumerate(events, 1):
+                    ts = evt.get("timestamp", "?")
+                    payload = evt.get("payload", {})
+                    print(f"      #{i} [{ts}]")
+                    print(f"         {json.dumps(payload, indent=None, ensure_ascii=False)}")
         if d.get("logs_url"):
             print(f"    logs: {d['logs_url']}")
         print()
