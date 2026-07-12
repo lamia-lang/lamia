@@ -1,13 +1,14 @@
 """Handle `lamia <script> --remote` — one-shot remote cloud execution."""
 
-import ast
 import hashlib
 import sys
-from dataclasses import dataclass, asdict, fields
+from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-from lamia_cloud.contracts import SCRIPT_CAPABILITY_FIELDS
+from lamia.interpreter.ast_analyzer import extract_script_file_refs
+from lamia.triggers.cli import extract_all_triggers
+from lamia.cli.script_analysis import analyze_script, slugify
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.gcp.deployer import (
     collect_project_files,
@@ -21,61 +22,6 @@ from lamia_cloud.gcp.deployer import (
 )
 from lamia_cloud.gcp.trigger_provider import GCPTriggerProvider
 from lamia_cloud.types import TriggerDeploymentPlan
-from lamia.interpreter.detectors import LLMCommandDetector
-from lamia.interpreter.ast_analyzer import ActionNamespaceAnalyzer, extract_script_file_refs
-from lamia.interpreter.commands import WebCommand, FileCommand
-from lamia.triggers.cli import extract_all_triggers
-
-
-@dataclass
-class ScriptCapabilities:
-    """Cloud-agnostic metadata about what a .lm script uses."""
-
-    uses_llm: bool = False
-    uses_browser: bool = False
-    uses_files: bool = False
-    uses_file_context: bool = False
-
-
-def script_capability_field_names() -> tuple[str, ...]:
-    """Return ordered ScriptCapabilities field names for contract tests."""
-    return tuple(field.name for field in fields(ScriptCapabilities))
-
-
-def analyze_script(script_path: Path) -> ScriptCapabilities:
-    """Analyze a .lm script using existing Lamia AST infrastructure.
-
-    Uses LLMCommandDetector to find resolved LLM commands and
-    ActionNamespaceAnalyzer to detect web/file namespace usage.
-    """
-    try:
-        source = script_path.read_text()
-    except OSError:
-        return ScriptCapabilities()
-
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return ScriptCapabilities()
-
-    llm_functions = LLMCommandDetector().detect_commands(source)
-
-    ns_analyzer = ActionNamespaceAnalyzer()
-    ns_analyzer.visit(tree)
-
-    return ScriptCapabilities(
-        uses_llm=len(llm_functions) > 0,
-        uses_browser=(
-            WebCommand.__name__ in ns_analyzer.used_types
-            or "web" in ns_analyzer.used_namespaces
-            or "session" in ns_analyzer.used_namespaces
-        ),
-        uses_files=(
-            FileCommand.__name__ in ns_analyzer.used_types
-            or "file" in ns_analyzer.used_namespaces
-        ),
-        uses_file_context="files" in ns_analyzer.used_namespaces,
-    )
 
 
 def handle_remote_run(
@@ -113,7 +59,7 @@ def handle_remote_run(
         _deploy_trigger(script_name, root, cloud_cfg, stages)
         return
 
-    run_name = _slugify(script_name)
+    run_name = slugify(script_name)
     target = deployment_name(run_name)
 
     print(f"Remote execution: {script_name}", file=sys.stderr)
@@ -202,7 +148,7 @@ def _deploy_trigger(
     stages: list,
 ) -> None:
     """Deploy always-reactive trigger infrastructure for a script with trigger.* calls."""
-    name = _slugify(script_name)
+    name = slugify(script_name)
     capabilities = analyze_script(project_root / script_name)
 
     plan = TriggerDeploymentPlan(
@@ -222,12 +168,6 @@ def _deploy_trigger(
     deployment_id = provider.deploy(plan)
     print(f"\nDeployed: {deployment_id}", file=sys.stderr)
     print(f"View triggers: lamia trigger list", file=sys.stderr)
-
-
-def _slugify(name: str) -> str:
-    stem = Path(name).stem
-    slug = "".join(c if c.isalnum() else "-" for c in stem.lower()).strip("-")
-    return slug[:20]
 
 
 def _compute_source_hash(project_root: Path) -> str:

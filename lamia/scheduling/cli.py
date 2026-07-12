@@ -15,24 +15,18 @@ Remote schedules use lamia-cloud (pip install "lamia-lang[cloud]").
 import argparse
 import shutil
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
-import yaml
-
 from .base import BaseScheduler, ScheduleJob, generate_schedule_id
-from .cloud_scheduler import get_cloud_scheduler, LAMIA_CLOUD_AVAILABLE
+from .cloud_scheduler import (
+    get_cloud_scheduler,
+    LAMIA_CLOUD_AVAILABLE,
+    deploy_scheduled_trigger,
+    fetch_cloud_statuses,
+)
 from .local_scheduler import LocalScheduler
 from .registry import save_job, remove_job, list_jobs, load_job, find_job_by_script, set_paused
 from lamia.triggers.cli import extract_all_triggers
-from lamia.cli.remote import analyze_script, _slugify
-from lamia_cloud.gcp.trigger_provider import GCPTriggerProvider
-from lamia_cloud.types import TriggerDeploymentPlan
-
-try:
-    from lamia_cloud import get_scheduler, CloudScheduleJob
-except ImportError:
-    pass
 
 EVERY_PRESETS = {
     "hour": "0 * * * *",
@@ -116,7 +110,7 @@ def _handle_add(args: argparse.Namespace) -> None:
     if remote:
         stages = extract_all_triggers(script_path)
         if stages:
-            _deploy_scheduled_trigger(relative_script, project_root, cron, stages)
+            deploy_scheduled_trigger(relative_script, project_root, cron, stages)
             return
 
     job_id = generate_schedule_id(relative_script, str(project_root))
@@ -165,94 +159,8 @@ def _handle_add(args: argparse.Namespace) -> None:
     print(f"  id:        {job_id}")
 
 
-def _deploy_scheduled_trigger(
-    script_name: str,
-    project_root: Path,
-    cron: str,
-    stages: list,
-) -> None:
-    """Deploy employee-mode trigger: events accumulate, scheduler drains at cron time."""
-    config_path = project_root / "config.yaml"
-    if not config_path.exists():
-        config_path = project_root / "config.yml"
-
-    cloud_cfg: dict = {}
-    if config_path.exists():
-        with open(config_path) as f:
-            full_config = yaml.safe_load(f) or {}
-        cloud_cfg = full_config.get("cloud", {})
-
-    if not cloud_cfg.get("project_id"):
-        print(
-            "Error: cloud.project_id not found in config.yaml.\n"
-            "Add:\n  cloud:\n    project_id: your-gcp-project",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    name = _slugify(script_name)
-    capabilities = analyze_script(project_root / script_name)
-
-    plan = TriggerDeploymentPlan(
-        name=name,
-        stages=stages,
-        capabilities=asdict(capabilities),
-        mode="scheduled",
-        cron=cron,
-    )
-
-    provider = GCPTriggerProvider.from_config(cloud_cfg)
-
-    print(f"Deploying scheduled trigger: {script_name} ({len(stages)} stage(s))...")
-    print(f"  mode: employee (batch drain at schedule time)")
-    print(f"  cron: {cron}")
-    for i, stage in enumerate(stages):
-        print(f"  stage {i}: {stage.trigger_method}")
-
-    deployment_id = provider.deploy(plan)
-    print(f"\nDeployed: {deployment_id}")
-    print(f"View triggers: lamia trigger list")
 
 
-def _fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
-    """Fetch last execution statuses from Cloud Scheduler for all cloud jobs at once."""
-    results = {}
-    try:
-        if not LAMIA_CLOUD_AVAILABLE:
-            return results
-
-        by_project: dict[str, list[dict]] = {}
-        for job in cloud_jobs:
-            by_project.setdefault(job["project_root"], []).append(job)
-
-        for project_root, jobs in by_project.items():
-            try:
-                scheduler = get_scheduler(Path(project_root))
-                for job in jobs:
-                    config = scheduler.get_installed_config(
-                        CloudScheduleJob(
-                            script=job["script"],
-                            cron=job["cron"],
-                            schedule_id=job["id"],
-                            project_root=Path(project_root),
-                        )
-                    )
-                    if config:
-                        state = config.get("state", "UNKNOWN")
-                        if state == "PAUSED":
-                            set_paused(job["id"], True)
-                        last_attempt = config.get("last_attempt_time")
-                        if last_attempt:
-                            results[job["id"]] = {
-                                "timestamp": last_attempt,
-                                "success": state == "ENABLED",
-                                "state": state,
-                            }
-            except Exception:
-                pass
-    except Exception:
-        pass
-    return results
 
 
 def _format_error_line(error_msg: str, job: dict) -> str:
@@ -324,7 +232,7 @@ def _handle_list(args: argparse.Namespace) -> None:
 
     sys.stderr.write("  fetching cloud status...")
     sys.stderr.flush()
-    cloud_statuses = _fetch_cloud_statuses(cloud_jobs)
+    cloud_statuses = fetch_cloud_statuses(cloud_jobs)
     sys.stderr.write("\r\033[K")
     sys.stderr.flush()
 
