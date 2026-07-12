@@ -1469,6 +1469,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Best Practices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-keyword-filters-to-avoid-unnecessary-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use keyword filters to avoid unnecessary execution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-triggerreject-when-filtering-depends-on-runtime-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use trigger.reject() when filtering depends on runtime data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unhandled-exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unhandled exceptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#how-isolation-works" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1589,40 +1639,89 @@ pauses the script until that event arrives (up to 72 hours).</p>
 <p>Below is a complete script that handles pricing inquiries. Regular requests
 get an automated response. Enterprise requests need a human to prepare custom
 pricing, so the script waits for that file to appear.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># AI classifies the request</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">classification</span> <span class="o">=</span> <span class="n">classify_lead</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">classification</span><span class="p">[</span><span class="s2">&quot;enterprise&quot;</span><span class="p">]:</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="c1"># Standard request — send public pricing immediately</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">pricing_page</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">&quot;https://ourcompany.com/pricing&quot;</span><span class="p">)</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">compose_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">pricing_page</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">&quot;drafts/reply.txt&quot;</span><span class="p">)</span>
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="k">else</span><span class="p">:</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="c1"># Enterprise request — notify the team and wait for human input.</span>
-</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="c1"># The sales team places a custom pricing document at this path</span>
-</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="c1"># within 72 hours. The file name should reference the request</span>
-</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="c1"># (e.g. &quot;bigcorp-2026-07.pdf&quot;).</span>
-</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>    <span class="n">notify_sales_team</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">LeadType</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">ENTERPRISE</span> <span class="o">=</span> <span class="s2">&quot;enterprise&quot;</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">STANDARD</span> <span class="o">=</span> <span class="s2">&quot;standard&quot;</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">LeadClassification</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">lead_type</span><span class="p">:</span> <span class="n">LeadType</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether this is an enterprise or standard lead&quot;</span><span class="p">)</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">company_slug</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Short lowercase identifier for the company, e.g. &#39;bigcorp&#39;&quot;</span><span class="p">)</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span> <span class="n">to</span><span class="o">=</span><span class="s2">&quot;pricing@ourcompany.com&quot;</span><span class="p">)</span>
 </span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>
-</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>    <span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;sales/custom-pricing&quot;</span><span class="p">)</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="n">classification</span> <span class="o">=</span> <span class="n">classify_lead</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LeadClassification</span>
 </span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>
-</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>    <span class="c1"># Script resumes here once the file appears.</span>
-</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>    <span class="n">compose_custom_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">&quot;drafts/reply.txt&quot;</span><span class="p">)</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="k">if</span> <span class="n">classification</span><span class="o">.</span><span class="n">lead_type</span> <span class="o">==</span> <span class="n">LeadType</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">:</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>    <span class="n">pricing_page</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">&quot;https://ourcompany.com/pricing&quot;</span><span class="p">)</span>
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>    <span class="n">compose_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">pricing_page</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">&quot;drafts/reply.txt&quot;</span><span class="p">)</span>
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="k">else</span><span class="p">:</span>
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>    <span class="n">notify_sales_team</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">classification</span><span class="o">.</span><span class="n">company_slug</span><span class="p">)</span>
+</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>
+</span><span id="__span-6-25"><a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>    <span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;sales/custom-pricing&quot;</span><span class="p">)</span>
+</span><span id="__span-6-26"><a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a>
+</span><span id="__span-6-27"><a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">classification</span><span class="o">.</span><span class="n">company_slug</span><span class="p">):</span>
+</span><span id="__span-6-28"><a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a>        <span class="n">trigger</span><span class="o">.</span><span class="n">reject</span><span class="p">()</span>
+</span><span id="__span-6-29"><a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-6-30"><a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a>        <span class="n">pricing_content</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;sales/custom-pricing/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-6-31"><a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a>        <span class="n">compose_custom_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">pricing_content</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">&quot;drafts/reply.txt&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>How this works at runtime:</p>
 <ol>
-<li>An email arrives. Lamia starts a new, isolated execution of the script.</li>
-<li>The AI classifies the request.</li>
-<li><strong>Standard request</strong>: reply is sent immediately, execution finishes.</li>
-<li><strong>Enterprise request</strong>: the script pauses and waits (up to 72 hours) for a
-   file to appear at <code>sales/custom-pricing</code>.</li>
-<li>Meanwhile, other emails can arrive and start their own independent
-   executions — they do not interfere with each other.</li>
-<li>When a team member uploads the pricing file, the waiting execution resumes
-   and sends the custom reply.</li>
+<li>An email arrives to <code>pricing@ourcompany.com</code>. Lamia starts a new, isolated
+   execution of the script. Emails to other addresses are filtered out at the
+   infrastructure level and never start the script.</li>
+<li>The AI classifies the lead with a validated return type — you get a typed
+   <code>LeadClassification</code> object with <code>lead_type</code> and <code>company_slug</code>.</li>
+<li><strong>Standard lead</strong>: reply is composed immediately, execution finishes.</li>
+<li><strong>Enterprise lead</strong>: the script notifies the sales team and pauses (up to
+   72 hours) waiting for a file in <code>sales/custom-pricing</code>.</li>
+<li>When a team member uploads a file, the waiting execution resumes and checks
+   whether the filename starts with the expected company slug.</li>
+<li><strong>Wrong file</strong>: <code>trigger.reject()</code> skips this event and the script keeps
+   waiting for the next file event.</li>
+<li><strong>Correct file</strong>: reads the content and sends the custom reply.</li>
 </ol>
 <p>If no file appears within 72 hours, the execution times out gracefully.</p>
+<h2 id="best-practices">Best Practices<a class="headerlink" href="#best-practices" title="Permanent link">&para;</a></h2>
+<h3 id="use-keyword-filters-to-avoid-unnecessary-execution">Use keyword filters to avoid unnecessary execution<a class="headerlink" href="#use-keyword-filters-to-avoid-unnecessary-execution" title="Permanent link">&para;</a></h3>
+<p>Any keyword argument with a string value acts as an infrastructure-level
+filter. The script never starts for events that don't match. You can combine
+multiple filters on a single trigger:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>                       <span class="n">to</span><span class="o">=</span><span class="s2">&quot;pricing@ourcompany.com&quot;</span><span class="p">,</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>                       <span class="n">from_domain</span><span class="o">=</span><span class="s2">&quot;enterprise.com&quot;</span><span class="p">)</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;sales/invoices&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Filters are the most efficient approach — they prevent the job from launching
+entirely, saving both time and cost.</p>
+<h3 id="use-triggerreject-when-filtering-depends-on-runtime-data">Use <code>trigger.reject()</code> when filtering depends on runtime data<a class="headerlink" href="#use-triggerreject-when-filtering-depends-on-runtime-data" title="Permanent link">&para;</a></h3>
+<p>When the filter can't be known at deploy time (e.g. it depends on a value
+computed earlier in the script), use <code>trigger.reject()</code> to skip the event
+and keep waiting for a different one:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;sales/custom-pricing&quot;</span><span class="p">)</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">expected_prefix</span><span class="p">):</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">trigger</span><span class="o">.</span><span class="n">reject</span><span class="p">()</span>
+</span></code></pre></div>
+<p><code>trigger.reject()</code> applies to the most recent trigger. It acknowledges the
+event (so it won't come back to this execution) and the script continues
+waiting for the next event on its private listener.</p>
+<p>Since each execution has its own isolated listener, rejecting an event in one
+execution does not affect other concurrent executions — they each receive
+their own independent copy of every event.</p>
+<h3 id="unhandled-exceptions">Unhandled exceptions<a class="headerlink" href="#unhandled-exceptions" title="Permanent link">&para;</a></h3>
+<p>If your script raises an unhandled exception after a trigger resumes, the
+event is retried automatically (up to 5 attempts). After all retries are
+exhausted, the event is moved to a dead-letter queue where it can be
+inspected via <code>lamia trigger list</code>.</p>
+<p>Dead-letter events are retained until you explicitly clear them.</p>
 <h2 id="how-isolation-works">How Isolation Works<a class="headerlink" href="#how-isolation-works" title="Permanent link">&para;</a></h2>
 <p>Each script execution that reaches a waiting point creates its own private
 event listener. This means:</p>
@@ -1631,8 +1730,19 @@ event listener. This means:</p>
 <li>Finished executions clean up their listeners automatically.</li>
 </ul>
 <h2 id="listing-triggers">Listing Triggers<a class="headerlink" href="#listing-triggers" title="Permanent link">&para;</a></h2>
-<p>To see what triggers are configured:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list
+<p>To see what triggers are configured (including dead-letter counts):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list
+</span></code></pre></div>
+<p>Example output:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>  [pricing-reply] pricing_reply.lm
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    event: email_received
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    mode: reactive
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    last run: 2026-07-09  status: ok
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    dead letter: 2 failed event(s)
+</span></code></pre></div>
+<p>If there are dead-letter events, review and fix the underlying issue, then
+clear them:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>clear-dead-letter<span class="w"> </span>pricing-reply
 </span></code></pre></div>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <ul>
