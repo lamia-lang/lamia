@@ -1,13 +1,10 @@
+"""Unit tests for script analysis utilities (no cloud deps)."""
+
 import pytest
 from pathlib import Path
 
-pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
-
-from lamia_cloud.contracts import FileSyncEntry
-from lamia.cli.remote import (
+from lamia.cli.script_analysis import (
     ScriptCapabilities,
-    SCRIPT_CAPABILITY_FIELDS,
-    _warn_about_file_uploads,
     analyze_script,
     script_capability_field_names,
 )
@@ -154,28 +151,6 @@ def run(
     assert result.uses_file_context is False
 
 
-def test_script_capabilities_contract_field_names():
-    field_names = script_capability_field_names()
-    assert field_names == tuple(SCRIPT_CAPABILITY_FIELDS), (
-        "ScriptCapabilities contract changed. If you add/rename/remove fields, "
-        "update BOTH lamia.cli.remote.ScriptCapabilities and "
-        "lamia.cli.remote.SCRIPT_CAPABILITY_FIELDS + the mirrored keys in "
-        "lamia_cloud.contracts.SCRIPT_CAPABILITY_FIELDS."
-    )
-
-
-def test_warn_about_file_uploads_prints_warning(capsys):
-    entries = [
-        FileSyncEntry(raw_path="docs/a.txt", resolved_path="/tmp/a.txt", bucket_key="docs/a.txt"),
-        FileSyncEntry(raw_path="docs/b.txt", resolved_path="/tmp/b.txt", bucket_key="docs/b.txt"),
-    ]
-    _warn_about_file_uploads(entries)
-    stderr = capsys.readouterr().err
-    assert "will upload local files" in stderr
-    assert "docs/a.txt" in stderr
-    assert "docs/b.txt" in stderr
-
-
 def test_extract_file_refs_single_path(tmp_path):
     script = _write_script(tmp_path, "task.lm", 'with files("data/input.csv"):\n    pass')
     assert extract_script_file_refs(script) == ["data/input.csv"]
@@ -201,3 +176,33 @@ def test_extract_file_refs_dynamic_arg_raises(tmp_path):
 def test_extract_file_refs_no_files_blocks(tmp_path):
     script = _write_script(tmp_path, "task.lm", 'x = 1\nprint(x)')
     assert extract_script_file_refs(script) == []
+
+
+@pytest.mark.integration
+def test_script_capabilities_contract_field_names():
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    from lamia_cloud.contracts import SCRIPT_CAPABILITY_FIELDS
+
+    field_names = script_capability_field_names()
+    assert field_names == tuple(SCRIPT_CAPABILITY_FIELDS), (
+        "ScriptCapabilities contract changed. If you add/rename/remove fields, "
+        "update BOTH lamia.cli.script_analysis.ScriptCapabilities and "
+        "lamia_cloud.contracts.SCRIPT_CAPABILITY_FIELDS."
+    )
+
+
+@pytest.mark.integration
+def test_warn_about_file_uploads_prints_warning(capsys):
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    from lamia_cloud.contracts import FileSyncEntry
+    from lamia.cli.remote import _warn_about_file_uploads
+
+    entries = [
+        FileSyncEntry(raw_path="docs/a.txt", resolved_path="/tmp/a.txt", bucket_key="docs/a.txt"),
+        FileSyncEntry(raw_path="docs/b.txt", resolved_path="/tmp/b.txt", bucket_key="docs/b.txt"),
+    ]
+    _warn_about_file_uploads(entries)
+    stderr = capsys.readouterr().err
+    assert "will upload local files" in stderr
+    assert "docs/a.txt" in stderr
+    assert "docs/b.txt" in stderr
