@@ -1719,9 +1719,10 @@ their own independent copy of every event.</p>
 <h3 id="unhandled-exceptions">Unhandled exceptions<a class="headerlink" href="#unhandled-exceptions" title="Permanent link">&para;</a></h3>
 <p>If your script raises an unhandled exception after a trigger resumes, the
 event is retried automatically (up to 5 attempts). After all retries are
-exhausted, the event is moved to a dead-letter queue where it can be
-inspected via <code>lamia trigger list</code>.</p>
-<p>Dead-letter events are retained until you explicitly clear them.</p>
+exhausted, the event is saved as a <strong>failed event</strong> and can be inspected
+via <code>lamia trigger list --verbose</code>.</p>
+<p>Failed events expire automatically after a retention period — there is no
+manual clearing step.</p>
 <h2 id="how-isolation-works">How Isolation Works<a class="headerlink" href="#how-isolation-works" title="Permanent link">&para;</a></h2>
 <p>Each script execution that reaches a waiting point creates its own private
 event listener. This means:</p>
@@ -1730,7 +1731,7 @@ event listener. This means:</p>
 <li>Finished executions clean up their listeners automatically.</li>
 </ul>
 <h2 id="listing-triggers">Listing Triggers<a class="headerlink" href="#listing-triggers" title="Permanent link">&para;</a></h2>
-<p>To see what triggers are configured (including dead-letter counts):</p>
+<p>To see what triggers are configured:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list
 </span></code></pre></div>
 <p>Example output:</p>
@@ -1738,12 +1739,13 @@ event listener. This means:</p>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    event: email_received
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    mode: reactive
 </span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    last run: 2026-07-09  status: ok
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    dead letter: 2 failed event(s)
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    failed events: 2
 </span></code></pre></div>
-<p>If there are dead-letter events, review and fix the underlying issue, then
-clear them:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>clear-dead-letter<span class="w"> </span>pricing-reply
+<p>To see details of failed events (what data they contained):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list<span class="w"> </span>--verbose
 </span></code></pre></div>
+<p>This shows the actual event payload and timestamp for each failure, so you
+can understand what went wrong and take action.</p>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Currently triggers are only supported in remote mode (<code>--remote</code>).</li>
