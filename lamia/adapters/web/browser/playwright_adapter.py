@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 class PlaywrightAdapter(BaseBrowserAdapter):
     """Playwright adapter for browser automation."""
-    
+
     def __init__(self, headless: bool = True, timeout: float = 10000.0, session_config: Optional[Dict[str, Any]] = None, profile_name: Optional[str] = None, chrome_user_data_dir: Optional[str] = None):
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None

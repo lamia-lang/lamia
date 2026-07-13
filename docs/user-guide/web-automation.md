@@ -164,7 +164,7 @@ The target URL is critical: it's how Lamia knows whether saved cookies still wor
 
 When you run a script with an existing session, you may see the browser briefly navigate to the login page. This is normal — Lamia is checking whether the site redirects you away (proving you're authenticated). The check typically takes 5–15 seconds depending on the site's load time.
 
-If the site is slow or the connection is poor, the validation may take longer. Lamia sets a 15-second timeout for these checks. If the page doesn't respond in time, validation falls through and the login block re-executes.
+If the site is slow or the connection is poor, the validation may take longer. Lamia sets a 30-second timeout for these checks. If the page doesn't respond in time, validation falls through and the login block re-executes.
 
 ### Session Storage
 

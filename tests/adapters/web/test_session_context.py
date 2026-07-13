@@ -453,6 +453,29 @@ class TestPreValidateSession:
 
         mock_driver.delete_all_cookies.assert_called_once()
 
+    def test_all_tiers_fail_clears_web_storage_and_stored_session(self):
+        """When all tiers fail, browser web storage and stored session files are cleared too."""
+        result = Mock(typed_result=None)
+        lamia = Mock()
+        lamia.run = Mock(return_value=result)
+        bm = self._make_browser_manager(current_url="https://example.com/login")
+        sm = self._make_session_manager(has_cookies=True)
+        web_manager = Mock()
+        web_manager.recent_actions = Mock()
+
+        mock_driver = Mock()
+        mock_adapter = Mock()
+        mock_adapter.driver = mock_driver
+        bm._browser_adapter = mock_adapter
+
+        with patch('lamia.adapters.web.session_context._get_browser_manager', return_value=bm):
+            with patch('lamia.adapters.web.session_context._get_session_manager', return_value=sm):
+                with patch('lamia.adapters.web.session_context._get_web_manager', return_value=web_manager):
+                    pre_validate_session(lamia, "https://example.com/login", None, "HTML")
+
+        mock_driver.execute_script.assert_called_once_with("localStorage.clear(); sessionStorage.clear();")
+        sm.clear_session.assert_called_once_with("login")
+
     def test_tier1_skip_does_not_clear_cookies(self):
         """When tier 1 detects valid session, cookies are NOT cleared."""
         lamia = Mock()

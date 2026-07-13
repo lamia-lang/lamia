@@ -395,7 +395,7 @@ def pre_validate_session(lamia_instance: Any, login_url: Optional[str],
 
     logger.info(f"pre_validate_session: checking tiers for profile '{profile}'")
 
-    _set_page_load_timeout(browser_manager, 15)
+    _set_page_load_timeout(browser_manager, 30)
     try:
         # --- Tier 1: redirect detection ---
         if login_url:
@@ -456,15 +456,26 @@ def pre_validate_session(lamia_instance: Any, login_url: Optional[str],
     # All tiers failed — session is invalid. Clear stale cookies so the
     # session body gets a fresh login page (prevents "Welcome back" flows
     # where the site remembers the email from expired cookies).
-    logger.info(f"Session invalid for profile '{profile}', clearing stale cookies for fresh login")
+    logger.info(f"Session invalid for profile '{profile}', clearing stale session state for fresh login")
     try:
         adapter = browser_manager._browser_adapter
         if isinstance(adapter, RetryingBrowserAdapter):
             adapter = adapter.adapter
         if adapter.driver:
             adapter.driver.delete_all_cookies()
+            # Clear web storage too: logged-in localStorage combined with no
+            # cookies is a state a real browser can never be in; sites may
+            # react by queueing a logout flag that would be saved at run end
+            # and log out every future session.
+            try:
+                adapter.driver.execute_script("localStorage.clear(); sessionStorage.clear();")
+            except Exception:
+                pass
     except Exception as exc:
-        logger.debug(f"Failed to clear cookies: {exc}")
+        logger.debug(f"Failed to clear session state: {exc}")
+    # Purge stored session files as well, so stale or corrupted state is
+    # never restored again; the fresh login re-creates them on save.
+    session_mgr.clear_session(profile)
 
 
 def validate_login_completion(lamia_instance: Any, target_url: Optional[str], return_type: Any,

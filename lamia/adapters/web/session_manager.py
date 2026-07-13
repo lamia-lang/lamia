@@ -187,7 +187,7 @@ class SessionManager:
         """Save local storage to file."""
         if not self.enabled or not self.should_save_local_storage:
             return
-        
+
         storage_file = self.get_local_storage_file(profile_name)
         storage_file.parent.mkdir(parents=True, exist_ok=True)
         
