@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from lamia.triggers.types import TriggerStage
+
 
 def handle_trigger() -> None:
     """Entry point for `lamia trigger` subcommand."""
@@ -99,8 +101,7 @@ def _get_cloud_provider(project_root: Path):
 def extract_all_triggers(script_path: Path) -> list:
     """Find all trigger.* calls in script, split into stages.
 
-    Returns list of TriggerStage-compatible dicts (stage_index, trigger_method,
-    trigger_config, output_bindings, script_source).
+    Returns a list of lamia.triggers.types.TriggerStage.
     """
     source = script_path.read_text()
     try:
@@ -140,7 +141,6 @@ def extract_all_triggers(script_path: Path) -> list:
 
     trigger_positions.sort(key=lambda t: t["lineno"])
 
-    from lamia_cloud.types import TriggerStage
     stages: list[TriggerStage] = []
     for i, trig in enumerate(trigger_positions):
         start_line = trig["lineno"]
