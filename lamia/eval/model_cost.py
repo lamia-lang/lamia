@@ -17,6 +17,8 @@ class ModelCost:
     def __add__(self, other: Optional["ModelCost"]) -> "ModelCost":
         if other is None:
             return self
+        if not isinstance(other, ModelCost):
+            return NotImplemented
         return ModelCost(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
