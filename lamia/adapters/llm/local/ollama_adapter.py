@@ -10,7 +10,7 @@ import sys
 import weakref
 import atexit
 import threading
-from ..base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, raise_for_connection_error
+from ..base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, raise_for_status, raise_for_connection_error
 from lamia.errors import OllamaNotInstalledError
 from pydantic import BaseModel
 
@@ -220,9 +220,7 @@ class OllamaAdapter(BaseLLMAdapter):
                 async with session.post(url, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        raise RuntimeError(
-                            f"Ollama API error (status {response.status}): {error_text}"
-                        )
+                        raise_for_status(response.status, error_text, "Ollama API error")
                     
                     result = await response.json()
                     
