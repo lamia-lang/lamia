@@ -59,5 +59,32 @@ jobs:
             exit 1
           fi
 
+      - name: Verify FileActions API in built wheel
+        run: |
+          python - <<'PY'
+          import glob
+          import sys
+          import zipfile
+
+          wheel = glob.glob("dist/*.whl")[0]
+          with zipfile.ZipFile(wheel) as archive:
+              file_actions_source = archive.read("lamia/actions/file.py").decode()
+
+          required_methods = ("read", "write", "append", "exists", "glob")
+          missing = [
+              method
+              for method in required_methods
+              if f"def {method}(" not in file_actions_source
+          ]
+          if missing:
+              print(
+                  "ERROR: Built wheel is missing FileActions methods:",
+                  ", ".join(missing),
+              )
+              sys.exit(1)
+
+          print("FileActions API verified in built wheel:", ", ".join(required_methods))
+          PY
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
