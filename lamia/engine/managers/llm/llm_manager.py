@@ -9,7 +9,7 @@ from ...managers import Manager
 from .providers import ProviderRegistry
 from lamia.validation.base import ValidationResult, BaseValidator, TrackingContext
 from lamia.adapters.retry.factory import RetriableAdapterFactory
-from lamia.errors import MissingAPIKeysError
+from lamia.errors import MissingAPIKeysError, ExternalOperationError
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import LLMCommand
 from .files_context_manager import get_active_files_context, get_current_source_file, resolve_standalone_file_references
@@ -336,7 +336,6 @@ class LLMManager(Manager):
             ValidationResult if successful, None if all retries exhausted
             
         Raises:
-            ExternalOperationError: Bubbles up immediately (don't try other models)
             Other exceptions: Programming errors bubble up immediately
         """
         attempts = 0
@@ -347,11 +346,18 @@ class LLMManager(Manager):
             logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
             logger.debug(f"Current prompt: {current_prompt}")
             response_model = self._extract_response_model(validator)
-            response = await adapter.generate(
-                current_prompt,
-                model=model,
-                response_model=response_model,
-            )
+            try:
+                response = await adapter.generate(
+                    current_prompt,
+                    model=model,
+                    response_model=response_model,
+                )
+            except ExternalOperationError as e:
+                logger.warning(
+                    f"Model '{model.name}' API call failed: {e}. "
+                    "Trying next model in chain."
+                )
+                return None
             logger.info(f"[Lamia][Answer][Attempt {attempts}] Received response from model '{model.name}'")
             logger.debug(f"Response: {response.text}")
             

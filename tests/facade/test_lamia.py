@@ -504,9 +504,8 @@ class TestLamiaLifecycle:
 
             # Override should have been called
             dummy_config_provider.override_model_chain_with.assert_called_once()
-            # Reset should NOT have been called because exception happened before it
-            # This tests current behavior - if this is undesirable, implementation needs try/finally
-            dummy_config_provider.reset_model_chain.assert_not_called()
+            # Reset should be called even when execution raises
+            dummy_config_provider.reset_model_chain.assert_called_once()
 
     def test_run_sync_works_from_async_context(self):
         """Test that run() works even from async context via EventLoopManager."""
