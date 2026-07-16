@@ -66,6 +66,9 @@ class CloudSchedulerBridge(BaseScheduler):
     def get_installed_config(self, job: ScheduleJob) -> Optional[dict]:
         return self._scheduler.get_installed_config(_to_cloud_job(job))
 
+    def get_last_execution_status(self, job: ScheduleJob) -> Optional[dict]:
+        return self._scheduler.get_last_execution_status(_to_cloud_job(job))
+
     def pause(self, job: ScheduleJob) -> None:
         self._scheduler.pause(_to_cloud_job(job))
 
@@ -154,7 +157,7 @@ def deploy_scheduled_trigger(
 
 
 def fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
-    """Fetch last execution statuses from Cloud Scheduler for all cloud jobs at once."""
+    """Fetch last execution statuses from Cloud Run for all cloud jobs at once."""
     results: dict[str, dict | None] = {}
     if not LAMIA_CLOUD_AVAILABLE:
         return results
@@ -168,24 +171,30 @@ def fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
             try:
                 scheduler = get_scheduler(Path(project_root))
                 for job in jobs:
-                    config = scheduler.get_installed_config(
-                        CloudScheduleJob(
-                            script=job["script"],
-                            cron=job["cron"],
-                            schedule_id=job["id"],
-                            project_root=Path(project_root),
-                        )
+                    cloud_job = CloudScheduleJob(
+                        script=job["script"],
+                        cron=job["cron"],
+                        schedule_id=job["id"],
+                        project_root=Path(project_root),
                     )
+                    config = scheduler.get_installed_config(cloud_job)
                     if config:
                         state = config.get("state", "UNKNOWN")
                         if state == "PAUSED":
                             set_paused(job["id"], True)
+
+                    exec_status = scheduler.get_last_execution_status(cloud_job)
+                    if exec_status:
+                        results[job["id"]] = {
+                            "timestamp": exec_status["timestamp"],
+                            "success": exec_status["success"],
+                        }
+                    elif config:
                         last_attempt = config.get("last_attempt_time")
                         if last_attempt:
                             results[job["id"]] = {
                                 "timestamp": last_attempt,
-                                "success": state == "ENABLED",
-                                "state": state,
+                                "success": None,
                             }
             except Exception:
                 pass
