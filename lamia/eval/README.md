@@ -11,20 +11,17 @@ from lamia.eval.evaluator import ModelEvaluator
 from lamia.types import JSON
 
 async def main():
-    # Create evaluator
-    evaluator = ModelEvaluator()
+    async with ModelEvaluator() as evaluator:
+        # Find cheapest model that can generate valid JSON
+        result = await evaluator.evaluate_prompt(
+            prompt="Generate a user profile with name and age",
+            return_type=JSON,
+            models=["openai:gpt-4o", "openai:gpt-4o-mini", "openai:gpt-3.5-turbo"],
+        )
     
-    # Find cheapest model that can generate valid JSON
-    result = await evaluator.evaluate_prompt(
-        prompt="Generate a user profile with name and age",
-        return_type=JSON,
-        max_model="openai:gpt-4o",  # Don't go more expensive than this
-        required_pass_rate_percent=100.0  # Require 100% validation success
-    )
-    
-    print(f"Best model: {result.minimum_working_model}")
-    print(f"Success: {result.success}")
-    print(f"Total cost: {result.total_cost}")
+        print(f"Best model: {result.minimum_working_model}")
+        print(f"Success: {result.success}")
+        print(f"Cost: {result.cost}")
 
 asyncio.run(main())
 ```
@@ -32,18 +29,18 @@ asyncio.run(main())
 ## Core Concepts
 
 ### Model Ordering
-Models are automatically ordered from most expensive to least expensive:
-- **OpenAI**: Uses live API + config fallback (gpt-4o → gpt-4o-mini → gpt-3.5-turbo)
-- **Anthropic**: Uses config data (claude-4 → claude-3-opus → claude-3.5-sonnet → claude-3.5-haiku)  
-- **Ollama**: Queries local installation, orders by parameter count (70b → 8b → 3b → 1b)
+Pass a `models` list ordered from most expensive/capable to least expensive/capable:
+- **OpenAI**: e.g. gpt-4o → gpt-4o-mini → gpt-3.5-turbo
+- **Anthropic**: e.g. claude-3-opus → claude-3.5-sonnet → claude-3.5-haiku  
+- **Ollama**: e.g. order by parameter count (70b → 8b → 3b → 1b)
 
 ### Search Strategies
 - **`binary_search`** (default): Efficiently finds the cheapest working model
 - **`step_back`**: Two-step-back, one-step-forward approach
 
 ### Validation Pass Rates
-- **100.0%** (default): Find cheapest model that always works
-- **85.0%**: Find cheapest model that works 85% of the time (useful with retry strategies)
+- **100.0**: Returned on `result.validation_pass_rate` when a model succeeds
+- **0.0**: Returned when no model succeeds
 
 ## Usage Examples
 
@@ -53,34 +50,34 @@ Models are automatically ordered from most expensive to least expensive:
 from lamia.eval.evaluator import ModelEvaluator
 from lamia.types import JSON, HTML, Markdown
 
-evaluator = ModelEvaluator()
+async with ModelEvaluator() as evaluator:
+    # Test JSON generation
+    result = await evaluator.evaluate_prompt(
+        prompt="Create a product catalog entry",
+        return_type=JSON,
+        models=["anthropic:claude-3-opus-20240229", "anthropic:claude-3-5-haiku-20241022"],
+    )
 
-# Test JSON generation
-result = await evaluator.evaluate_prompt(
-    prompt="Create a product catalog entry",
-    return_type=JSON,
-    max_model="anthropic:claude-3-opus-20240229"
-)
-
-# Test HTML generation  
-result = await evaluator.evaluate_prompt(
-    prompt="Create a landing page",
-    return_type=HTML,
-    max_model="openai:gpt-4o",
-    strategy="step_back"
-)
+    # Test HTML generation  
+    result = await evaluator.evaluate_prompt(
+        prompt="Create a landing page",
+        return_type=HTML,
+        models=["openai:gpt-4o", "openai:gpt-4o-mini"],
+        strategy="step_back",
+    )
 ```
 
 ### Using Existing Lamia Instance
 
 ```python
 # Use your existing Lamia configuration
-evaluator = ModelEvaluator()
+lamia = Lamia(("openai:gpt-4o", 3))
+evaluator = ModelEvaluator(lamia_instance=lamia)
 
 result = await evaluator.evaluate_prompt(
     prompt="Generate documentation",
     return_type=Markdown,
-    max_model="anthropic:claude-3-opus-20240229"
+    models=["anthropic:claude-3-opus-20240229", "anthropic:claude-3-5-haiku-20241022"],
 )
 ```
 
@@ -100,26 +97,27 @@ async def my_complex_workflow(lamia):
     
     return summary
 
-# Evaluate the entire workflow
-result = await evaluator.evaluate_script(
-    script_func=my_complex_workflow,
-    max_model="openai:gpt-4o"
-)
+async with ModelEvaluator() as evaluator:
+    # Evaluate the entire workflow
+    result = await evaluator.evaluate_script(
+        script_func=my_complex_workflow,
+        models=["openai:gpt-4o", "openai:gpt-4o-mini"],
+    )
 ```
 
 ### Advanced: Custom Pass Rates
 
 ```python
-# Accept 90% pass rate for cost optimization
+# Try different search strategies for cost optimization
 result = await evaluator.evaluate_prompt(
     prompt="Generate creative content",
     return_type=Markdown,
-    max_model="openai:gpt-4o",
-    required_pass_rate_percent=90.0  # Allow 10% failures
+    models=["openai:gpt-4o", "openai:gpt-4o-mini", "openai:gpt-3.5-turbo"],
+    strategy="step_back",
 )
 
 # Use pricing info to decide: worse model + retries vs better model
-if result.total_cost and result.total_cost.total_cost_usd < 0.01:
+if result.cost and result.cost.total_cost_usd < 0.01:
     print("Cost-effective model found!")
 ```
 
@@ -176,9 +174,8 @@ class EvaluationResult:
     minimum_working_model: Optional[str]  # "openai:gpt-4o-mini" 
     success: bool                         # True if any model worked
     validation_pass_rate: float         # 100.0 for successful evaluations
-    attempts: List[Dict[str, Any]]      # Details of each model attempt
+    attempts: List[ModelAttemptResult]  # Details of each model attempt
     cost: Optional[ModelCost]           # Cost of the best model
-    total_cost: Optional[ModelCost]     # Total cost across all attempts
     error_message: Optional[str]        # Error if evaluation failed
 ```
 
@@ -197,25 +194,22 @@ class ModelCost:
 ### 1. Use Appropriate Max Models
 ```python
 # For simple tasks, start with mid-tier models
-max_model="openai:gpt-4o-mini"
+models=["openai:gpt-4o-mini", "openai:gpt-3.5-turbo"]
 
 # For complex tasks, allow expensive models
-max_model="openai:gpt-4o" 
+models=["openai:gpt-4o", "openai:gpt-4o-mini", "openai:gpt-3.5-turbo"]
 
 # For local-only evaluation
-max_model="ollama:llama3.2:8b"
+models=["ollama:llama3.2:8b"]
 ```
 
 ### 2. Choose Right Pass Rates
 ```python
-# Critical applications - require perfection
-required_pass_rate_percent=100.0
+# binary_search: fewer attempts when success boundary is in the middle
+strategy="binary_search"
 
-# Cost-sensitive applications - allow some failures
-required_pass_rate_percent=85.0
-
-# Creative tasks - more tolerance for variation
-required_pass_rate_percent=75.0
+# step_back: starts from the cheapest model
+strategy="step_back"
 ```
 
 ### 3. Reuse Lamia Instances
@@ -231,8 +225,8 @@ evaluator = ModelEvaluator(lamia_instance=lamia)
 result = await evaluator.evaluate_prompt(...)
 
 # Check if pricing is available
-if result.total_cost:
-    print(f"Total spent: ${result.total_cost.total_cost_usd:.4f}")
+if result.cost:
+    print(f"Total spent: ${result.cost.total_cost_usd:.4f}")
 else:
     print("Pricing data not available")
 ```
@@ -250,7 +244,7 @@ else:
 
 ### "Validation failed for all models"
 - Your prompt might be too complex for the available models
-- Try a simpler prompt or allow a higher max_model
+- Try a simpler prompt or add more capable models to your `models` list
 - Check that your return_type is appropriate for the task
 
 ### Import errors
@@ -285,7 +279,7 @@ class MyApp:
         result = await self.evaluator.evaluate_prompt(
             prompt=task_prompt,
             return_type=return_type,
-            max_model="openai:gpt-4o"
+            models=["openai:gpt-4o", "openai:gpt-4o-mini", "openai:gpt-3.5-turbo"],
         )
         
         # Use the best model for production
