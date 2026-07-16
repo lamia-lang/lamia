@@ -289,7 +289,7 @@ def test_handle_remote_run_calls_ensure_apis_enabled_before_deploy(monkeypatch, 
     call_order = []
     monkeypatch.setattr(
         remote,
-        "ensure_apis_enabled",
+        "_ensure_apis",
         lambda project_id: call_order.append(("ensure_apis", project_id)),
     )
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
@@ -361,7 +361,7 @@ def test_handle_remote_run_continues_when_ensure_apis_enabled_raises(monkeypatch
     def _raise(*args, **kwargs):
         raise RuntimeError("API enable failed")
 
-    monkeypatch.setattr(remote, "ensure_apis_enabled", _raise)
+    monkeypatch.setattr(remote, "_ensure_apis", _raise)
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
     monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
     monkeypatch.setattr(
