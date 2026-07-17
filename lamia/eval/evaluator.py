@@ -59,18 +59,14 @@ class ScriptTask:
     script_func: Callable[[Lamia], Any]
     
     async def execute(self, model: str, lamia: Lamia) -> Any:
-        # Update lamia to use the specific model for this evaluation
         llm_model = LLMModel(model)
         model_with_retries = ModelWithRetries(llm_model, 1)
-        
-        # Temporarily set the model for this script execution
-        original_models = lamia._models
-        lamia._models = [model_with_retries]
+        config_provider = lamia._engine.config_provider
+        config_provider.override_model_chain_with([model_with_retries])
         try:
             return await self.script_func(lamia)
         finally:
-            # Restore original models
-            lamia._models = original_models
+            config_provider.reset_model_chain()
 
 
 class ModelEvaluator:

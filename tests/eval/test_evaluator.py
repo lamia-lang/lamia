@@ -262,8 +262,10 @@ class TestScriptTask:
     @pytest.mark.asyncio
     async def test_execute(self):
         """Test script task execution."""
+        mock_config_provider = Mock()
         mock_lamia = Mock()
-        mock_lamia._models = []
+        mock_lamia._engine = Mock()
+        mock_lamia._engine.config_provider = mock_config_provider
 
         async def test_script(lamia):
             return "script result"
@@ -272,14 +274,16 @@ class TestScriptTask:
         result = await task.execute("openai:gpt-4", mock_lamia)
 
         assert result == "script result"
-        assert mock_lamia._models == []
+        mock_config_provider.override_model_chain_with.assert_called_once()
+        mock_config_provider.reset_model_chain.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_restores_models_on_exception(self):
-        """Test that _models is restored when the script function raises."""
-        original_models = ["original:model"]
+        """Test that model chain is restored when the script function raises."""
+        mock_config_provider = Mock()
         mock_lamia = Mock()
-        mock_lamia._models = original_models
+        mock_lamia._engine = Mock()
+        mock_lamia._engine.config_provider = mock_config_provider
 
         async def failing_script(lamia):
             raise RuntimeError("script failed")
@@ -289,7 +293,7 @@ class TestScriptTask:
         with pytest.raises(RuntimeError, match="script failed"):
             await task.execute("openai:gpt-4", mock_lamia)
 
-        assert mock_lamia._models == original_models
+        mock_config_provider.reset_model_chain.assert_called_once()
 
 
 class TestEvaluateModel:
