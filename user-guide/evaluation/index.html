@@ -886,13 +886,30 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#advanced-usage-through-python-with-pass-rates" class="md-nav__link">
+  <a href="#python-api" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Advanced usage through Python with pass rates
+        Python API
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Python API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#result-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Result object
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1463,13 +1480,30 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#advanced-usage-through-python-with-pass-rates" class="md-nav__link">
+  <a href="#python-api" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Advanced usage through Python with pass rates
+        Python API
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Python API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#result-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Result object
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1553,7 +1587,7 @@
 
 
 <h1 id="model-evaluation">Model Evaluation<a class="headerlink" href="#model-evaluation" title="Permanent link">&para;</a></h1>
-<p>The evaluation module helps you find the most cost-effective model that meets your validation requirements. It tests models from most expensive to least expensive, finding the cheapest one that achieves your desired pass rate.</p>
+<p>The evaluation module helps you find the most cost-effective model that meets your validation requirements. It tests models from most expensive to least expensive, finding the cheapest one that passes validation.</p>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>lamia<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>&lt;your_script.lm&gt;
 </span></code></pre></div>
@@ -1578,36 +1612,86 @@
 </table>
 <p>With both strategies, the eval extracts all LLM prompts from the script and evaluates them one by one.
 The evaluation stops on the first prompt where no model in the range succeeds. But if at least one model passes for a prompt, it moves on to the next prompt.</p>
-<h2 id="advanced-usage-through-python-with-pass-rates">Advanced usage through Python with pass rates<a class="headerlink" href="#advanced-usage-through-python-with-pass-rates" title="Permanent link">&para;</a></h2>
+<h2 id="python-api">Python API<a class="headerlink" href="#python-api" title="Permanent link">&para;</a></h2>
+<p>Use <code>ModelEvaluator</code> when you want to evaluate prompts or scripts directly from Python:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">lamia.eval.evaluator</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelEvaluator</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">lamia.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">JSON</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="k">async</span> <span class="k">with</span> <span class="n">ModelEvaluator</span><span class="p">()</span> <span class="k">as</span> <span class="n">evaluator</span><span class="p">:</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate_prompt</span><span class="p">(</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>            <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Generate a user profile with name and age&quot;</span><span class="p">,</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>            <span class="n">return_type</span><span class="o">=</span><span class="n">JSON</span><span class="p">,</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>            <span class="n">models</span><span class="o">=</span><span class="p">[</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>                <span class="s2">&quot;openai:gpt-4o&quot;</span><span class="p">,</span>           <span class="c1"># most expensive</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>                <span class="s2">&quot;openai:gpt-4o-mini&quot;</span><span class="p">,</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>                <span class="s2">&quot;openai:gpt-3.5-turbo&quot;</span><span class="p">,</span>    <span class="c1"># cheapest</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>            <span class="p">],</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>            <span class="n">strategy</span><span class="o">=</span><span class="s2">&quot;binary_search&quot;</span><span class="p">,</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>        <span class="p">)</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Minimum working model: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">minimum_working_model</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Success: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">success</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">cost</span><span class="p">:</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cost: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">cost</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</span></code></pre></div>
+<p>Models must be ordered from <strong>most expensive to least expensive</strong> (most expensive first). The evaluator finds the cheapest model in the list that passes validation.</p>
+<p>For scripts with multiple <code>lamia.run_async()</code> calls, use <code>evaluate_script()</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">lamia</span><span class="w"> </span><span class="kn">import</span> <span class="n">Lamia</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">lamia.eval.evaluator</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelEvaluator</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">lamia.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">JSON</span><span class="p">,</span> <span class="n">HTML</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">my_workflow</span><span class="p">(</span><span class="n">lamia</span><span class="p">:</span> <span class="n">Lamia</span><span class="p">):</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">user_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lamia</span><span class="o">.</span><span class="n">run_async</span><span class="p">(</span><span class="s2">&quot;Create user profile&quot;</span><span class="p">,</span> <span class="n">JSON</span><span class="p">)</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">lamia</span><span class="o">.</span><span class="n">run_async</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Create report for: </span><span class="si">{</span><span class="n">user_data</span><span class="o">.</span><span class="n">result_text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">HTML</span><span class="p">)</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="k">async</span> <span class="k">with</span> <span class="n">ModelEvaluator</span><span class="p">()</span> <span class="k">as</span> <span class="n">evaluator</span><span class="p">:</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate_script</span><span class="p">(</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="n">script_func</span><span class="o">=</span><span class="n">my_workflow</span><span class="p">,</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>        <span class="n">models</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;openai:gpt-4o&quot;</span><span class="p">,</span> <span class="s2">&quot;openai:gpt-4o-mini&quot;</span><span class="p">],</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="p">)</span>
+</span></code></pre></div>
+<h3 id="result-object">Result object<a class="headerlink" href="#result-object" title="Permanent link">&para;</a></h3>
+<p><code>evaluate_prompt()</code> and <code>evaluate_script()</code> return an <code>EvaluationResult</code>:</p>
 <table>
 <thead>
 <tr>
-<th>Rate</th>
-<th>Use Case</th>
+<th>Attribute</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>100.0%</code> (default)</td>
-<td>Cheapest model that always works</td>
+<td><code>minimum_working_model</code></td>
+<td>Cheapest model that passed validation, or <code>None</code></td>
 </tr>
 <tr>
-<td><code>90.0%</code></td>
-<td>Allow some failures, use with retry strategies</td>
+<td><code>success</code></td>
+<td>Whether any model succeeded</td>
 </tr>
 <tr>
-<td><code>75.0%</code></td>
-<td>Creative tasks with more variation tolerance</td>
+<td><code>validation_pass_rate</code></td>
+<td><code>100.0</code> if a model succeeded, <code>0.0</code> otherwise</td>
+</tr>
+<tr>
+<td><code>attempts</code></td>
+<td>List of <code>ModelAttemptResult</code> for each model tried</td>
+</tr>
+<tr>
+<td><code>cost</code></td>
+<td>Token usage for the winning model (<code>ModelCost</code>), or <code>None</code></td>
+</tr>
+<tr>
+<td><code>error_message</code></td>
+<td>Error description when all models fail</td>
 </tr>
 </tbody>
 </table>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate_prompt</span><span class="p">(</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;My prompt&quot;</span><span class="p">,</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">return_type</span><span class="o">=</span><span class="n">Markdown</span><span class="p">[</span><span class="n">MyRepresentationType</span><span class="p">],</span> <span class="c1"># MyType is a pydantic model</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">max_model</span><span class="o">=</span><span class="s2">&quot;openai:gpt-4o&quot;</span><span class="p">,</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">required_pass_rate_percent</span><span class="o">=</span><span class="mf">90.0</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
-</span></code></pre></div>
+<p>Each attempt in <code>result.attempts</code> has <code>model</code>, <code>success</code>, <code>cost</code>, <code>result</code>, and <code>error</code> fields.</p>
+<p>For structured validation, pass a Lamia type as <code>return_type</code> — for example <code>JSON</code>, <code>HTML</code>, or <code>JSON[MyModel]</code> where <code>MyModel</code> is a Pydantic model (see <a href="../validation/">validation documentation</a>).</p>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1627,7 +1711,7 @@ The evaluation stops on the first prompt where no model in the range succeeds. B
 </tr>
 <tr>
 <td>"Validation failed for all models"</td>
-<td>Simplify prompt, allow higher max_model, or check return_type, give more hints with the return_type, see the <a href="../validation/">validation documentation</a> on how to do this</td>
+<td>Simplify prompt, include more expensive models in your <code>models</code> list, or check <code>return_type</code>; add hints to your return type — see the <a href="../validation/">validation documentation</a> on how to do this</td>
 </tr>
 </tbody>
 </table>
