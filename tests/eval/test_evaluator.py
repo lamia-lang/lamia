@@ -220,7 +220,8 @@ class TestStepBackStrategy:
 
         assert not result.success
         assert result.error_message == "No model succeeded"
-        assert len(result.attempts) <= len(models)
+        # step_back is a linear scan cheapest -> most expensive; every model is tried
+        assert len(result.attempts) == len(models)
 
     @pytest.mark.asyncio
     async def test_step_back_single_model_terminates(self):
@@ -516,6 +517,57 @@ class TestBinarySearchStrategy:
         assert result.success
         assert result.minimum_working_model == "expensive"
 
+    @pytest.mark.asyncio
+    async def test_two_models_cheaper_is_tried_first(self):
+        """With 2 models, the cheaper one (higher index) is the initial midpoint."""
+        mock_lamia = Mock()
+        evaluator = ModelEvaluator(lamia_instance=mock_lamia)
+        models = ["expensive", "cheap"]
+        call_order: list[str] = []
+
+        async def mock_evaluate(model: str, task):
+            call_order.append(model)
+            return ModelAttemptResult(model=model, success=True)
+
+        with patch.object(evaluator, "_evaluate_model", side_effect=mock_evaluate):
+            await evaluator._binary_search_strategy(Mock(), models, [])
+
+        assert call_order[0] == "cheap"
+
+    @pytest.mark.asyncio
+    async def test_three_models_middle_is_tried_first(self):
+        """With 3 models, the middle one is the initial midpoint."""
+        mock_lamia = Mock()
+        evaluator = ModelEvaluator(lamia_instance=mock_lamia)
+        models = ["expensive", "mid", "cheap"]
+        call_order: list[str] = []
+
+        async def mock_evaluate(model: str, task):
+            call_order.append(model)
+            return ModelAttemptResult(model=model, success=True)
+
+        with patch.object(evaluator, "_evaluate_model", side_effect=mock_evaluate):
+            await evaluator._binary_search_strategy(Mock(), models, [])
+
+        assert call_order[0] == "mid"
+
+    @pytest.mark.asyncio
+    async def test_four_models_cheaper_midpoint_is_tried_first(self):
+        """With 4 models, index 1 and 2 are both candidate midpoints — pick 2 (cheaper)."""
+        mock_lamia = Mock()
+        evaluator = ModelEvaluator(lamia_instance=mock_lamia)
+        models = ["m0", "m1", "m2", "m3"]  # m0 = most expensive, m3 = cheapest
+        call_order: list[str] = []
+
+        async def mock_evaluate(model: str, task):
+            call_order.append(model)
+            return ModelAttemptResult(model=model, success=True)
+
+        with patch.object(evaluator, "_evaluate_model", side_effect=mock_evaluate):
+            await evaluator._binary_search_strategy(Mock(), models, [])
+
+        assert call_order[0] == "m2"
+
 
 class TestStepBackStrategyExtended:
     """Extended tests for ModelEvaluator._step_back_strategy."""
@@ -554,10 +606,10 @@ class TestStepBackStrategyExtended:
 
         assert result.success
         assert result.minimum_working_model == "m2"
-        assert call_order == ["m4", "m2"]
+        assert call_order == ["m4", "m3", "m2"]
 
     @pytest.mark.asyncio
-    async def test_most_expensive_model_succeeds(self):
+    async def test_step_back_walks_full_list_when_only_top_model_works(self):
         mock_lamia = Mock()
         evaluator = ModelEvaluator(lamia_instance=mock_lamia)
         models = ["expensive", "mid", "cheap"]
@@ -572,7 +624,7 @@ class TestStepBackStrategyExtended:
 
         assert result.success
         assert result.minimum_working_model == "expensive"
-        assert call_order == ["cheap", "expensive"]
+        assert call_order == ["cheap", "mid", "expensive"]
 
     @pytest.mark.asyncio
     async def test_success_returns_immediately_without_extra_attempts(self):
