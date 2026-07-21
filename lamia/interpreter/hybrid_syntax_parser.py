@@ -38,15 +38,14 @@ def _fix_line_ranges(tree: ast.AST) -> None:
     for node in ast.walk(tree):
         lineno = getattr(node, 'lineno', None)
         end_lineno = getattr(node, 'end_lineno', None)
-        if lineno is not None and end_lineno is not None:
-            if end_lineno < lineno:
-                node.end_lineno = lineno
-            col = getattr(node, 'col_offset', None)
-            end_col = getattr(node, 'end_col_offset', None)
-            if col is not None and end_col is not None:
-                effective_end_lineno = getattr(node, 'end_lineno', lineno)
-                if effective_end_lineno == lineno and end_col < col:
-                    node.end_col_offset = col
+        if lineno is not None and end_lineno is not None and end_lineno < lineno:
+            node.end_lineno = lineno
+            end_lineno = lineno
+        col = getattr(node, 'col_offset', None)
+        end_col = getattr(node, 'end_col_offset', None)
+        if (col is not None and end_col is not None
+                and lineno == end_lineno and end_col < col):
+            node.end_col_offset = col
 
 
 def _walk_paired_trees(src_node: ast.AST, out_node: ast.AST, smap: dict) -> None:
