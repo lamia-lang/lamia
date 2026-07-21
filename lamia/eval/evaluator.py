@@ -192,20 +192,21 @@ class ModelEvaluator:
         )
 
     async def _step_back_strategy(
-        self, 
+        self,
         task: EvaluationTask,
-        models: List[str], 
+        models: List[str],
         attempts: List[ModelAttemptResult]
     ) -> EvaluationResult:
-        """Two-step-back, one-step-forward evaluation strategy."""
-        current_idx = len(models) - 1
-        
-        while current_idx >= 0:
+        """Linear scan from cheapest to most expensive; returns the first working model.
+
+        Guarantees the true minimum working model at the cost of O(n) evaluations.
+        """
+        for current_idx in range(len(models) - 1, -1, -1):
             model = models[current_idx]
-            
+
             attempt = await self._evaluate_model(model, task)
             attempts.append(attempt)
-            
+
             if attempt.success:
                 return EvaluationResult(
                     minimum_working_model=model,
@@ -214,11 +215,7 @@ class ModelEvaluator:
                     cost=attempt.cost,
                     attempts=attempts
                 )
-            
-            if current_idx == 0:
-                break  # Most-capable model failed, nothing left to try
-            current_idx = max(0, current_idx - 2)
-        
+
         return EvaluationResult(
             minimum_working_model=None,
             success=False,
