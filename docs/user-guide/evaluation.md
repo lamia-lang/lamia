@@ -1,6 +1,6 @@
 # Model Evaluation
 
-The evaluation module helps you find the most cost-effective model that meets your validation requirements. It tests models from most capable to least capable, finding the cheapest one that passes validation.
+The evaluation module helps you find the most cost-effective model that meets your validation requirements. It tests models from most expensive to least expensive, finding the cheapest one that passes validation.
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ async def main():
             prompt="Generate a user profile with name and age",
             return_type=JSON,
             models=[
-                "openai:gpt-4o",           # most capable (tried first in binary search)
+                "openai:gpt-4o",           # most expensive
                 "openai:gpt-4o-mini",
                 "openai:gpt-3.5-turbo",    # cheapest
             ],
@@ -50,7 +50,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Models must be ordered from **most capable to least capable** (most expensive first). The evaluator finds the cheapest model in the list that passes validation.
+Models must be ordered from **most expensive to least expensive** (most expensive first). The evaluator finds the cheapest model in the list that passes validation.
 
 For scripts with multiple `lamia.run_async()` calls, use `evaluate_script()`:
 
@@ -93,4 +93,4 @@ For structured validation, pass a Lamia type as `return_type` — for example `J
 |-------|----------|
 | "No models available" | Check API keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or ensure Ollama is running |
 | "No pricing provider found" | Normal — evaluation works without pricing data |
-| "Validation failed for all models" | Simplify prompt, include more capable models in your `models` list, or check `return_type`; add hints to your return type — see the [validation documentation](validation.md) on how to do this |
+| "Validation failed for all models" | Simplify prompt, include more expensive models in your `models` list, or check `return_type`; add hints to your return type — see the [validation documentation](validation.md) on how to do this |

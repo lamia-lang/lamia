@@ -39,7 +39,7 @@ Models are automatically ordered from most expensive to least expensive:
 
 ### Search Strategies
 - **`binary_search`** (default): Efficiently finds the cheapest working model
-- **`step_back`**: Two-step-back, one-step-forward approach
+- **`step_back`**: Linear scan from cheapest to most expensive; returns the first model that passes
 
 ### Validation Pass Rates
 - **100.0%** (default): Find cheapest model that always works

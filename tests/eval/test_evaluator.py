@@ -178,8 +178,8 @@ class TestStepBackStrategy:
 
         assert not result.success
         assert result.error_message == "No model succeeded"
-        # With 3 models step_back visits at most 2 (cheapest, then index 0)
-        assert len(result.attempts) <= len(models)
+        # step_back is a linear scan cheapest -> most expensive; every model is tried
+        assert len(result.attempts) == len(models)
 
     @pytest.mark.asyncio
     async def test_step_back_single_model_terminates(self):
