@@ -40,6 +40,7 @@ def _fix_line_ranges(tree: ast.AST) -> None:
         end_lineno = getattr(node, 'end_lineno', None)
         if lineno is not None and end_lineno is not None and end_lineno < lineno:
             node.end_lineno = lineno
+            end_lineno = lineno
         col = getattr(node, 'col_offset', None)
         end_col = getattr(node, 'end_col_offset', None)
         if (col is not None and end_col is not None

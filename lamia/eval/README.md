@@ -37,7 +37,7 @@ The evaluator searches this list to find the cheapest model that succeeds. Order
 
 ### Search Strategies
 - **`binary_search`** (default): Efficiently finds the cheapest working model via binary search
-- **`step_back`**: Starts from the cheapest model and steps back two indices on failure until one succeeds
+- **`step_back`**: Linear scan from cheapest to most expensive; returns the first model that passes
 
 ### Validation
 A model attempt succeeds only when:
