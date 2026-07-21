@@ -7,6 +7,7 @@ from ..types import BaseType
 from .model_cost import ModelCost
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
+from lamia.facade.result_types import LamiaResult
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,9 @@ class PromptTask:
     async def execute(self, model: str, lamia: Lamia) -> Any:
         llm_model = LLMModel(model)
         model_with_retries = ModelWithRetries(llm_model, 1)
-        return await lamia.run_async(self.prompt, self.return_type, models=[model_with_retries])
+        return await lamia.run_async(
+            self.prompt, self.return_type, models=[model_with_retries], _full_result=True
+        )
 
 
 @dataclass
@@ -56,18 +59,14 @@ class ScriptTask:
     script_func: Callable[[Lamia], Any]
     
     async def execute(self, model: str, lamia: Lamia) -> Any:
-        # Update lamia to use the specific model for this evaluation
         llm_model = LLMModel(model)
         model_with_retries = ModelWithRetries(llm_model, 1)
-        
-        # Temporarily set the model for this script execution
-        original_models = lamia._models
-        lamia._models = [model_with_retries]
+        config_provider = lamia._engine.config_provider
+        config_provider.override_model_chain_with([model_with_retries])
         try:
             return await self.script_func(lamia)
         finally:
-            # Restore original models
-            lamia._models = original_models
+            config_provider.reset_model_chain()
 
 
 class ModelEvaluator:
@@ -169,7 +168,8 @@ class ModelEvaluator:
         left, right = 0, len(models) - 1
         
         while left <= right:
-            mid = (left + right) // 2
+            # Ceiling division biases toward the cheaper midpoint (higher index).
+            mid = (left + right + 1) // 2
             model = models[mid]
             
             attempt = await self._evaluate_model(model, task)
@@ -178,9 +178,9 @@ class ModelEvaluator:
             if attempt.success:
                 best_model = model
                 best_cost = attempt.cost
-                right = mid - 1  # Try cheaper models
+                left = mid + 1  # Try cheaper models (higher indices)
             else:
-                left = mid + 1  # Try more expensive models
+                right = mid - 1  # Try more expensive models (lower indices)
         
         return EvaluationResult(
             minimum_working_model=best_model,
@@ -248,7 +248,10 @@ class ModelEvaluator:
                     error="Model returned None result"
                 )
             
-            logger.debug(f"Model {model} generated response: {getattr(result, 'result_text', str(result))}")
+            if isinstance(result, LamiaResult):
+                logger.debug(f"Model {model} generated response: {result.result_text}")
+            else:
+                logger.debug(f"Model {model} generated response: {result}")
             
             # TODO: Implement cost calculation when pricing is added
             # For now, extract token usage if available and create a basic ModelCost
@@ -276,20 +279,21 @@ class ModelEvaluator:
         TODO: Implement actual cost calculation when pricing is added.
         For now, just extracts token counts without monetary cost.
         """
+        if not isinstance(result, LamiaResult):
+            return None
+
         try:
-            # Try to get usage from tracking context
-            if hasattr(result, 'tracking_context'):
-                metadata = result.tracking_context.metadata
-                if metadata and isinstance(metadata, dict):
-                    usage = metadata.get("usage", {})
-                    if usage and isinstance(usage, dict):
-                        input_tokens = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
-                        output_tokens = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
-                        return ModelCost(
-                            input_tokens=input_tokens,
-                            output_tokens=output_tokens
-                        )
+            metadata = result.tracking_context.metadata
+            if metadata and isinstance(metadata, dict):
+                usage = metadata.get("usage", {})
+                if usage and isinstance(usage, dict):
+                    input_tokens = usage.get("prompt_tokens", 0) or usage.get("input_tokens", 0)
+                    output_tokens = usage.get("completion_tokens", 0) or usage.get("output_tokens", 0)
+                    return ModelCost(
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens
+                    )
         except Exception as e:
             logger.debug(f"Could not extract cost: {e}")
-        
+
         return None

@@ -205,13 +205,14 @@ class Lamia:
         if normalized_models is not None:
             self._engine.config_provider.override_model_chain_with(normalized_models)
 
-        response = await self._engine.execute(
-            parsed_command,
-            return_type=return_type
-        )
-
-        if normalized_models is not None:
-            self._engine.config_provider.reset_model_chain()
+        try:
+            response = await self._engine.execute(
+                parsed_command,
+                return_type=return_type
+            )
+        finally:
+            if normalized_models is not None:
+                self._engine.config_provider.reset_model_chain()
 
         if _full_result:
             return LamiaResult(
