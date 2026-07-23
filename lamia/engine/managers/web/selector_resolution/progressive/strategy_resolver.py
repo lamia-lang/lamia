@@ -115,7 +115,8 @@ class ProgressiveSelectorResolver:
     async def resolve(
         self,
         description: str,
-        page_url: str
+        page_url: str,
+        scope_element_handle: Optional[Any] = None,
     ) -> Tuple[str, List[Any]]:
         """
         Resolve description to actual elements progressively.
@@ -123,6 +124,7 @@ class ProgressiveSelectorResolver:
         Args:
             description: Natural language description of element(s)
             page_url: Current page URL for caching
+            scope_element_handle: Optional element handle to scope search within
             
         Returns:
             (selector_used, elements_found)
@@ -156,6 +158,7 @@ class ProgressiveSelectorResolver:
                 selectors,
                 failed_selectors,
                 step_name="progressive",
+                scope_element_handle=scope_element_handle,
             )
             if outcome.is_success:
                 if outcome.selector is None:
@@ -164,10 +167,17 @@ class ProgressiveSelectorResolver:
 
         raise ValueError(f"Could not resolve '{description}' after {max_retries} attempts")
     
-    async def _find_elements(self, selector: str) -> List[Any]:
-        """Find elements using selector."""
+    async def _find_elements(
+        self,
+        selector: str,
+        scope_element_handle: Optional[Any] = None,
+    ) -> List[Any]:
+        """Find elements using selector, optionally scoped to a parent element."""
         try:
-            params = BrowserActionParams(selector=selector)
+            params = BrowserActionParams(
+                selector=selector,
+                scope_element_handle=scope_element_handle,
+            )
             elements = await self.browser.get_elements(params)
             return elements or []
         except Exception as e:
@@ -182,6 +192,7 @@ class ProgressiveSelectorResolver:
         selectors: List[str],
         failed_selectors: List[str],
         step_name: str,
+        scope_element_handle: Optional[Any] = None,
     ) -> ResolutionOutcome:
         had_matches = False
 
@@ -192,7 +203,7 @@ class ProgressiveSelectorResolver:
         for i, selector in enumerate(selectors, 1):
             logger.info(f"[{i}/{len(selectors)}] Trying {step_name} selector: {selector}")
 
-            elements = await self._find_elements(selector)
+            elements = await self._find_elements(selector, scope_element_handle)
             if not elements:
                 failed_selectors.append(selector)
                 continue
