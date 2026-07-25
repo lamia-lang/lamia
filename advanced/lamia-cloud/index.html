@@ -2064,6 +2064,10 @@
 <li>Logs (stdout/stderr) go to Cloud Logging under Cloud Run Job execution logs</li>
 <li>Exit status is reported back to the local lamia registry so <code>lamia schedule list</code> shows it</li>
 </ol>
+<p><strong>Version:</strong> A cloud script is built with the newest version of Lamia at the time you
+deploy it, and it keeps that version until it's rebuilt. Deploying again after you
+change your script rebuilds it with the latest version. Updates stay compatible with
+your existing scripts, so cloud runs behave the same as running on your computer.</p>
 <h2 id="logs">Logs<a class="headerlink" href="#logs" title="Permanent link">&para;</a></h2>
 <p>View execution logs:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>logs<span class="w"> </span>&lt;id&gt;
