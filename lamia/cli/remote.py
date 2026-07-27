@@ -111,18 +111,27 @@ def handle_remote_run(
         set_deployed_source_hash(project_id, location, target, source_hash)
 
     print("  Running...", file=sys.stderr)
-    result = run_job(
-        project_id=project_id,
-        location=location,
-        target=target,
-        verbose=verbose,
-    )
+    result = {}
+    run_error = None
+    try:
+        result = run_job(
+            project_id=project_id,
+            location=location,
+            target=target,
+            verbose=verbose,
+        )
+    except Exception as exc:
+        run_error = exc
 
-    stdout, stderr = fetch_execution_logs(
-        project_id=project_id,
-        target=target,
-        execution_name=result.get("execution_name", ""),
-    )
+    try:
+        stdout, stderr = fetch_execution_logs(
+            project_id=project_id,
+            target=target,
+            execution_name=result.get("execution_name", ""),
+        )
+    except Exception as log_error:
+        stdout, stderr = "", ""
+        print(f"  Failed to fetch container logs: {log_error}", file=sys.stderr)
 
     if stdout:
         print(stdout)
@@ -137,6 +146,9 @@ def handle_remote_run(
         print(f"\n  Completed in {elapsed:.1f}s", file=sys.stderr)
     if logs_url:
         print(f"  Logs: {logs_url}", file=sys.stderr)
+
+    if run_error:
+        raise run_error
 
     sys.exit(exit_code)
 

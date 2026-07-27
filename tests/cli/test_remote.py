@@ -278,6 +278,96 @@ def test_handle_remote_run_routes_to_deploy_trigger_when_script_has_triggers(mon
     assert stages == fake_stages
 
 
+@pytest.mark.integration
+def test_handle_remote_run_fetches_logs_when_run_job_raises(monkeypatch, tmp_path, capsys):
+    """Even if run_job raises unexpectedly, container logs should still be fetched."""
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    from lamia.cli.script_analysis import ScriptCapabilities
+    import lamia.cli.remote as remote
+
+    _write_script(tmp_path, "task.lm", 'def run():\n    raise Exception("boom")')
+
+    monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
+    monkeypatch.setattr(
+        remote,
+        "analyze_script",
+        lambda path: ScriptCapabilities(),
+    )
+    monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
+    monkeypatch.setattr(remote, "sync_runtime_files", lambda **kwargs: {})
+    monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *a, **kw: "abc")
+    monkeypatch.setattr(remote, "_compute_source_hash", lambda root: "abc")
+
+    def failing_run_job(**kwargs):
+        raise RuntimeError("The container exited with an error")
+
+    logs_called = []
+    def mock_fetch_logs(**kwargs):
+        logs_called.append(kwargs)
+        return ("container stdout", "container stderr")
+
+    monkeypatch.setattr(remote, "run_job", failing_run_job)
+    monkeypatch.setattr(remote, "fetch_execution_logs", mock_fetch_logs)
+
+    with pytest.raises(RuntimeError, match="container exited with an error"):
+        remote.handle_remote_run(
+            "task.lm", str(tmp_path), {"cloud": {"project_id": "proj"}}, verbose=False
+        )
+
+    assert len(logs_called) == 1
+    captured = capsys.readouterr()
+    assert "container stdout" in captured.out
+    assert "container stderr" in captured.err
+
+
+@pytest.mark.integration
+def test_handle_remote_run_displays_logs_on_container_failure(monkeypatch, tmp_path, capsys):
+    """Failed remote runs must print container logs and the logs URL."""
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    from lamia.cli.script_analysis import ScriptCapabilities
+    import lamia.cli.remote as remote
+
+    _write_script(tmp_path, "task.lm", 'def run():\n    raise Exception("boom")')
+
+    monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
+    monkeypatch.setattr(
+        remote,
+        "analyze_script",
+        lambda path: ScriptCapabilities(),
+    )
+    monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
+    monkeypatch.setattr(remote, "sync_runtime_files", lambda **kwargs: {})
+    monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *a, **kw: "abc")
+    monkeypatch.setattr(remote, "_compute_source_hash", lambda root: "abc")
+
+    monkeypatch.setattr(
+        remote,
+        "run_job",
+        lambda **kwargs: {
+            "exit_code": 1,
+            "elapsed_seconds": 3.2,
+            "logs_url": "https://console.cloud.google.com/logs/exec-1",
+            "execution_name": "projects/p/locations/us-central1/jobs/lamia-task/executions/exec-1",
+        },
+    )
+    monkeypatch.setattr(
+        remote,
+        "fetch_execution_logs",
+        lambda **kwargs: ("Traceback: boom", ""),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        remote.handle_remote_run(
+            "task.lm", str(tmp_path), {"cloud": {"project_id": "proj"}}, verbose=False
+        )
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "Traceback: boom" in captured.out
+    assert "https://console.cloud.google.com/logs/exec-1" in captured.err
+    assert "Completed in 3.2s" in captured.err
+    
+
 def _remote_module():
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     import lamia.cli.remote as remote
