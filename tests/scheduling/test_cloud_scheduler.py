@@ -174,13 +174,18 @@ def test_deploy_scheduled_trigger_builds_plan_and_deploys(monkeypatch, tmp_path,
 
 
 @pytest.mark.integration
-def test_fetch_cloud_statuses_maps_enabled_state(monkeypatch, tmp_path):
+def test_fetch_cloud_statuses_uses_execution_status(monkeypatch, tmp_path):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
 
     mock_scheduler = mock.MagicMock()
     mock_scheduler.get_installed_config.return_value = {
         "state": "ENABLED",
         "last_attempt_time": "2026-07-01T00:00:00Z",
+    }
+    mock_scheduler.get_last_execution_status.return_value = {
+        "timestamp": "2026-07-01T01:00:00Z",
+        "success": False,
+        "exit_code": 1,
     }
     monkeypatch.setattr(cloud_scheduler, "get_scheduler", lambda root: mock_scheduler)
 
@@ -191,9 +196,84 @@ def test_fetch_cloud_statuses_maps_enabled_state(monkeypatch, tmp_path):
     results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
 
     assert results["job-1"] == {
-        "timestamp": "2026-07-01T00:00:00Z",
-        "success": True,
+        "timestamp": "2026-07-01T01:00:00Z",
+        "success": False,
+    }
+    mock_scheduler.get_last_execution_status.assert_called_once()
+
+
+@pytest.mark.integration
+def test_fetch_cloud_statuses_fallback_when_no_executions(monkeypatch, tmp_path):
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+
+    mock_scheduler = mock.MagicMock()
+    mock_scheduler.get_installed_config.return_value = {
         "state": "ENABLED",
+        "last_attempt_time": "2026-07-01T00:00:00Z",
+    }
+    mock_scheduler.get_last_execution_status.return_value = None
+    monkeypatch.setattr(cloud_scheduler, "get_scheduler", lambda root: mock_scheduler)
+
+    cloud_jobs = [
+        {"id": "job-1", "script": "task.lm", "cron": "0 * * * *", "project_root": str(tmp_path)}
+    ]
+
+    results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
+
+    assert results["job-1"] == {
+        "timestamp": "2026-07-01T00:00:00Z",
+        "success": None,
+    }
+
+
+@pytest.mark.integration
+def test_fetch_cloud_statuses_mixed_jobs(monkeypatch, tmp_path):
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+
+    mock_scheduler = mock.MagicMock()
+
+    def config_for_job(cloud_job):
+        if cloud_job.schedule_id == "with-exec":
+            return {"state": "ENABLED", "last_attempt_time": "2026-07-01T00:00:00Z"}
+        return {"state": "ENABLED", "last_attempt_time": "2026-07-02T00:00:00Z"}
+
+    def exec_status_for_job(cloud_job):
+        if cloud_job.schedule_id == "with-exec":
+            return {
+                "timestamp": "2026-07-01T01:00:00Z",
+                "success": True,
+                "exit_code": 0,
+            }
+        return None
+
+    mock_scheduler.get_installed_config.side_effect = config_for_job
+    mock_scheduler.get_last_execution_status.side_effect = exec_status_for_job
+    monkeypatch.setattr(cloud_scheduler, "get_scheduler", lambda root: mock_scheduler)
+
+    cloud_jobs = [
+        {
+            "id": "with-exec",
+            "script": "a.lm",
+            "cron": "0 * * * *",
+            "project_root": str(tmp_path),
+        },
+        {
+            "id": "no-exec",
+            "script": "b.lm",
+            "cron": "0 * * * *",
+            "project_root": str(tmp_path),
+        },
+    ]
+
+    results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
+
+    assert results["with-exec"] == {
+        "timestamp": "2026-07-01T01:00:00Z",
+        "success": True,
+    }
+    assert results["no-exec"] == {
+        "timestamp": "2026-07-02T00:00:00Z",
+        "success": None,
     }
 
 
