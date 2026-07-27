@@ -157,47 +157,55 @@ def deploy_scheduled_trigger(
 
 
 def fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
-    """Fetch last execution statuses from Cloud Run for all cloud jobs at once."""
+    """Fetch last execution status for all cloud jobs at once.
+
+    Uses the Cloud Run execution result, falling back to Cloud Scheduler's last
+    attempt time (with unknown success) when no execution exists yet.
+    """
     results: dict[str, dict | None] = {}
     if not LAMIA_CLOUD_AVAILABLE:
         return results
 
-    try:
-        by_project: dict[str, list[dict]] = {}
-        for job in cloud_jobs:
-            by_project.setdefault(job["project_root"], []).append(job)
+    by_project: dict[str, list[dict]] = {}
+    for job in cloud_jobs:
+        by_project.setdefault(job["project_root"], []).append(job)
 
-        for project_root, jobs in by_project.items():
+    for project_root, jobs in by_project.items():
+        try:
+            scheduler = get_scheduler(Path(project_root))
+        except Exception as exc:
+            for job in jobs:
+                print(f"  Failed to fetch status for {job['id']}: {exc}", file=sys.stderr)
+            continue
+
+        for job in jobs:
             try:
-                scheduler = get_scheduler(Path(project_root))
-                for job in jobs:
-                    cloud_job = CloudScheduleJob(
-                        script=job["script"],
-                        cron=job["cron"],
-                        schedule_id=job["id"],
-                        project_root=Path(project_root),
-                    )
-                    config = scheduler.get_installed_config(cloud_job)
-                    if config:
-                        state = config.get("state", "UNKNOWN")
-                        if state == "PAUSED":
-                            set_paused(job["id"], True)
+                cloud_job = CloudScheduleJob(
+                    script=job["script"],
+                    cron=job["cron"],
+                    schedule_id=job["id"],
+                    project_root=Path(project_root),
+                )
+                config = scheduler.get_installed_config(cloud_job)
+                if config:
+                    state = config.get("state", "UNKNOWN")
+                    if state == "PAUSED":
+                        set_paused(job["id"], True)
 
-                    exec_status = scheduler.get_last_execution_status(cloud_job)
-                    if exec_status:
+                exec_status = scheduler.get_last_execution_status(cloud_job)
+                if exec_status:
+                    results[job["id"]] = {
+                        "timestamp": exec_status.get("timestamp"),
+                        "success": exec_status.get("success"),
+                    }
+                elif config:
+                    last_attempt = config.get("last_attempt_time")
+                    if last_attempt:
                         results[job["id"]] = {
-                            "timestamp": exec_status["timestamp"],
-                            "success": exec_status["success"],
+                            "timestamp": last_attempt,
+                            "success": None,
                         }
-                    elif config:
-                        last_attempt = config.get("last_attempt_time")
-                        if last_attempt:
-                            results[job["id"]] = {
-                                "timestamp": last_attempt,
-                                "success": None,
-                            }
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as exc:
+                print(f"  Failed to fetch status for {job['id']}: {exc}", file=sys.stderr)
+
     return results
