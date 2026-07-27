@@ -123,11 +123,15 @@ def handle_remote_run(
     except Exception as exc:
         run_error = exc
 
-    stdout, stderr = fetch_execution_logs(
-        project_id=project_id,
-        target=target,
-        execution_name=result.get("execution_name", ""),
-    )
+    try:
+        stdout, stderr = fetch_execution_logs(
+            project_id=project_id,
+            target=target,
+            execution_name=result.get("execution_name", ""),
+        )
+    except Exception as log_error:
+        stdout, stderr = "", ""
+        print(f"  Failed to fetch container logs: {log_error}", file=sys.stderr)
 
     if stdout:
         print(stdout)
