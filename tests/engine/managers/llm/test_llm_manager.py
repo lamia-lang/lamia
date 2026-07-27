@@ -13,7 +13,7 @@ from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from lamia.validation.base import ValidationResult, BaseValidator, TrackingContext
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import LLMCommand
-from lamia.errors import MissingAPIKeysError
+from lamia.errors import MissingAPIKeysError, ExternalOperationTransientError
 from lamia.adapters.retry.factory import RetriableAdapterFactory
 
 
@@ -762,6 +762,26 @@ class TestLLMManagerGenerateAndValidate:
         assert "Validation failed" in retry_prompt
         assert "Try again" in retry_prompt
         assert "Original prompt" not in retry_prompt  # Should NOT include original with context memory
+
+    @pytest.mark.asyncio
+    async def test_generate_and_validate_api_error_returns_none(self):
+        """Test that API failures return None so the model chain can fall back."""
+        mock_adapter = Mock(spec=BaseLLMAdapter)
+        mock_model = Mock(spec=LLMModel)
+        mock_model.name = "claude-3"
+        mock_adapter.generate.side_effect = ExternalOperationTransientError(
+            "Anthropic API error (status 529): overloaded"
+        )
+
+        result = await self.manager._generate_and_validate(
+            adapter=mock_adapter,
+            model=mock_model,
+            prompt="Hello",
+            max_attempts=3,
+        )
+
+        assert result is None
+        mock_adapter.generate.assert_called_once()
 
 
 class TestLLMManagerCleanup:

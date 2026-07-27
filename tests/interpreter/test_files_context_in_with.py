@@ -472,6 +472,18 @@ result = compare()
         assert _has_capture(t)
         ast.parse(t)
 
+    def test_compile_with_files_and_models_default(self):
+        """with files() + models= default must compile without invalid column ranges."""
+        src = """
+with files("~/Documents"):
+    def get_name(models="openai:gpt-4"):
+        "Extract name from {@resume.txt}"
+
+name = get_name()
+"""
+        code = HybridSyntaxParser().compile(src)
+        assert code is not None
+
     def test_models_list_default_uses_variable_ref(self):
         """models=['a', 'b'] default: lamia.run() must reference the variable."""
         src = """
