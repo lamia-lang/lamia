@@ -1,6 +1,7 @@
 """Unit tests for script analysis utilities (no cloud deps), plus integration
 tests for the remote/trigger deploy paths with the lamia_cloud boundary mocked."""
 
+import importlib.util
 from unittest import mock
 
 import pytest
@@ -18,6 +19,16 @@ def _write_script(tmp_path: Path, name: str, content: str) -> Path:
     script_path = tmp_path / name
     script_path.write_text(content)
     return script_path
+
+
+@pytest.fixture(autouse=True)
+def _stub_ensure_apis_enabled(monkeypatch):
+    """Keep tests off the real Service Usage API, which needs GCP credentials."""
+    if importlib.util.find_spec("lamia_cloud") is None:
+        return
+    import lamia.cli.remote as remote
+
+    monkeypatch.setattr(remote, "ensure_apis_enabled", lambda project_id: None)
 
 
 def test_analyze_script_detects_llm_web_file_and_file_context(tmp_path):
@@ -500,3 +511,127 @@ class TestHandleRemoteRun:
         stderr = capsys.readouterr().err
         assert "will upload local files" in stderr
         assert "data.csv" in stderr
+
+
+@pytest.mark.integration
+def test_handle_remote_run_calls_ensure_apis_enabled_before_deploy(monkeypatch, tmp_path):
+    """handle_remote_run must enable GCP APIs before any deploy/run calls."""
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    import lamia.cli.remote as remote
+
+    _write_script(tmp_path, "task.lm", 'def run():\n    return 1\n')
+
+    call_order = []
+    monkeypatch.setattr(
+        remote,
+        "ensure_apis_enabled",
+        lambda project_id: call_order.append(("ensure_apis", project_id)),
+    )
+    monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
+    monkeypatch.setattr(
+        remote,
+        "build_file_sync_plan",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        remote,
+        "sync_runtime_files",
+        lambda **kwargs: {"uploaded": 0, "skipped": 0, "overwrite_warnings": []},
+    )
+    monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        remote,
+        "deploy",
+        lambda **kwargs: call_order.append(("deploy", kwargs["project_id"])) or "job",
+    )
+    monkeypatch.setattr(remote, "set_deployed_source_hash", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        remote,
+        "run_job",
+        lambda **kwargs: call_order.append(("run_job", kwargs["project_id"]))
+        or {"exit_code": 0, "elapsed_seconds": 0, "logs_url": ""},
+    )
+    monkeypatch.setattr(
+        remote,
+        "fetch_execution_logs",
+        lambda **kwargs: ("", ""),
+    )
+    monkeypatch.setattr(
+        remote,
+        "analyze_script",
+        lambda path: ScriptCapabilities(
+            uses_llm=False,
+            uses_browser=False,
+            uses_files=False,
+            uses_file_context=False,
+        ),
+    )
+    monkeypatch.setattr(
+        remote,
+        "collect_project_files",
+        lambda root: list(root.glob("*.lm")),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        remote.handle_remote_run(
+            "task.lm", str(tmp_path), {"cloud": {"project_id": "proj"}}, verbose=False
+        )
+
+    assert exc_info.value.code == 0
+    assert call_order[0] == ("ensure_apis", "proj")
+    assert ("deploy", "proj") in call_order
+    deploy_index = call_order.index(("deploy", "proj"))
+    ensure_index = call_order.index(("ensure_apis", "proj"))
+    assert ensure_index < deploy_index
+
+
+@pytest.mark.integration
+def test_handle_remote_run_propagates_ensure_apis_enabled_failure(monkeypatch, tmp_path):
+    """If API enablement fails, surface the error instead of deploying regardless."""
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    import lamia.cli.remote as remote
+
+    _write_script(tmp_path, "task.lm", 'def run():\n    return 1\n')
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("API enable failed")
+
+    deploy_calls = []
+    monkeypatch.setattr(remote, "ensure_apis_enabled", _raise)
+    monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
+    monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
+    monkeypatch.setattr(
+        remote,
+        "sync_runtime_files",
+        lambda **kwargs: {"uploaded": 0, "skipped": 0, "overwrite_warnings": []},
+    )
+    monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *args, **kwargs: "abc")
+    monkeypatch.setattr(
+        remote,
+        "deploy",
+        lambda **kwargs: deploy_calls.append(kwargs) or "job",
+    )
+    monkeypatch.setattr(remote, "set_deployed_source_hash", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        remote,
+        "run_job",
+        lambda **kwargs: {"exit_code": 0, "elapsed_seconds": 0, "logs_url": ""},
+    )
+    monkeypatch.setattr(remote, "fetch_execution_logs", lambda **kwargs: ("", ""))
+    monkeypatch.setattr(
+        remote,
+        "analyze_script",
+        lambda path: ScriptCapabilities(
+            uses_llm=False,
+            uses_browser=False,
+            uses_files=False,
+            uses_file_context=False,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="API enable failed"):
+        remote.handle_remote_run(
+            "task.lm", str(tmp_path), {"cloud": {"project_id": "proj"}}, verbose=False
+        )
+
+    assert deploy_calls == []

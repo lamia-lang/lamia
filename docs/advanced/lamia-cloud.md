@@ -89,13 +89,8 @@ Or directly in GCP Console under Cloud Run > Jobs > `lamia-...` > Executions > L
 
 ## API Enablement
 
-lamia-cloud automatically enables required APIs on first use.
-In restricted org environments where API auto-enablement is blocked by policy,
-a platform administrator can run:
-
-```bash
-gcloud services enable run.googleapis.com cloudscheduler.googleapis.com cloudbuild.googleapis.com logging.googleapis.com --project=my-gcp-project
-```
+lamia-cloud automatically enables required APIs on first use, for both scheduled
+jobs and `--remote` runs. No manual `gcloud services enable` step is needed.
 
 ## File Sync for Cloud Execution
 

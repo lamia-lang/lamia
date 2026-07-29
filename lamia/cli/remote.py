@@ -14,6 +14,7 @@ from lamia_cloud.gcp.deployer import (
     collect_project_files,
     deployment_name,
     deploy,
+    ensure_apis_enabled,
     fetch_execution_logs,
     get_deployed_source_hash,
     run_job,
@@ -46,6 +47,8 @@ def handle_remote_run(
             file=sys.stderr,
         )
         sys.exit(1)
+
+    ensure_apis_enabled(project_id)
 
     root = Path(project_root)
     script_path = Path(script)
