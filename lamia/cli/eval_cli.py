@@ -131,6 +131,8 @@ def _extract_llm_prompts(
     for info in parsed.get("llm_functions", {}).values():
         if not isinstance(info, LLMFunctionInfo):
             continue
+        if not info.command:
+            continue
         if not isinstance(CommandParser(info.command).parsed_command, LLMCommand):
             continue
         prompts.append((info.command, _resolve_return_type(info.return_type)))

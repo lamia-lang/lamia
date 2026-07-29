@@ -12,6 +12,99 @@ from unittest import mock
 import pytest
 
 from lamia.scheduling import cloud_scheduler
+from lamia.scheduling.base import JobStatus, ScheduleJob
+from lamia.scheduling.cloud_scheduler import CloudSchedulerBridge, _to_cloud_job
+
+
+def _schedule_job(tmp_path: Path) -> ScheduleJob:
+    return ScheduleJob(
+        script="task.lm",
+        cron="0 * * * *",
+        schedule_id="task-abc1",
+        catch_up=False,
+        project_root=tmp_path,
+    )
+
+
+class TestCloudSchedulerBridge:
+    def test_install_delegates_with_converted_job(self, tmp_path):
+        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+        mock_scheduler = mock.MagicMock()
+        bridge = CloudSchedulerBridge(mock_scheduler)
+        job = _schedule_job(tmp_path)
+
+        bridge.install(job, lamia_bin="/usr/bin/lamia")
+
+        mock_scheduler.install.assert_called_once()
+        cloud_job, lamia_bin = mock_scheduler.install.call_args[0]
+        assert lamia_bin == "/usr/bin/lamia"
+        assert cloud_job.script == "task.lm"
+        assert cloud_job.cron == "0 * * * *"
+        assert cloud_job.schedule_id == "task-abc1"
+        assert cloud_job.catch_up is False
+        assert cloud_job.project_root == tmp_path
+
+    def test_uninstall_delegates_with_converted_job(self, tmp_path):
+        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+        mock_scheduler = mock.MagicMock()
+        bridge = CloudSchedulerBridge(mock_scheduler)
+        job = _schedule_job(tmp_path)
+
+        bridge.uninstall(job)
+
+        mock_scheduler.uninstall.assert_called_once()
+        cloud_job = mock_scheduler.uninstall.call_args[0][0]
+        assert cloud_job.schedule_id == "task-abc1"
+
+    def test_get_status_converts_cloud_status_to_job_status(self, tmp_path):
+        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+        from lamia_cloud.types import CloudJobStatus
+
+        mock_scheduler = mock.MagicMock()
+        mock_scheduler.get_status.return_value = CloudJobStatus.ACTIVE
+        bridge = CloudSchedulerBridge(mock_scheduler)
+
+        status = bridge.get_status(_schedule_job(tmp_path))
+
+        assert status == JobStatus.ACTIVE
+        mock_scheduler.get_status.assert_called_once()
+
+    def test_pause_and_resume_delegate(self, tmp_path):
+        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+        mock_scheduler = mock.MagicMock()
+        bridge = CloudSchedulerBridge(mock_scheduler)
+        job = _schedule_job(tmp_path)
+
+        bridge.pause(job)
+        bridge.resume(job)
+
+        mock_scheduler.pause.assert_called_once()
+        mock_scheduler.resume.assert_called_once()
+        assert mock_scheduler.pause.call_args[0][0].schedule_id == "task-abc1"
+        assert mock_scheduler.resume.call_args[0][0].schedule_id == "task-abc1"
+
+
+class TestToCloudJob:
+    def test_maps_schedule_job_fields(self, tmp_path):
+        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+        from lamia_cloud.types import CloudScheduleJob
+
+        job = ScheduleJob(
+            script="hello.lm",
+            cron="@reboot",
+            schedule_id="hello-dead",
+            catch_up=True,
+            project_root=tmp_path,
+        )
+
+        cloud_job = _to_cloud_job(job)
+
+        assert isinstance(cloud_job, CloudScheduleJob)
+        assert cloud_job.script == "hello.lm"
+        assert cloud_job.cron == "@reboot"
+        assert cloud_job.schedule_id == "hello-dead"
+        assert cloud_job.catch_up is True
+        assert cloud_job.project_root == tmp_path
 
 
 def test_deploy_scheduled_trigger_errors_without_lamia_cloud(monkeypatch, tmp_path, capsys):
@@ -81,13 +174,18 @@ def test_deploy_scheduled_trigger_builds_plan_and_deploys(monkeypatch, tmp_path,
 
 
 @pytest.mark.integration
-def test_fetch_cloud_statuses_maps_enabled_state(monkeypatch, tmp_path):
+def test_fetch_cloud_statuses_uses_execution_status(monkeypatch, tmp_path):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
 
     mock_scheduler = mock.MagicMock()
     mock_scheduler.get_installed_config.return_value = {
         "state": "ENABLED",
         "last_attempt_time": "2026-07-01T00:00:00Z",
+    }
+    mock_scheduler.get_last_execution_status.return_value = {
+        "timestamp": "2026-07-01T01:00:00Z",
+        "success": False,
+        "exit_code": 1,
     }
     monkeypatch.setattr(cloud_scheduler, "get_scheduler", lambda root: mock_scheduler)
 
@@ -98,9 +196,84 @@ def test_fetch_cloud_statuses_maps_enabled_state(monkeypatch, tmp_path):
     results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
 
     assert results["job-1"] == {
-        "timestamp": "2026-07-01T00:00:00Z",
-        "success": True,
+        "timestamp": "2026-07-01T01:00:00Z",
+        "success": False,
+    }
+    mock_scheduler.get_last_execution_status.assert_called_once()
+
+
+@pytest.mark.integration
+def test_fetch_cloud_statuses_fallback_when_no_executions(monkeypatch, tmp_path):
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+
+    mock_scheduler = mock.MagicMock()
+    mock_scheduler.get_installed_config.return_value = {
         "state": "ENABLED",
+        "last_attempt_time": "2026-07-01T00:00:00Z",
+    }
+    mock_scheduler.get_last_execution_status.return_value = None
+    monkeypatch.setattr(cloud_scheduler, "get_scheduler", lambda root: mock_scheduler)
+
+    cloud_jobs = [
+        {"id": "job-1", "script": "task.lm", "cron": "0 * * * *", "project_root": str(tmp_path)}
+    ]
+
+    results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
+
+    assert results["job-1"] == {
+        "timestamp": "2026-07-01T00:00:00Z",
+        "success": None,
+    }
+
+
+@pytest.mark.integration
+def test_fetch_cloud_statuses_mixed_jobs(monkeypatch, tmp_path):
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+
+    mock_scheduler = mock.MagicMock()
+
+    def config_for_job(cloud_job):
+        if cloud_job.schedule_id == "with-exec":
+            return {"state": "ENABLED", "last_attempt_time": "2026-07-01T00:00:00Z"}
+        return {"state": "ENABLED", "last_attempt_time": "2026-07-02T00:00:00Z"}
+
+    def exec_status_for_job(cloud_job):
+        if cloud_job.schedule_id == "with-exec":
+            return {
+                "timestamp": "2026-07-01T01:00:00Z",
+                "success": True,
+                "exit_code": 0,
+            }
+        return None
+
+    mock_scheduler.get_installed_config.side_effect = config_for_job
+    mock_scheduler.get_last_execution_status.side_effect = exec_status_for_job
+    monkeypatch.setattr(cloud_scheduler, "get_scheduler", lambda root: mock_scheduler)
+
+    cloud_jobs = [
+        {
+            "id": "with-exec",
+            "script": "a.lm",
+            "cron": "0 * * * *",
+            "project_root": str(tmp_path),
+        },
+        {
+            "id": "no-exec",
+            "script": "b.lm",
+            "cron": "0 * * * *",
+            "project_root": str(tmp_path),
+        },
+    ]
+
+    results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
+
+    assert results["with-exec"] == {
+        "timestamp": "2026-07-01T01:00:00Z",
+        "success": True,
+    }
+    assert results["no-exec"] == {
+        "timestamp": "2026-07-02T00:00:00Z",
+        "success": None,
     }
 
 

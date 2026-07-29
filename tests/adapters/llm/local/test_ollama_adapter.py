@@ -146,3 +146,71 @@ class TestOllamaAdapterModels:
 
         assert len(models) == 1
         mock_session.get.assert_called_once_with("http://192.168.1.10:11434/api/tags")
+
+
+class TestOllamaAdapterGenerate:
+    """Test OllamaAdapter generate error handling."""
+
+    @pytest.mark.asyncio
+    async def test_generate_raises_permanent_error_on_404(self):
+        """Test that 4xx Ollama errors raise ExternalOperationPermanentError."""
+        mock_response = AsyncMock()
+        mock_response.status = 404
+        mock_response.text = AsyncMock(return_value="model not found")
+
+        class MockPostContext:
+            def __init__(self, resp):
+                self.resp = resp
+            async def __aenter__(self):
+                return self.resp
+            async def __aexit__(self, *a):
+                return None
+
+        mock_session = Mock()
+        mock_session.post = Mock(return_value=MockPostContext(mock_response))
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(OllamaAdapter, '_start_ollama_service', return_value=None):
+            with patch.object(OllamaAdapter, '_ensure_ollama_model_pulled', return_value=True):
+                with patch('aiohttp.ClientSession', return_value=mock_session):
+                    adapter = OllamaAdapter()
+                    mock_model = Mock()
+                    mock_model.get_model_name_without_provider.return_value = "missing-model"
+                    mock_model.name = "ollama:missing-model"
+
+                    from lamia.errors import ExternalOperationPermanentError
+                    with pytest.raises(ExternalOperationPermanentError, match="Ollama API error"):
+                        await adapter.generate("Test prompt", mock_model)
+
+    @pytest.mark.asyncio
+    async def test_generate_raises_transient_error_on_529(self):
+        """Test that 5xx Ollama errors raise ExternalOperationTransientError."""
+        mock_response = AsyncMock()
+        mock_response.status = 529
+        mock_response.text = AsyncMock(return_value="overloaded")
+
+        class MockPostContext:
+            def __init__(self, resp):
+                self.resp = resp
+            async def __aenter__(self):
+                return self.resp
+            async def __aexit__(self, *a):
+                return None
+
+        mock_session = Mock()
+        mock_session.post = Mock(return_value=MockPostContext(mock_response))
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(OllamaAdapter, '_start_ollama_service', return_value=None):
+            with patch.object(OllamaAdapter, '_ensure_ollama_model_pulled', return_value=True):
+                with patch('aiohttp.ClientSession', return_value=mock_session):
+                    adapter = OllamaAdapter()
+                    mock_model = Mock()
+                    mock_model.get_model_name_without_provider.return_value = "llama3"
+                    mock_model.name = "ollama:llama3"
+
+                    from lamia.errors import ExternalOperationTransientError
+                    with pytest.raises(ExternalOperationTransientError, match="Ollama API error"):
+                        await adapter.generate("Test prompt", mock_model)

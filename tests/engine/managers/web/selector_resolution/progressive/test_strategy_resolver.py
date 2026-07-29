@@ -238,6 +238,35 @@ class TestProgressiveSelectorResolverResolve:
         with pytest.raises(ValueError, match="Could not resolve"):
             await resolver.resolve("login button", "http://example.com")
 
+    async def test_resolve_accepts_scope_element_handle(
+        self, mock_llm_manager, mock_browser_adapter, mock_cache, mock_config_provider
+    ):
+        """Test that resolve accepts scope_element_handle and passes it to element search."""
+        mock_element = Mock()
+        mock_scope = Mock(name="scope-element")
+        mock_browser_adapter.get_elements.return_value = [mock_element]
+
+        resolver = ProgressiveSelectorResolver(
+            mock_browser_adapter,
+            mock_llm_manager,
+            mock_cache,
+            mock_config_provider
+        )
+
+        selector, elements = await resolver.resolve(
+            "login button",
+            "http://example.com",
+            scope_element_handle=mock_scope,
+        )
+
+        assert selector == "button.login"
+        assert elements == [mock_element]
+
+        mock_browser_adapter.get_elements.assert_awaited_once()
+        call_params = mock_browser_adapter.get_elements.call_args[0][0]
+        assert call_params.scope_element_handle is mock_scope
+        assert call_params.selector == "button.login"
+
 
 @pytest.mark.asyncio
 class TestProgressiveSelectorResolverAmbiguity:
