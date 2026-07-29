@@ -1,6 +1,7 @@
 """Unit tests for script analysis utilities (no cloud deps), plus integration
 tests for the remote/trigger deploy paths with the lamia_cloud boundary mocked."""
 
+import importlib.util
 from unittest import mock
 
 import pytest
@@ -18,6 +19,16 @@ def _write_script(tmp_path: Path, name: str, content: str) -> Path:
     script_path = tmp_path / name
     script_path.write_text(content)
     return script_path
+
+
+@pytest.fixture(autouse=True)
+def _stub_ensure_apis_enabled(monkeypatch):
+    """Keep tests off the real Service Usage API, which needs GCP credentials."""
+    if importlib.util.find_spec("lamia_cloud") is None:
+        return
+    import lamia.cli.remote as remote
+
+    monkeypatch.setattr(remote, "ensure_apis_enabled", lambda project_id: None)
 
 
 def test_analyze_script_detects_llm_web_file_and_file_context(tmp_path):
