@@ -14,6 +14,7 @@ from lamia_cloud.gcp.deployer import (
     collect_project_files,
     deployment_name,
     deploy,
+    ensure_apis_enabled,
     fetch_execution_logs,
     get_deployed_source_hash,
     run_job,
@@ -22,11 +23,6 @@ from lamia_cloud.gcp.deployer import (
 )
 from lamia_cloud.gcp.trigger_provider import GCPTriggerProvider
 from lamia_cloud.types import TriggerDeploymentPlan
-
-try:
-    from lamia_cloud.gcp.deployer import ensure_apis_enabled as _ensure_apis
-except ImportError:
-    _ensure_apis = None
 
 
 def handle_remote_run(
@@ -52,14 +48,7 @@ def handle_remote_run(
         )
         sys.exit(1)
 
-    if _ensure_apis is not None:
-        try:
-            _ensure_apis(project_id)
-        except Exception as exc:
-            print(
-                f"Warning: could not enable GCP APIs automatically: {exc}",
-                file=sys.stderr,
-            )
+    ensure_apis_enabled(project_id)
 
     root = Path(project_root)
     script_path = Path(script)

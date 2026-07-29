@@ -513,7 +513,7 @@ def test_handle_remote_run_calls_ensure_apis_enabled_before_deploy(monkeypatch, 
     call_order = []
     monkeypatch.setattr(
         remote,
-        "_ensure_apis",
+        "ensure_apis_enabled",
         lambda project_id: call_order.append(("ensure_apis", project_id)),
     )
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
@@ -575,8 +575,8 @@ def test_handle_remote_run_calls_ensure_apis_enabled_before_deploy(monkeypatch, 
 
 
 @pytest.mark.integration
-def test_handle_remote_run_continues_when_ensure_apis_enabled_raises(monkeypatch, tmp_path, capsys):
-    """A failure in ensure_apis_enabled should warn but not abort the remote run."""
+def test_handle_remote_run_propagates_ensure_apis_enabled_failure(monkeypatch, tmp_path):
+    """If API enablement fails, surface the error instead of deploying regardless."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     import lamia.cli.remote as remote
 
@@ -585,7 +585,8 @@ def test_handle_remote_run_continues_when_ensure_apis_enabled_raises(monkeypatch
     def _raise(*args, **kwargs):
         raise RuntimeError("API enable failed")
 
-    monkeypatch.setattr(remote, "_ensure_apis", _raise)
+    deploy_calls = []
+    monkeypatch.setattr(remote, "ensure_apis_enabled", _raise)
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
     monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
     monkeypatch.setattr(
@@ -594,7 +595,11 @@ def test_handle_remote_run_continues_when_ensure_apis_enabled_raises(monkeypatch
         lambda **kwargs: {"uploaded": 0, "skipped": 0, "overwrite_warnings": []},
     )
     monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *args, **kwargs: "abc")
-    monkeypatch.setattr(remote, "deploy", lambda **kwargs: "job")
+    monkeypatch.setattr(
+        remote,
+        "deploy",
+        lambda **kwargs: deploy_calls.append(kwargs) or "job",
+    )
     monkeypatch.setattr(remote, "set_deployed_source_hash", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         remote,
@@ -613,12 +618,9 @@ def test_handle_remote_run_continues_when_ensure_apis_enabled_raises(monkeypatch
         ),
     )
 
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(RuntimeError, match="API enable failed"):
         remote.handle_remote_run(
             "task.lm", str(tmp_path), {"cloud": {"project_id": "proj"}}, verbose=False
         )
 
-    assert exc_info.value.code == 0
-    stderr = capsys.readouterr().err
-    assert "could not enable GCP APIs automatically" in stderr
-    assert "API enable failed" in stderr
+    assert deploy_calls == []
