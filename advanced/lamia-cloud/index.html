@@ -2074,18 +2074,15 @@ your existing scripts, so cloud runs behave the same as running on your computer
 </span></code></pre></div>
 <p>Or directly in GCP Console under Cloud Run &gt; Jobs &gt; <code>lamia-...</code> &gt; Executions &gt; Logs.</p>
 <h2 id="api-enablement">API Enablement<a class="headerlink" href="#api-enablement" title="Permanent link">&para;</a></h2>
-<p>lamia-cloud automatically enables required APIs on first use.
-In restricted org environments where API auto-enablement is blocked by policy,
-a platform administrator can run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>gcloud<span class="w"> </span>services<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>run.googleapis.com<span class="w"> </span>cloudscheduler.googleapis.com<span class="w"> </span>cloudbuild.googleapis.com<span class="w"> </span>logging.googleapis.com<span class="w"> </span>--project<span class="o">=</span>my-gcp-project
-</span></code></pre></div>
+<p>lamia-cloud automatically enables required APIs on first use, for both scheduled
+jobs and <code>--remote</code> runs. No manual <code>gcloud services enable</code> step is needed.</p>
 <h2 id="file-sync-for-cloud-execution">File Sync for Cloud Execution<a class="headerlink" href="#file-sync-for-cloud-execution" title="Permanent link">&para;</a></h2>
 <p>When your script uses <code>with files(...)</code> to provide context to the LLM, Lamia automatically uploads the referenced files to cloud storage (GCS) so the script runs identically in the cloud.</p>
 <h3 id="what-gets-uploaded">What gets uploaded<a class="headerlink" href="#what-gets-uploaded" title="Permanent link">&para;</a></h3>
 <p><strong>Only</strong> the folders and files specified in <code>with files(...)</code> syntax are uploaded. Nothing else.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;./docs&quot;</span><span class="p">,</span> <span class="s2">&quot;./data/input.csv&quot;</span><span class="p">):</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">summarize</span><span class="p">():</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>        <span class="s2">&quot;Summarize {@report.pdf} and {@input.csv}&quot;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;./docs&quot;</span><span class="p">,</span> <span class="s2">&quot;./data/input.csv&quot;</span><span class="p">):</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">summarize</span><span class="p">():</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>        <span class="s2">&quot;Summarize {@report.pdf} and {@input.csv}&quot;</span>
 </span></code></pre></div>
 <p>In this example, every file inside <code>./docs/</code> and the single file <code>./data/input.csv</code> are synced to cloud storage.</p>
 <h3 id="how-it-works-at-runtime">How it works at runtime<a class="headerlink" href="#how-it-works-at-runtime" title="Permanent link">&para;</a></h3>
@@ -2142,28 +2139,28 @@ a platform administrator can run:</p>
 <h2 id="gitflow-for-lamia-team-workflows">Gitflow for Lamia (Team Workflows)<a class="headerlink" href="#gitflow-for-lamia-team-workflows" title="Permanent link">&para;</a></h2>
 <p>When multiple developers work on a shared Lamia project, file paths must be consistent across machines. The recommended approach: <strong>use paths relative to the Git repository root</strong>.</p>
 <h3 id="the-problem-with-absolute-paths">The problem with absolute paths<a class="headerlink" href="#the-problem-with-absolute-paths" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># BAD for teams — breaks on other machines</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;~/Documents/company_data/&quot;</span><span class="p">):</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">analyze</span><span class="p">():</span>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>        <span class="s2">&quot;Summarize {@quarterly_report.pdf}&quot;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># BAD for teams — breaks on other machines</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;~/Documents/company_data/&quot;</span><span class="p">):</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">analyze</span><span class="p">():</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>        <span class="s2">&quot;Summarize {@quarterly_report.pdf}&quot;</span>
 </span></code></pre></div>
 <p>This works for one developer but fails for everyone else (different home directory, different folder structure).</p>
 <h3 id="the-solution-repository-relative-paths">The solution: repository-relative paths<a class="headerlink" href="#the-solution-repository-relative-paths" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># GOOD for teams — works for everyone who clones the repo</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;./data/&quot;</span><span class="p">):</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">analyze</span><span class="p">():</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>        <span class="s2">&quot;Summarize {@quarterly_report.pdf}&quot;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># GOOD for teams — works for everyone who clones the repo</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">&quot;./data/&quot;</span><span class="p">):</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">analyze</span><span class="p">():</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>        <span class="s2">&quot;Summarize {@quarterly_report.pdf}&quot;</span>
 </span></code></pre></div>
 <p>Place the files your script needs inside the Git repository (or a subdirectory of it). Every team member gets the same structure after cloning.</p>
 <h3 id="recommended-project-structure-for-teams">Recommended project structure for teams<a class="headerlink" href="#recommended-project-structure-for-teams" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>my-project/              ← Git repository root
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>├── config.yaml          ← cloud configuration
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>├── daily_report.lm      ← script
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>├── data/                ← files referenced in with files(&quot;./data/&quot;)
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>│   ├── templates/
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>│   │   └── report_template.html
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>│   └── reference_data.csv
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>└── requirements.txt
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>my-project/              ← Git repository root
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>├── config.yaml          ← cloud configuration
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>├── daily_report.lm      ← script
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>├── data/                ← files referenced in with files(&quot;./data/&quot;)
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>│   ├── templates/
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>│   │   └── report_template.html
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>│   └── reference_data.csv
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>└── requirements.txt
 </span></code></pre></div>
 <h3 id="rules-for-team-shared-projects">Rules for team-shared projects<a class="headerlink" href="#rules-for-team-shared-projects" title="Permanent link">&para;</a></h3>
 <ol>
@@ -2181,26 +2178,26 @@ a platform administrator can run:</p>
 </ul>
 <h3 id="cicd-integration-github-flow">CI/CD integration (GitHub Flow)<a class="headerlink" href="#cicd-integration-github-flow" title="Permanent link">&para;</a></h3>
 <p>For automated deployments, set up a CI workflow that triggers <code>lamia &lt;script&gt;.lm --remote</code> when relevant files change:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># .github/workflows/lamia-deploy.yml</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deploy Lamia Script</span>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="nt">on</span><span class="p">:</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="nt">push</span><span class="p">:</span>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span>
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">    </span><span class="nt">paths</span><span class="p">:</span>
-</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;daily_report.lm&#39;</span>
-</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;data/**&#39;</span>
-</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;config.yaml&#39;</span>
-</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>
-</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="nt">jobs</span><span class="p">:</span>
-</span><span id="__span-12-13"><a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">  </span><span class="nt">deploy</span><span class="p">:</span>
-</span><span id="__span-12-14"><a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
-</span><span id="__span-12-15"><a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
-</span><span id="__span-12-16"><a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
-</span><span id="__span-12-17"><a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install &quot;lamia-lang[cloud]&quot;</span>
-</span><span id="__span-12-18"><a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lamia daily_report.lm --remote</span>
-</span><span id="__span-12-19"><a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a><span class="w">        </span><span class="nt">env</span><span class="p">:</span>
-</span><span id="__span-12-20"><a id="__codelineno-12-20" name="__codelineno-12-20" href="#__codelineno-12-20"></a><span class="w">          </span><span class="nt">GOOGLE_APPLICATION_CREDENTIALS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.GCP_SA_KEY }}</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># .github/workflows/lamia-deploy.yml</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deploy Lamia Script</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="nt">on</span><span class="p">:</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span><span class="nt">push</span><span class="p">:</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span><span class="nt">paths</span><span class="p">:</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;daily_report.lm&#39;</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;data/**&#39;</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;config.yaml&#39;</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="nt">jobs</span><span class="p">:</span>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">  </span><span class="nt">deploy</span><span class="p">:</span>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+</span><span id="__span-11-17"><a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install &quot;lamia-lang[cloud]&quot;</span>
+</span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lamia daily_report.lm --remote</span>
+</span><span id="__span-11-19"><a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a><span class="w">        </span><span class="nt">env</span><span class="p">:</span>
+</span><span id="__span-11-20"><a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="w">          </span><span class="nt">GOOGLE_APPLICATION_CREDENTIALS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.GCP_SA_KEY }}</span>
 </span></code></pre></div>
 <p>This ensures the cloud deployment updates whenever the script or its data files change in the repository — no manual <code>--remote</code> runs needed.</p>
 <p><strong>Benefits over manual sync:</strong></p>
