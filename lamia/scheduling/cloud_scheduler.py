@@ -75,6 +75,9 @@ class CloudSchedulerBridge(BaseScheduler):
     def resume(self, job: ScheduleJob) -> None:
         self._scheduler.resume(_to_cloud_job(job))
 
+    def fetch_logs(self, job: ScheduleJob) -> dict:
+        return self._scheduler.fetch_logs(_to_cloud_job(job))
+
 
 def get_cloud_scheduler(project_root: Path) -> BaseScheduler:
     """Load the cloud scheduler from lamia-cloud and wrap it as BaseScheduler.

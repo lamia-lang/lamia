@@ -222,6 +222,6 @@ See the [lamia-cloud user guide](../advanced/lamia-cloud.md) for installation, o
 ## Troubleshooting
 
 - **Script not found**: If you moved the project after scheduling, the job will fail. Use `lamia schedule list` to see the stale path, then `remove` and `add` with the new location.
-- **Check logs**: Use `lamia schedule list` to get the job id, then inspect `~/.lamia/logs/schedules/<id>/schedule.log`.
+- **Check logs**: Use `lamia schedule list` to get the job id, then run `lamia schedule logs <id>`. Local jobs write to `~/.lamia/logs/schedules/<id>/schedule.log`.
 - **Force fresh login**: If a web automation script's session expired, delete `.lamia_sessions/` and run the script manually once to re-authenticate before the next scheduled run.
 - **Cloud: "requires lamia-cloud"**: Run `pip install "lamia-lang[cloud]"`. See [lamia-cloud docs](../advanced/lamia-cloud.md).
