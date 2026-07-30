@@ -236,6 +236,17 @@ lamia trigger list --verbose
 This shows the actual event payload and timestamp for each failure, so you
 can understand what went wrong and take action.
 
+## Viewing Logs
+
+Triggers run in the cloud, so their output never reaches your terminal. Use the
+id from `lamia trigger list` to read the most recent run:
+
+```bash
+lamia trigger logs pricing-reply
+```
+
+Multi-stage triggers print each stage in order.
+
 ## Requirements
 
 - Currently triggers are only supported in remote mode (`--remote`).

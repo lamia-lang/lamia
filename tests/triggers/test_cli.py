@@ -115,3 +115,48 @@ def test_get_cloud_provider_errors_without_project_id(tmp_path, capsys):
 
     assert exc.value.code == 1
     assert "cloud.project_id" in capsys.readouterr().err
+
+
+class TestHandleLogs:
+    def test_prints_stdout_stderr_and_url(self, monkeypatch, capsys):
+        mock_provider = mock.MagicMock()
+        mock_provider.fetch_logs.return_value = {
+            "stdout": "run output\n",
+            "stderr": "warning line\n",
+            "logs_url": "https://console.cloud.google.com/logs/query",
+        }
+        monkeypatch.setattr(triggers_cli, "_get_cloud_provider", lambda root: mock_provider)
+
+        args = mock.MagicMock()
+        args.id = "pricing-reply"
+        triggers_cli._handle_logs(args)
+
+        mock_provider.fetch_logs.assert_called_once_with("pricing-reply")
+        captured = capsys.readouterr()
+        assert captured.out == (
+            "run output\n\nLogs: https://console.cloud.google.com/logs/query\n"
+        )
+        assert captured.err == "warning line\n"
+
+    def test_tolerates_partial_log_payload(self, monkeypatch, capsys):
+        mock_provider = mock.MagicMock()
+        mock_provider.fetch_logs.return_value = {"stdout": "only stdout\n"}
+        monkeypatch.setattr(triggers_cli, "_get_cloud_provider", lambda root: mock_provider)
+
+        args = mock.MagicMock()
+        args.id = "pricing-reply"
+        triggers_cli._handle_logs(args)
+
+        assert capsys.readouterr().out == "only stdout\n"
+
+    def test_exits_when_trigger_has_no_jobs(self, monkeypatch, capsys):
+        mock_provider = mock.MagicMock()
+        mock_provider.fetch_logs.side_effect = ValueError("No deployed jobs found")
+        monkeypatch.setattr(triggers_cli, "_get_cloud_provider", lambda root: mock_provider)
+
+        args = mock.MagicMock()
+        args.id = "missing"
+        with pytest.raises(SystemExit):
+            triggers_cli._handle_logs(args)
+
+        assert "No deployed jobs found" in capsys.readouterr().err
