@@ -54,10 +54,21 @@ def _make_run_async_side_effect(
 
 
 def _make_mock_lamia(run_async_side_effect):
+    mock_config_provider = Mock()
+    mock_config_provider._chain: list = []
+
+    def override_model_chain_with(chain):
+        mock_config_provider._chain = list(chain)
+
+    def reset_model_chain():
+        mock_config_provider._chain = []
+
+    mock_config_provider.override_model_chain_with = Mock(side_effect=override_model_chain_with)
+    mock_config_provider.reset_model_chain = Mock(side_effect=reset_model_chain)
     mock_lamia = Mock()
     mock_lamia._engine = Mock()
+    mock_lamia._engine.config_provider = mock_config_provider
     mock_lamia._engine.cleanup = AsyncMock()
-    mock_lamia._models = []
     mock_lamia.run_async = AsyncMock(side_effect=run_async_side_effect)
     return mock_lamia
 
@@ -114,14 +125,13 @@ class TestEvaluateScriptIntegration:
     @pytest.mark.asyncio
     async def test_script_evaluation_end_to_end(self):
         call_log: list[str] = []
-        original_models: list = ["original:model"]
 
         async def run_async(*args, **kwargs):
             models = kwargs.get("models")
             if models:
                 model = models[0].model.name
-            elif mock_lamia._models:
-                model = mock_lamia._models[0].model.name
+            elif mock_lamia._engine.config_provider._chain:
+                model = mock_lamia._engine.config_provider._chain[0].model.name
             else:
                 model = ""
             call_log.append(model)
@@ -130,7 +140,6 @@ class TestEvaluateScriptIntegration:
             return _lamia_result(result_text=f"script output from {model}")
 
         mock_lamia = _make_mock_lamia(run_async)
-        mock_lamia._models = original_models
 
         async def my_script(lamia):
             response = await lamia.run_async("do work", None)
@@ -145,7 +154,7 @@ class TestEvaluateScriptIntegration:
 
         assert result.success
         assert result.minimum_working_model == "openai:expensive"
-        assert mock_lamia._models is original_models
+        mock_lamia._engine.config_provider.reset_model_chain.assert_called()
         assert "openai:expensive" in call_log
 
 

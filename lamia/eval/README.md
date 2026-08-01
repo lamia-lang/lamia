@@ -37,7 +37,7 @@ The evaluator searches this list to find the cheapest model that succeeds. Order
 
 ### Search Strategies
 - **`binary_search`** (default): Efficiently finds the cheapest working model via binary search
-- **`step_back`**: Starts from the cheapest model and steps back two indices on failure until one succeeds
+- **`step_back`**: Linear scan from cheapest to most expensive; returns the first model that passes
 
 ### Validation
 A model attempt succeeds only when:
@@ -249,10 +249,22 @@ if result.cost:
         print(f"Cost: ${result.cost.total_cost_usd:.4f}")
 ```
 
+## API Keys
+
+The evaluation module uses the same API key configuration as the main Lamia library:
+- **OpenAI**: `OPENAI_API_KEY` environment variable
+- **Anthropic**: `ANTHROPIC_API_KEY` environment variable
+- **Ollama**: No API key needed (local installation)
+
 ## Troubleshooting
 
 ### "Models list cannot be empty"
 Pass at least one model in the `models` parameter.
+
+### A model always fails / authentication errors
+- **OpenAI**: check the `OPENAI_API_KEY` environment variable is set
+- **Anthropic**: check the `ANTHROPIC_API_KEY` environment variable is set
+- **Ollama**: ensure Ollama is running locally (`ollama serve`)
 
 ### "No model succeeded"
 - Your prompt or script may be too complex for the models in your list
