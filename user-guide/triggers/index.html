@@ -1541,6 +1541,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#viewing-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewing Logs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#requirements" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1735,7 +1746,7 @@ event listener. This means:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list
 </span></code></pre></div>
 <p>Example output:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>  [pricing-reply] pricing_reply.lm
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>  [pricing-reply-a3f2] pricing_reply.lm
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    event: email_received
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    mode: reactive
 </span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    last run: 2026-07-09  status: ok
@@ -1746,6 +1757,14 @@ event listener. This means:</p>
 </span></code></pre></div>
 <p>This shows the actual event payload and timestamp for each failure, so you
 can understand what went wrong and take action.</p>
+<h2 id="viewing-logs">Viewing Logs<a class="headerlink" href="#viewing-logs" title="Permanent link">&para;</a></h2>
+<p>Triggers run in the cloud, so their output never reaches your terminal. Take the
+id shown in brackets by <code>lamia trigger list</code> and read the most recent run:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>logs<span class="w"> </span>pricing-reply-a3f2
+</span></code></pre></div>
+<p>The id is the script slug plus a short hash of the project directory, so the
+same script name in two projects stays distinct. It is not the file name.</p>
+<p>Multi-stage triggers print each stage in order.</p>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Currently triggers are only supported in remote mode (<code>--remote</code>).</li>
