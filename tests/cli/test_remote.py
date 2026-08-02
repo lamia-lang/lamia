@@ -281,7 +281,7 @@ def test_deploy_trigger_ids_differ_across_project_roots(monkeypatch, tmp_path):
         names.append(mock_provider.deploy.call_args[0][0].name)
 
     assert names[0] != names[1]
-    assert all(n.startswith("task-") for n in names)
+    assert all(len(n) == 12 and all(c in "0123456789abcdef" for c in n) for n in names)
 
 
 @pytest.mark.integration
