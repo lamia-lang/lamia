@@ -170,7 +170,11 @@ def test_deploy_scheduled_trigger_builds_plan_and_deploys(monkeypatch, tmp_path,
     assert plan.mode == "scheduled"
     assert plan.cron == "0 * * * *"
     assert plan.stages == stages
-    assert "Deployed: lamia-trigger-task" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "Deployed: lamia-trigger-task" in output
+    deployed_line = next(line for line in output.splitlines() if line.startswith("Deployed: "))
+    deployed_id = deployed_line.split("Deployed: ", 1)[1].strip()
+    assert deployed_id.startswith("lamia-")
 
 
 @pytest.mark.integration

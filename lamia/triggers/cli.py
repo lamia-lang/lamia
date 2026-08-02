@@ -2,6 +2,7 @@
 
 Usage:
     lamia trigger list [--verbose]
+    lamia trigger logs <id>
 """
 
 import argparse
@@ -28,10 +29,15 @@ def handle_trigger() -> None:
         help="Show details of failed events",
     )
 
+    logs_parser = subparsers.add_parser("logs", help="View execution logs for a trigger")
+    logs_parser.add_argument("id", help="Trigger id (from 'lamia trigger list')")
+
     args = parser.parse_args(sys.argv[2:])
 
     if args.action == "list":
         _handle_list(verbose=args.verbose)
+    elif args.action == "logs":
+        _handle_logs(args)
     else:
         parser.print_help()
         sys.exit(1)
@@ -63,6 +69,22 @@ def _handle_list(verbose: bool = False) -> None:
         if d.get("logs_url"):
             print(f"    logs: {d['logs_url']}")
         print()
+
+
+def _handle_logs(args: argparse.Namespace) -> None:
+    provider = _get_cloud_provider(Path.cwd())
+    try:
+        logs = provider.fetch_logs(args.id)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if logs.get("stdout"):
+        print(logs["stdout"], end="")
+    if logs.get("stderr"):
+        print(logs["stderr"], file=sys.stderr, end="")
+    if logs.get("logs_url"):
+        print(f"\nLogs: {logs['logs_url']}")
 
 
 def _get_cloud_provider(project_root: Path):
