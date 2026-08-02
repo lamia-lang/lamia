@@ -12,6 +12,7 @@ from lamia.cli.script_analysis import (
     script_capability_field_names,
 )
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
+from lamia.scheduling.base import generate_schedule_id
 
 
 def _write_script(tmp_path: Path, name: str, content: str) -> Path:
@@ -241,12 +242,46 @@ def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_p
     mock_provider_cls.from_config.assert_called_once_with({"project_id": "proj"})
     plan = mock_provider.deploy.call_args[0][0]
     assert isinstance(plan, TriggerDeploymentPlan)
-    assert plan.name == "task"
+    assert plan.name == generate_schedule_id("task.lm", str(tmp_path))
+    assert plan.name.startswith("task-")
     assert plan.mode == "reactive"
     assert plan.stages == stages
 
     stderr = capsys.readouterr().err
     assert "Deployed: lamia-trigger-task" in stderr
+
+
+@pytest.mark.integration
+def test_deploy_trigger_ids_differ_across_project_roots(monkeypatch, tmp_path):
+    """The same script name in two projects must not deploy onto the same trigger."""
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    from lamia_cloud.types import TriggerStage
+    import lamia.cli.remote as remote
+
+    stages = [
+        TriggerStage(
+            stage_index=0,
+            trigger_method="email_received",
+            trigger_config={},
+            output_bindings=[],
+            script_source="",
+        )
+    ]
+
+    names = []
+    for project in ("alpha", "beta"):
+        root = tmp_path / project
+        root.mkdir()
+        mock_provider = mock.MagicMock()
+        mock_provider_cls = mock.MagicMock()
+        mock_provider_cls.from_config.return_value = mock_provider
+        monkeypatch.setattr(remote, "GCPTriggerProvider", mock_provider_cls)
+
+        remote._deploy_trigger("task.lm", root, {"project_id": "proj"}, stages)
+        names.append(mock_provider.deploy.call_args[0][0].name)
+
+    assert names[0] != names[1]
+    assert all(n.startswith("task-") for n in names)
 
 
 @pytest.mark.integration

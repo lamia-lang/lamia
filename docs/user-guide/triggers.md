@@ -220,7 +220,7 @@ lamia trigger list
 Example output:
 
 ```
-  [pricing-reply] pricing_reply.lm
+  [pricing-reply-a3f2] pricing_reply.lm
     event: email_received
     mode: reactive
     last run: 2026-07-09  status: ok
@@ -238,12 +238,15 @@ can understand what went wrong and take action.
 
 ## Viewing Logs
 
-Triggers run in the cloud, so their output never reaches your terminal. Use the
-id from `lamia trigger list` to read the most recent run:
+Triggers run in the cloud, so their output never reaches your terminal. Take the
+id shown in brackets by `lamia trigger list` and read the most recent run:
 
 ```bash
-lamia trigger logs pricing-reply
+lamia trigger logs pricing-reply-a3f2
 ```
+
+The id is the script slug plus a short hash of the project directory, so the
+same script name in two projects stays distinct. It is not the file name.
 
 Multi-stage triggers print each stage in order.
 
