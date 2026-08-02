@@ -249,6 +249,9 @@ def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_p
 
     stderr = capsys.readouterr().err
     assert "Deployed: lamia-trigger-task" in stderr
+    deployed_line = next(line for line in stderr.splitlines() if line.startswith("Deployed: "))
+    deployed_id = deployed_line.split("Deployed: ", 1)[1].strip()
+    assert deployed_id.startswith("lamia-")
 
 
 @pytest.mark.integration
