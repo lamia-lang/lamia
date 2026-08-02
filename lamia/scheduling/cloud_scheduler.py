@@ -13,7 +13,8 @@ import yaml
 
 from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob
 from lamia.scheduling.registry import set_paused
-from lamia.cli.script_analysis import analyze_script, slugify
+from lamia.cli.script_analysis import analyze_script
+from lamia.id_gen import generate_unique_id
 
 try:
     from lamia_cloud import get_scheduler, CloudScheduleJob, CloudJobStatus
@@ -132,7 +133,7 @@ def deploy_scheduled_trigger(
         )
         sys.exit(1)
 
-    name = slugify(script_name)
+    name = generate_unique_id(script_name, str(project_root))
     capabilities = analyze_script(project_root / script_name)
 
     plan = TriggerDeploymentPlan(

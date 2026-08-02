@@ -12,7 +12,7 @@ from lamia.cli.script_analysis import (
     script_capability_field_names,
 )
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
-from lamia.scheduling.base import generate_schedule_id
+from lamia.id_gen import generate_unique_id
 
 
 def _write_script(tmp_path: Path, name: str, content: str) -> Path:
@@ -242,8 +242,8 @@ def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_p
     mock_provider_cls.from_config.assert_called_once_with({"project_id": "proj"})
     plan = mock_provider.deploy.call_args[0][0]
     assert isinstance(plan, TriggerDeploymentPlan)
-    assert plan.name == generate_schedule_id("task.lm", str(tmp_path))
-    assert plan.name.startswith("task-")
+    assert plan.name == generate_unique_id("task.lm", str(tmp_path))
+    assert len(plan.name) == 12
     assert plan.mode == "reactive"
     assert plan.stages == stages
 

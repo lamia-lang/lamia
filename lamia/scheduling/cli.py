@@ -18,7 +18,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from .base import BaseScheduler, ScheduleJob, generate_schedule_id
+from lamia.id_gen import generate_unique_id
+from .base import BaseScheduler, ScheduleJob
 from .cloud_scheduler import (
     get_cloud_scheduler,
     LAMIA_CLOUD_AVAILABLE,
@@ -114,7 +115,7 @@ def _handle_add(args: argparse.Namespace) -> None:
             deploy_scheduled_trigger(relative_script, project_root, cron, stages)
             return
 
-    job_id = generate_schedule_id(relative_script, str(project_root))
+    job_id = generate_unique_id(relative_script, str(project_root))
 
     job = ScheduleJob(
         script=relative_script,

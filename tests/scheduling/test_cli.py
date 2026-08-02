@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from lamia.scheduling.base import ScheduleJob, generate_schedule_id
+from lamia.scheduling.base import ScheduleJob
 from lamia.scheduling.cli import (
     EVERY_PRESETS,
     _cron_to_friendly,

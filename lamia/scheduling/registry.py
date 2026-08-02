@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from .base import ScheduleJob, generate_schedule_id
+from lamia.id_gen import generate_unique_id
+from .base import ScheduleJob
 
 SCHEDULES_DIR = Path.home() / ".lamia" / "schedules"
 
@@ -120,7 +121,7 @@ def find_job_by_script(script: str, project_root: str) -> Optional[dict]:
 
     Checks both the current ID format and legacy hash-based IDs.
     """
-    job_id = generate_schedule_id(script, project_root)
+    job_id = generate_unique_id(script, project_root)
     result = load_job(job_id)
     if result:
         return result
@@ -187,7 +188,7 @@ def _normalize_job_data(path: Path, job_data: dict) -> Optional[dict]:
 
     job_id = job_data.get("id")
     if not job_id:
-        job_id = generate_schedule_id(script, project_root)
+        job_id = generate_unique_id(script, project_root)
         job_data["id"] = job_id
 
     job_data.setdefault("catch_up", True)

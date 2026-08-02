@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from lamia.id_gen import generate_unique_id
 from lamia.scheduling.base import ScheduleJob
 from lamia.scheduling.local_scheduler import (
     LaunchdScheduler,
@@ -56,8 +57,7 @@ class TestLaunchdScheduler:
 
     @pytest.fixture
     def job(self):
-        from lamia.scheduling.base import generate_schedule_id
-        sid = generate_schedule_id("daily_task.lm", "/Users/test/project")
+        sid = generate_unique_id("daily_task.lm", "/Users/test/project")
         return ScheduleJob(
             script="daily_task.lm",
             cron="0 9 * * *",
