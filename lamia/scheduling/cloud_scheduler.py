@@ -11,9 +11,10 @@ from typing import Optional
 
 import yaml
 
+from lamia.id_gen import slugify
 from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob
 from lamia.scheduling.registry import set_paused
-from lamia.cli.script_analysis import analyze_script, slugify
+from lamia.cli.script_analysis import analyze_script
 
 try:
     from lamia_cloud import get_scheduler, CloudScheduleJob, CloudJobStatus

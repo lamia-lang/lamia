@@ -6,9 +6,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
+from lamia.id_gen import generate_id, slugify
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
-from lamia.triggers.cli import extract_all_triggers
-from lamia.cli.script_analysis import analyze_script, slugify
+from lamia.triggers.extraction import extract_all_triggers
+from lamia.cli.script_analysis import analyze_script
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.gcp.deployer import (
     collect_project_files,
@@ -148,7 +149,7 @@ def _deploy_trigger(
     stages: list,
 ) -> None:
     """Deploy always-reactive trigger infrastructure for a script with trigger.* calls."""
-    name = slugify(script_name)
+    name = generate_id(script_name, str(project_root))
     capabilities = analyze_script(project_root / script_name)
 
     plan = TriggerDeploymentPlan(

@@ -13,10 +13,10 @@ Remote schedules use lamia-cloud (pip install "lamia-lang[cloud]").
 """
 
 import argparse
-import shutil
 import sys
 from pathlib import Path
 
+from lamia.runtime import find_lamia_bin
 from .base import BaseScheduler, ScheduleJob, generate_schedule_id
 from .cloud_scheduler import (
     get_cloud_scheduler,
@@ -26,7 +26,7 @@ from .cloud_scheduler import (
 )
 from .local_scheduler import LocalScheduler
 from .registry import save_job, remove_job, list_jobs, load_job, find_job_by_script, set_paused
-from lamia.triggers.cli import extract_all_triggers
+from lamia.triggers.extraction import extract_all_triggers
 
 EVERY_PRESETS = {
     "hour": "0 * * * *",
@@ -74,13 +74,6 @@ def _resolve_cron(args: argparse.Namespace) -> str:
     sys.exit(1)
 
 
-def _find_lamia_bin() -> str:
-    lamia_path = shutil.which("lamia")
-    if lamia_path:
-        return lamia_path
-    return f"{sys.executable} -m lamia"
-
-
 def _scheduler_for_job(job_data: dict, project_root: Path) -> BaseScheduler:
     """Return the appropriate scheduler based on job backend metadata."""
     backend = job_data.get("backend", "local")
@@ -123,7 +116,7 @@ def _handle_add(args: argparse.Namespace) -> None:
         project_root=project_root,
     )
 
-    lamia_bin = _find_lamia_bin()
+    lamia_bin = find_lamia_bin()
     backend = "cloud" if remote else "local"
 
     if remote:
@@ -305,7 +298,7 @@ def _handle_update(args: argparse.Namespace) -> None:
 
     backend = job_data.get("backend", "local")
     scheduler = _scheduler_for_job(job_data, Path(job_data["project_root"]))
-    lamia_bin = _find_lamia_bin()
+    lamia_bin = find_lamia_bin()
 
     scheduler.uninstall(old_job)
     try:

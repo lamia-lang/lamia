@@ -6,12 +6,11 @@ both the job configuration and its last run status.
 
 import hashlib
 import json
-import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from lamia.persistence import atomic_write, read_json
 from .base import ScheduleJob, generate_schedule_id
 
 SCHEDULES_DIR = Path.home() / ".lamia" / "schedules"
@@ -20,26 +19,6 @@ SCHEDULES_DIR = Path.home() / ".lamia" / "schedules"
 def _ensure_dir() -> Path:
     SCHEDULES_DIR.mkdir(parents=True, exist_ok=True)
     return SCHEDULES_DIR
-
-
-def _atomic_write(path: Path, content: str) -> None:
-    """Write content to path via temp-file + rename for crash safety."""
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    closed = False
-    try:
-        os.write(fd, content.encode())
-        os.fsync(fd)
-        os.close(fd)
-        closed = True
-        os.replace(tmp, str(path))
-    except BaseException:
-        if not closed:
-            os.close(fd)
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
 
 
 def _job_file(job_id: str) -> Path:
@@ -70,7 +49,7 @@ def save_job(job: ScheduleJob, lamia_bin: str, *, backend: str = "local") -> str
     if "last_run" in existing:
         data["last_run"] = existing["last_run"]
 
-    _atomic_write(path, json.dumps(data, indent=2))
+    atomic_write(path, json.dumps(data, indent=2))
     return job.schedule_id
 
 
@@ -150,7 +129,7 @@ def record_run(job_id: str, exit_code: int, error: str = "") -> None:
         "success": exit_code == 0,
         "error": error,
     }
-    _atomic_write(path, json.dumps(data, indent=2))
+    atomic_write(path, json.dumps(data, indent=2))
 
 
 def set_paused(job_id: str, paused: bool) -> bool:
@@ -163,7 +142,7 @@ def set_paused(job_id: str, paused: bool) -> bool:
     except (json.JSONDecodeError, OSError):
         return False
     data["paused"] = paused
-    _atomic_write(path, json.dumps(data, indent=2))
+    atomic_write(path, json.dumps(data, indent=2))
     return True
 
 

@@ -2,16 +2,17 @@
 
 Usage:
     lamia trigger list [--verbose]
+    lamia trigger drain <id>
+    lamia trigger clear <id>
 """
 
 import argparse
-import ast
 import json
 import sys
 from pathlib import Path
 from typing import Optional
 
-from lamia.triggers.types import TriggerStage
+from lamia.triggers.local.provider import LocalTriggerProvider
 
 
 def handle_trigger() -> None:
@@ -22,39 +23,59 @@ def handle_trigger() -> None:
     )
     subparsers = parser.add_subparsers(dest="action")
 
-    list_parser = subparsers.add_parser("list", help="List all deployed triggers")
+    list_parser = subparsers.add_parser("list", help="List all active triggers (local + cloud)")
     list_parser.add_argument(
         "--verbose", "-v", action="store_true",
         help="Show details of failed events",
     )
 
+    drain_parser = subparsers.add_parser("drain", help="Clear failed events for a trigger")
+    drain_parser.add_argument("id", help="Trigger ID (shown in list)")
+
+    clear_parser = subparsers.add_parser("clear", help="Stop and unload a trigger")
+    clear_parser.add_argument("id", help="Trigger ID (shown in list)")
+
     args = parser.parse_args(sys.argv[2:])
 
     if args.action == "list":
         _handle_list(verbose=args.verbose)
+    elif args.action == "drain":
+        _handle_drain(args.id)
+    elif args.action == "clear":
+        _handle_clear(args.id)
     else:
         parser.print_help()
         sys.exit(1)
 
 
 def _handle_list(verbose: bool = False) -> None:
-    project_root = Path.cwd()
-    provider = _get_cloud_provider(project_root)
-    deployments = provider.list_deployments()
-    if not deployments:
-        print("No triggers deployed.")
+    """List all triggers: local + cloud (if available)."""
+    local_provider = LocalTriggerProvider()
+    local_deployments = local_provider.list_deployments()
+
+    cloud_deployments = _try_cloud_list()
+
+    all_deployments = local_deployments + cloud_deployments
+
+    if not all_deployments:
+        print("No triggers active.")
         return
-    for d in deployments:
+
+    for d in all_deployments:
+        location = d.get("location", "cloud")
         status_str = d.get("last_status", "never run")
         failed_count = d.get("failed_event_count", 0)
-        print(f"  [{d['name']}] {d.get('script', '?')}")
+        active_execs = d.get("active_executions", 0)
+        print(f"  [{d['name']}] {d.get('script', '?')} ({location})")
         print(f"    event: {d.get('trigger_method', '?')}")
         print(f"    mode: {d.get('mode', 'reactive')}")
         print(f"    last run: {d.get('last_run', 'never')}  status: {status_str}")
+        if verbose and active_execs > 0:
+            print(f"    active executions: {active_execs}")
         if failed_count > 0:
             print(f"    failed events: {failed_count}")
             if verbose:
-                events = provider.get_failed_events(d["name"])
+                events = _get_failed_events_for(d["name"], location)
                 for i, evt in enumerate(events, 1):
                     ts = evt.get("timestamp", "?")
                     payload = evt.get("payload", {})
@@ -65,18 +86,94 @@ def _handle_list(verbose: bool = False) -> None:
         print()
 
 
-def _get_cloud_provider(project_root: Path):
-    """Load cloud config and return the trigger provider."""
+def _handle_drain(trigger_id: str) -> None:
+    """Clear failed events for a trigger (local or cloud)."""
+    local_provider = LocalTriggerProvider()
+    local_deployments = local_provider.list_deployments()
+    local_ids = {d.get("name") for d in local_deployments}
+
+    if trigger_id in local_ids:
+        count = local_provider.clear_failed_events(trigger_id)
+        if count > 0:
+            print(f"Drained {count} failed event(s) for '{trigger_id}'.")
+        else:
+            print(f"No failed events to drain for '{trigger_id}'.")
+        return
+
+    cloud_provider = _try_get_cloud_provider()
+    if cloud_provider is not None:
+        cloud_deployments = _try_cloud_list()
+        cloud_ids = {d.get("name") for d in cloud_deployments}
+        if trigger_id in cloud_ids:
+            count = cloud_provider.clear_failed_events(trigger_id)
+            if count > 0:
+                print(f"Drained {count} failed event(s) for '{trigger_id}'.")
+            else:
+                print(f"No failed events to drain for '{trigger_id}'.")
+            return
+
+    print(f"Trigger '{trigger_id}' not found (local or cloud).", file=sys.stderr)
+    sys.exit(1)
+
+
+def _handle_clear(trigger_id: str) -> None:
+    """Stop and unload a trigger entirely."""
+    local_provider = LocalTriggerProvider()
+    local_result = local_provider.clear_trigger(trigger_id)
+    if local_result["cleared"]:
+        if local_result["was_running"]:
+            print(f"Trigger '{trigger_id}' stopped and cleared.")
+        else:
+            print(f"Trigger '{trigger_id}' was not running; stale registry entry cleaned up.")
+        return
+
+    cloud_provider = _try_get_cloud_provider()
+    if cloud_provider is not None:
+        try:
+            cloud_provider.undeploy(trigger_id)
+            print(f"Trigger '{trigger_id}' undeployed from cloud.")
+            return
+        except Exception as e:
+            print(f"Error undeploying '{trigger_id}': {e}", file=sys.stderr)
+            sys.exit(1)
+
+    print(f"Trigger '{trigger_id}' not found.", file=sys.stderr)
+    sys.exit(1)
+
+
+def _get_failed_events_for(trigger_id: str, location: str) -> list[dict]:
+    """Get failed events from the appropriate provider."""
+    if location == "local":
+        return LocalTriggerProvider().get_failed_events(trigger_id)
+    cloud_provider = _try_get_cloud_provider()
+    if cloud_provider is not None:
+        return cloud_provider.get_failed_events(trigger_id)
+    return []
+
+
+def _try_cloud_list() -> list[dict]:
+    """Attempt to list cloud triggers; return [] if lamia_cloud unavailable."""
+    provider = _try_get_cloud_provider()
+    if provider is None:
+        return []
+    try:
+        deployments = provider.list_deployments()
+        for d in deployments:
+            d.setdefault("location", "cloud")
+        return deployments
+    except Exception:
+        return []
+
+
+def _try_get_cloud_provider():
+    """Try to load the cloud provider, return None if unavailable."""
     try:
         from lamia_cloud.gcp.trigger_provider import GCPTriggerProvider
     except ImportError:
-        print(
-            "Error: lamia-cloud not installed. Install with: pip install \"lamia-lang[cloud]\"",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        return None
 
     import yaml
+    project_root = Path.cwd()
     config_path = project_root / "config.yaml"
     if not config_path.exists():
         config_path = project_root / "config.yml"
@@ -88,91 +185,8 @@ def _get_cloud_provider(project_root: Path):
         cloud_cfg = full_config.get("cloud", {})
 
     if not cloud_cfg.get("project_id"):
-        print(
-            "Error: cloud.project_id not found in config.yaml.\n"
-            "Add:\n  cloud:\n    project_id: your-gcp-project",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        return None
 
     return GCPTriggerProvider.from_config(cloud_cfg)
 
 
-def extract_all_triggers(script_path: Path) -> list:
-    """Find all trigger.* calls in script, split into stages.
-
-    Returns a list of lamia.triggers.types.TriggerStage.
-    """
-    source = script_path.read_text()
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return []
-
-    lines = source.splitlines(keepends=False)
-    trigger_positions: list[dict] = []
-
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Expr):
-            continue
-        if not isinstance(node.value, ast.Call):
-            continue
-        call = node.value
-        if not isinstance(call.func, ast.Attribute):
-            continue
-        if not isinstance(call.func.value, ast.Name):
-            continue
-        if call.func.value.id != "trigger":
-            continue
-
-        method_name = call.func.attr
-        config_params = _extract_config_params(call)
-        output_bindings = _extract_output_bindings(call)
-
-        trigger_positions.append({
-            "method": method_name,
-            "config": config_params,
-            "bindings": output_bindings,
-            "lineno": node.lineno,
-        })
-
-    if not trigger_positions:
-        return []
-
-    trigger_positions.sort(key=lambda t: t["lineno"])
-
-    stages: list[TriggerStage] = []
-    for i, trig in enumerate(trigger_positions):
-        start_line = trig["lineno"]
-        if i + 1 < len(trigger_positions):
-            end_line = trigger_positions[i + 1]["lineno"] - 1
-        else:
-            end_line = len(lines)
-        stage_source = "\n".join(lines[start_line:end_line])
-        stages.append(TriggerStage(
-            stage_index=i,
-            trigger_method=trig["method"],
-            trigger_config=trig["config"],
-            output_bindings=trig["bindings"],
-            script_source=stage_source,
-        ))
-
-    return stages
-
-
-def _extract_config_params(call: ast.Call) -> dict:
-    """Extract string-literal keyword arguments (config params)."""
-    params: dict = {}
-    for kw in call.keywords:
-        if kw.arg and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
-            params[kw.arg] = kw.value.value
-    return params
-
-
-def _extract_output_bindings(call: ast.Call) -> list[str]:
-    """Extract bare name arguments (output bindings)."""
-    bindings: list[str] = []
-    for arg in call.args:
-        if isinstance(arg, ast.Name):
-            bindings.append(arg.id)
-    return bindings

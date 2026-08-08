@@ -6,10 +6,10 @@ from unittest.mock import patch
 
 import pytest
 
+from lamia.persistence import atomic_write
 from lamia.scheduling.base import ScheduleJob, generate_schedule_id
 from lamia.scheduling.registry import (
     SCHEDULES_DIR,
-    _atomic_write,
     find_job_by_script,
     get_last_run_status,
     list_jobs,
@@ -260,18 +260,18 @@ class TestRunStatus:
 class TestAtomicWrite:
     def test_writes_content(self, tmp_path):
         target = tmp_path / "out.json"
-        _atomic_write(target, '{"key": "value"}')
+        atomic_write(target, '{"key": "value"}')
         assert json.loads(target.read_text()) == {"key": "value"}
 
     def test_overwrites_existing(self, tmp_path):
         target = tmp_path / "out.json"
         target.write_text('{"old": true}')
-        _atomic_write(target, '{"new": true}')
+        atomic_write(target, '{"new": true}')
         assert json.loads(target.read_text()) == {"new": True}
 
     def test_no_leftover_temp_files(self, tmp_path):
         target = tmp_path / "out.json"
-        _atomic_write(target, "hello")
+        atomic_write(target, "hello")
         tmp_files = list(tmp_path.glob("*.tmp"))
         assert tmp_files == []
 

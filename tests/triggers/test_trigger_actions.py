@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from lamia.actions.trigger import TriggerActions, TriggerRejectError
-from lamia.triggers.cli import extract_all_triggers
+from lamia.triggers.extraction import extract_all_triggers
 from lamia.interpreter.transformers.syntax_transformer import HybridSyntaxTransformer
 
 
