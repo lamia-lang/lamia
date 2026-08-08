@@ -265,6 +265,7 @@ class TestScriptTask:
         """Test script task execution."""
         mock_config_provider = Mock()
         mock_lamia = Mock()
+        mock_lamia._models = []
         mock_lamia._engine = Mock()
         mock_lamia._engine.config_provider = mock_config_provider
 

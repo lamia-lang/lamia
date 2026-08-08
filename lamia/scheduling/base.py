@@ -5,19 +5,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from lamia.id_gen import generate_id
-
-
-def generate_schedule_id(script: str, project_root: str) -> str:
-    """Generate a human-readable schedule ID from script name + project hash.
-
-    Format: <script-slug>-<4-char-hash>
-    Example: 'publish-pins-a3f2', 'test-vertex-7bc1'
-
-    Delegates to the shared lamia.id_gen module (same logic for triggers).
-    """
-    return generate_id(script, project_root)
-
 
 class JobStatus(Enum):
     ACTIVE = "active"

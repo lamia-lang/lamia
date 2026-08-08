@@ -7,6 +7,7 @@ Usage:
     lamia schedule list
     lamia schedule update <id> --every day
     lamia schedule remove <id>
+    lamia schedule logs <id>
 
 Local schedules use OS scheduler (launchd/systemd/schtasks).
 Remote schedules use lamia-cloud (pip install "lamia-lang[cloud]").
@@ -16,8 +17,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from lamia.runtime import find_lamia_bin
-from .base import BaseScheduler, ScheduleJob, generate_schedule_id
+from lamia.id_gen import generate_unique_id
+from .base import BaseScheduler, ScheduleJob
 from .cloud_scheduler import (
     get_cloud_scheduler,
     LAMIA_CLOUD_AVAILABLE,
@@ -106,7 +107,7 @@ def _handle_add(args: argparse.Namespace) -> None:
             deploy_scheduled_trigger(relative_script, project_root, cron, stages)
             return
 
-    job_id = generate_schedule_id(relative_script, str(project_root))
+    job_id = generate_unique_id(relative_script, str(project_root))
 
     job = ScheduleJob(
         script=relative_script,
@@ -369,6 +370,44 @@ def _handle_resume(args: argparse.Namespace) -> None:
     print(f"Resumed: {job_data['script']} [{job_id}]")
 
 
+def _handle_logs(args: argparse.Namespace) -> None:
+    job_id = args.id
+    job_data = load_job(job_id)
+
+    if not job_data:
+        print(f"Error: no schedule found with id '{job_id}'", file=sys.stderr)
+        sys.exit(1)
+
+    backend = job_data.get("backend", "local")
+    if backend == "local":
+        log_path = Path.home() / ".lamia" / "logs" / "schedules" / job_id / "schedule.log"
+        if not log_path.exists():
+            print("No logs found")
+            return
+        print(log_path.read_text(), end="")
+        return
+
+    scheduler = _scheduler_for_job(job_data, Path(job_data["project_root"]))
+    job = ScheduleJob(
+        script=job_data["script"],
+        cron=job_data["cron"],
+        schedule_id=job_id,
+        catch_up=job_data.get("catch_up", True),
+        project_root=Path(job_data["project_root"]),
+    )
+    logs = scheduler.fetch_logs(job)
+    stdout = logs["stdout"]
+    stderr = logs["stderr"]
+    logs_url = logs["logs_url"]
+    if stdout:
+        print(stdout, end="")
+    if stderr:
+        print(stderr, file=sys.stderr, end="")
+    if logs_url:
+        print(f"\nLogs: {logs_url}")
+
+
+
 def handle_schedule() -> None:
     parser = argparse.ArgumentParser(
         description="Manage scheduled Lamia script execution",
@@ -427,6 +466,9 @@ def handle_schedule() -> None:
     resume_parser = subparsers.add_parser("resume", help="Resume a paused job")
     resume_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")
 
+    logs_parser = subparsers.add_parser("logs", help="View execution logs for a scheduled job")
+    logs_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")
+
     update_parser = subparsers.add_parser(
         "update",
         help="Update an existing scheduled job in one command",
@@ -480,6 +522,8 @@ def handle_schedule() -> None:
         _handle_pause(args)
     elif args.action == "resume":
         _handle_resume(args)
+    elif args.action == "logs":
+        _handle_logs(args)
     else:
         parser.print_help()
         sys.exit(1)

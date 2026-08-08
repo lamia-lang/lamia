@@ -2,8 +2,7 @@
 
 Usage:
     lamia trigger list [--verbose]
-    lamia trigger drain <id>
-    lamia trigger clear <id>
+    lamia trigger logs <id>
 """
 
 import argparse
@@ -29,20 +28,15 @@ def handle_trigger() -> None:
         help="Show details of failed events",
     )
 
-    drain_parser = subparsers.add_parser("drain", help="Clear failed events for a trigger")
-    drain_parser.add_argument("id", help="Trigger ID (shown in list)")
-
-    clear_parser = subparsers.add_parser("clear", help="Stop and unload a trigger")
-    clear_parser.add_argument("id", help="Trigger ID (shown in list)")
+    logs_parser = subparsers.add_parser("logs", help="View execution logs for a trigger")
+    logs_parser.add_argument("id", help="Trigger id (from 'lamia trigger list')")
 
     args = parser.parse_args(sys.argv[2:])
 
     if args.action == "list":
         _handle_list(verbose=args.verbose)
-    elif args.action == "drain":
-        _handle_drain(args.id)
-    elif args.action == "clear":
-        _handle_clear(args.id)
+    elif args.action == "logs":
+        _handle_logs(args)
     else:
         parser.print_help()
         sys.exit(1)
@@ -86,87 +80,24 @@ def _handle_list(verbose: bool = False) -> None:
         print()
 
 
-def _handle_drain(trigger_id: str) -> None:
-    """Clear failed events for a trigger (local or cloud)."""
-    local_provider = LocalTriggerProvider()
-    local_deployments = local_provider.list_deployments()
-    local_ids = {d.get("name") for d in local_deployments}
-
-    if trigger_id in local_ids:
-        count = local_provider.clear_failed_events(trigger_id)
-        if count > 0:
-            print(f"Drained {count} failed event(s) for '{trigger_id}'.")
-        else:
-            print(f"No failed events to drain for '{trigger_id}'.")
-        return
-
-    cloud_provider = _try_get_cloud_provider()
-    if cloud_provider is not None:
-        cloud_deployments = _try_cloud_list()
-        cloud_ids = {d.get("name") for d in cloud_deployments}
-        if trigger_id in cloud_ids:
-            count = cloud_provider.clear_failed_events(trigger_id)
-            if count > 0:
-                print(f"Drained {count} failed event(s) for '{trigger_id}'.")
-            else:
-                print(f"No failed events to drain for '{trigger_id}'.")
-            return
-
-    print(f"Trigger '{trigger_id}' not found (local or cloud).", file=sys.stderr)
-    sys.exit(1)
-
-
-def _handle_clear(trigger_id: str) -> None:
-    """Stop and unload a trigger entirely."""
-    local_provider = LocalTriggerProvider()
-    local_result = local_provider.clear_trigger(trigger_id)
-    if local_result["cleared"]:
-        if local_result["was_running"]:
-            print(f"Trigger '{trigger_id}' stopped and cleared.")
-        else:
-            print(f"Trigger '{trigger_id}' was not running; stale registry entry cleaned up.")
-        return
-
-    cloud_provider = _try_get_cloud_provider()
-    if cloud_provider is not None:
-        try:
-            cloud_provider.undeploy(trigger_id)
-            print(f"Trigger '{trigger_id}' undeployed from cloud.")
-            return
-        except Exception as e:
-            print(f"Error undeploying '{trigger_id}': {e}", file=sys.stderr)
-            sys.exit(1)
-
-    print(f"Trigger '{trigger_id}' not found.", file=sys.stderr)
-    sys.exit(1)
-
-
-def _get_failed_events_for(trigger_id: str, location: str) -> list[dict]:
-    """Get failed events from the appropriate provider."""
-    if location == "local":
-        return LocalTriggerProvider().get_failed_events(trigger_id)
-    cloud_provider = _try_get_cloud_provider()
-    if cloud_provider is not None:
-        return cloud_provider.get_failed_events(trigger_id)
-    return []
-
-
-def _try_cloud_list() -> list[dict]:
-    """Attempt to list cloud triggers; return [] if lamia_cloud unavailable."""
-    provider = _try_get_cloud_provider()
-    if provider is None:
-        return []
+def _handle_logs(args: argparse.Namespace) -> None:
+    provider = _get_cloud_provider(Path.cwd())
     try:
-        deployments = provider.list_deployments()
-        for d in deployments:
-            d.setdefault("location", "cloud")
-        return deployments
-    except Exception:
-        return []
+        logs = provider.fetch_logs(args.id)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if logs.get("stdout"):
+        print(logs["stdout"], end="")
+    if logs.get("stderr"):
+        print(logs["stderr"], file=sys.stderr, end="")
+    if logs.get("logs_url"):
+        print(f"\nLogs: {logs['logs_url']}")
 
 
-def _try_get_cloud_provider():
-    """Try to load the cloud provider, return None if unavailable."""
+def _get_cloud_provider(project_root: Path):
+    """Load cloud config and return the trigger provider."""
     try:
         from lamia_cloud.gcp.trigger_provider import GCPTriggerProvider
     except ImportError:

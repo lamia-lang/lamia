@@ -4,44 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob, generate_schedule_id
-
-
-class TestGenerateScheduleId:
-    def test_produces_slug_with_hash_suffix(self):
-        result = generate_schedule_id("script.lm", "/home/user/project")
-        assert result.startswith("script-")
-        assert len(result.split("-")[-1]) == 4
-
-    def test_descriptive_name(self):
-        result = generate_schedule_id("publish_pins.lm", "/home/user/project")
-        assert result.startswith("publish-pins-")
-
-    def test_deterministic(self):
-        a = generate_schedule_id("x.lm", "/p")
-        b = generate_schedule_id("x.lm", "/p")
-        assert a == b
-
-    def test_different_scripts_different_ids(self):
-        a = generate_schedule_id("a.lm", "/p")
-        b = generate_schedule_id("b.lm", "/p")
-        assert a != b
-
-    def test_different_roots_different_ids(self):
-        a = generate_schedule_id("a.lm", "/p1")
-        b = generate_schedule_id("a.lm", "/p2")
-        assert a != b
-
-    def test_special_characters_sanitized(self):
-        result = generate_schedule_id("My Script (v2).lm", "/path")
-        assert " " not in result
-        assert "(" not in result
-        assert result.startswith("my-script-v2-")
-
-    def test_long_names_truncated(self):
-        long_name = "a" * 100 + ".lm"
-        result = generate_schedule_id(long_name, "/p")
-        assert len(result) <= 21
+from lamia.id_gen import generate_unique_id
+from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob
 
 
 class TestScheduleJob:
@@ -59,7 +23,7 @@ class TestScheduleJob:
         assert job.project_root == Path()
 
     def test_schedule_id_is_stored_field(self):
-        sid = generate_schedule_id("task.lm", "/project")
+        sid = generate_unique_id("task.lm", "/project")
         job = ScheduleJob(script="task.lm", cron="0 0 * * *", schedule_id=sid, project_root=Path("/project"))
         assert job.schedule_id == sid
 

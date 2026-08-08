@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from lamia.scheduling.base import ScheduleJob, generate_schedule_id
+from lamia.scheduling.base import ScheduleJob
 from lamia.scheduling.cli import (
     EVERY_PRESETS,
     _cron_to_friendly,
@@ -17,6 +17,7 @@ from lamia.scheduling.cli import (
     handle_schedule,
     _handle_add,
     _handle_list,
+    _handle_logs,
     _handle_remove,
     _handle_update,
 )
@@ -187,6 +188,85 @@ class TestHandleUpdate:
 
         with pytest.raises(SystemExit):
             _handle_update(args)
+
+
+class TestHandleLogs:
+    def test_local_backend_prints_log_file(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        log_dir = tmp_path / ".lamia" / "logs" / "schedules" / "abc123"
+        log_dir.mkdir(parents=True)
+        log_file = log_dir / "schedule.log"
+        log_file.write_text("run output line 1\nrun output line 2\n")
+
+        monkeypatch.setattr("lamia.scheduling.cli.load_job", lambda job_id: {
+            "id": "abc123",
+            "script": "daily.lm",
+            "cron": "0 9 * * *",
+            "catch_up": True,
+            "project_root": "/home/user/proj",
+            "backend": "local",
+        })
+
+        args = MagicMock()
+        args.id = "abc123"
+        _handle_logs(args)
+
+        captured = capsys.readouterr()
+        assert captured.out == "run output line 1\nrun output line 2\n"
+        assert captured.err == ""
+
+    def test_local_backend_no_log_file(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("lamia.scheduling.cli.load_job", lambda job_id: {
+            "id": "abc123",
+            "script": "daily.lm",
+            "cron": "0 9 * * *",
+            "catch_up": True,
+            "project_root": "/home/user/proj",
+            "backend": "local",
+        })
+
+        args = MagicMock()
+        args.id = "abc123"
+        _handle_logs(args)
+
+        captured = capsys.readouterr()
+        assert captured.out == "No logs found\n"
+
+    def test_cloud_backend_fetches_logs(self, capsys, monkeypatch):
+        mock_scheduler = MagicMock()
+        mock_scheduler.fetch_logs.return_value = {
+            "stdout": "cloud stdout\n",
+            "stderr": "cloud stderr\n",
+            "logs_url": "https://console.cloud.google.com/logs/query",
+        }
+        monkeypatch.setattr("lamia.scheduling.cli._scheduler_for_job", lambda *a: mock_scheduler)
+        monkeypatch.setattr("lamia.scheduling.cli.load_job", lambda job_id: {
+            "id": "cloud-1",
+            "script": "daily.lm",
+            "cron": "0 9 * * *",
+            "catch_up": False,
+            "project_root": "/home/user/proj",
+            "backend": "cloud",
+        })
+
+        args = MagicMock()
+        args.id = "cloud-1"
+        _handle_logs(args)
+
+        mock_scheduler.fetch_logs.assert_called_once()
+        captured = capsys.readouterr()
+        assert captured.out == "cloud stdout\n\nLogs: https://console.cloud.google.com/logs/query\n"
+        assert captured.err == "cloud stderr\n"
+
+    def test_nonexistent_job_exits(self, monkeypatch):
+        monkeypatch.setattr("lamia.scheduling.cli.load_job", lambda x: None)
+        args = MagicMock()
+        args.id = "missing"
+
+        with pytest.raises(SystemExit):
+            _handle_logs(args)
+
 
 
 class TestResolveCron:

@@ -8,13 +8,15 @@ from typing import Optional
 
 from lamia.id_gen import generate_id, slugify
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
-from lamia.triggers.extraction import extract_all_triggers
-from lamia.cli.script_analysis import analyze_script
+from lamia.triggers.cli import extract_all_triggers
+from lamia.cli.script_analysis import analyze_script, slugify
+from lamia.id_gen import generate_unique_id
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.gcp.deployer import (
     collect_project_files,
     deployment_name,
     deploy,
+    ensure_apis_enabled,
     fetch_execution_logs,
     get_deployed_source_hash,
     run_job,
@@ -47,6 +49,8 @@ def handle_remote_run(
             file=sys.stderr,
         )
         sys.exit(1)
+
+    ensure_apis_enabled(project_id)
 
     root = Path(project_root)
     script_path = Path(script)
@@ -112,18 +116,27 @@ def handle_remote_run(
         set_deployed_source_hash(project_id, location, target, source_hash)
 
     print("  Running...", file=sys.stderr)
-    result = run_job(
-        project_id=project_id,
-        location=location,
-        target=target,
-        verbose=verbose,
-    )
+    result = {}
+    run_error = None
+    try:
+        result = run_job(
+            project_id=project_id,
+            location=location,
+            target=target,
+            verbose=verbose,
+        )
+    except Exception as exc:
+        run_error = exc
 
-    stdout, stderr = fetch_execution_logs(
-        project_id=project_id,
-        target=target,
-        execution_name=result.get("execution_name", ""),
-    )
+    try:
+        stdout, stderr = fetch_execution_logs(
+            project_id=project_id,
+            target=target,
+            execution_name=result.get("execution_name", ""),
+        )
+    except Exception as log_error:
+        stdout, stderr = "", ""
+        print(f"  Failed to fetch container logs: {log_error}", file=sys.stderr)
 
     if stdout:
         print(stdout)
@@ -139,6 +152,9 @@ def handle_remote_run(
     if logs_url:
         print(f"  Logs: {logs_url}", file=sys.stderr)
 
+    if run_error:
+        raise run_error
+
     sys.exit(exit_code)
 
 
@@ -149,7 +165,7 @@ def _deploy_trigger(
     stages: list,
 ) -> None:
     """Deploy always-reactive trigger infrastructure for a script with trigger.* calls."""
-    name = generate_id(script_name, str(project_root))
+    name = generate_unique_id(script_name, str(project_root))
     capabilities = analyze_script(project_root / script_name)
 
     plan = TriggerDeploymentPlan(

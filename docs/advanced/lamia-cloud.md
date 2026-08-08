@@ -72,6 +72,11 @@ lamia schedule remove <id>   # tears down the cloud job + scheduler job
 4. Logs (stdout/stderr) go to Cloud Logging under Cloud Run Job execution logs
 5. Exit status is reported back to the local lamia registry so `lamia schedule list` shows it
 
+**Version:** A cloud script is built with the newest version of Lamia at the time you
+deploy it, and it keeps that version until it's rebuilt. Deploying again after you
+change your script rebuilds it with the latest version. Updates stay compatible with
+your existing scripts, so cloud runs behave the same as running on your computer.
+
 ## Logs
 
 View execution logs:
@@ -84,13 +89,8 @@ Or directly in GCP Console under Cloud Run > Jobs > `lamia-...` > Executions > L
 
 ## API Enablement
 
-lamia-cloud automatically enables required APIs on first use.
-In restricted org environments where API auto-enablement is blocked by policy,
-a platform administrator can run:
-
-```bash
-gcloud services enable run.googleapis.com cloudscheduler.googleapis.com cloudbuild.googleapis.com logging.googleapis.com --project=my-gcp-project
-```
+lamia-cloud automatically enables required APIs on first use, for both scheduled
+jobs and `--remote` runs. No manual `gcloud services enable` step is needed.
 
 ## File Sync for Cloud Execution
 
