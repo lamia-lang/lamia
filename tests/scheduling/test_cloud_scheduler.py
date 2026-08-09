@@ -117,15 +117,12 @@ def test_deploy_scheduled_trigger_errors_without_lamia_cloud(monkeypatch, tmp_pa
     assert "lamia-cloud package" in capsys.readouterr().err
 
 
-def test_deploy_scheduled_trigger_errors_without_project_id(tmp_path, capsys):
+def test_deploy_scheduled_trigger_errors_without_provider(tmp_path):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     (tmp_path / "config.yaml").write_text("cloud:\n  location: us-central1\n")
 
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(ValueError, match="cloud.provider"):
         cloud_scheduler.deploy_scheduled_trigger("task.lm", tmp_path, "0 * * * *", [])
-
-    assert exc.value.code == 1
-    assert "cloud.project_id" in capsys.readouterr().err
 
 
 def test_fetch_cloud_statuses_returns_empty_without_lamia_cloud(monkeypatch):
@@ -143,7 +140,7 @@ def test_deploy_scheduled_trigger_builds_plan_and_deploys(monkeypatch, tmp_path,
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     from lamia_cloud.types import TriggerDeploymentPlan, TriggerStage
 
-    (tmp_path / "config.yaml").write_text("cloud:\n  project_id: proj\n")
+    (tmp_path / "config.yaml").write_text("cloud:\n  provider: gcp\n  project_id: proj\n")
     (tmp_path / "task.lm").write_text("def run():\n    pass\n")
 
     stages = [
@@ -158,13 +155,10 @@ def test_deploy_scheduled_trigger_builds_plan_and_deploys(monkeypatch, tmp_path,
 
     mock_provider = mock.MagicMock()
     mock_provider.deploy.return_value = "lamia-trigger-task"
-    mock_provider_cls = mock.MagicMock()
-    mock_provider_cls.from_config.return_value = mock_provider
-    monkeypatch.setattr(cloud_scheduler, "GCPTriggerProvider", mock_provider_cls)
+    monkeypatch.setattr(cloud_scheduler, "get_trigger_provider", lambda root: mock_provider)
 
     cloud_scheduler.deploy_scheduled_trigger("task.lm", tmp_path, "0 * * * *", stages)
 
-    mock_provider_cls.from_config.assert_called_once_with({"project_id": "proj"})
     plan = mock_provider.deploy.call_args[0][0]
     assert isinstance(plan, TriggerDeploymentPlan)
     assert plan.mode == "scheduled"
@@ -172,9 +166,6 @@ def test_deploy_scheduled_trigger_builds_plan_and_deploys(monkeypatch, tmp_path,
     assert plan.stages == stages
     output = capsys.readouterr().out
     assert "Deployed: lamia-trigger-task" in output
-    deployed_line = next(line for line in output.splitlines() if line.startswith("Deployed: "))
-    deployed_id = deployed_line.split("Deployed: ", 1)[1].strip()
-    assert deployed_id.startswith("lamia-")
 
 
 @pytest.mark.integration

@@ -7,23 +7,11 @@ from pathlib import Path
 from typing import Optional
 
 from lamia.id_gen import generate_unique_id
-
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
 from lamia.triggers.extraction import extract_all_triggers
 from lamia.cli.script_analysis import analyze_script
+from lamia_cloud import get_deployer, get_trigger_provider
 from lamia_cloud.file_sync import build_file_sync_plan
-from lamia_cloud.gcp.deployer import (
-    collect_project_files,
-    deployment_name,
-    deploy,
-    ensure_apis_enabled,
-    fetch_execution_logs,
-    get_deployed_source_hash,
-    run_job,
-    set_deployed_source_hash,
-    sync_runtime_files,
-)
-from lamia_cloud.gcp.trigger_provider import GCPTriggerProvider
 from lamia_cloud.types import TriggerDeploymentPlan
 
 
@@ -38,21 +26,10 @@ def handle_remote_run(
         print("Error: --remote requires a script file", file=sys.stderr)
         sys.exit(1)
 
-    cloud_cfg = (config or {}).get("cloud", {})
-    project_id = cloud_cfg.get("project_id")
-    location = cloud_cfg.get("location", "us-central1")
-
-    if not project_id:
-        print(
-            "Error: cloud.project_id not set in config.yaml.\n"
-            "Add:\n  cloud:\n    project_id: your-gcp-project",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    ensure_apis_enabled(project_id)
-
     root = Path(project_root)
+    deployer = get_deployer(root)
+    deployer.ensure_apis_enabled()
+
     script_path = Path(script)
     if script_path.is_absolute():
         script_name = str(script_path.relative_to(root))
@@ -61,11 +38,11 @@ def handle_remote_run(
 
     stages = extract_all_triggers(root / script_name)
     if stages:
-        _deploy_trigger(script_name, root, cloud_cfg, stages)
+        _deploy_trigger(script_name, root, stages)
         return
 
     run_name = _run_service_name(script_name, str(root))
-    target = deployment_name(run_name)
+    target = deployer.deployment_name(run_name)
 
     print(f"Remote execution: {script_name}", file=sys.stderr)
 
@@ -81,11 +58,7 @@ def handle_remote_run(
         sys.exit(1)
     _warn_about_file_uploads(entries)
 
-    sync_feedback = sync_runtime_files(
-        project_id=project_id,
-        location=location,
-        entries=entries,
-    )
+    sync_feedback = deployer.sync_runtime_files(entries=entries)
     for overwrite in sync_feedback.get("overwrite_warnings", []):
         print(f"  Warning: {overwrite}", file=sys.stderr)
     if sync_feedback.get("uploaded", 0):
@@ -95,8 +68,8 @@ def handle_remote_run(
             file=sys.stderr,
         )
 
-    source_hash = _compute_source_hash(root)
-    deployed_hash = get_deployed_source_hash(project_id, location, target)
+    source_hash = _compute_source_hash(root, deployer)
+    deployed_hash = deployer.get_deployed_source_hash(target)
 
     uses_files = capabilities.uses_files or capabilities.uses_file_context
 
@@ -104,33 +77,25 @@ def handle_remote_run(
         print("  Container up to date, skipping build.", file=sys.stderr)
     else:
         print("  Building and deploying...", file=sys.stderr)
-        deploy(
-            project_id=project_id,
-            location=location,
+        deployer.deploy(
             project_root=root,
             script_name=script_name,
             name=run_name,
             capabilities=asdict(capabilities),
             uses_files=uses_files,
         )
-        set_deployed_source_hash(project_id, location, target, source_hash)
+        deployer.set_deployed_source_hash(target, source_hash)
 
     print("  Running...", file=sys.stderr)
     result = {}
     run_error = None
     try:
-        result = run_job(
-            project_id=project_id,
-            location=location,
-            target=target,
-            verbose=verbose,
-        )
+        result = deployer.run_job(target=target, verbose=verbose)
     except Exception as exc:
         run_error = exc
 
     try:
-        stdout, stderr = fetch_execution_logs(
-            project_id=project_id,
+        stdout, stderr = deployer.fetch_execution_logs(
             target=target,
             execution_name=result.get("execution_name", ""),
         )
@@ -161,7 +126,6 @@ def handle_remote_run(
 def _deploy_trigger(
     script_name: str,
     project_root: Path,
-    cloud_cfg: dict,
     stages: list,
 ) -> None:
     """Deploy always-reactive trigger infrastructure for a script with trigger.* calls."""
@@ -175,7 +139,7 @@ def _deploy_trigger(
         mode="reactive",
     )
 
-    provider = GCPTriggerProvider.from_config(cloud_cfg)
+    provider = get_trigger_provider(project_root)
 
     print(f"Deploying trigger: {script_name} ({len(stages)} stage(s))...", file=sys.stderr)
     print(f"  mode: always-reactive (event -> immediate execution)", file=sys.stderr)
@@ -187,9 +151,9 @@ def _deploy_trigger(
     print(f"View triggers: lamia trigger list", file=sys.stderr)
 
 
-def _compute_source_hash(project_root: Path) -> str:
+def _compute_source_hash(project_root: Path, deployer) -> str:
     hasher = hashlib.sha256()
-    for f in sorted(collect_project_files(project_root)):
+    for f in sorted(deployer.collect_project_files(project_root)):
         hasher.update(str(f.relative_to(project_root)).encode())
         hasher.update(f.read_bytes())
     return hasher.hexdigest()[:16]
@@ -205,11 +169,11 @@ def _warn_about_file_uploads(entries: list) -> None:
 
 
 def _run_service_name(script: str, project_root: str) -> str:
-    """Deterministic Cloud Run service name for one-shot remote runs.
+    """Deterministic service name for one-shot remote runs.
 
     Derived from script + project_root so the same script always reuses
-    the same Cloud Run service (enables container caching).  This is an
-    internal GCP resource name, not a user-facing resource ID.
+    the same cloud resource (enables container caching). This is an
+    internal resource name, not a user-facing resource ID.
     """
     raw = f"{script}:{project_root}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]

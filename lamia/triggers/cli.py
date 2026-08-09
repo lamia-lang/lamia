@@ -203,25 +203,13 @@ def _handle_logs(args: argparse.Namespace) -> None:
 def _get_cloud_provider(project_root: Path):
     """Load cloud config and return the trigger provider."""
     try:
-        from lamia_cloud.gcp.trigger_provider import GCPTriggerProvider
+        from lamia_cloud import get_trigger_provider
     except ImportError:
         return None
 
-    import yaml
-    project_root = Path.cwd()
-    config_path = project_root / "config.yaml"
-    if not config_path.exists():
-        config_path = project_root / "config.yml"
-
-    cloud_cfg: dict = {}
-    if config_path.exists():
-        with open(config_path) as f:
-            full_config = yaml.safe_load(f) or {}
-        cloud_cfg = full_config.get("cloud", {})
-
-    if not cloud_cfg.get("project_id"):
+    try:
+        return get_trigger_provider(project_root)
+    except (ValueError, FileNotFoundError):
         return None
-
-    return GCPTriggerProvider.from_config(cloud_cfg)
 
 

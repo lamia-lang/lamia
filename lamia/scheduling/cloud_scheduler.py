@@ -9,15 +9,12 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-import yaml
-
 from lamia.id_gen import generate_unique_id
 from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob
 from lamia.cli.script_analysis import analyze_script
 
 try:
-    from lamia_cloud import get_scheduler, CloudScheduleJob, CloudJobStatus
-    from lamia_cloud.gcp.trigger_provider import GCPTriggerProvider
+    from lamia_cloud import get_scheduler, get_trigger_provider, CloudScheduleJob, CloudJobStatus
     from lamia_cloud.types import TriggerDeploymentPlan
     LAMIA_CLOUD_AVAILABLE = True
 except ImportError:
@@ -117,24 +114,6 @@ def deploy_scheduled_trigger(
         )
         sys.exit(1)
 
-    config_path = project_root / "config.yaml"
-    if not config_path.exists():
-        config_path = project_root / "config.yml"
-
-    cloud_cfg: dict = {}
-    if config_path.exists():
-        with open(config_path) as f:
-            full_config = yaml.safe_load(f) or {}
-        cloud_cfg = full_config.get("cloud", {})
-
-    if not cloud_cfg.get("project_id"):
-        print(
-            "Error: cloud.project_id not found in config.yaml.\n"
-            "Add:\n  cloud:\n    project_id: your-gcp-project",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
     name = generate_unique_id()
     capabilities = analyze_script(project_root / script_name)
 
@@ -146,7 +125,7 @@ def deploy_scheduled_trigger(
         cron=cron,
     )
 
-    provider = GCPTriggerProvider.from_config(cloud_cfg)
+    provider = get_trigger_provider(project_root)
 
     print(f"Deploying scheduled trigger: {script_name} ({len(stages)} stage(s))...")
     print(f"  mode: employee (batch drain at schedule time)")

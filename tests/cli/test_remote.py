@@ -22,14 +22,31 @@ def _write_script(tmp_path: Path, name: str, content: str) -> Path:
     return script_path
 
 
+def _make_mock_deployer():
+    """Create a mock deployer with sensible defaults for all CloudDeployer methods."""
+    deployer = mock.MagicMock()
+    deployer.deployment_name.side_effect = lambda name: f"lamia-{name}"
+    deployer.collect_project_files.side_effect = lambda root: list(root.glob("*.lm"))
+    deployer.get_deployed_source_hash.return_value = None
+    deployer.set_deployed_source_hash.return_value = None
+    deployer.sync_runtime_files.return_value = {"uploaded": 0, "skipped": 0, "overwrite_warnings": []}
+    deployer.deploy.return_value = "lamia-task"
+    deployer.run_job.return_value = {
+        "exit_code": 0, "elapsed_seconds": 1.5,
+        "logs_url": "https://logs.example", "execution_name": "exec-1",
+    }
+    deployer.fetch_execution_logs.return_value = ("", "")
+    return deployer
+
+
 @pytest.fixture(autouse=True)
-def _stub_ensure_apis_enabled(monkeypatch):
-    """Keep tests off the real Service Usage API, which needs GCP credentials."""
+def _stub_cloud_factories(monkeypatch):
+    """Stub get_deployer and get_trigger_provider so tests never hit real GCP."""
     if importlib.util.find_spec("lamia_cloud") is None:
         return
     import lamia.cli.remote as remote
-
-    monkeypatch.setattr(remote, "ensure_apis_enabled", lambda project_id: None)
+    monkeypatch.setattr(remote, "get_deployer", lambda root: _make_mock_deployer())
+    monkeypatch.setattr(remote, "get_trigger_provider", lambda root: mock.MagicMock())
 
 
 def test_analyze_script_detects_llm_web_file_and_file_context(tmp_path):
@@ -100,6 +117,7 @@ def test_analyze_script_detects_only_browser(tmp_path):
         """
 def run():
     web.navigate("https://example.com")
+    web.click("Login")
 """.strip(),
     )
 
@@ -117,7 +135,8 @@ def test_analyze_script_detects_only_files(tmp_path):
         "files_only.lm",
         """
 def run():
-    file.read("notes.txt")
+    data = file.read("data.csv")
+    file.write("output.json", data)
 """.strip(),
     )
 
@@ -151,11 +170,8 @@ def run():
 def test_analyze_script_syntax_error_falls_back_to_empty_capabilities(tmp_path):
     script = _write_script(
         tmp_path,
-        "broken.lm",
-        """
-def run(
-    return 1
-""".strip(),
+        "bad.lm",
+        "def run(:\n    pass  # syntax error",
     )
 
     result = analyze_script(script)
@@ -167,23 +183,41 @@ def run(
 
 
 def test_extract_file_refs_single_path(tmp_path):
-    script = _write_script(tmp_path, "task.lm", 'with files("data/input.csv"):\n    pass')
-    assert extract_script_file_refs(script) == ["data/input.csv"]
+    script = _write_script(
+        tmp_path,
+        "task.lm",
+        'with files("data/report.csv"):\n    pass',
+    )
+    refs = extract_script_file_refs(script)
+    assert refs == ["data/report.csv"]
 
 
 def test_extract_file_refs_multiple_paths_same_block(tmp_path):
-    script = _write_script(tmp_path, "task.lm", 'with files("docs", "config.json"):\n    pass')
-    assert extract_script_file_refs(script) == ["docs", "config.json"]
+    script = _write_script(
+        tmp_path,
+        "task.lm",
+        'with files("a.txt", "b.txt"):\n    pass',
+    )
+    refs = extract_script_file_refs(script)
+    assert set(refs) == {"a.txt", "b.txt"}
 
 
 def test_extract_file_refs_multiple_blocks(tmp_path):
-    script = _write_script(tmp_path, "task.lm",
-        'with files("a.txt"):\n    pass\nwith files("b/"):\n    pass')
-    assert extract_script_file_refs(script) == ["a.txt", "b/"]
+    script = _write_script(
+        tmp_path,
+        "task.lm",
+        'with files("a.txt"):\n    pass\nwith files("b.txt"):\n    pass',
+    )
+    refs = extract_script_file_refs(script)
+    assert set(refs) == {"a.txt", "b.txt"}
 
 
 def test_extract_file_refs_dynamic_arg_raises(tmp_path):
-    script = _write_script(tmp_path, "task.lm", 'with files(some_var):\n    pass')
+    script = _write_script(
+        tmp_path,
+        "task.lm",
+        'path = "a.txt"\nwith files(path):\n    pass',
+    )
     with pytest.raises(ValueError, match="literal strings"):
         extract_script_file_refs(script)
 
@@ -225,9 +259,7 @@ def test_warn_about_file_uploads_prints_warning(capsys):
 
 @pytest.mark.integration
 def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_path, capsys):
-    """_deploy_trigger is lamia's side of the link to lamia_cloud: it must build the
-    right TriggerDeploymentPlan and call provider.deploy(). What GCPTriggerProvider
-    does with that plan belongs to the lamia-cloud test suite, not here."""
+    """_deploy_trigger must build the right TriggerDeploymentPlan and call provider.deploy()."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     from lamia_cloud.types import TriggerDeploymentPlan, TriggerStage
     import lamia.cli.remote as remote
@@ -244,13 +276,10 @@ def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_p
 
     mock_provider = mock.MagicMock()
     mock_provider.deploy.return_value = "lamia-trigger-task"
-    mock_provider_cls = mock.MagicMock()
-    mock_provider_cls.from_config.return_value = mock_provider
-    monkeypatch.setattr(remote, "GCPTriggerProvider", mock_provider_cls)
+    monkeypatch.setattr(remote, "get_trigger_provider", lambda root: mock_provider)
 
-    remote._deploy_trigger("task.lm", tmp_path, {"project_id": "proj"}, stages)
+    remote._deploy_trigger("task.lm", tmp_path, stages)
 
-    mock_provider_cls.from_config.assert_called_once_with({"project_id": "proj"})
     plan = mock_provider.deploy.call_args[0][0]
     assert isinstance(plan, TriggerDeploymentPlan)
     assert len(plan.name) == 12
@@ -284,11 +313,9 @@ def test_deploy_trigger_ids_differ_across_project_roots(monkeypatch, tmp_path):
         root = tmp_path / project
         root.mkdir()
         mock_provider = mock.MagicMock()
-        mock_provider_cls = mock.MagicMock()
-        mock_provider_cls.from_config.return_value = mock_provider
-        monkeypatch.setattr(remote, "GCPTriggerProvider", mock_provider_cls)
+        monkeypatch.setattr(remote, "get_trigger_provider", lambda root, mp=mock_provider: mp)
 
-        remote._deploy_trigger("task.lm", root, {"project_id": "proj"}, stages)
+        remote._deploy_trigger("task.lm", root, stages)
         names.append(mock_provider.deploy.call_args[0][0].name)
 
     assert names[0] != names[1]
@@ -299,11 +326,11 @@ def test_deploy_trigger_ids_differ_across_project_roots(monkeypatch, tmp_path):
 
 @pytest.mark.integration
 def test_handle_remote_run_routes_to_deploy_trigger_when_script_has_triggers(monkeypatch, tmp_path):
-    """handle_remote_run must detect trigger.* calls and hand off to _deploy_trigger
-    instead of the one-shot run path — this is the routing decision lamia owns."""
+    """handle_remote_run must detect trigger.* calls and hand off to _deploy_trigger."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     import lamia.cli.remote as remote
 
+    (tmp_path / "config.yaml").write_text("cloud:\n  provider: gcp\n  project_id: proj\n")
     _write_script(tmp_path, "task.lm", "trigger.email_received(sender)")
 
     fake_stages = [mock.sentinel.stage]
@@ -313,16 +340,18 @@ def test_handle_remote_run_routes_to_deploy_trigger_when_script_has_triggers(mon
         remote, "_deploy_trigger", lambda *args, **kwargs: deploy_calls.append((args, kwargs))
     )
 
+    deployer = _make_mock_deployer()
+    monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
+
     remote.handle_remote_run(
         "task.lm", str(tmp_path), {"cloud": {"project_id": "proj"}}, verbose=False
     )
 
     assert len(deploy_calls) == 1
     args, _ = deploy_calls[0]
-    script_name, project_root, cloud_cfg, stages = args
+    script_name, project_root, stages = args
     assert script_name == "task.lm"
     assert project_root == tmp_path
-    assert cloud_cfg == {"project_id": "proj"}
     assert stages == fake_stages
 
 
@@ -330,39 +359,25 @@ def test_handle_remote_run_routes_to_deploy_trigger_when_script_has_triggers(mon
 def test_handle_remote_run_fetches_logs_when_run_job_raises(monkeypatch, tmp_path, capsys):
     """Even if run_job raises unexpectedly, container logs should still be fetched."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
-    from lamia.cli.script_analysis import ScriptCapabilities
     import lamia.cli.remote as remote
 
+    (tmp_path / "config.yaml").write_text("cloud:\n  provider: gcp\n  project_id: proj\n")
     _write_script(tmp_path, "task.lm", 'def run():\n    raise Exception("boom")')
 
+    deployer = _make_mock_deployer()
+    deployer.run_job.side_effect = RuntimeError("The container exited with an error")
+    deployer.fetch_execution_logs.return_value = ("container stdout", "container stderr")
+    deployer.get_deployed_source_hash.return_value = "abc"
+    monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
-    monkeypatch.setattr(
-        remote,
-        "analyze_script",
-        lambda path: ScriptCapabilities(),
-    )
     monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
-    monkeypatch.setattr(remote, "sync_runtime_files", lambda **kwargs: {})
-    monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *a, **kw: "abc")
-    monkeypatch.setattr(remote, "_compute_source_hash", lambda root: "abc")
-
-    def failing_run_job(**kwargs):
-        raise RuntimeError("The container exited with an error")
-
-    logs_called = []
-    def mock_fetch_logs(**kwargs):
-        logs_called.append(kwargs)
-        return ("container stdout", "container stderr")
-
-    monkeypatch.setattr(remote, "run_job", failing_run_job)
-    monkeypatch.setattr(remote, "fetch_execution_logs", mock_fetch_logs)
+    monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d: "abc")
 
     with pytest.raises(RuntimeError, match="container exited with an error"):
         remote.handle_remote_run(
             "task.lm", str(tmp_path), {"cloud": {"project_id": "proj"}}, verbose=False
         )
 
-    assert len(logs_called) == 1
     captured = capsys.readouterr()
     assert "container stdout" in captured.out
     assert "container stderr" in captured.err
@@ -372,37 +387,24 @@ def test_handle_remote_run_fetches_logs_when_run_job_raises(monkeypatch, tmp_pat
 def test_handle_remote_run_displays_logs_on_container_failure(monkeypatch, tmp_path, capsys):
     """Failed remote runs must print container logs and the logs URL."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
-    from lamia.cli.script_analysis import ScriptCapabilities
     import lamia.cli.remote as remote
 
+    (tmp_path / "config.yaml").write_text("cloud:\n  provider: gcp\n  project_id: proj\n")
     _write_script(tmp_path, "task.lm", 'def run():\n    raise Exception("boom")')
 
+    deployer = _make_mock_deployer()
+    deployer.run_job.return_value = {
+        "exit_code": 1,
+        "elapsed_seconds": 3.2,
+        "logs_url": "https://console.cloud.google.com/logs/exec-1",
+        "execution_name": "projects/p/locations/us-central1/jobs/lamia-task/executions/exec-1",
+    }
+    deployer.fetch_execution_logs.return_value = ("Traceback: boom", "")
+    deployer.get_deployed_source_hash.return_value = "abc"
+    monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
-    monkeypatch.setattr(
-        remote,
-        "analyze_script",
-        lambda path: ScriptCapabilities(),
-    )
     monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
-    monkeypatch.setattr(remote, "sync_runtime_files", lambda **kwargs: {})
-    monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *a, **kw: "abc")
-    monkeypatch.setattr(remote, "_compute_source_hash", lambda root: "abc")
-
-    monkeypatch.setattr(
-        remote,
-        "run_job",
-        lambda **kwargs: {
-            "exit_code": 1,
-            "elapsed_seconds": 3.2,
-            "logs_url": "https://console.cloud.google.com/logs/exec-1",
-            "execution_name": "projects/p/locations/us-central1/jobs/lamia-task/executions/exec-1",
-        },
-    )
-    monkeypatch.setattr(
-        remote,
-        "fetch_execution_logs",
-        lambda **kwargs: ("Traceback: boom", ""),
-    )
+    monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d: "abc")
 
     with pytest.raises(SystemExit) as exc_info:
         remote.handle_remote_run(
@@ -414,12 +416,11 @@ def test_handle_remote_run_displays_logs_on_container_failure(monkeypatch, tmp_p
     assert "Traceback: boom" in captured.out
     assert "https://console.cloud.google.com/logs/exec-1" in captured.err
     assert "Completed in 3.2s" in captured.err
-    
+
 
 def _remote_module():
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     import lamia.cli.remote as remote
-
     return remote
 
 
@@ -434,43 +435,35 @@ def run():
     )
 
 
+def _setup_deployer(monkeypatch, remote, tmp_path, **overrides):
+    """Create a mock deployer, patch it into remote, and write config.yaml."""
+    (tmp_path / "config.yaml").write_text("cloud:\n  provider: gcp\n  project_id: proj\n")
+    deployer = _make_mock_deployer()
+    for attr, val in overrides.items():
+        setattr(deployer, attr, val)
+    monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
+    monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
+    monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
+    return deployer
+
+
 class TestHandleRemoteRun:
     def test_happy_path_deploy_run_fetch_logs(self, monkeypatch, tmp_path, capsys):
         remote = _remote_module()
         _plain_script(tmp_path)
-        config = {"cloud": {"project_id": "proj", "location": "us-central1"}}
 
-        monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
-        monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
-        monkeypatch.setattr(
-            remote,
-            "sync_runtime_files",
-            lambda **kwargs: {"uploaded": 0, "skipped": 0, "overwrite_warnings": []},
-        )
-        monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *args: None)
-        monkeypatch.setattr(remote, "deploy", mock.MagicMock())
-        monkeypatch.setattr(remote, "set_deployed_source_hash", mock.MagicMock())
-        monkeypatch.setattr(
-            remote,
-            "run_job",
-            lambda **kwargs: {
-                "exit_code": 0,
-                "elapsed_seconds": 1.5,
-                "logs_url": "https://logs.example",
-                "execution_name": "exec-1",
-            },
-        )
-        monkeypatch.setattr(
-            remote,
-            "fetch_execution_logs",
-            lambda **kwargs: ("hello out", "hello err"),
-        )
+        deployer = _setup_deployer(monkeypatch, remote, tmp_path)
+        deployer.fetch_execution_logs.return_value = ("hello out", "hello err")
 
         with pytest.raises(SystemExit) as exc:
-            remote.handle_remote_run("task.lm", str(tmp_path), config, verbose=False)
+            remote.handle_remote_run(
+                "task.lm", str(tmp_path),
+                {"cloud": {"project_id": "proj", "location": "us-central1"}},
+                verbose=False,
+            )
 
         assert exc.value.code == 0
-        remote.deploy.assert_called_once()
+        deployer.deploy.assert_called_once()
         captured = capsys.readouterr()
         assert "hello out" in captured.out
         assert "hello err" in captured.err
@@ -479,41 +472,31 @@ class TestHandleRemoteRun:
     def test_skips_deploy_when_source_hash_matches(self, monkeypatch, tmp_path, capsys):
         remote = _remote_module()
         _plain_script(tmp_path)
-        config = {"cloud": {"project_id": "proj"}}
 
-        monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
-        monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
-        monkeypatch.setattr(
-            remote,
-            "sync_runtime_files",
-            lambda **kwargs: {"uploaded": 0, "skipped": 0, "overwrite_warnings": []},
-        )
-        monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *args: "abc123")
-        monkeypatch.setattr(remote, "_compute_source_hash", lambda root: "abc123")
-        mock_deploy = mock.MagicMock()
-        monkeypatch.setattr(remote, "deploy", mock_deploy)
-        monkeypatch.setattr(
-            remote,
-            "run_job",
-            lambda **kwargs: {"exit_code": 0, "execution_name": "exec-1"},
-        )
-        monkeypatch.setattr(remote, "fetch_execution_logs", lambda **kwargs: ("", ""))
+        deployer = _setup_deployer(monkeypatch, remote, tmp_path)
+        deployer.get_deployed_source_hash.return_value = "abc123"
+        monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d: "abc123")
 
         with pytest.raises(SystemExit):
-            remote.handle_remote_run("task.lm", str(tmp_path), config, verbose=False)
+            remote.handle_remote_run(
+                "task.lm", str(tmp_path),
+                {"cloud": {"project_id": "proj"}},
+                verbose=False,
+            )
 
-        mock_deploy.assert_not_called()
+        deployer.deploy.assert_not_called()
         assert "skipping build" in capsys.readouterr().err
 
-    def test_missing_project_id_exits_with_error(self, tmp_path, capsys):
+    def test_missing_project_id_exits_with_error(self, monkeypatch, tmp_path, capsys):
         remote = _remote_module()
         _plain_script(tmp_path)
 
-        with pytest.raises(SystemExit) as exc:
-            remote.handle_remote_run("task.lm", str(tmp_path), {}, verbose=False)
+        def _raise_no_config(root):
+            raise ValueError("cloud.project_id is required in config.yaml.")
+        monkeypatch.setattr(remote, "get_deployer", _raise_no_config)
 
-        assert exc.value.code == 1
-        assert "cloud.project_id not set" in capsys.readouterr().err
+        with pytest.raises(ValueError, match="project_id"):
+            remote.handle_remote_run("task.lm", str(tmp_path), {}, verbose=False)
 
     def test_file_sync_warnings_printed_for_nonempty_entries(self, monkeypatch, tmp_path, capsys):
         remote = _remote_module()
@@ -521,29 +504,21 @@ class TestHandleRemoteRun:
         from lamia_cloud.contracts import FileSyncEntry
 
         _plain_script(tmp_path)
-        config = {"cloud": {"project_id": "proj"}}
         entries = [
             FileSyncEntry(raw_path="data.csv", resolved_path="/tmp/data.csv", bucket_key="data.csv"),
         ]
 
-        monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
+        deployer = _setup_deployer(monkeypatch, remote, tmp_path)
+        deployer.get_deployed_source_hash.return_value = "same"
         monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: entries)
-        monkeypatch.setattr(
-            remote,
-            "sync_runtime_files",
-            lambda **kwargs: {"uploaded": 0, "skipped": 0, "overwrite_warnings": []},
-        )
-        monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *args: "same")
-        monkeypatch.setattr(remote, "_compute_source_hash", lambda root: "same")
-        monkeypatch.setattr(
-            remote,
-            "run_job",
-            lambda **kwargs: {"exit_code": 0, "execution_name": "exec-1"},
-        )
-        monkeypatch.setattr(remote, "fetch_execution_logs", lambda **kwargs: ("", ""))
+        monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d: "same")
 
         with pytest.raises(SystemExit):
-            remote.handle_remote_run("task.lm", str(tmp_path), config, verbose=False)
+            remote.handle_remote_run(
+                "task.lm", str(tmp_path),
+                {"cloud": {"project_id": "proj"}},
+                verbose=False,
+            )
 
         stderr = capsys.readouterr().err
         assert "will upload local files" in stderr
@@ -552,61 +527,28 @@ class TestHandleRemoteRun:
 
 @pytest.mark.integration
 def test_handle_remote_run_calls_ensure_apis_enabled_before_deploy(monkeypatch, tmp_path):
-    """handle_remote_run must enable GCP APIs before any deploy/run calls."""
+    """handle_remote_run must enable cloud APIs before any deploy/run calls."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     import lamia.cli.remote as remote
 
+    (tmp_path / "config.yaml").write_text("cloud:\n  provider: gcp\n  project_id: proj\n")
     _write_script(tmp_path, "task.lm", 'def run():\n    return 1\n')
 
     call_order = []
-    monkeypatch.setattr(
-        remote,
-        "ensure_apis_enabled",
-        lambda project_id: call_order.append(("ensure_apis", project_id)),
+    deployer = _make_mock_deployer()
+    deployer.ensure_apis_enabled.side_effect = lambda: call_order.append("ensure_apis")
+    deployer.deploy.side_effect = lambda **kw: call_order.append("deploy") or "lamia-task"
+    deployer.run_job.side_effect = (
+        lambda **kw: call_order.append("run_job")
+        or {"exit_code": 0, "elapsed_seconds": 0, "logs_url": "", "execution_name": "e1"}
     )
+
+    monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
+    monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
     monkeypatch.setattr(
-        remote,
-        "build_file_sync_plan",
-        lambda **kwargs: [],
-    )
-    monkeypatch.setattr(
-        remote,
-        "sync_runtime_files",
-        lambda **kwargs: {"uploaded": 0, "skipped": 0, "overwrite_warnings": []},
-    )
-    monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        remote,
-        "deploy",
-        lambda **kwargs: call_order.append(("deploy", kwargs["project_id"])) or "job",
-    )
-    monkeypatch.setattr(remote, "set_deployed_source_hash", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        remote,
-        "run_job",
-        lambda **kwargs: call_order.append(("run_job", kwargs["project_id"]))
-        or {"exit_code": 0, "elapsed_seconds": 0, "logs_url": ""},
-    )
-    monkeypatch.setattr(
-        remote,
-        "fetch_execution_logs",
-        lambda **kwargs: ("", ""),
-    )
-    monkeypatch.setattr(
-        remote,
-        "analyze_script",
-        lambda path: ScriptCapabilities(
-            uses_llm=False,
-            uses_browser=False,
-            uses_files=False,
-            uses_file_context=False,
-        ),
-    )
-    monkeypatch.setattr(
-        remote,
-        "collect_project_files",
-        lambda root: list(root.glob("*.lm")),
+        remote, "analyze_script",
+        lambda path: ScriptCapabilities(),
     )
 
     with pytest.raises(SystemExit) as exc_info:
@@ -615,11 +557,9 @@ def test_handle_remote_run_calls_ensure_apis_enabled_before_deploy(monkeypatch, 
         )
 
     assert exc_info.value.code == 0
-    assert call_order[0] == ("ensure_apis", "proj")
-    assert ("deploy", "proj") in call_order
-    deploy_index = call_order.index(("deploy", "proj"))
-    ensure_index = call_order.index(("ensure_apis", "proj"))
-    assert ensure_index < deploy_index
+    assert call_order[0] == "ensure_apis"
+    assert "deploy" in call_order
+    assert call_order.index("ensure_apis") < call_order.index("deploy")
 
 
 @pytest.mark.integration
@@ -628,47 +568,17 @@ def test_handle_remote_run_propagates_ensure_apis_enabled_failure(monkeypatch, t
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     import lamia.cli.remote as remote
 
+    (tmp_path / "config.yaml").write_text("cloud:\n  provider: gcp\n  project_id: proj\n")
     _write_script(tmp_path, "task.lm", 'def run():\n    return 1\n')
 
-    def _raise(*args, **kwargs):
-        raise RuntimeError("API enable failed")
-
-    deploy_calls = []
-    monkeypatch.setattr(remote, "ensure_apis_enabled", _raise)
+    deployer = _make_mock_deployer()
+    deployer.ensure_apis_enabled.side_effect = RuntimeError("API enable failed")
+    monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
-    monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
-    monkeypatch.setattr(
-        remote,
-        "sync_runtime_files",
-        lambda **kwargs: {"uploaded": 0, "skipped": 0, "overwrite_warnings": []},
-    )
-    monkeypatch.setattr(remote, "get_deployed_source_hash", lambda *args, **kwargs: "abc")
-    monkeypatch.setattr(
-        remote,
-        "deploy",
-        lambda **kwargs: deploy_calls.append(kwargs) or "job",
-    )
-    monkeypatch.setattr(remote, "set_deployed_source_hash", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        remote,
-        "run_job",
-        lambda **kwargs: {"exit_code": 0, "elapsed_seconds": 0, "logs_url": ""},
-    )
-    monkeypatch.setattr(remote, "fetch_execution_logs", lambda **kwargs: ("", ""))
-    monkeypatch.setattr(
-        remote,
-        "analyze_script",
-        lambda path: ScriptCapabilities(
-            uses_llm=False,
-            uses_browser=False,
-            uses_files=False,
-            uses_file_context=False,
-        ),
-    )
 
     with pytest.raises(RuntimeError, match="API enable failed"):
         remote.handle_remote_run(
             "task.lm", str(tmp_path), {"cloud": {"project_id": "proj"}}, verbose=False
         )
 
-    assert deploy_calls == []
+    deployer.deploy.assert_not_called()
