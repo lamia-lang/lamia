@@ -1552,10 +1552,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#requirements" class="md-nav__link">
+  <a href="#local-vs-cloud-triggers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Requirements
+        Local vs Cloud Triggers
       
     </span>
   </a>
@@ -1732,8 +1732,12 @@ their own independent copy of every event.</p>
 event is retried automatically (up to 5 attempts). After all retries are
 exhausted, the event is saved as a <strong>failed event</strong> and can be inspected
 via <code>lamia trigger list --verbose</code>.</p>
-<p>Failed events expire automatically after a retention period — there is no
-manual clearing step.</p>
+<p>To clear failed events for a trigger:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>drain<span class="w"> </span>a3f2c8b1d4e5
+</span></code></pre></div>
+<p>To stop and fully remove a trigger:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>clear<span class="w"> </span>a3f2c8b1d4e5
+</span></code></pre></div>
 <h2 id="how-isolation-works">How Isolation Works<a class="headerlink" href="#how-isolation-works" title="Permanent link">&para;</a></h2>
 <p>Each script execution that reaches a waiting point creates its own private
 event listener. This means:</p>
@@ -1743,33 +1747,40 @@ event listener. This means:</p>
 </ul>
 <h2 id="listing-triggers">Listing Triggers<a class="headerlink" href="#listing-triggers" title="Permanent link">&para;</a></h2>
 <p>To see what triggers are configured:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list
 </span></code></pre></div>
 <p>Example output:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>  [pricing-reply-a3f2] pricing_reply.lm
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    event: email_received
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    mode: reactive
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    last run: 2026-07-09  status: ok
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    failed events: 2
+<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>  [a3f2c8b1d4e5] pricing_reply.lm (local)
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    event: email_received
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    mode: reactive
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    last run: 2026-07-09  status: ok
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    failed events: 2
 </span></code></pre></div>
+<p>The id in brackets is a random 12-character hex string assigned once
+when the trigger is first created.</p>
 <p>To see details of failed events (what data they contained):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list<span class="w"> </span>--verbose
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list<span class="w"> </span>--verbose
 </span></code></pre></div>
 <p>This shows the actual event payload and timestamp for each failure, so you
 can understand what went wrong and take action.</p>
 <h2 id="viewing-logs">Viewing Logs<a class="headerlink" href="#viewing-logs" title="Permanent link">&para;</a></h2>
-<p>Triggers run in the cloud, so their output never reaches your terminal. Take the
-id shown in brackets by <code>lamia trigger list</code> and read the most recent run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>logs<span class="w"> </span>pricing-reply-a3f2
+<p>For cloud triggers, output never reaches your terminal. Take the id shown
+in brackets by <code>lamia trigger list</code> and read the most recent run:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>logs<span class="w"> </span>a3f2c8b1d4e5
 </span></code></pre></div>
-<p>The id is the script slug plus a short hash of the project directory, so the
-same script name in two projects stays distinct. It is not the file name.</p>
-<p>Multi-stage triggers print each stage in order.</p>
-<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
+<p>Local triggers print output to the terminal where they were started.
+Multi-stage triggers print each stage in order.</p>
+<h2 id="local-vs-cloud-triggers">Local vs Cloud Triggers<a class="headerlink" href="#local-vs-cloud-triggers" title="Permanent link">&para;</a></h2>
+<p>Triggers run <strong>locally</strong> by default — Lamia watches for events on your
+machine and executes the script as a local process. No cloud setup is
+required.</p>
+<p>To deploy triggers to the cloud instead, use <code>--remote</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>lamia<span class="w"> </span>pricing_reply.lm<span class="w"> </span>--remote
+</span></code></pre></div>
+<p>Cloud triggers require:</p>
 <ul>
-<li>Currently triggers are only supported in remote mode (<code>--remote</code>).</li>
-<li>Install cloud support: <code>pip install "lamia-lang[cloud]"</code></li>
-<li>Set <code>cloud.project_id</code> in your project <code>config.yaml</code>.</li>
+<li><code>pip install "lamia-lang[cloud]"</code></li>
+<li><code>cloud.project_id</code> set in your project <code>config.yaml</code></li>
 </ul>
 
 
