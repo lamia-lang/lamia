@@ -11,11 +11,9 @@ from typing import Optional
 
 import yaml
 
-from lamia.id_gen import slugify
-from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob
-from lamia.scheduling.registry import set_paused
-from lamia.cli.script_analysis import analyze_script
 from lamia.id_gen import generate_unique_id
+from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob
+from lamia.cli.script_analysis import analyze_script
 
 try:
     from lamia_cloud import get_scheduler, CloudScheduleJob, CloudJobStatus
@@ -137,7 +135,7 @@ def deploy_scheduled_trigger(
         )
         sys.exit(1)
 
-    name = generate_unique_id(script_name, str(project_root))
+    name = generate_unique_id()
     capabilities = analyze_script(project_root / script_name)
 
     plan = TriggerDeploymentPlan(
@@ -195,7 +193,7 @@ def fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
                 if config:
                     state = config.get("state", "UNKNOWN")
                     if state == "PAUSED":
-                        set_paused(job["id"], True)
+                        job["paused"] = True
 
                 exec_status = scheduler.get_last_execution_status(cloud_job)
                 if exec_status:

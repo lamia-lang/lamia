@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from lamia.id_gen import generate_unique_id
+from lamia.persistence import atomic_write
 from lamia.scheduling.base import ScheduleJob
 from lamia.scheduling.registry import (
     SCHEDULES_DIR,
@@ -30,19 +31,14 @@ def temp_schedules_dir(tmp_path, monkeypatch):
 
 
 class TestGenerateId:
-    def test_twelve_char_hex(self):
-        result = generate_unique_id("script.lm", "/home/user/project")
+    def test_bare_hex_format(self):
+        result = generate_unique_id()
         assert len(result) == 12
         assert all(c in "0123456789abcdef" for c in result)
 
-    def test_deterministic(self):
-        a = generate_unique_id("x.lm", "/p")
-        b = generate_unique_id("x.lm", "/p")
-        assert a == b
-
-    def test_different_inputs_different_ids(self):
-        a = generate_unique_id("x.lm", "/p")
-        b = generate_unique_id("y.lm", "/p")
+    def test_each_call_is_unique(self):
+        a = generate_unique_id()
+        b = generate_unique_id()
         assert a != b
 
 
@@ -51,7 +47,7 @@ class TestSaveAndLoadJob:
         job = ScheduleJob(
             script="test.lm",
             cron="0 9 * * *",
-            schedule_id=generate_unique_id("test.lm", "/home/user/myproject"),
+            schedule_id=generate_unique_id(),
             catch_up=True,
             project_root=Path("/home/user/myproject"),
         )
@@ -62,7 +58,7 @@ class TestSaveAndLoadJob:
         job = ScheduleJob(
             script="test.lm",
             cron="0 9 * * *",
-            schedule_id=generate_unique_id("test.lm", "/home/user/myproject"),
+            schedule_id=generate_unique_id(),
             catch_up=False,
             project_root=Path("/home/user/myproject"),
         )
@@ -89,7 +85,7 @@ class TestRemoveJob:
     def test_remove_existing(self, temp_schedules_dir):
         job = ScheduleJob(
             script="r.lm", cron="0 0 * * *",
-            schedule_id=generate_unique_id("r.lm", "/p"),
+            schedule_id=generate_unique_id(),
             project_root=Path("/p"),
         )
         job_id = save_job(job, "/bin/lamia")
@@ -107,12 +103,12 @@ class TestListJobs:
     def test_lists_all_saved_jobs(self, temp_schedules_dir):
         job1 = ScheduleJob(
             script="a.lm", cron="0 1 * * *",
-            schedule_id=generate_unique_id("a.lm", "/p1"),
+            schedule_id=generate_unique_id(),
             project_root=Path("/p1"),
         )
         job2 = ScheduleJob(
             script="b.lm", cron="0 2 * * *",
-            schedule_id=generate_unique_id("b.lm", "/p2"),
+            schedule_id=generate_unique_id(),
             project_root=Path("/p2"),
         )
         save_job(job1, "/bin/lamia")
@@ -125,7 +121,7 @@ class TestListJobs:
     def test_skips_corrupted_files(self, temp_schedules_dir):
         job = ScheduleJob(
             script="good.lm", cron="0 0 * * *",
-            schedule_id=generate_unique_id("good.lm", "/p"),
+            schedule_id=generate_unique_id(),
             project_root=Path("/p"),
         )
         save_job(job, "/bin/lamia")
@@ -153,6 +149,9 @@ class TestListJobs:
         assert len(jobs) == 1
         assert jobs[0]["script"] == "legacy_task.lm"
         assert "id" in jobs[0]
+        rid = jobs[0]["id"]
+        assert len(rid) == 12
+        assert all(c in "0123456789abcdef" for c in rid)
 
         canonical = temp_schedules_dir / f"{jobs[0]['id']}.json"
         assert canonical.exists()
@@ -161,7 +160,7 @@ class TestListJobs:
     def test_deduplicates_same_job_id(self, temp_schedules_dir):
         job = ScheduleJob(
             script="dup_task.lm", cron="0 9 * * *",
-            schedule_id=generate_unique_id("dup_task.lm", "/dup/project"),
+            schedule_id=generate_unique_id(),
             project_root=Path("/dup/project"),
         )
         job_id = save_job(job, "/usr/local/bin/lamia")
@@ -181,14 +180,15 @@ class TestListJobs:
 
         jobs = list_jobs()
         assert len(jobs) == 1
-        assert jobs[0]["id"] == job_id
+        assert jobs[0]["script"] == "dup_task.lm"
+        assert jobs[0]["project_root"] == "/dup/project"
 
 
 class TestFindJobByScript:
     def test_finds_existing(self, temp_schedules_dir):
         job = ScheduleJob(
             script="find_me.lm", cron="0 5 * * *",
-            schedule_id=generate_unique_id("find_me.lm", "/proj"),
+            schedule_id=generate_unique_id(),
             project_root=Path("/proj"),
         )
         save_job(job, "/bin/lamia")
@@ -235,7 +235,7 @@ class TestRunStatus:
     def test_list_jobs_includes_last_run(self, temp_schedules_dir):
         job = ScheduleJob(
             script="tracked.lm", cron="0 0 * * *",
-            schedule_id=generate_unique_id("tracked.lm", "/p"),
+            schedule_id=generate_unique_id(),
             project_root=Path("/p"),
         )
         job_id = save_job(job, "/bin/lamia")
@@ -248,7 +248,7 @@ class TestRunStatus:
     def test_remove_job_also_removes_status(self, temp_schedules_dir):
         job = ScheduleJob(
             script="bye.lm", cron="0 0 * * *",
-            schedule_id=generate_unique_id("bye.lm", "/p"),
+            schedule_id=generate_unique_id(),
             project_root=Path("/p"),
         )
         job_id = save_job(job, "/bin/lamia")

@@ -282,16 +282,13 @@ def test_fetch_cloud_statuses_mixed_jobs(monkeypatch, tmp_path):
 
 
 @pytest.mark.integration
-def test_fetch_cloud_statuses_pauses_job_when_scheduler_reports_paused(monkeypatch, tmp_path):
+def test_fetch_cloud_statuses_marks_paused_on_job_dict(monkeypatch, tmp_path):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
 
     mock_scheduler = mock.MagicMock()
     mock_scheduler.get_installed_config.return_value = {"state": "PAUSED"}
+    mock_scheduler.get_last_execution_status.return_value = None
     monkeypatch.setattr(cloud_scheduler, "get_scheduler", lambda root: mock_scheduler)
-    paused_calls = []
-    monkeypatch.setattr(
-        cloud_scheduler, "set_paused", lambda job_id, val: paused_calls.append((job_id, val))
-    )
 
     cloud_jobs = [
         {"id": "job-2", "script": "task.lm", "cron": "0 * * * *", "project_root": str(tmp_path)}
@@ -299,4 +296,4 @@ def test_fetch_cloud_statuses_pauses_job_when_scheduler_reports_paused(monkeypat
 
     cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
 
-    assert paused_calls == [("job-2", True)]
+    assert cloud_jobs[0].get("paused") is True

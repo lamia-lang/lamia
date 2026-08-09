@@ -2,6 +2,8 @@
 
 Usage:
     lamia trigger list [--verbose]
+    lamia trigger drain <id>
+    lamia trigger clear <id>
     lamia trigger logs <id>
 """
 
@@ -28,6 +30,12 @@ def handle_trigger() -> None:
         help="Show details of failed events",
     )
 
+    drain_parser = subparsers.add_parser("drain", help="Remove failed events for a trigger")
+    drain_parser.add_argument("id", help="Trigger id (from 'lamia trigger list')")
+
+    clear_parser = subparsers.add_parser("clear", help="Stop and remove a trigger")
+    clear_parser.add_argument("id", help="Trigger id (from 'lamia trigger list')")
+
     logs_parser = subparsers.add_parser("logs", help="View execution logs for a trigger")
     logs_parser.add_argument("id", help="Trigger id (from 'lamia trigger list')")
 
@@ -35,6 +43,10 @@ def handle_trigger() -> None:
 
     if args.action == "list":
         _handle_list(verbose=args.verbose)
+    elif args.action == "drain":
+        _handle_drain(args.id)
+    elif args.action == "clear":
+        _handle_clear(args.id)
     elif args.action == "logs":
         _handle_logs(args)
     else:
@@ -78,6 +90,98 @@ def _handle_list(verbose: bool = False) -> None:
         if d.get("logs_url"):
             print(f"    logs: {d['logs_url']}")
         print()
+
+
+def _try_cloud_list() -> list[dict]:
+    """Try to list cloud triggers — returns [] if lamia-cloud is unavailable."""
+    provider = _get_cloud_provider(Path.cwd())
+    if provider is None:
+        return []
+    try:
+        return provider.list_deployments()
+    except Exception:
+        return []
+
+
+def _get_failed_events_for(trigger_name: str, location: str) -> list[dict]:
+    """Fetch failed events for a trigger — returns [] on error."""
+    if location == "local":
+        local_provider = LocalTriggerProvider()
+        try:
+            return local_provider.get_failed_events(trigger_name)
+        except Exception:
+            return []
+    provider = _get_cloud_provider(Path.cwd())
+    if provider is None:
+        return []
+    try:
+        return provider.get_failed_events(trigger_name)
+    except Exception:
+        return []
+
+
+def _handle_drain(trigger_id: str) -> None:
+    """Remove failed events for a trigger."""
+    local_provider = LocalTriggerProvider()
+    local_triggers = local_provider.list_deployments()
+    local_names = {t["name"] for t in local_triggers}
+
+    if trigger_id in local_names:
+        count = local_provider.clear_failed_events(trigger_id)
+        if count:
+            print(f"Drained {count} failed event(s) for {trigger_id}")
+        else:
+            print(f"No failed events for {trigger_id}")
+        return
+
+    cloud_provider = _try_get_cloud_provider()
+    if cloud_provider is not None:
+        try:
+            count = cloud_provider.clear_failed_events(trigger_id)
+            if count:
+                print(f"Drained {count} failed event(s) for {trigger_id}")
+            else:
+                print(f"No failed events for {trigger_id}")
+            return
+        except Exception:
+            pass
+
+    print(f"Error: trigger '{trigger_id}' not found", file=sys.stderr)
+    sys.exit(1)
+
+
+def _handle_clear(trigger_id: str) -> None:
+    """Stop and remove a trigger."""
+    local_provider = LocalTriggerProvider()
+    result = local_provider.clear_trigger(trigger_id)
+
+    if result.get("cleared"):
+        if result.get("was_running"):
+            print(f"Trigger {trigger_id} stopped and cleared")
+        else:
+            print(f"Trigger {trigger_id} not running (stale entry cleared)")
+        return
+
+    cloud_provider = _try_get_cloud_provider()
+    if cloud_provider is not None:
+        try:
+            cloud_provider.clear_trigger(trigger_id)
+            print(f"Trigger {trigger_id} stopped and cleared (cloud)")
+            return
+        except Exception:
+            pass
+
+    print(
+        "Error: trigger not found locally. For cloud triggers, ensure "
+        "cloud.project_id is set in config.yaml",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def _try_get_cloud_provider():
+    """Return the cloud trigger provider, or None if unavailable."""
+    return _get_cloud_provider(Path.cwd())
 
 
 def _handle_logs(args: argparse.Namespace) -> None:

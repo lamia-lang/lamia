@@ -198,8 +198,17 @@ event is retried automatically (up to 5 attempts). After all retries are
 exhausted, the event is saved as a **failed event** and can be inspected
 via `lamia trigger list --verbose`.
 
-Failed events expire automatically after a retention period — there is no
-manual clearing step.
+To clear failed events for a trigger:
+
+```bash
+lamia trigger drain a3f2c8b1d4e5
+```
+
+To stop and fully remove a trigger:
+
+```bash
+lamia trigger clear a3f2c8b1d4e5
+```
 
 ## How Isolation Works
 
@@ -220,12 +229,15 @@ lamia trigger list
 Example output:
 
 ```
-  [pricing-reply-a3f2] pricing_reply.lm
+  [a3f2c8b1d4e5] pricing_reply.lm (local)
     event: email_received
     mode: reactive
     last run: 2026-07-09  status: ok
     failed events: 2
 ```
+
+The id in brackets is a random 12-character hex string assigned once
+when the trigger is first created.
 
 To see details of failed events (what data they contained):
 
@@ -238,20 +250,29 @@ can understand what went wrong and take action.
 
 ## Viewing Logs
 
-Triggers run in the cloud, so their output never reaches your terminal. Take the
-id shown in brackets by `lamia trigger list` and read the most recent run:
+For cloud triggers, output never reaches your terminal. Take the id shown
+in brackets by `lamia trigger list` and read the most recent run:
 
 ```bash
-lamia trigger logs pricing-reply-a3f2
+lamia trigger logs a3f2c8b1d4e5
 ```
 
-The id is the script slug plus a short hash of the project directory, so the
-same script name in two projects stays distinct. It is not the file name.
-
+Local triggers print output to the terminal where they were started.
 Multi-stage triggers print each stage in order.
 
-## Requirements
+## Local vs Cloud Triggers
 
-- Currently triggers are only supported in remote mode (`--remote`).
-- Install cloud support: `pip install "lamia-lang[cloud]"`
-- Set `cloud.project_id` in your project `config.yaml`.
+Triggers run **locally** by default — Lamia watches for events on your
+machine and executes the script as a local process. No cloud setup is
+required.
+
+To deploy triggers to the cloud instead, use `--remote`:
+
+```bash
+lamia pricing_reply.lm --remote
+```
+
+Cloud triggers require:
+
+- `pip install "lamia-lang[cloud]"`
+- `cloud.project_id` set in your project `config.yaml`

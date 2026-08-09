@@ -57,7 +57,7 @@ class TestLaunchdScheduler:
 
     @pytest.fixture
     def job(self):
-        sid = generate_unique_id("daily_task.lm", "/Users/test/project")
+        sid = generate_unique_id()
         return ScheduleJob(
             script="daily_task.lm",
             cron="0 9 * * *",

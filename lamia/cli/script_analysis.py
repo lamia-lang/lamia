@@ -60,4 +60,3 @@ def analyze_script(script_path: Path) -> ScriptCapabilities:
     )
 
 
-from lamia.id_gen import slugify  # noqa: F401 — re-export for backward compat

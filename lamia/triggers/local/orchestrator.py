@@ -22,7 +22,7 @@ from pathlib import Path
 from queue import Empty, Queue
 from typing import Dict, List, Optional
 
-from lamia.id_gen import generate_id
+from lamia.id_gen import generate_unique_id
 from lamia.runtime import find_lamia_bin
 from lamia.triggers.constants import (
     CONTINUATION_TIMEOUT_SECONDS,
@@ -35,6 +35,7 @@ from lamia.triggers.local.event_sources.file_watcher import FileEventSource
 from lamia.triggers.local.event_sources.email_poller import EmailEventSource
 from lamia.triggers.local.registry import (
     append_failed_event,
+    list_active_triggers,
     remove_active_trigger,
     remove_execution,
     save_active_trigger,
@@ -212,8 +213,15 @@ def run_local_trigger(
     if project_root is None:
         project_root = Path.cwd()
 
-    trigger_id = generate_id(str(script_path.name), str(project_root))
-    save_active_trigger(trigger_id, str(script_path.name), str(project_root), "reactive", os.getpid())
+    script_name = str(script_path.name)
+    root_str = str(project_root)
+    existing = next(
+        (t for t in list_active_triggers()
+         if t.get("script") == script_name and t.get("project_root") == root_str),
+        None,
+    )
+    trigger_id = existing["id"] if existing else generate_unique_id()
+    save_active_trigger(trigger_id, script_name, root_str, "reactive", os.getpid())
 
     print(f"Trigger active: {trigger_id} ({script_path.name})", file=sys.stderr)
     print(f"  stages: {len(stages)}", file=sys.stderr)

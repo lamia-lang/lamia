@@ -23,7 +23,7 @@ class TestScheduleJob:
         assert job.project_root == Path()
 
     def test_schedule_id_is_stored_field(self):
-        sid = generate_unique_id("task.lm", "/project")
+        sid = generate_unique_id()
         job = ScheduleJob(script="task.lm", cron="0 0 * * *", schedule_id=sid, project_root=Path("/project"))
         assert job.schedule_id == sid
 

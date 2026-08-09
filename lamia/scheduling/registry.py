@@ -4,13 +4,13 @@ Each scheduled job is persisted as a single JSON file (<id>.json) that holds
 both the job configuration and its last run status.
 """
 
-import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from lamia.id_gen import generate_unique_id
+from lamia.persistence import atomic_write
 from .base import ScheduleJob
 
 SCHEDULES_DIR = Path.home() / ".lamia" / "schedules"
@@ -74,10 +74,15 @@ def remove_job(job_id: str) -> bool:
 
 
 def list_jobs() -> list[dict]:
-    """List all registered scheduled jobs."""
+    """List all registered scheduled jobs.
+
+    Deduplicates by (script, project_root) — if a legacy file and a
+    canonical UUID file describe the same job, only the canonical one
+    (whose filename matches its own id) is kept.
+    """
     _ensure_dir()
     jobs = []
-    seen_ids = set()
+    seen_keys: set[tuple[str, str]] = set()
     for path in SCHEDULES_DIR.glob("*.json"):
         try:
             job_data = json.loads(path.read_text())
@@ -86,10 +91,10 @@ def list_jobs() -> list[dict]:
         job_data = _normalize_job_data(path, job_data)
         if not job_data:
             continue
-        job_id = job_data.get("id")
-        if not job_id or job_id in seen_ids:
+        key = (job_data.get("script", ""), job_data.get("project_root", ""))
+        if key in seen_keys:
             continue
-        seen_ids.add(job_id)
+        seen_keys.add(key)
         jobs.append(job_data)
     return jobs
 
@@ -97,14 +102,12 @@ def list_jobs() -> list[dict]:
 def find_job_by_script(script: str, project_root: str) -> Optional[dict]:
     """Find an existing job by script + project_root combo.
 
-    Checks both the current ID format and legacy hash-based IDs.
+    Scans all stored jobs since IDs are UUIDs and can't be regenerated.
     """
-    job_id = generate_unique_id(script, project_root)
-    result = load_job(job_id)
-    if result:
-        return result
-    legacy_id = hashlib.sha256(f"{project_root}:{script}".encode()).hexdigest()[:12]
-    return load_job(legacy_id)
+    for job in list_jobs():
+        if job.get("script") == script and job.get("project_root") == project_root:
+            return job
+    return None
 
 
 def record_run(job_id: str, exit_code: int, error: str = "") -> None:
@@ -166,7 +169,7 @@ def _normalize_job_data(path: Path, job_data: dict) -> Optional[dict]:
 
     job_id = job_data.get("id")
     if not job_id:
-        job_id = generate_unique_id(script, project_root)
+        job_id = generate_unique_id()
         job_data["id"] = job_id
 
     job_data.setdefault("catch_up", True)
