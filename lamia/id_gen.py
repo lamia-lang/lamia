@@ -1,12 +1,16 @@
-"""Shared ID generation for schedules and triggers."""
+"""Shared ID generation for schedules, triggers, and all named resources.
 
-import hashlib
+Format: bare 12-character hex string, e.g. ``a3f7c2e1b9d0``.
+IDs are generated once at creation time and stored in the registry.
+The ``lamia-`` prefix for GCP resource names is added by lamia-cloud.
+"""
+
+import uuid
 
 
-def generate_unique_id(script: str, project_root: str) -> str:
-    """Stable alphanumeric ID from script + project root.
+def generate_unique_id() -> str:
+    """Generate a globally unique 12-hex resource ID."""
+    return uuid.uuid4().hex[:12]
 
-    Format: 12-char hex hash, e.g. 'a3f2c8b1d4e5'.
-    """
-    raw = f"{project_root}:{script}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:12]
+
+generate_id = generate_unique_id

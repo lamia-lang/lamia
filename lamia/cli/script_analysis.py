@@ -60,8 +60,3 @@ def analyze_script(script_path: Path) -> ScriptCapabilities:
     )
 
 
-def slugify(name: str) -> str:
-    """Convert a script name to a cloud-safe slug."""
-    stem = Path(name).stem
-    slug = "".join(c if c.isalnum() else "-" for c in stem.lower()).strip("-")
-    return slug[:20]

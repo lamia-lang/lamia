@@ -14,11 +14,12 @@ Remote schedules use lamia-cloud (pip install "lamia-lang[cloud]").
 """
 
 import argparse
-import shutil
 import sys
 from pathlib import Path
 
 from lamia.id_gen import generate_unique_id
+from lamia.runtime import find_lamia_bin
+
 from .base import BaseScheduler, ScheduleJob
 from .cloud_scheduler import (
     get_cloud_scheduler,
@@ -28,7 +29,7 @@ from .cloud_scheduler import (
 )
 from .local_scheduler import LocalScheduler
 from .registry import save_job, remove_job, list_jobs, load_job, find_job_by_script, set_paused
-from lamia.triggers.cli import extract_all_triggers
+from lamia.triggers.extraction import extract_all_triggers
 
 EVERY_PRESETS = {
     "hour": "0 * * * *",
@@ -76,19 +77,22 @@ def _resolve_cron(args: argparse.Namespace) -> str:
     sys.exit(1)
 
 
-def _find_lamia_bin() -> str:
-    lamia_path = shutil.which("lamia")
-    if lamia_path:
-        return lamia_path
-    return f"{sys.executable} -m lamia"
-
-
 def _scheduler_for_job(job_data: dict, project_root: Path) -> BaseScheduler:
     """Return the appropriate scheduler based on job backend metadata."""
     backend = job_data.get("backend", "local")
     if backend == "cloud":
         return get_cloud_scheduler(Path(project_root))
     return LocalScheduler()
+
+
+def _fetch_cloud_jobs() -> list[dict]:
+    """Return cloud schedule entries from the local cache.
+
+    Cloud state (paused, last run) is fetched from GCP — the local file
+    only remembers which cloud jobs exist so we know what to query.
+    TODO: replace with CloudScheduler.list_jobs() when lamia-cloud adds it.
+    """
+    return [j for j in list_jobs() if j.get("backend") == "cloud"]
 
 
 def _handle_add(args: argparse.Namespace) -> None:
@@ -115,7 +119,8 @@ def _handle_add(args: argparse.Namespace) -> None:
             deploy_scheduled_trigger(relative_script, project_root, cron, stages)
             return
 
-    job_id = generate_unique_id(relative_script, str(project_root))
+    existing = find_job_by_script(relative_script, str(project_root))
+    job_id = existing["id"] if existing else generate_unique_id()
 
     job = ScheduleJob(
         script=relative_script,
@@ -125,7 +130,7 @@ def _handle_add(args: argparse.Namespace) -> None:
         project_root=project_root,
     )
 
-    lamia_bin = _find_lamia_bin()
+    lamia_bin = find_lamia_bin()
     backend = "cloud" if remote else "local"
 
     if remote:
@@ -134,7 +139,6 @@ def _handle_add(args: argparse.Namespace) -> None:
     else:
         scheduler = LocalScheduler()
 
-    existing = find_job_by_script(relative_script, str(project_root))
     if existing:
         old_scheduler = _scheduler_for_job(existing, project_root)
         old_scheduler.uninstall(ScheduleJob(
@@ -218,28 +222,28 @@ def _print_job(job: dict, last_run: dict | None = None) -> None:
 
 
 def _handle_list(args: argparse.Namespace) -> None:
-    jobs = list_jobs()
-    if not jobs:
-        print("No scheduled jobs.")
-        return
-
-    cloud_jobs = [j for j in jobs if j.get("backend") == "cloud"]
-    local_jobs = [j for j in jobs if j.get("backend", "local") != "cloud"]
+    local_jobs = [j for j in list_jobs() if j.get("backend", "local") == "local"]
 
     for job in local_jobs:
         _print_job(job)
 
-    if not cloud_jobs:
+    if not LAMIA_CLOUD_AVAILABLE:
+        if not local_jobs:
+            print("No scheduled jobs.")
         return
 
-    sys.stderr.write("  fetching cloud status...")
+    sys.stderr.write("  fetching cloud schedules...")
     sys.stderr.flush()
-    cloud_statuses = fetch_cloud_statuses(cloud_jobs)
+    cloud_jobs = _fetch_cloud_jobs()
+    cloud_statuses = fetch_cloud_statuses(cloud_jobs) if cloud_jobs else {}
     sys.stderr.write("\r\033[K")
     sys.stderr.flush()
 
     for job in cloud_jobs:
         _print_job(job, last_run=cloud_statuses.get(job["id"]))
+
+    if not local_jobs and not cloud_jobs:
+        print("No scheduled jobs.")
 
 
 def _cron_to_friendly(cron: str) -> str:
@@ -307,7 +311,7 @@ def _handle_update(args: argparse.Namespace) -> None:
 
     backend = job_data.get("backend", "local")
     scheduler = _scheduler_for_job(job_data, Path(job_data["project_root"]))
-    lamia_bin = _find_lamia_bin()
+    lamia_bin = find_lamia_bin()
 
     scheduler.uninstall(old_job)
     try:

@@ -841,6 +841,8 @@ For help on a subcommand, run:
         parser.add_argument('--json', action='store_true', help='Machine-readable JSON-line mode for IDE/tool integration')
         parser.add_argument('--remote', action='store_true', help='Execute script on cloud (requires lamia-lang[cloud])')
         parser.add_argument('--schedule-id', type=str, help=argparse.SUPPRESS)
+        parser.add_argument('--trigger-stage', type=int, default=None, help=argparse.SUPPRESS)
+        parser.add_argument('--trigger-exec-id', type=str, default=None, help=argparse.SUPPRESS)
         args = parser.parse_args()
 
     global _active_schedule_id
@@ -911,9 +913,6 @@ For help on a subcommand, run:
         )
         return
 
-    # Note: Lazy loading is now handled by HybridExecutor for .hu files
-    # Python files still need sys.path management for regular execution
-
     lamia = None
     try:
         # Handle --no-cache flag
@@ -938,6 +937,26 @@ For help on a subcommand, run:
                 # TODO: Support .hu files from the cli
                 pass
             elif file_ext in HYBRID_EXTENSIONS:
+                script_path = Path(prompt_file).resolve()
+                trigger_stage = getattr(args, 'trigger_stage', None)
+                trigger_exec_id = getattr(args, 'trigger_exec_id', None)
+
+                if trigger_stage is not None:
+                    from lamia.triggers.local.stage_runner import run_single_stage
+                    run_single_stage(
+                        script_path=script_path,
+                        stage_index=trigger_stage,
+                        exec_id=trigger_exec_id or "",
+                    )
+                    _graceful_shutdown(lamia, 0)
+
+                from lamia.triggers.extraction import extract_all_triggers
+                stages = extract_all_triggers(script_path) if script_path.exists() else None
+                if stages:
+                    from lamia.triggers.local.orchestrator import run_local_trigger
+                    run_local_trigger(script_path, stages, Path(project_root))
+                    _graceful_shutdown(lamia, 0)
+
                 try:
                     executor = HybridExecutor(lamia)
                     executor.execute_file(prompt_file, enable_lazy_dependency_loading=True)

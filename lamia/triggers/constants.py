@@ -1,0 +1,8 @@
+"""Shared constants for trigger execution — local and cloud use the same values."""
+
+CONTINUATION_TIMEOUT_SECONDS = 259200  # 72 hours
+MAX_EXCEPTION_RETRIES = 5
+EXIT_CODE_REJECT = 2
+MAX_CONCURRENT_EXECUTIONS = 10
+EMAIL_POLL_INTERVAL_SECONDS = 30
+FILE_DEBOUNCE_MS = 500

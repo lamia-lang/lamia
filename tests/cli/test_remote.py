@@ -13,7 +13,7 @@ from lamia.cli.script_analysis import (
     script_capability_field_names,
 )
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
-from lamia.id_gen import generate_unique_id
+
 
 
 def _write_script(tmp_path: Path, name: str, content: str) -> Path:
@@ -253,16 +253,13 @@ def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_p
     mock_provider_cls.from_config.assert_called_once_with({"project_id": "proj"})
     plan = mock_provider.deploy.call_args[0][0]
     assert isinstance(plan, TriggerDeploymentPlan)
-    assert plan.name == generate_unique_id("task.lm", str(tmp_path))
     assert len(plan.name) == 12
+    assert all(c in "0123456789abcdef" for c in plan.name)
     assert plan.mode == "reactive"
     assert plan.stages == stages
 
     stderr = capsys.readouterr().err
     assert "Deployed: lamia-trigger-task" in stderr
-    deployed_line = next(line for line in stderr.splitlines() if line.startswith("Deployed: "))
-    deployed_id = deployed_line.split("Deployed: ", 1)[1].strip()
-    assert deployed_id.startswith("lamia-")
 
 
 @pytest.mark.integration
@@ -295,7 +292,9 @@ def test_deploy_trigger_ids_differ_across_project_roots(monkeypatch, tmp_path):
         names.append(mock_provider.deploy.call_args[0][0].name)
 
     assert names[0] != names[1]
-    assert all(len(n) == 12 and all(c in "0123456789abcdef" for c in n) for n in names)
+    for n in names:
+        assert len(n) == 12
+        assert all(c in "0123456789abcdef" for c in n)
 
 
 @pytest.mark.integration

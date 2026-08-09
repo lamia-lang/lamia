@@ -6,10 +6,11 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-from lamia.interpreter.ast_analyzer import extract_script_file_refs
-from lamia.triggers.cli import extract_all_triggers
-from lamia.cli.script_analysis import analyze_script, slugify
 from lamia.id_gen import generate_unique_id
+
+from lamia.interpreter.ast_analyzer import extract_script_file_refs
+from lamia.triggers.extraction import extract_all_triggers
+from lamia.cli.script_analysis import analyze_script
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.gcp.deployer import (
     collect_project_files,
@@ -63,7 +64,7 @@ def handle_remote_run(
         _deploy_trigger(script_name, root, cloud_cfg, stages)
         return
 
-    run_name = slugify(script_name)
+    run_name = _run_service_name(script_name, str(root))
     target = deployment_name(run_name)
 
     print(f"Remote execution: {script_name}", file=sys.stderr)
@@ -164,7 +165,7 @@ def _deploy_trigger(
     stages: list,
 ) -> None:
     """Deploy always-reactive trigger infrastructure for a script with trigger.* calls."""
-    name = generate_unique_id(script_name, str(project_root))
+    name = generate_unique_id()
     capabilities = analyze_script(project_root / script_name)
 
     plan = TriggerDeploymentPlan(
@@ -203,3 +204,12 @@ def _warn_about_file_uploads(entries: list) -> None:
         print(f"    - {raw}", file=sys.stderr)
 
 
+def _run_service_name(script: str, project_root: str) -> str:
+    """Deterministic Cloud Run service name for one-shot remote runs.
+
+    Derived from script + project_root so the same script always reuses
+    the same Cloud Run service (enables container caching).  This is an
+    internal GCP resource name, not a user-facing resource ID.
+    """
+    raw = f"{script}:{project_root}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
