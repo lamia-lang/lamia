@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytest.importorskip("watchdog", reason="watchdog not installed")
+
 from lamia.triggers.local import registry
 from lamia.triggers.constants import EXIT_CODE_REJECT, MAX_EXCEPTION_RETRIES
 from lamia.triggers.local.event_sources.base import BaseEventSource

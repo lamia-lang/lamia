@@ -5,6 +5,8 @@ import time
 
 import pytest
 
+pytest.importorskip("watchdog", reason="watchdog not installed")
+
 from lamia.triggers.local.event_sources.file_watcher import FileEventSource
 
 
