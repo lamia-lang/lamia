@@ -1142,6 +1142,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#resource-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1740,6 +1751,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#resource-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2033,6 +2055,13 @@ Then create the schedule:</p>
 <p>Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (<code>list</code>, <code>update</code>, <code>remove</code>) automatically detect whether a job is local or cloud.</p>
 <p>Cloud scheduling requires the <a href="../../advanced/lamia-cloud/"><code>lamia-cloud</code></a> package.<br />
 See the <a href="../../advanced/lamia-cloud/">lamia-cloud user guide</a> for installation, one-time cloud runs, and scheduler setup.</p>
+<h2 id="resource-lifecycle">Resource Lifecycle<a class="headerlink" href="#resource-lifecycle" title="Permanent link">&para;</a></h2>
+<p>If a script file is renamed, moved, or deleted, any schedule pointing to it
+shows <code>SOURCE_MISSING</code> in <code>lamia schedule list</code>. To clean up these entries:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>remove<span class="w"> </span>--orphaned
+</span></code></pre></div>
+<p>Unused cloud resources (containers, images) are automatically removed after
+30 days of inactivity. Active schedules and triggers are never affected.</p>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Script not found</strong>: If you moved the project after scheduling, the job will fail. Use <code>lamia schedule list</code> to see the stale path, then <code>remove</code> and <code>add</code> with the new location.</li>

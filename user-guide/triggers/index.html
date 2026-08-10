@@ -1562,6 +1562,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#resource-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1782,6 +1793,13 @@ required.</p>
 <li><code>pip install "lamia-lang[cloud]"</code></li>
 <li><code>cloud.project_id</code> set in your project <code>config.yaml</code></li>
 </ul>
+<h2 id="resource-lifecycle">Resource Lifecycle<a class="headerlink" href="#resource-lifecycle" title="Permanent link">&para;</a></h2>
+<p>If a script file is renamed, moved, or deleted, any trigger pointing to it
+shows <code>SOURCE_MISSING</code> in <code>lamia trigger list</code>. To clean up these entries:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>clear<span class="w"> </span>--orphaned
+</span></code></pre></div>
+<p>Unused cloud resources (containers, images) are automatically removed after
+30 days of inactivity. Active schedules and triggers are never affected.</p>
 
 
 
