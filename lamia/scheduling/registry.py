@@ -79,6 +79,8 @@ def list_jobs() -> list[dict]:
     Deduplicates by (script, project_root) — if a legacy file and a
     canonical UUID file describe the same job, only the canonical one
     (whose filename matches its own id) is kept.
+
+    Marks entries whose script file no longer exists on disk as orphaned.
     """
     _ensure_dir()
     jobs = []
@@ -91,6 +93,17 @@ def list_jobs() -> list[dict]:
         job_data = _normalize_job_data(path, job_data)
         if not job_data:
             continue
+
+        backend = job_data.get("backend", "local")
+        project_root = job_data.get("project_root", "")
+        script = job_data.get("script", "")
+        script_missing = False
+        if backend == "local" and project_root and script:
+            script_missing = not (Path(project_root) / script).exists()
+        job_data["source_missing"] = script_missing
+        if script_missing:
+            job_data["last_status"] = "SOURCE_MISSING"
+
         key = (job_data.get("script", ""), job_data.get("project_root", ""))
         if key in seen_keys:
             continue

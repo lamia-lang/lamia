@@ -100,16 +100,22 @@ class TestListJobs:
     def test_empty_directory(self, temp_schedules_dir):
         assert list_jobs() == []
 
-    def test_lists_all_saved_jobs(self, temp_schedules_dir):
+    def test_lists_all_saved_jobs(self, temp_schedules_dir, tmp_path):
+        p1 = tmp_path / "p1"
+        p2 = tmp_path / "p2"
+        p1.mkdir()
+        p2.mkdir()
+        (p1 / "a.lm").write_text("print('a')")
+        (p2 / "b.lm").write_text("print('b')")
         job1 = ScheduleJob(
             script="a.lm", cron="0 1 * * *",
             schedule_id=generate_unique_id(),
-            project_root=Path("/p1"),
+            project_root=p1,
         )
         job2 = ScheduleJob(
             script="b.lm", cron="0 2 * * *",
             schedule_id=generate_unique_id(),
-            project_root=Path("/p2"),
+            project_root=p2,
         )
         save_job(job1, "/bin/lamia")
         save_job(job2, "/bin/lamia")
@@ -118,11 +124,14 @@ class TestListJobs:
         scripts = {j["script"] for j in jobs}
         assert scripts == {"a.lm", "b.lm"}
 
-    def test_skips_corrupted_files(self, temp_schedules_dir):
+    def test_skips_corrupted_files(self, temp_schedules_dir, tmp_path):
+        project = tmp_path / "proj"
+        project.mkdir()
+        (project / "good.lm").write_text("print('ok')")
         job = ScheduleJob(
             script="good.lm", cron="0 0 * * *",
             schedule_id=generate_unique_id(),
-            project_root=Path("/p"),
+            project_root=project,
         )
         save_job(job, "/bin/lamia")
         (temp_schedules_dir / "corrupt.json").write_text("{{bad")
@@ -130,7 +139,10 @@ class TestListJobs:
         assert len(jobs) == 1
         assert jobs[0]["script"] == "good.lm"
 
-    def test_migrates_legacy_entry_without_id(self, temp_schedules_dir):
+    def test_migrates_legacy_entry_without_id(self, temp_schedules_dir, tmp_path):
+        project = tmp_path / "legacy" / "project"
+        project.mkdir(parents=True)
+        (project / "legacy_task.lm").write_text("print('legacy')")
         legacy_path = temp_schedules_dir / "com.lamia.schedule.legacy.json"
         legacy_path.write_text(
             json.dumps(
@@ -139,7 +151,7 @@ class TestListJobs:
                     "cron": "0 9 * * *",
                     "timezone": "UTC",
                     "catch_up": True,
-                    "project_root": "/legacy/project",
+                    "project_root": str(project),
                     "lamia_bin": "/usr/local/bin/lamia",
                 }
             )
@@ -157,11 +169,14 @@ class TestListJobs:
         assert canonical.exists()
         assert not legacy_path.exists()
 
-    def test_deduplicates_same_job_id(self, temp_schedules_dir):
+    def test_deduplicates_same_job_id(self, temp_schedules_dir, tmp_path):
+        project = tmp_path / "dup" / "project"
+        project.mkdir(parents=True)
+        (project / "dup_task.lm").write_text("print('dup')")
         job = ScheduleJob(
             script="dup_task.lm", cron="0 9 * * *",
             schedule_id=generate_unique_id(),
-            project_root=Path("/dup/project"),
+            project_root=project,
         )
         job_id = save_job(job, "/usr/local/bin/lamia")
         legacy_path = temp_schedules_dir / "com.lamia.schedule.dup_task.json"
@@ -172,7 +187,7 @@ class TestListJobs:
                     "cron": "0 9 * * *",
                     "timezone": "UTC",
                     "catch_up": True,
-                    "project_root": "/dup/project",
+                    "project_root": str(project),
                     "lamia_bin": "/usr/local/bin/lamia",
                 }
             )
@@ -181,18 +196,21 @@ class TestListJobs:
         jobs = list_jobs()
         assert len(jobs) == 1
         assert jobs[0]["script"] == "dup_task.lm"
-        assert jobs[0]["project_root"] == "/dup/project"
+        assert jobs[0]["project_root"] == str(project)
 
 
 class TestFindJobByScript:
-    def test_finds_existing(self, temp_schedules_dir):
+    def test_finds_existing(self, temp_schedules_dir, tmp_path):
+        project = tmp_path / "proj"
+        project.mkdir()
+        (project / "find_me.lm").write_text("print('found')")
         job = ScheduleJob(
             script="find_me.lm", cron="0 5 * * *",
             schedule_id=generate_unique_id(),
-            project_root=Path("/proj"),
+            project_root=project,
         )
         save_job(job, "/bin/lamia")
-        found = find_job_by_script("find_me.lm", "/proj")
+        found = find_job_by_script("find_me.lm", str(project))
         assert found is not None
         assert found["script"] == "find_me.lm"
 
@@ -232,11 +250,14 @@ class TestRunStatus:
     def test_get_status_nonexistent(self, temp_schedules_dir):
         assert get_last_run_status("nope") is None
 
-    def test_list_jobs_includes_last_run(self, temp_schedules_dir):
+    def test_list_jobs_includes_last_run(self, temp_schedules_dir, tmp_path):
+        project = tmp_path / "proj"
+        project.mkdir()
+        (project / "tracked.lm").write_text("print('hi')")
         job = ScheduleJob(
             script="tracked.lm", cron="0 0 * * *",
             schedule_id=generate_unique_id(),
-            project_root=Path("/p"),
+            project_root=project,
         )
         job_id = save_job(job, "/bin/lamia")
         record_run(job_id, exit_code=0)
@@ -255,6 +276,61 @@ class TestRunStatus:
         record_run(job_id, exit_code=0)
         remove_job(job_id)
         assert get_last_run_status(job_id) is None
+
+
+class TestListJobsOrphanedSource:
+    def test_marks_missing_script_as_source_missing(self, temp_schedules_dir, tmp_path):
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        script_file = project_dir / "task.lm"
+        script_file.write_text("print('hi')")
+
+        job = ScheduleJob(
+            script="task.lm", cron="0 0 * * *",
+            schedule_id=generate_unique_id(),
+            project_root=project_dir,
+        )
+        job_id = save_job(job, "/bin/lamia")
+        assert len(list_jobs()) == 1
+
+        script_file.unlink()
+        jobs = list_jobs()
+        assert len(jobs) == 1
+        assert jobs[0]["id"] == job_id
+        assert jobs[0]["source_missing"] is True
+        assert jobs[0]["last_status"] == "SOURCE_MISSING"
+        assert (temp_schedules_dir / f"{job_id}.json").exists()
+
+    def test_keeps_entry_for_existing_script(self, temp_schedules_dir, tmp_path):
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        script_file = project_dir / "task.lm"
+        script_file.write_text("print('hi')")
+
+        job = ScheduleJob(
+            script="task.lm", cron="0 0 * * *",
+            schedule_id=generate_unique_id(),
+            project_root=project_dir,
+        )
+        save_job(job, "/bin/lamia")
+        jobs = list_jobs()
+        assert len(jobs) == 1
+
+    def test_cloud_backend_not_marked_source_missing(self, temp_schedules_dir, tmp_path):
+        cloud_job_file = temp_schedules_dir / "cloudid123456.json"
+        cloud_job_file.write_text(json.dumps({
+            "id": "cloudid123456",
+            "script": "nonexistent.lm",
+            "cron": "0 0 * * *",
+            "catch_up": True,
+            "project_root": "/nonexistent/path",
+            "lamia_bin": "/bin/lamia",
+            "backend": "cloud",
+        }))
+        jobs = list_jobs()
+        assert len(jobs) == 1
+        assert jobs[0]["backend"] == "cloud"
+        assert jobs[0]["source_missing"] is False
 
 
 class TestAtomicWrite:

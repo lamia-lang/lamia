@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -15,13 +16,23 @@ def isolated_registry(tmp_path, monkeypatch):
     monkeypatch.setattr(registry, "TRIGGERS_DIR", tmp_path)
 
 
+@pytest.fixture
+def fake_project(tmp_path):
+    """Create a fake project directory with a test script."""
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "test.lm").write_text("print('test')")
+    (proj / "t.lm").write_text("print('t')")
+    return proj
+
+
 class TestLocalTriggerProvider:
     def test_list_deployments_empty(self):
         provider = LocalTriggerProvider()
         assert provider.list_deployments() == []
 
-    def test_list_deployments_shows_active(self):
-        registry.save_active_trigger("test-ab12", "test.lm", "/proj", "reactive", os.getpid())
+    def test_list_deployments_shows_active(self, fake_project):
+        registry.save_active_trigger("test-ab12", "test.lm", str(fake_project), "reactive", os.getpid())
         provider = LocalTriggerProvider()
         result = provider.list_deployments()
         assert len(result) == 1
@@ -29,8 +40,8 @@ class TestLocalTriggerProvider:
         assert result[0]["last_status"] == "running"
         assert result[0]["location"] == "local"
 
-    def test_list_deployments_shows_stopped_for_dead_pid(self):
-        registry.save_active_trigger("test-ab12", "test.lm", "/proj", "reactive", 99999999)
+    def test_list_deployments_shows_stopped_for_dead_pid(self, fake_project):
+        registry.save_active_trigger("test-ab12", "test.lm", str(fake_project), "reactive", 99999999)
         provider = LocalTriggerProvider()
         result = provider.list_deployments()
         assert result[0]["last_status"] == "stopped"
@@ -50,8 +61,8 @@ class TestLocalTriggerProvider:
         assert count == 2
         assert provider.get_failed_events("test-ab12") == []
 
-    def test_clear_trigger_removes_from_registry(self):
-        registry.save_active_trigger("test-ab12", "test.lm", "/proj", "reactive", 99999999)
+    def test_clear_trigger_removes_from_registry(self, fake_project):
+        registry.save_active_trigger("test-ab12", "test.lm", str(fake_project), "reactive", 99999999)
         provider = LocalTriggerProvider()
         result = provider.clear_trigger("test-ab12")
         assert result["cleared"] is True
@@ -62,12 +73,12 @@ class TestLocalTriggerProvider:
         result = provider.clear_trigger("nope")
         assert result["cleared"] is False
 
-    def test_clear_trigger_reports_was_running_true_when_pid_alive(self):
+    def test_clear_trigger_reports_was_running_true_when_pid_alive(self, fake_project):
         """Issue #13: caller must be able to tell we actually killed a live process."""
         import subprocess
         proc = subprocess.Popen(["sleep", "30"])
         try:
-            registry.save_active_trigger("test-alive", "t.lm", "/proj", "reactive", proc.pid)
+            registry.save_active_trigger("test-alive", "t.lm", str(fake_project), "reactive", proc.pid)
             result = LocalTriggerProvider().clear_trigger("test-alive")
             assert result["cleared"] is True
             assert result["was_running"] is True
@@ -75,22 +86,20 @@ class TestLocalTriggerProvider:
             proc.kill()
             proc.wait(timeout=5)
 
-    def test_clear_trigger_reports_was_running_false_when_pid_dead(self):
+    def test_clear_trigger_reports_was_running_false_when_pid_dead(self, fake_project):
         """Issue #13: cleaning stale registry state must not look like we killed something."""
-        registry.save_active_trigger("test-dead", "t.lm", "/proj", "reactive", 99999999)
+        registry.save_active_trigger("test-dead", "t.lm", str(fake_project), "reactive", 99999999)
         result = LocalTriggerProvider().clear_trigger("test-dead")
         assert result["cleared"] is True
         assert result["was_running"] is False
 
-    def test_list_deployments_stopped_when_pid_reused_by_unrelated_process(self):
+    def test_list_deployments_stopped_when_pid_reused_by_unrelated_process(self, fake_project):
         """Issue #14: a live PID that was created AFTER the trigger's started_at is
         a reused PID (unrelated process) and must not read as 'running'."""
         import subprocess
-        # Start a fresh helper process now. The trigger will be registered with
-        # its PID but a started_at from the past.
         proc = subprocess.Popen(["sleep", "30"])
         try:
-            registry.save_active_trigger("test-reused", "t.lm", "/proj", "reactive", proc.pid)
+            registry.save_active_trigger("test-reused", "t.lm", str(fake_project), "reactive", proc.pid)
             # Rewrite started_at to 24h in the past — before the proc was created.
             from datetime import datetime, timedelta, timezone
             entries = registry.list_active_triggers()
@@ -109,6 +118,18 @@ class TestLocalTriggerProvider:
         finally:
             proc.kill()
             proc.wait(timeout=5)
+
+
+    def test_list_deployments_marks_stale_missing_script(self, fake_project):
+        """Trigger entries for deleted scripts remain visible as SOURCE_MISSING."""
+        registry.save_active_trigger("stale-1", "deleted.lm", str(fake_project), "reactive", 99999999)
+        provider = LocalTriggerProvider()
+        result = provider.list_deployments()
+        assert len(result) == 1
+        assert result[0]["name"] == "stale-1"
+        assert result[0]["source_missing"] is True
+        assert result[0]["last_status"] == "SOURCE_MISSING"
+        assert registry.get_active_trigger("stale-1") is not None
 
 
 class TestIsPidAlive:

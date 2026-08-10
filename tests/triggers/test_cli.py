@@ -4,6 +4,7 @@ Cloud-touching tests mock GCPTriggerProvider rather than hitting real GCP:
 this repo only needs to verify lamia calls lamia_cloud's interface correctly.
 """
 
+import argparse
 from unittest import mock
 
 import pytest
@@ -84,6 +85,29 @@ def test_handle_list_shows_local_trigger(monkeypatch, capsys):
     assert "pricing-a3f2" in out
     assert "local" in out
     assert "running" in out
+
+
+def test_handle_list_shows_source_missing_status(monkeypatch, capsys):
+    monkeypatch.setattr(LocalTriggerProvider, "list_deployments", lambda self: [
+        {
+            "name": "orphan-a1b2",
+            "script": "deleted.lm",
+            "trigger_method": "email_received",
+            "mode": "reactive",
+            "last_run": "never",
+            "last_status": "SOURCE_MISSING",
+            "failed_event_count": 0,
+            "location": "local",
+            "source_missing": True,
+        }
+    ])
+    monkeypatch.setattr(triggers_cli, "_try_cloud_list", lambda: [])
+
+    triggers_cli._handle_list()
+
+    out = capsys.readouterr().out
+    assert "SOURCE_MISSING" in out
+    assert "orphan-a1b2" in out
 
 
 def test_handle_list_prints_failed_event_count(monkeypatch, capsys):
@@ -217,6 +241,26 @@ def test_handle_clear_not_found(monkeypatch, capsys):
 
     assert exc.value.code == 1
     assert "cloud.project_id" in capsys.readouterr().err
+
+
+def test_handle_clear_orphaned(monkeypatch, capsys):
+    monkeypatch.setattr(LocalTriggerProvider, "list_deployments", lambda self: [
+        {
+            "name": "orph-1",
+            "script": "missing.lm",
+            "source_missing": True,
+        }
+    ])
+    monkeypatch.setattr(
+        LocalTriggerProvider,
+        "clear_trigger",
+        lambda self, name: {"cleared": True, "was_running": False},
+    )
+
+    triggers_cli._handle_clear(argparse.Namespace(id=None, orphaned=True))
+
+    out = capsys.readouterr().out
+    assert "Removed orphaned trigger" in out
 
 
 class TestHandleLogs:

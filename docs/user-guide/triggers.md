@@ -276,3 +276,15 @@ Cloud triggers require:
 
 - `pip install "lamia-lang[cloud]"`
 - `cloud.project_id` set in your project `config.yaml`
+
+## Resource Lifecycle
+
+If a script file is renamed, moved, or deleted, any trigger pointing to it
+shows `SOURCE_MISSING` in `lamia trigger list`. To clean up these entries:
+
+```bash
+lamia trigger clear --orphaned
+```
+
+Unused cloud resources (containers, images) are automatically removed after
+30 days of inactivity. Active schedules and triggers are never affected.

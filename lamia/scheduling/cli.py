@@ -15,6 +15,7 @@ Remote schedules use lamia-cloud (pip install "lamia-lang[cloud]").
 
 import argparse
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from lamia.id_gen import generate_unique_id
@@ -205,11 +206,15 @@ def _print_job(job: dict, last_run: dict | None = None) -> None:
     friendly = _cron_to_friendly(cron_val)
     print(f"    schedule: {friendly}  catch_up: {job.get('catch_up', True)}")
     print(f"    path: {job['project_root']}")
+    if job.get("source_missing"):
+        print("    source: MISSING (script file not found at path)")
 
     if last_run is None:
         last_run = job.get("last_run")
 
-    if last_run:
+    if job.get("source_missing"):
+        print("    last run: unavailable  status: SOURCE_MISSING")
+    elif last_run:
         status_icon = "ok" if last_run.get("success") else "FAILED"
         ts = last_run.get("timestamp", "unknown")
         error_msg = last_run.get("error", "")
@@ -245,6 +250,15 @@ def _handle_list(args: argparse.Namespace) -> None:
     if not local_jobs and not cloud_jobs:
         print("No scheduled jobs.")
 
+    try:
+        from lamia_cloud import get_deployer
+        deployer = get_deployer(Path.cwd())
+        cleaned = deployer.cleanup_stale_resources()
+        for name in cleaned:
+            print(f"  Cleaned up stale resource: {name}", file=sys.stderr)
+    except Exception:
+        pass
+
 
 def _cron_to_friendly(cron: str) -> str:
     """Convert cron expression back to a friendly name if it matches a preset."""
@@ -255,6 +269,17 @@ def _cron_to_friendly(cron: str) -> str:
 
 
 def _handle_remove(args: argparse.Namespace) -> None:
+    if getattr(args, "orphaned", False) is True:
+        if getattr(args, "id", None):
+            print("Error: provide either <id> or --orphaned, not both.", file=sys.stderr)
+            sys.exit(1)
+        _handle_remove_orphaned()
+        return
+
+    if not getattr(args, "id", None):
+        print("Error: provide a schedule id or use --orphaned.", file=sys.stderr)
+        sys.exit(1)
+
     job_id = args.id
     job_data = load_job(job_id)
 
@@ -274,6 +299,56 @@ def _handle_remove(args: argparse.Namespace) -> None:
     scheduler.uninstall(job)
     remove_job(job_id)
     print(f"Removed schedule: {job_data['script']} [{job_id}]")
+
+
+def _handle_remove_orphaned() -> None:
+    orphaned = [j for j in list_jobs() if j.get("source_missing")]
+    orphaned = [j for j in orphaned if j.get("backend", "local") != "cloud"]
+
+    safe = []
+    for j in orphaned:
+        last_run = j.get("last_run")
+        if last_run:
+            ts_str = last_run.get("timestamp", "")
+            if ts_str:
+                try:
+                    run_time = datetime.fromisoformat(ts_str)
+                    if datetime.now(timezone.utc) - run_time < timedelta(days=7):
+                        print(
+                            f"  Skipped: {j['script']} [{j['id']}] "
+                            f"(ran within 7 days — use 'remove <id>' instead)",
+                            file=sys.stderr,
+                        )
+                        continue
+                except ValueError:
+                    pass
+        safe.append(j)
+    orphaned = safe
+
+    if not orphaned:
+        print("No orphaned schedules found.")
+        return
+
+    removed = 0
+    for job_data in orphaned:
+        job_id = job_data["id"]
+        job = ScheduleJob(
+            script=job_data["script"],
+            cron=job_data["cron"],
+            schedule_id=job_id,
+            catch_up=job_data.get("catch_up", True),
+            project_root=Path(job_data["project_root"]),
+        )
+        try:
+            scheduler = _scheduler_for_job(job_data, Path(job_data["project_root"]))
+            scheduler.uninstall(job)
+        except Exception:
+            pass
+        if remove_job(job_id):
+            removed += 1
+            print(f"Removed orphaned schedule: {job_data['script']} [{job_id}]")
+
+    print(f"Removed {removed} orphaned schedule(s).")
 
 
 def _handle_update(args: argparse.Namespace) -> None:
@@ -470,7 +545,12 @@ def handle_schedule() -> None:
     subparsers.add_parser("list", help="List all scheduled jobs")
 
     remove_parser = subparsers.add_parser("remove", help="Remove a scheduled job")
-    remove_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")
+    remove_parser.add_argument("id", nargs="?", help="Job ID (from 'lamia schedule list')")
+    remove_parser.add_argument(
+        "--orphaned",
+        action="store_true",
+        help="Remove schedules whose source script file no longer exists",
+    )
 
     pause_parser = subparsers.add_parser("pause", help="Pause a scheduled job")
     pause_parser.add_argument("id", help="Job ID (from 'lamia schedule list')")

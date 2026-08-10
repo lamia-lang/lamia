@@ -117,6 +117,13 @@ def handle_remote_run(
     if logs_url:
         print(f"  Logs: {logs_url}", file=sys.stderr)
 
+    try:
+        cleaned = deployer.cleanup_stale_resources()
+        for name in cleaned:
+            print(f"  Cleaned up stale resource: {name}", file=sys.stderr)
+    except Exception:
+        pass
+
     if run_error:
         raise run_error
 

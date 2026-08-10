@@ -34,7 +34,12 @@ def handle_trigger() -> None:
     drain_parser.add_argument("id", help="Trigger id (from 'lamia trigger list')")
 
     clear_parser = subparsers.add_parser("clear", help="Stop and remove a trigger")
-    clear_parser.add_argument("id", help="Trigger id (from 'lamia trigger list')")
+    clear_parser.add_argument("id", nargs="?", help="Trigger id (from 'lamia trigger list')")
+    clear_parser.add_argument(
+        "--orphaned",
+        action="store_true",
+        help="Remove triggers whose source script file no longer exists",
+    )
 
     logs_parser = subparsers.add_parser("logs", help="View execution logs for a trigger")
     logs_parser.add_argument("id", help="Trigger id (from 'lamia trigger list')")
@@ -46,7 +51,7 @@ def handle_trigger() -> None:
     elif args.action == "drain":
         _handle_drain(args.id)
     elif args.action == "clear":
-        _handle_clear(args.id)
+        _handle_clear(args)
     elif args.action == "logs":
         _handle_logs(args)
     else:
@@ -90,6 +95,15 @@ def _handle_list(verbose: bool = False) -> None:
         if d.get("logs_url"):
             print(f"    logs: {d['logs_url']}")
         print()
+
+    try:
+        from lamia_cloud import get_deployer
+        deployer = get_deployer(Path.cwd())
+        cleaned = deployer.cleanup_stale_resources()
+        for name in cleaned:
+            print(f"  Cleaned up stale resource: {name}", file=sys.stderr)
+    except Exception:
+        pass
 
 
 def _try_cloud_list() -> list[dict]:
@@ -150,8 +164,23 @@ def _handle_drain(trigger_id: str) -> None:
     sys.exit(1)
 
 
-def _handle_clear(trigger_id: str) -> None:
+def _handle_clear(args: argparse.Namespace | str) -> None:
     """Stop and remove a trigger."""
+    if isinstance(args, str):
+        args = argparse.Namespace(id=args, orphaned=False)
+
+    if args.orphaned:
+        if args.id:
+            print("Error: provide either <id> or --orphaned, not both.", file=sys.stderr)
+            sys.exit(1)
+        _handle_clear_orphaned()
+        return
+
+    if not args.id:
+        print("Error: provide a trigger id or use --orphaned.", file=sys.stderr)
+        sys.exit(1)
+
+    trigger_id = args.id
     local_provider = LocalTriggerProvider()
     result = local_provider.clear_trigger(trigger_id)
 
@@ -177,6 +206,24 @@ def _handle_clear(trigger_id: str) -> None:
         file=sys.stderr,
     )
     sys.exit(1)
+
+
+def _handle_clear_orphaned() -> None:
+    local_provider = LocalTriggerProvider()
+    local_triggers = local_provider.list_deployments()
+    orphaned = [t for t in local_triggers if t.get("source_missing")]
+    if not orphaned:
+        print("No orphaned triggers found.")
+        return
+
+    removed = 0
+    for trigger in orphaned:
+        result = local_provider.clear_trigger(trigger["name"])
+        if result.get("cleared"):
+            removed += 1
+            print(f"Removed orphaned trigger: {trigger.get('script', '?')} [{trigger['name']}]")
+
+    print(f"Removed {removed} orphaned trigger(s).")
 
 
 def _try_get_cloud_provider():

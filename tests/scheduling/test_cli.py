@@ -124,6 +124,23 @@ class TestHandleList:
         assert "abc123" in captured.out
         assert "daily.lm" in captured.out
 
+    def test_list_shows_source_missing_status(self, mock_registry, capsys, monkeypatch):
+        monkeypatch.setattr("lamia.scheduling.cli.list_jobs", lambda: [
+            {
+                "id": "orph123",
+                "script": "deleted.lm",
+                "cron": "0 9 * * *",
+                "catch_up": True,
+                "project_root": "/home/user/proj",
+                "source_missing": True,
+            },
+        ])
+        args = MagicMock()
+        _handle_list(args)
+        captured = capsys.readouterr()
+        assert "SOURCE_MISSING" in captured.out
+        assert "source: MISSING" in captured.out
+
 
 class TestHandleRemove:
     def test_remove_existing_job(self, mock_scheduler, capsys, monkeypatch):
@@ -138,6 +155,7 @@ class TestHandleRemove:
 
         args = MagicMock()
         args.id = "abc123"
+        args.orphaned = False
         _handle_remove(args)
 
         mock_scheduler.uninstall.assert_called_once()
@@ -148,9 +166,31 @@ class TestHandleRemove:
         monkeypatch.setattr("lamia.scheduling.cli.load_job", lambda x: None)
         args = MagicMock()
         args.id = "nope"
+        args.orphaned = False
 
         with pytest.raises(SystemExit):
             _handle_remove(args)
+
+    def test_remove_orphaned(self, mock_scheduler, capsys, monkeypatch):
+        monkeypatch.setattr("lamia.scheduling.cli.list_jobs", lambda: [
+            {
+                "id": "orph-1",
+                "script": "missing.lm",
+                "cron": "0 9 * * *",
+                "catch_up": True,
+                "project_root": "/home/user/proj",
+                "source_missing": True,
+            }
+        ])
+        monkeypatch.setattr("lamia.scheduling.cli.remove_job", lambda x: True)
+        args = MagicMock()
+        args.id = None
+        args.orphaned = True
+
+        _handle_remove(args)
+
+        out = capsys.readouterr().out
+        assert "Removed orphaned schedule" in out
 
 
 class TestHandleUpdate:

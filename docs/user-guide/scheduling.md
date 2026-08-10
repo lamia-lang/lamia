@@ -219,6 +219,18 @@ Cloud jobs are guaranteed to run on time — no catch-up needed, no local machin
 Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package.  
 See the [lamia-cloud user guide](../advanced/lamia-cloud.md) for installation, one-time cloud runs, and scheduler setup.
 
+## Resource Lifecycle
+
+If a script file is renamed, moved, or deleted, any schedule pointing to it
+shows `SOURCE_MISSING` in `lamia schedule list`. To clean up these entries:
+
+```bash
+lamia schedule remove --orphaned
+```
+
+Unused cloud resources (containers, images) are automatically removed after
+30 days of inactivity. Active schedules and triggers are never affected.
+
 ## Troubleshooting
 
 - **Script not found**: If you moved the project after scheduling, the job will fail. Use `lamia schedule list` to see the stale path, then `remove` and `add` with the new location.

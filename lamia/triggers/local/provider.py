@@ -8,6 +8,7 @@ import os
 import signal
 import subprocess
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import List, Optional
 
 from lamia.triggers.local.registry import (
@@ -23,11 +24,22 @@ class LocalTriggerProvider:
     """Local trigger provider backed by filesystem state at ~/.lamia/triggers/."""
 
     def list_deployments(self) -> List[dict]:
-        """List all locally-active triggers."""
+        """List all locally-active triggers.
+
+        Marks entries whose script file no longer exists on disk as orphaned.
+        """
         entries = list_active_triggers()
         results = []
         for entry in entries:
             trigger_id = entry.get("id", "")
+            project_root = entry.get("project_root", "")
+            script = entry.get("script", "")
+
+            script_missing = False
+            if project_root and script:
+                script_path = Path(project_root) / script
+                script_missing = not script_path.exists()
+
             pid = entry.get("pid", 0)
             started_at_str = entry.get("started_at", "")
             is_alive = bool(pid) and _is_our_process(pid, started_at_str)
@@ -37,13 +49,14 @@ class LocalTriggerProvider:
 
             results.append({
                 "name": trigger_id,
-                "script": entry.get("script", "?"),
+                "script": script or "?",
                 "trigger_method": "",
                 "mode": entry.get("mode", "reactive"),
                 "last_run": entry.get("started_at", "never"),
-                "last_status": "running" if is_alive else "stopped",
+                "last_status": "SOURCE_MISSING" if script_missing else ("running" if is_alive else "stopped"),
                 "failed_event_count": len(failed_events),
                 "active_executions": len(executions),
+                "source_missing": script_missing,
                 "location": "local",
             })
         return results
