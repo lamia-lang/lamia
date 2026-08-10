@@ -286,9 +286,38 @@ def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_p
     assert all(c in "0123456789abcdef" for c in plan.name)
     assert plan.mode == "reactive"
     assert plan.stages == stages
+    assert plan.script_name == "task.lm"
 
     stderr = capsys.readouterr().err
     assert "Deployed: lamia-trigger-task" in stderr
+
+
+@pytest.mark.integration
+def test_deploy_trigger_same_script_same_name(monkeypatch, tmp_path):
+    """Deploying the same script from the same project twice must produce the same plan name."""
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    from lamia_cloud.types import TriggerStage
+    import lamia.cli.remote as remote
+
+    stages = [
+        TriggerStage(
+            stage_index=0,
+            trigger_method="email_received",
+            trigger_config={},
+            output_bindings=[],
+            script_source="",
+        )
+    ]
+
+    names = []
+    for _ in range(2):
+        mock_provider = mock.MagicMock()
+        mock_provider.deploy.return_value = "lamia-trigger-task"
+        monkeypatch.setattr(remote, "get_trigger_provider", lambda root: mock_provider)
+        remote._deploy_trigger("task.lm", tmp_path, stages)
+        names.append(mock_provider.deploy.call_args[0][0].name)
+
+    assert names[0] == names[1], "same script + same project must produce identical name"
 
 
 @pytest.mark.integration

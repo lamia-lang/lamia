@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-from lamia.id_gen import generate_unique_id
+from lamia.id_gen import generate_deterministic_id
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
 from lamia.triggers.extraction import extract_all_triggers
 from lamia.cli.script_analysis import analyze_script
@@ -135,8 +135,12 @@ def _deploy_trigger(
     project_root: Path,
     stages: list,
 ) -> None:
-    """Deploy always-reactive trigger infrastructure for a script with trigger.* calls."""
-    name = generate_unique_id()
+    """Deploy always-reactive trigger infrastructure for a script with trigger.* calls.
+
+    Uses a deterministic name so re-deploying the same script updates
+    existing cloud resources instead of creating duplicates.
+    """
+    name = generate_deterministic_id(script_name, str(project_root))
     capabilities = analyze_script(project_root / script_name)
 
     plan = TriggerDeploymentPlan(
@@ -144,6 +148,7 @@ def _deploy_trigger(
         stages=stages,
         capabilities=asdict(capabilities),
         mode="reactive",
+        script_name=script_name,
     )
 
     provider = get_trigger_provider(project_root)

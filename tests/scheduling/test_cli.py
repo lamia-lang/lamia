@@ -82,6 +82,35 @@ class TestHandleAdd:
         captured = capsys.readouterr()
         assert "Scheduled:" in captured.out
 
+    def test_add_same_script_twice_reuses_id(self, temp_project, mock_scheduler, mock_registry, capsys, monkeypatch):
+        """Running schedule add twice for the same script must update, not duplicate."""
+        project_dir, script = temp_project
+        existing = {
+            "id": "existingid123",
+            "script": "test_script.lm",
+            "cron": "0 9 * * *",
+            "catch_up": True,
+            "project_root": str(project_dir),
+            "backend": "local",
+        }
+        monkeypatch.setattr("lamia.scheduling.cli.find_job_by_script",
+                            lambda s, p: existing)
+
+        args = MagicMock()
+        args.script = str(script)
+        args.every = "day"
+        args.cron = None
+        args.no_catch_up = False
+        args.remote = False
+
+        _handle_add(args)
+
+        installed_job = mock_scheduler.install.call_args[0][0]
+        assert installed_job.schedule_id == "existingid123"
+        mock_scheduler.uninstall.assert_called_once()
+        captured = capsys.readouterr()
+        assert "existingid123" in captured.out
+
     def test_add_nonexistent_script_exits(self, tmp_path, capsys):
         args = MagicMock()
         args.script = str(tmp_path / "missing.lm")

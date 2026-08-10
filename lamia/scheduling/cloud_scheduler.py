@@ -9,7 +9,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-from lamia.id_gen import generate_unique_id
+from lamia.id_gen import generate_deterministic_id
 from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob
 from lamia.cli.script_analysis import analyze_script
 
@@ -105,7 +105,11 @@ def deploy_scheduled_trigger(
     cron: str,
     stages: list,
 ) -> None:
-    """Deploy employee-mode trigger: events accumulate, scheduler drains at cron time."""
+    """Deploy employee-mode trigger: events accumulate, scheduler drains at cron time.
+
+    Uses a deterministic name so re-deploying the same script updates
+    existing cloud resources instead of creating duplicates.
+    """
     if not LAMIA_CLOUD_AVAILABLE:
         print(
             "Error: trigger deployment requires the lamia-cloud package.\n"
@@ -114,7 +118,7 @@ def deploy_scheduled_trigger(
         )
         sys.exit(1)
 
-    name = generate_unique_id()
+    name = generate_deterministic_id(script_name, str(project_root))
     capabilities = analyze_script(project_root / script_name)
 
     plan = TriggerDeploymentPlan(
@@ -123,6 +127,7 @@ def deploy_scheduled_trigger(
         capabilities=asdict(capabilities),
         mode="scheduled",
         cron=cron,
+        script_name=script_name,
     )
 
     provider = get_trigger_provider(project_root)
