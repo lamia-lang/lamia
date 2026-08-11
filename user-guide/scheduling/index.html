@@ -2055,6 +2055,7 @@ Then create the schedule:</p>
 <p>Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (<code>list</code>, <code>update</code>, <code>remove</code>) automatically detect whether a job is local or cloud.</p>
 <p>Cloud scheduling requires the <a href="../../advanced/lamia-cloud/"><code>lamia-cloud</code></a> package.<br />
 See the <a href="../../advanced/lamia-cloud/">lamia-cloud user guide</a> for installation, one-time cloud runs, and scheduler setup.</p>
+<p>For team deployments via GitHub and CI, see <a href="../github-deployment/">GitHub Deployment</a>.</p>
 <h2 id="resource-lifecycle">Resource Lifecycle<a class="headerlink" href="#resource-lifecycle" title="Permanent link">&para;</a></h2>
 <p>If a script file is renamed, moved, or deleted, any schedule pointing to it
 shows <code>SOURCE_MISSING</code> in <code>lamia schedule list</code>. To clean up these entries:</p>
