@@ -623,8 +623,8 @@ class TestResolveDeployMode:
     def test_defaults_to_git_when_remote_exists(self, monkeypatch, tmp_path):
         import lamia.cli.remote as remote
         monkeypatch.setattr(
-            remote, "_detect_git_remote",
-            lambda root: "https://github.com/lamia-lang/lamia",
+            remote, "get_remote_origin",
+            lambda path: "https://github.com/lamia-lang/lamia",
         )
 
         mode, url = remote._resolve_deploy_mode(None, tmp_path)
@@ -633,7 +633,7 @@ class TestResolveDeployMode:
 
     def test_defaults_to_local_when_no_git(self, monkeypatch, tmp_path):
         import lamia.cli.remote as remote
-        monkeypatch.setattr(remote, "_detect_git_remote", lambda root: None)
+        monkeypatch.setattr(remote, "get_remote_origin", lambda path: None)
 
         mode, url = remote._resolve_deploy_mode(None, tmp_path)
         assert mode == "local"
@@ -642,8 +642,8 @@ class TestResolveDeployMode:
     def test_config_override_local_ignores_git(self, monkeypatch, tmp_path):
         import lamia.cli.remote as remote
         monkeypatch.setattr(
-            remote, "_detect_git_remote",
-            lambda root: "https://github.com/lamia-lang/lamia",
+            remote, "get_remote_origin",
+            lambda path: "https://github.com/lamia-lang/lamia",
         )
 
         config = {"cloud": {"deploy_mode": "local"}}
@@ -653,7 +653,7 @@ class TestResolveDeployMode:
 
     def test_config_git_without_remote_falls_back(self, monkeypatch, tmp_path, capsys):
         import lamia.cli.remote as remote
-        monkeypatch.setattr(remote, "_detect_git_remote", lambda root: None)
+        monkeypatch.setattr(remote, "get_remote_origin", lambda path: None)
 
         config = {"cloud": {"deploy_mode": "git"}}
         mode, url = remote._resolve_deploy_mode(config, tmp_path)
@@ -680,8 +680,8 @@ class TestHandleRemoteRunGitMode:
             remote, "analyze_script", lambda path: ScriptCapabilities(),
         )
         monkeypatch.setattr(
-            remote, "_detect_git_remote",
-            lambda root: "https://github.com/lamia-lang/lamia",
+            remote, "get_remote_origin",
+            lambda path: "https://github.com/lamia-lang/lamia",
         )
 
         with pytest.raises(SystemExit) as exc_info:
@@ -707,7 +707,7 @@ class TestHandleRemoteRunGitMode:
         monkeypatch.setattr(
             remote, "analyze_script", lambda path: ScriptCapabilities(),
         )
-        monkeypatch.setattr(remote, "_detect_git_remote", lambda root: None)
+        monkeypatch.setattr(remote, "get_remote_origin", lambda path: None)
 
         with pytest.raises(SystemExit) as exc_info:
             remote.handle_remote_run(

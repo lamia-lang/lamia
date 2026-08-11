@@ -1,12 +1,12 @@
 """Handle `lamia <script> --remote` — one-shot remote cloud execution."""
 
 import hashlib
-import subprocess
 import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
+from lamia.git import get_remote_origin
 from lamia.id_gen import generate_deterministic_id
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
 from lamia.triggers.extraction import extract_all_triggers
@@ -14,20 +14,6 @@ from lamia.cli.script_analysis import analyze_script
 from lamia_cloud import get_deployer, get_trigger_provider
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.types import TriggerDeploymentPlan
-
-
-def _detect_git_remote(project_root: Path) -> str | None:
-    """Return the git remote origin URL if this is a git repo, else None."""
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(project_root), "remote", "get-url", "origin"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
-    return None
 
 
 def _resolve_deploy_mode(
@@ -43,7 +29,7 @@ def _resolve_deploy_mode(
     if explicit_mode == "local":
         return "local", None
 
-    repo_url = _detect_git_remote(project_root)
+    repo_url = get_remote_origin(str(project_root))
 
     if explicit_mode == "git":
         if not repo_url:
