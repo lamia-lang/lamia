@@ -1,6 +1,7 @@
 """Handle `lamia <script> --remote` — one-shot remote cloud execution."""
 
 import hashlib
+import subprocess
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -13,6 +14,51 @@ from lamia.cli.script_analysis import analyze_script
 from lamia_cloud import get_deployer, get_trigger_provider
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.types import TriggerDeploymentPlan
+
+
+def _detect_git_remote(project_root: Path) -> str | None:
+    """Return the git remote origin URL if this is a git repo, else None."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_root), "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return None
+
+
+def _resolve_deploy_mode(
+    config: Optional[dict], project_root: Path,
+) -> tuple[str, str | None]:
+    """Determine deploy_mode and repo_url from config and git state.
+
+    Returns (deploy_mode, repo_url).
+    """
+    cloud_cfg = (config or {}).get("cloud", {})
+    explicit_mode = cloud_cfg.get("deploy_mode")
+
+    if explicit_mode == "local":
+        return "local", None
+
+    repo_url = _detect_git_remote(project_root)
+
+    if explicit_mode == "git":
+        if not repo_url:
+            print(
+                "Warning: deploy_mode is 'git' but no git remote found. "
+                "Falling back to local mode.",
+                file=sys.stderr,
+            )
+            return "local", None
+        return "git", repo_url
+
+    if repo_url:
+        return "git", repo_url
+
+    return "local", None
 
 
 def handle_remote_run(
@@ -41,10 +87,11 @@ def handle_remote_run(
         _deploy_trigger(script_name, root, stages)
         return
 
+    deploy_mode, repo_url = _resolve_deploy_mode(config, root)
     run_name = _run_service_name(script_name, str(root))
     target = deployer.deployment_name(run_name)
 
-    print(f"Remote execution: {script_name}", file=sys.stderr)
+    print(f"Remote execution: {script_name} (source: {deploy_mode})", file=sys.stderr)
 
     capabilities = analyze_script(root / script_name)
     try:
@@ -83,6 +130,8 @@ def handle_remote_run(
             name=run_name,
             capabilities=asdict(capabilities),
             uses_files=uses_files,
+            deploy_mode=deploy_mode,
+            repo_url=repo_url,
         )
         deployer.set_deployed_source_hash(target, source_hash)
 

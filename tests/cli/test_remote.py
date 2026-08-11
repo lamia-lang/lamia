@@ -611,3 +611,110 @@ def test_handle_remote_run_propagates_ensure_apis_enabled_failure(monkeypatch, t
         )
 
     deployer.deploy.assert_not_called()
+
+
+class TestResolveDeployMode:
+    """_resolve_deploy_mode picks the right source mode and repo URL."""
+
+    @pytest.fixture(autouse=True)
+    def _require_cloud(self):
+        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+
+    def test_defaults_to_git_when_remote_exists(self, monkeypatch, tmp_path):
+        import lamia.cli.remote as remote
+        monkeypatch.setattr(
+            remote, "_detect_git_remote",
+            lambda root: "https://github.com/lamia-lang/lamia",
+        )
+
+        mode, url = remote._resolve_deploy_mode(None, tmp_path)
+        assert mode == "git"
+        assert url == "https://github.com/lamia-lang/lamia"
+
+    def test_defaults_to_local_when_no_git(self, monkeypatch, tmp_path):
+        import lamia.cli.remote as remote
+        monkeypatch.setattr(remote, "_detect_git_remote", lambda root: None)
+
+        mode, url = remote._resolve_deploy_mode(None, tmp_path)
+        assert mode == "local"
+        assert url is None
+
+    def test_config_override_local_ignores_git(self, monkeypatch, tmp_path):
+        import lamia.cli.remote as remote
+        monkeypatch.setattr(
+            remote, "_detect_git_remote",
+            lambda root: "https://github.com/lamia-lang/lamia",
+        )
+
+        config = {"cloud": {"deploy_mode": "local"}}
+        mode, url = remote._resolve_deploy_mode(config, tmp_path)
+        assert mode == "local"
+        assert url is None
+
+    def test_config_git_without_remote_falls_back(self, monkeypatch, tmp_path, capsys):
+        import lamia.cli.remote as remote
+        monkeypatch.setattr(remote, "_detect_git_remote", lambda root: None)
+
+        config = {"cloud": {"deploy_mode": "git"}}
+        mode, url = remote._resolve_deploy_mode(config, tmp_path)
+        assert mode == "local"
+        assert url is None
+        assert "Falling back to local" in capsys.readouterr().err
+
+
+@pytest.mark.integration
+class TestHandleRemoteRunGitMode:
+    """handle_remote_run passes deploy_mode and repo_url through to deployer."""
+
+    def test_git_mode_passes_repo_url_to_deploy(self, monkeypatch, tmp_path):
+        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+        import lamia.cli.remote as remote
+
+        _write_script(tmp_path, "task.lm", 'def run():\n    return 1\n')
+
+        deployer = _make_mock_deployer()
+        monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
+        monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
+        monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
+        monkeypatch.setattr(
+            remote, "analyze_script", lambda path: ScriptCapabilities(),
+        )
+        monkeypatch.setattr(
+            remote, "_detect_git_remote",
+            lambda root: "https://github.com/lamia-lang/lamia",
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            remote.handle_remote_run(
+                "task.lm", str(tmp_path), None, verbose=False,
+            )
+
+        assert exc_info.value.code == 0
+        deploy_kwargs = deployer.deploy.call_args.kwargs
+        assert deploy_kwargs["deploy_mode"] == "git"
+        assert deploy_kwargs["repo_url"] == "https://github.com/lamia-lang/lamia"
+
+    def test_local_mode_no_repo_url(self, monkeypatch, tmp_path):
+        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+        import lamia.cli.remote as remote
+
+        _write_script(tmp_path, "task.lm", 'def run():\n    return 1\n')
+
+        deployer = _make_mock_deployer()
+        monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
+        monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
+        monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
+        monkeypatch.setattr(
+            remote, "analyze_script", lambda path: ScriptCapabilities(),
+        )
+        monkeypatch.setattr(remote, "_detect_git_remote", lambda root: None)
+
+        with pytest.raises(SystemExit) as exc_info:
+            remote.handle_remote_run(
+                "task.lm", str(tmp_path), None, verbose=False,
+            )
+
+        assert exc_info.value.code == 0
+        deploy_kwargs = deployer.deploy.call_args.kwargs
+        assert deploy_kwargs["deploy_mode"] == "local"
+        assert deploy_kwargs["repo_url"] is None
