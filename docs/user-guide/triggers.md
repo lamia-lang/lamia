@@ -277,6 +277,8 @@ Cloud triggers require:
 - `pip install "lamia-lang[cloud]"`
 - `cloud.project_id` set in your project `config.yaml`
 
+For team deployments via GitHub and CI, see [GitHub Deployment](github-deployment.md).
+
 ## Resource Lifecycle
 
 If a script file is renamed, moved, or deleted, any trigger pointing to it

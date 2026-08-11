@@ -688,6 +688,11 @@ def main():
         handle_trigger()
         return
 
+    if len(sys.argv) > 1 and sys.argv[1] == "cloud":
+        from lamia.cli.cloud import handle_cloud
+        handle_cloud()
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] == "models":
         _handle_models_command()
         return
@@ -761,6 +766,7 @@ Subcommands:
   init          Initialize a new Lamia project
   models        List available models
   schedule      Manage scheduled script execution (add, list, remove)
+  cloud         Manage cloud provider integrations (connect, status)
   eval          Evaluate model quality
   inspect       Inspect .lm/.hu files
   debug         Debug a script with breakpoints

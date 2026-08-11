@@ -219,6 +219,8 @@ Cloud jobs are guaranteed to run on time — no catch-up needed, no local machin
 Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package.  
 See the [lamia-cloud user guide](../advanced/lamia-cloud.md) for installation, one-time cloud runs, and scheduler setup.
 
+For team deployments via GitHub and CI, see [GitHub Deployment](github-deployment.md).
+
 ## Resource Lifecycle
 
 If a script file is renamed, moved, or deleted, any schedule pointing to it
