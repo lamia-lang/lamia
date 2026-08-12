@@ -2,50 +2,56 @@
 
 Deploy lamia scripts from a git repository. Containers are built from committed source instead of local files, so every team member and CI pipeline produces identical deployments.
 
+## Prerequisites
+
+- `pip install lamia-lang[cloud]`
+- A `config.yaml` with a `cloud` section (`provider`, `project_id`)
+- Cloud provider CLI installed and authenticated (admin only, one-time setup)
+
+Developers who only push code do not need cloud credentials.
+
 ## Connecting Your Repository
 
-Before using git mode, connect your repository with Lamia Cloud. This is a **one-time setup** performed by a project admin -- once connected, all team members can deploy without running this step again.
+One administrator runs this once per repository:
 
 ```bash
 lamia cloud connect
 ```
 
-Run this from inside your git project. Lamia detects the remote origin and sets up the connection with your cloud provider. A browser window opens for authorization -- install the provider's app on your repository or organization, then return to the terminal.
+This authorizes the repository to deploy to the cloud project configured in `config.yaml`. During connect, Lamia opens an interactive GitHub device authorization flow and configures required repository CI variables automatically. Do not store CI auth fields in `config.yaml`.
 
-Verify the connection:
+The Lamia GitHub App must be installed on the repository (or its organization) with read/write access to Actions variables. If connect reports that variables could not be written, install the app for the repository and rerun `lamia cloud connect`.
+
+All team members and CI pipelines can deploy after this step without any additional cloud setup.
+
+By default, only the `main` branch is authorized for CI deployments. To use a different branch:
 
 ```bash
-lamia cloud status
+lamia cloud connect --branch master
 ```
 
-Any team member can run `lamia cloud status` to check whether the repository is connected to Lamia Cloud. The connection is stored server-side by the cloud provider, so it works from any machine with access to the same cloud project.
+### Verifying and Revoking
 
-No tokens or credentials are stored in your project files. Authentication is handled by the cloud provider's app and managed server-side.
+```bash
+lamia cloud status       # check connection
+lamia cloud disconnect   # revoke access
+```
 
-## How It Works
+## Deploying
 
-When you run `lamia ... --remote` inside a connected git repository, lamia automatically uses git mode:
+When you run `lamia ... --remote` inside a connected repository, lamia uses git mode automatically:
 
 ```bash
 lamia schedule add daily_task.lm --every day --remote
 ```
 
-In git mode:
+The cloud provider clones the latest source from your repository and builds the container. Re-running the same command updates the existing deployment in place (idempotent).
 
-1. Lamia generates a Dockerfile and requirements.txt (same as local mode).
-2. Only the Dockerfile and requirements.txt are uploaded -- no project files.
-3. The cloud provider clones the latest source from your repository and builds the container.
-4. The container is deployed as a cloud job.
-
-The Dockerfile is identical in both modes. The only difference is where the project files come from: a local tarball or a git clone.
-
-### Deterministic IDs
-
-Resource IDs are derived from the git remote URL, not the local checkout path. This means a developer deploying from `/Users/sergey/projects/myapp` and CI deploying from `/home/runner/work/myapp/myapp` both produce the same cloud resource name. Re-deploying updates the existing resource instead of creating a duplicate.
+Resource IDs are derived from the git remote URL, not your local checkout path. Different machines deploying the same repository produce the same cloud resource.
 
 ### Forcing Local Mode
 
-To deploy from local files even inside a git repo (for example, to test uncommitted changes), set `deploy_mode` in your `config.yaml`:
+To deploy uncommitted changes for testing:
 
 ```yaml
 cloud:
@@ -55,21 +61,17 @@ cloud:
 
 ### Private Repositories
 
-Private repositories work after `lamia cloud connect`. The cloud provider's app is installed on the repository and has read access for cloning. No SSH keys or personal tokens are needed.
+Private repositories work after `lamia cloud connect`. The cloud provider's app is installed on the repository with read access for cloning. No SSH keys or personal tokens are needed.
 
 ## CI Integration
 
-Use a GitHub Actions workflow to redeploy whenever scripts change:
+Add a GitHub Actions workflow to redeploy on push:
 
 ```yaml
 name: Deploy Lamia Scripts
 on:
   push:
     branches: [main]
-    paths:
-      - '**/*.lm'
-      - 'requirements.txt'
-      - 'config.yaml'
 
 jobs:
   deploy:
@@ -77,55 +79,94 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      LAMIA_CONNECTED_REPO: ${{ vars.LAMIA_CONNECTED_REPO }}
+      LAMIA_CONNECTION_ID: ${{ vars.LAMIA_CONNECTION_ID }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Authenticate to cloud provider
-        # Use your provider's authentication action.
-        # Example for GCP with Workload Identity Federation:
-        # uses: google-github-actions/auth@v2
-        # with:
-        #   workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-        #   service_account: ${{ vars.SERVICE_ACCOUNT }}
-
-      - name: Install lamia
-        run: pip install "lamia-lang[cloud]==${{ vars.LAMIA_VERSION }}"
-
-      - name: Deploy schedules
-        run: |
-          lamia schedule add daily_task.lm --every day --remote
-          lamia schedule add weekly_report.lm --cron "0 9 * * 1" --remote
-
-      - name: Deploy triggers
-        run: |
-          lamia email_handler.lm --remote
+      - run: pip install "lamia-lang[cloud]==${{ vars.LAMIA_VERSION }}"
+      - run: lamia schedule add daily_task.lm --every day --remote
 ```
 
-### Key Points
+For a monorepo, add a `paths` filter:
 
-- **No Docker required** in CI. The cloud provider builds the container.
-- **No tokens in config files.** CI authenticates via your provider's identity federation. The repository connection (set up via `lamia cloud connect` by a project admin) handles source access.
-- **Pin the lamia version.** Store the version in a CI variable (`vars.LAMIA_VERSION`) and update it deliberately.
-- **Path filtering.** The `paths` filter avoids redeployments when only documentation or tests change.
-- **Same commands as local.** CI runs the exact same lamia commands a developer runs on their machine.
-- **`lamia cloud connect` is not needed in CI.** The connection is already established by the admin. CI only needs cloud authentication (e.g., Workload Identity Federation) and `lamia` installed.
+```yaml
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'my_project/**'
+```
+
+Keep the same job permissions in monorepo workflows:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+```
+
+The `permissions: id-token: write` line is required for CI authentication. If GitHub authorization is interrupted during `lamia cloud connect`, rerun `lamia cloud connect` to complete variable setup.
+
+### CI Secrets
+
+Use repository secrets for runtime API keys and pass them through workflow environment variables:
+
+```yaml
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+Lamia reads these values from process environment in CI. For local development, Lamia continues to read shell env, project `.env`, and global `~/.lamia/.env`.
+
+Pin `lamia-lang[cloud]` to a specific version in CI and update deliberately.
+
+## Security
+
+### General CI/CD Security
+
+These practices apply to any language or project using CI/CD — they are not specific to lamia.
+
+**Protect the main branch.** The main branch is the deployment gate. Code merged to main can be deployed to production. Use branch protection rules to require code reviews before merging.
+
+**Open-source projects require extra vigilance.** Anyone can submit a pull request. Maintainers must review code carefully before merging — a malicious contribution that reaches main will be deployed by CI. Enable required reviews from code owners and use GitHub's merge queue for automated checks before merge.
+
+**Private repositories are simpler but not risk-free.** Access is limited to collaborators, but credential leaks and compromised accounts remain threats. Use minimal repository permissions and audit collaborator access regularly.
+
+### How Lamia CI Security Works
+
+- **No static credentials.** CI authentication uses short-lived tokens that expire within minutes. No long-lived keys or secrets are stored anywhere.
+- **Repository-scoped trust.** Each repository is authorized individually via `lamia cloud connect`. Only the specific repository (and branch) authorized by the admin can authenticate.
+- **Branch restriction.** Only the branch specified during `lamia cloud connect` (default: `main`) can deploy from CI. Feature branches, forks, and pull requests cannot authenticate. Re-running `lamia cloud connect --branch <name>` on an already-connected repository rewrites the restriction to the new branch.
+- **Per-repository isolation.** Each connected repository gets its own credentials and permissions. A compromised repository cannot affect other repositories in the same cloud project.
+- **Privilege separation.** CI deployments run with deploy permissions. Deployed scripts run with minimal permissions (only what the script needs, such as model access). Deployed code cannot redeploy or modify infrastructure.
+- **Mandatory admin setup.** CI cannot deploy without a prior `lamia cloud connect`. There is no way for a repository to self-authorize.
+- **Fork protection.** Fork pull requests cannot obtain deployment credentials. GitHub does not grant identity tokens to fork PRs by default, and the cloud trust is scoped to the exact repository.
+
+### Workflow Trigger Safety
+
+Lamia only authenticates for events that run code already merged into the deploy branch:
+
+| Event | CI auth |
+|---|---|
+| `push`, `workflow_dispatch`, `schedule`, `release` | Allowed |
+| everything else | Refused |
+
+Anything outside that list is rejected, so newly introduced GitHub trigger types are denied by default rather than silently permitted.
+
+The notable rejections are `pull_request_target` and `workflow_run`, which run in the base repository's security context while being triggered by an outside contributor — a fork PR could otherwise reach production credentials. `pull_request` is refused as well: same-repo PRs carry the repository's identity and would let unreviewed code deploy.
+
+This check is defense-in-depth and produces a clear error message. The binding restriction is the cloud-side trust condition, which accepts only the exact repository and branch regardless of event type.
 
 ## Updating Scripts
 
-After editing a `.lm` script, run the same command again:
+Run the same command again:
 
 ```bash
 lamia schedule add daily_task.lm --every day --remote
 ```
 
-The command is idempotent -- the same script in the same repository always maps to the same cloud resource. The container is rebuilt with the latest source and the schedule is updated in place.
+The command is idempotent. The same script in the same repository maps to the same cloud resource.
 
-For **local schedules**, no redeployment is needed. The schedule references the script file on disk; editing the file is enough.
-
-## Version Management
-
-- **CI**: pin `lamia-lang[cloud]` to a specific version.
-- **Local development**: use whatever version is installed.
-- **Cloud labels**: each deployed container is tagged with the lamia version that built it.
-
-If a CI deploy and a local deploy use different lamia versions, the source hash check triggers a rebuild. The container always reflects the last person (or CI run) that deployed it.
+For local schedules, no redeployment is needed. The schedule references the script file on disk.
