@@ -80,13 +80,14 @@ jobs:
       id-token: write
       contents: read
     env:
-      LAMIA_CONNECTED_REPO: ${{ vars.LAMIA_CONNECTED_REPO }}
       LAMIA_CONNECTION_ID: ${{ vars.LAMIA_CONNECTION_ID }}
     steps:
       - uses: actions/checkout@v4
-      - run: pip install "lamia-lang[cloud]==${{ vars.LAMIA_VERSION }}"
+      - run: pip install "lamia-lang[cloud]"
       - run: lamia schedule add daily_task.lm --every day --remote
 ```
+
+`lamia cloud connect` already stored `LAMIA_CONNECTION_ID` as a repository variable, so there is nothing to copy or paste. The `env:` line exists only because GitHub Actions does not expose repository variables to the job automatically — a variable is readable by the process only when the workflow references it through `vars`. Which repository is being deployed comes from the runner itself, so it needs no variable at all.
 
 For a monorepo, add a `paths` filter:
 
@@ -120,7 +121,13 @@ env:
 
 Lamia reads these values from process environment in CI. For local development, Lamia continues to read shell env, project `.env`, and global `~/.lamia/.env`.
 
-Pin `lamia-lang[cloud]` to a specific version in CI and update deliberately.
+The example above installs the latest release, so CI picks up fixes without any maintenance. If you would rather a lamia release never change your deploys until you say so, pin the version explicitly:
+
+```yaml
+      - run: pip install "lamia-lang[cloud]==1.4.0"
+```
+
+Pinning is the safer default for production deploys; using latest is fine while iterating.
 
 ## Security
 

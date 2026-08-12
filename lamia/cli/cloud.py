@@ -63,11 +63,11 @@ def handle_cloud() -> None:
         sys.exit(1)
 
 
-def _get_deployer(project_root: Path):
-    """Load a CloudDeployer for the project. Exits on failure."""
+def _get_connector(project_root: Path):
+    """Load a RepositoryConnector for the project. Exits on failure."""
     try:
-        from lamia_cloud import get_deployer
-        return get_deployer(project_root)
+        from lamia_cloud import get_connector
+        return get_connector(project_root)
     except ImportError:
         print(
             "lamia-cloud is not installed. Install it with:\n"
@@ -95,11 +95,11 @@ def _cloud_connect(args) -> None:
     identity = canonical_remote_identity(repo_url)
     print(f"Detected repository: {identity or repo_url}")
 
-    deployer = _get_deployer(root)
+    connector = _get_connector(root)
     print("Connecting to cloud provider...")
 
     try:
-        result = deployer.connect_repository(repo_url, branch=branch)
+        result = connector.connect_repository(repo_url, branch=branch)
     except Exception as exc:
         print(f"Connection failed: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -151,7 +151,6 @@ def _cloud_connect(args) -> None:
         "        id-token: write\n"
         "        contents: read\n"
         "      env:\n"
-        "        LAMIA_CONNECTED_REPO: ${{ vars.LAMIA_CONNECTED_REPO }}\n"
         "        LAMIA_CONNECTION_ID: ${{ vars.LAMIA_CONNECTION_ID }}\n"
         "      steps:\n"
         "        - uses: actions/checkout@v4\n"
@@ -159,8 +158,9 @@ def _cloud_connect(args) -> None:
         "        - run: lamia schedule add main.lm --every day --remote"
     )
     print(
-        "\nSecurity: use 'push' trigger only. Never use "
-        "'pull_request_target'."
+        "\nLAMIA_CONNECTION_ID is already stored as a repository variable; "
+        "the workflow only references it.\n"
+        "Security: use 'push' trigger only. Never use 'pull_request_target'."
     )
 
 
@@ -172,11 +172,11 @@ def _cloud_disconnect(args) -> None:
         sys.exit(1)
 
     identity = canonical_remote_identity(repo_url)
-    deployer = _get_deployer(root)
+    connector = _get_connector(root)
 
     print(f"Disconnecting {identity or repo_url}...")
     try:
-        result = deployer.disconnect_repository(repo_url)
+        result = connector.disconnect_repository(repo_url)
     except Exception as exc:
         print(f"Disconnect failed: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -195,10 +195,10 @@ def _cloud_status(args) -> None:
         sys.exit(1)
 
     identity = canonical_remote_identity(repo_url)
-    deployer = _get_deployer(root)
+    connector = _get_connector(root)
 
     try:
-        connected = deployer.is_repository_connected(repo_url)
+        connected = connector.is_repository_connected(repo_url)
     except Exception as exc:
         print(f"Status check failed: {exc}", file=sys.stderr)
         sys.exit(1)

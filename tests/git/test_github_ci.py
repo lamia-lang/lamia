@@ -104,10 +104,12 @@ class TestUpsertRepoVariable:
     def test_missing_installation_gets_actionable_error(self, calls, code):
         calls.outcomes.append(http_error(code))
 
-        with pytest.raises(RuntimeError, match="may not be installed"):
+        with pytest.raises(RuntimeError, match="is not installed") as exc_info:
             github_ci._upsert_repo_variable(
                 token="t", owner="acme", repo="widgets", name="V", value="1",
             )
+
+        assert github_ci._LAMIA_APP_INSTALL_URL in str(exc_info.value)
 
     def test_other_http_errors_propagate(self, calls):
         calls.outcomes.append(http_error(500))
@@ -147,7 +149,7 @@ class TestGetRepoVariable:
 
 
 class TestSetRepositoryCiVariables:
-    def test_writes_and_verifies_both_variables(self, monkeypatch):
+    def test_writes_only_the_connection_variable(self, monkeypatch):
         writes = {}
         monkeypatch.setattr(github_ci, "_device_flow_token", lambda: "tok")
         monkeypatch.setattr(
@@ -164,10 +166,7 @@ class TestSetRepositoryCiVariables:
             connection_id="v1-123456-abc123def456",
         )
 
-        assert writes == {
-            "LAMIA_CONNECTED_REPO": "https://github.com/acme/widgets.git",
-            "LAMIA_CONNECTION_ID": "v1-123456-abc123def456",
-        }
+        assert writes == {"LAMIA_CONNECTION_ID": "v1-123456-abc123def456"}
 
     def test_readback_mismatch_fails(self, monkeypatch):
         monkeypatch.setattr(github_ci, "_device_flow_token", lambda: "tok")

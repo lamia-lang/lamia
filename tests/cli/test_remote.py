@@ -732,14 +732,44 @@ class TestCiAuthMandatoryConnect:
         import lamia.cli.remote as remote
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
         monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+        monkeypatch.delenv("LAMIA_CONNECTION_ID", raising=False)
 
         with pytest.raises(SystemExit) as exc_info:
             remote._setup_ci_auth_if_needed({"cloud": {"project_id": "x"}})
 
         assert exc_info.value.code == 1
         stderr = capsys.readouterr().err
-        assert "LAMIA_CONNECTED_REPO" in stderr
+        assert "LAMIA_CONNECTION_ID" in stderr
+
+    def test_connection_id_from_another_repo_rejected(self, monkeypatch, capsys):
+        """A connection ID copied from a different repository must not work."""
+        import lamia.cli.remote as remote
+
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
+        monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-ac0d478df1c7")
+
+        with pytest.raises(SystemExit) as exc_info:
+            remote._setup_ci_auth_if_needed({"cloud": {"project_id": "proj"}})
+
+        assert exc_info.value.code == 1
+        assert "different repository" in capsys.readouterr().err
+
+    def test_missing_github_repository_rejected(self, monkeypatch, capsys):
+        import lamia.cli.remote as remote
+
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+
+        with pytest.raises(SystemExit) as exc_info:
+            remote._setup_ci_auth_if_needed({"cloud": {"project_id": "x"}})
+
+        assert exc_info.value.code == 1
+        assert "GITHUB_REPOSITORY" in capsys.readouterr().err
 
     def test_ci_fails_fast_with_none_config(self, monkeypatch, capsys):
         import lamia.cli.remote as remote
@@ -790,8 +820,8 @@ class TestCiAuthEventGuard:
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.setenv("GITHUB_EVENT_NAME", event)
-        monkeypatch.setenv("LAMIA_CONNECTED_REPO", "https://github.com/acme/widgets.git")
-        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-abc123def456")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
+        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
 
         with pytest.raises(SystemExit) as exc_info:
             remote._setup_ci_auth_if_needed({"cloud": {"project_id": "proj"}})
@@ -809,8 +839,8 @@ class TestCiAuthEventGuard:
             "https://vstoken.actions.githubusercontent.com/token",
         )
         monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ghs_fake")
-        monkeypatch.setenv("LAMIA_CONNECTED_REPO", "https://github.com/acme/widgets.git")
-        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-abc123def456")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
+        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
             remote, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
@@ -823,7 +853,7 @@ class TestCiAuthEventGuard:
 
 @pytest.mark.integration
 class TestCiAuthRepoValidation:
-    """Workspace git remote must match LAMIA_CONNECTED_REPO."""
+    """Workspace git remote must match the repository being built."""
 
     @pytest.fixture(autouse=True)
     def _require_cloud(self):
@@ -834,8 +864,8 @@ class TestCiAuthRepoValidation:
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
-        monkeypatch.setenv("LAMIA_CONNECTED_REPO", "https://github.com/acme/widgets.git")
-        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-abc123def456")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
+        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
             remote, "get_remote_origin",
             lambda path: "https://github.com/attacker/malware.git",
@@ -858,8 +888,8 @@ class TestCiAuthRepoValidation:
             "https://vstoken.actions.githubusercontent.com/token",
         )
         monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ghs_fake")
-        monkeypatch.setenv("LAMIA_CONNECTED_REPO", "https://github.com/acme/widgets.git")
-        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-abc123def456")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
+        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
             remote, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
@@ -886,8 +916,8 @@ class TestCiAuthEnvVarSpoofing:
         monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
         monkeypatch.delenv("ACTIONS_ID_TOKEN_REQUEST_URL", raising=False)
         monkeypatch.delenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", raising=False)
-        monkeypatch.setenv("LAMIA_CONNECTED_REPO", "https://github.com/acme/widgets.git")
-        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-abc123def456")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
+        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
             remote, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
@@ -933,8 +963,8 @@ class TestCiCredentialConfig:
             "https://vstoken.actions.githubusercontent.com/token",
         )
         monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ghs_fake_token")
-        monkeypatch.setenv("LAMIA_CONNECTED_REPO", "https://github.com/acme/widgets.git")
-        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-abc123def456")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
+        monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
             remote, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
@@ -949,9 +979,9 @@ class TestCiCredentialConfig:
         cred = json.loads(Path(cred_path).read_text())
         assert cred["type"] == "external_account"
         assert "lamia-github-pool" in cred["audience"]
-        assert "lamia-gh-abc123def456" in cred["audience"]
+        assert "lamia-gh-f60ecdb16e5e" in cred["audience"]
         assert cred["token_url"] == "https://sts.googleapis.com/v1/token"
-        assert "lm-ci-abc123def456" in cred["service_account_impersonation_url"]
+        assert "lm-ci-f60ecdb16e5e" in cred["service_account_impersonation_url"]
         assert "ghs_fake_token" in cred["credential_source"]["headers"]["Authorization"]
 
         mode = stat.S_IMODE(os.stat(cred_path).st_mode)

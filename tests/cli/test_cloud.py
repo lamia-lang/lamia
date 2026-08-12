@@ -10,24 +10,24 @@ import yaml
 
 @pytest.fixture
 def mock_deployer():
-    deployer = mock.MagicMock()
-    deployer.connect_repository.return_value = {
+    connector = mock.MagicMock()
+    connector.connect_repository.return_value = {
         "connected": True,
         "message": "Connected.",
         "connection_id": "v1-123456-abc123def456",
         "branch": "main",
     }
-    deployer.is_repository_connected.return_value = True
-    deployer.disconnect_repository.return_value = {
+    connector.is_repository_connected.return_value = True
+    connector.disconnect_repository.return_value = {
         "disconnected": True,
         "deleted": ["WIF provider: lamia-gh-lamia-lang-lamia"],
     }
-    return deployer
+    return connector
 
 
 @pytest.fixture
 def _stub_cloud(monkeypatch, mock_deployer):
-    """Patch git detection and deployer factory for all cloud CLI tests."""
+    """Patch git detection and connector factory for all cloud CLI tests."""
     import lamia.cli.cloud as cloud_mod
 
     monkeypatch.setattr(
@@ -35,7 +35,7 @@ def _stub_cloud(monkeypatch, mock_deployer):
         lambda path: "https://github.com/lamia-lang/lamia.git",
     )
     monkeypatch.setattr(
-        cloud_mod, "_get_deployer",
+        cloud_mod, "_get_connector",
         lambda root: mock_deployer,
     )
     monkeypatch.setattr(

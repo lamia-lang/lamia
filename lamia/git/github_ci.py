@@ -14,8 +14,10 @@ _GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code"
 _GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 _GITHUB_API_BASE = "https://api.github.com"
 
-# Client IDs are public identifiers, not secrets: the device flow authenticates
-# the user, not the client. Overridable so forks can point at their own app.
+_LAMIA_APP_SLUG = "lamia-cloud-connect"
+_LAMIA_APP_INSTALL_URL = f"https://github.com/apps/{_LAMIA_APP_SLUG}/installations/new"
+
+# Overridden by LAMIA_GITHUB_OAUTH_CLIENT_ID to target a different app.
 _DEFAULT_CLIENT_ID = "Iv23liWCpxdsyPLeeOzx"
 
 
@@ -32,15 +34,13 @@ def set_repository_ci_variables(
     owner, repo = _parse_owner_repo(repo_url)
     token = _device_flow_token()
 
-    values = {
-        "LAMIA_CONNECTED_REPO": repo_url,
-        "LAMIA_CONNECTION_ID": connection_id,
-    }
-    for name, value in values.items():
-        _upsert_repo_variable(token=token, owner=owner, repo=repo, name=name, value=value)
-        actual = _get_repo_variable(token=token, owner=owner, repo=repo, name=name)
-        if actual != value:
-            raise RuntimeError(f"Failed to verify GitHub variable {name}")
+    name = "LAMIA_CONNECTION_ID"
+    _upsert_repo_variable(
+        token=token, owner=owner, repo=repo, name=name, value=connection_id,
+    )
+    actual = _get_repo_variable(token=token, owner=owner, repo=repo, name=name)
+    if actual != connection_id:
+        raise RuntimeError(f"Failed to verify GitHub variable {name}")
 
 
 def _parse_owner_repo(repo_url: str) -> tuple[str, str]:
@@ -139,12 +139,7 @@ def _upsert_repo_variable(
     name: str,
     value: str,
 ) -> None:
-    """Create the variable, falling back to an update when it already exists.
-
-    The Actions variables API has no idempotent write: creation is a POST to
-    the collection and returns 409 once the variable exists, while updates are
-    a PATCH against the individual variable.
-    """
+    """Create the variable, falling back to PATCH on 409 when it exists."""
     body = json.dumps({"name": name, "value": value}).encode()
     try:
         _api_request(
@@ -178,9 +173,10 @@ def _write_error(name: str, owner: str, repo: str, exc: urllib.error.HTTPError) 
     if exc.code in (403, 404):
         return (
             f"Failed to set variable {name}: HTTP {exc.code} {reason}\n"
-            f"The Lamia GitHub App may not be installed on {owner}/{repo}, or the "
-            "installation lacks read/write access to Actions variables. Install or "
-            "reconfigure the app for this repository, then rerun `lamia cloud connect`."
+            f"The Lamia Cloud Connect GitHub App is not installed on {owner}/{repo}, "
+            "or its installation lacks read/write access to Actions variables.\n"
+            f"Install it for this repository at {_LAMIA_APP_INSTALL_URL} "
+            "then rerun `lamia cloud connect`."
         )
     return f"Failed to set variable {name}: HTTP {exc.code} {reason}"
 

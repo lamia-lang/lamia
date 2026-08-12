@@ -31,23 +31,14 @@ def _is_ci() -> bool:
     return os.environ.get("GITHUB_ACTIONS") == "true"
 
 
-# Events that run only code already merged into the target branch.  Anything
-# else -- pull_request_target, workflow_run, issue_comment, the review events --
-# executes in the base repository's security context while being triggered by
-# an outside contributor, so a fork PR could reach production credentials.
+# Events that run only code already merged into the target branch.
 _ALLOWED_CI_EVENTS = frozenset(
     {"push", "workflow_dispatch", "schedule", "release"}
 )
 
 
 def _reject_dangerous_event() -> None:
-    """Block CI auth for event types that could run unreviewed code.
-
-    An allowlist rather than a denylist: GitHub keeps adding trigger types,
-    and a new one defaults to being rejected instead of silently permitted.
-    Defense-in-depth -- the WIF ref condition is the real gate, but failing
-    fast here gives a clearer error.
-    """
+    """Reject CI auth for events outside _ALLOWED_CI_EVENTS."""
     event = os.environ.get("GITHUB_EVENT_NAME", "")
     if event and event not in _ALLOWED_CI_EVENTS:
         allowed = ", ".join(sorted(_ALLOWED_CI_EVENTS))
@@ -61,21 +52,22 @@ def _reject_dangerous_event() -> None:
         sys.exit(1)
 
 
-def _validate_connected_repo(connected_repo: str) -> None:
-    """Verify the workspace git remote matches the connected repository.
-
-    Prevents an attacker from changing ``git remote set-url origin`` to
-    clone malicious code while using the victim repo's WIF credentials.
-    """
-    if not connected_repo:
+def _connected_repo_url() -> str:
+    """Repository URL for this CI run, from GITHUB_REPOSITORY."""
+    repository = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    if not repository:
         print(
-            "ERROR: Repository not connected.\n"
-            "Missing CI variable LAMIA_CONNECTED_REPO.\n"
-            "Run `lamia cloud connect` and set repository CI variables.",
+            "ERROR: GITHUB_REPOSITORY is not set.\n"
+            "Lamia CI authentication requires a GitHub Actions runner.",
             file=sys.stderr,
         )
         sys.exit(1)
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+    return f"{server}/{repository}"
 
+
+def _validate_connected_repo(connected_repo: str) -> None:
+    """Verify the workspace git remote matches the repository being built."""
     from lamia.git import canonical_remote_identity
     workspace_remote = get_remote_origin(os.getcwd())
     if not workspace_remote:
@@ -86,8 +78,8 @@ def _validate_connected_repo(connected_repo: str) -> None:
     if expected and actual and expected != actual:
         print(
             f"ERROR: Git remote mismatch.\n"
-            f"  CI LAMIA_CONNECTED_REPO: {expected}\n"
-            f"  workspace git remote:       {actual}\n"
+            f"  GitHub Actions repository: {expected}\n"
+            f"  workspace git remote:      {actual}\n"
             f"Refusing to authenticate. This could indicate a tampered "
             f"git remote.",
             file=sys.stderr,
@@ -95,28 +87,39 @@ def _validate_connected_repo(connected_repo: str) -> None:
         sys.exit(1)
 
 
-def _setup_ci_auth_if_needed(config: Optional[dict]) -> None:
-    """In CI, authenticate using variables emitted by lamia cloud connect.
+def _validate_connection_matches_repo(connection_id: str, connected_repo: str) -> None:
+    """Reject a connection ID whose repository digest is not this repo."""
+    from lamia_cloud import connection_suffix_for_repo, parse_connection_id
 
-    Required CI env vars:
-    - LAMIA_CONNECTED_REPO
-    - LAMIA_CONNECTION_ID
-    """
+    _, suffix = parse_connection_id(connection_id)
+    if suffix != connection_suffix_for_repo(connected_repo):
+        print(
+            "ERROR: LAMIA_CONNECTION_ID was issued for a different repository.\n"
+            f"  this repository: {connected_repo}\n"
+            "Run `lamia cloud connect` in this repository.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def _setup_ci_auth_if_needed(config: Optional[dict]) -> None:
+    """In CI, authenticate using LAMIA_CONNECTION_ID. No-op otherwise."""
     if not _is_ci():
         return
 
     _reject_dangerous_event()
 
-    connected_repo = os.environ.get("LAMIA_CONNECTED_REPO", "")
+    connected_repo = _connected_repo_url()
     connection_id = os.environ.get("LAMIA_CONNECTION_ID", "")
 
-    if not connected_repo or not connection_id:
+    if not connection_id:
         print(
-            "ERROR: Missing CI auth variables.\n"
-            "Required:\n"
-            "  LAMIA_CONNECTED_REPO\n"
-            "  LAMIA_CONNECTION_ID\n"
-            "Run `lamia cloud connect` and add the printed values to CI repository variables.",
+            "ERROR: Missing CI auth variable LAMIA_CONNECTION_ID.\n"
+            "Add it to the deploy job:\n"
+            "  env:\n"
+            "    LAMIA_CONNECTION_ID: ${{ vars.LAMIA_CONNECTION_ID }}\n"
+            "`lamia cloud connect` stores the value as a repository variable; "
+            "the workflow only has to reference it.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -144,6 +147,7 @@ def _setup_ci_auth_if_needed(config: Optional[dict]) -> None:
     wif_provider = derive_wif_provider_from_connection(project_number, connection_suffix)
     service_account = ci_sa_email_from_connection(project_id, connection_suffix)
 
+    _validate_connection_matches_repo(connection_id, connected_repo)
     _validate_connected_repo(connected_repo)
     _create_wif_credential_config(wif_provider, service_account)
 
