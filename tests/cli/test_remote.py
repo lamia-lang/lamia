@@ -16,6 +16,13 @@ from lamia.interpreter.ast_analyzer import extract_script_file_refs
 
 
 
+
+def _gcp_connector(project_root):
+    """Real GCP connector without reading config.yaml from disk."""
+    from lamia_cloud.gcp.connect import GCPRepositoryConnector
+    return GCPRepositoryConnector.from_config({"project_id": "proj"})
+
+
 def _write_script(tmp_path: Path, name: str, content: str) -> Path:
     script_path = tmp_path / name
     script_path.write_text(content)
@@ -737,7 +744,7 @@ class TestCiAuthMandatoryConnect:
         monkeypatch.delenv("LAMIA_CONNECTION_ID", raising=False)
 
         with pytest.raises(SystemExit) as exc_info:
-            remote._setup_ci_auth_if_needed({"cloud": {"project_id": "x"}})
+            remote._setup_ci_auth_if_needed(Path("."))
 
         assert exc_info.value.code == 1
         stderr = capsys.readouterr().err
@@ -753,7 +760,7 @@ class TestCiAuthMandatoryConnect:
         monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-ac0d478df1c7")
 
         with pytest.raises(SystemExit) as exc_info:
-            remote._setup_ci_auth_if_needed({"cloud": {"project_id": "proj"}})
+            remote._setup_ci_auth_if_needed(Path("."))
 
         assert exc_info.value.code == 1
         assert "different repository" in capsys.readouterr().err
@@ -766,7 +773,7 @@ class TestCiAuthMandatoryConnect:
         monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
 
         with pytest.raises(SystemExit) as exc_info:
-            remote._setup_ci_auth_if_needed({"cloud": {"project_id": "x"}})
+            remote._setup_ci_auth_if_needed(Path("."))
 
         assert exc_info.value.code == 1
         assert "GITHUB_REPOSITORY" in capsys.readouterr().err
@@ -778,7 +785,7 @@ class TestCiAuthMandatoryConnect:
         monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
 
         with pytest.raises(SystemExit) as exc_info:
-            remote._setup_ci_auth_if_needed(None)
+            remote._setup_ci_auth_if_needed(Path("."))
 
         assert exc_info.value.code == 1
 
@@ -787,13 +794,13 @@ class TestCiAuthMandatoryConnect:
         import lamia.cli.remote as remote
 
         monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-        remote._setup_ci_auth_if_needed({})
+        remote._setup_ci_auth_if_needed(Path("."))
 
     def test_not_in_ci_with_empty_env(self, monkeypatch):
         import lamia.cli.remote as remote
 
         monkeypatch.setenv("GITHUB_ACTIONS", "false")
-        remote._setup_ci_auth_if_needed({})
+        remote._setup_ci_auth_if_needed(Path("."))
 
 
 @pytest.mark.integration
@@ -824,7 +831,7 @@ class TestCiAuthEventGuard:
         monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
 
         with pytest.raises(SystemExit) as exc_info:
-            remote._setup_ci_auth_if_needed({"cloud": {"project_id": "proj"}})
+            remote._setup_ci_auth_if_needed(Path("."))
 
         assert exc_info.value.code == 1
         assert event in capsys.readouterr().err
@@ -845,8 +852,9 @@ class TestCiAuthEventGuard:
             remote, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
         )
+        monkeypatch.setattr(remote, "get_connector", _gcp_connector)
 
-        remote._setup_ci_auth_if_needed({"cloud": {"project_id": "proj"}})
+        remote._setup_ci_auth_if_needed(Path("."))
 
         monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
 
@@ -872,7 +880,7 @@ class TestCiAuthRepoValidation:
         )
 
         with pytest.raises(SystemExit) as exc_info:
-            remote._setup_ci_auth_if_needed({"cloud": {"project_id": "proj"}})
+            remote._setup_ci_auth_if_needed(Path("."))
 
         assert exc_info.value.code == 1
         stderr = capsys.readouterr().err
@@ -894,8 +902,9 @@ class TestCiAuthRepoValidation:
             remote, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
         )
+        monkeypatch.setattr(remote, "get_connector", _gcp_connector)
 
-        remote._setup_ci_auth_if_needed({"cloud": {"project_id": "proj"}})
+        remote._setup_ci_auth_if_needed(Path("."))
 
         monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
 
@@ -922,9 +931,10 @@ class TestCiAuthEnvVarSpoofing:
             remote, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
         )
+        monkeypatch.setattr(remote, "get_connector", _gcp_connector)
 
         with pytest.raises(SystemExit) as exc_info:
-            remote._setup_ci_auth_if_needed({"cloud": {"project_id": "proj"}})
+            remote._setup_ci_auth_if_needed(Path("."))
 
         assert exc_info.value.code == 1
         stderr = capsys.readouterr().err
@@ -935,10 +945,10 @@ class TestCiAuthEnvVarSpoofing:
         import lamia.cli.remote as remote
 
         monkeypatch.setenv("GITHUB_ACTIONS", "1")
-        remote._setup_ci_auth_if_needed({})
+        remote._setup_ci_auth_if_needed(Path("."))
 
         monkeypatch.setenv("GITHUB_ACTIONS", "yes")
-        remote._setup_ci_auth_if_needed({})
+        remote._setup_ci_auth_if_needed(Path("."))
 
 
 @pytest.mark.integration
@@ -969,8 +979,9 @@ class TestCiCredentialConfig:
             remote, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
         )
+        monkeypatch.setattr(remote, "get_connector", _gcp_connector)
 
-        remote._setup_ci_auth_if_needed({"cloud": {"project_id": "proj"}})
+        remote._setup_ci_auth_if_needed(Path("."))
 
         cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
         assert cred_path is not None

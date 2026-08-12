@@ -34,20 +34,10 @@ from lamia.triggers.extraction import extract_all_triggers
 
 
 def _ensure_ci_auth(project_root: Path) -> None:
-    """Set up CI authentication before any cloud operations.
-
-    Loads config.yaml and delegates to the centralized CI auth handler.
-    No-op when not running in CI.
-    """
-    import yaml
+    """Set up CI authentication before any cloud operations. No-op locally."""
     from lamia.cli.remote import _setup_ci_auth_if_needed
 
-    config_path = project_root / "config.yaml"
-    config = None
-    if config_path.exists():
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-    _setup_ci_auth_if_needed(config)
+    _setup_ci_auth_if_needed(project_root)
 
 
 EVERY_PRESETS = {

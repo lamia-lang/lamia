@@ -1,11 +1,8 @@
 """Handle `lamia <script> --remote` — one-shot remote cloud execution."""
 
 import hashlib
-import json
 import os
 import sys
-import tempfile
-import urllib.parse
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
@@ -15,7 +12,7 @@ from lamia.id_gen import generate_deterministic_id
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
 from lamia.triggers.extraction import extract_all_triggers
 from lamia.cli.script_analysis import analyze_script
-from lamia_cloud import get_deployer, get_trigger_provider
+from lamia_cloud import get_connector, get_deployer, get_trigger_provider
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.types import TriggerDeploymentPlan
 
@@ -102,7 +99,7 @@ def _validate_connection_matches_repo(connection_id: str, connected_repo: str) -
         sys.exit(1)
 
 
-def _setup_ci_auth_if_needed(config: Optional[dict]) -> None:
+def _setup_ci_auth_if_needed(project_root: Path) -> None:
     """In CI, authenticate using LAMIA_CONNECTION_ID. No-op otherwise."""
     if not _is_ci():
         return
@@ -124,99 +121,14 @@ def _setup_ci_auth_if_needed(config: Optional[dict]) -> None:
         )
         sys.exit(1)
 
-    cloud_cfg = (config or {}).get("cloud", {})
-    project_id = cloud_cfg.get("project_id")
-    if not project_id:
-        print(
-            "ERROR: cloud.project_id is required in config.yaml for CI auth.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    from lamia_cloud import (
-        ci_sa_email_from_connection,
-        derive_wif_provider_from_connection,
-        parse_connection_id,
-    )
-    try:
-        project_number, connection_suffix = parse_connection_id(connection_id)
-    except ValueError:
-        print("ERROR: Invalid LAMIA_CONNECTION_ID format.", file=sys.stderr)
-        sys.exit(1)
-
-    wif_provider = derive_wif_provider_from_connection(project_number, connection_suffix)
-    service_account = ci_sa_email_from_connection(project_id, connection_suffix)
-
     _validate_connection_matches_repo(connection_id, connected_repo)
     _validate_connected_repo(connected_repo)
-    _create_wif_credential_config(wif_provider, service_account)
 
-
-def _create_wif_credential_config(
-    wif_provider: str, service_account: str,
-) -> None:
-    """Create a temporary credential config for WIF OIDC token exchange.
-
-    Replicates what ``google-github-actions/auth@v2`` does: writes an
-    external-account credential configuration file and sets
-    ``GOOGLE_APPLICATION_CREDENTIALS`` so the google-auth SDK exchanges
-    the GitHub OIDC token for GCP access credentials via STS.
-    """
-    token_url = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL")
-    token_bearer = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-
-    if not token_url or not token_bearer:
-        print(
-            "ERROR: GitHub OIDC token not available.\n"
-            "Ensure your workflow has:\n"
-            "  permissions:\n"
-            "    id-token: write",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    audience = f"//iam.googleapis.com/{wif_provider}"
-    encoded_audience = urllib.parse.quote(audience, safe="")
-
-    cred_config = {
-        "type": "external_account",
-        "audience": audience,
-        "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
-        "token_url": "https://sts.googleapis.com/v1/token",
-        "credential_source": {
-            "url": f"{token_url}&audience={encoded_audience}",
-            "headers": {
-                "Authorization": f"bearer {token_bearer}",
-            },
-            "format": {
-                "type": "json",
-                "subject_token_field_name": "value",
-            },
-        },
-        "service_account_impersonation_url": (
-            f"https://iamcredentials.googleapis.com/v1/projects/-/"
-            f"serviceAccounts/{service_account}:generateAccessToken"
-        ),
-    }
-
-    fd, cred_path = tempfile.mkstemp(suffix=".json", prefix="lamia-wif-")
-    with os.fdopen(fd, "w") as f:
-        json.dump(cred_config, f)
-    os.chmod(cred_path, 0o600)
-
-    import atexit
-    atexit.register(lambda: _cleanup_cred_file(cred_path))
-
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
-    print("  CI auth: credentials configured via WIF", file=sys.stderr)
-
-
-def _cleanup_cred_file(path: str) -> None:
-    """Remove temporary credential config on process exit."""
     try:
-        os.unlink(path)
-    except OSError:
-        pass
+        get_connector(project_root).configure_ci_auth(connected_repo, connection_id)
+    except (RuntimeError, ValueError) as exc:
+        print(f"ERROR: CI authentication failed: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _resolve_deploy_mode(
@@ -263,7 +175,7 @@ def handle_remote_run(
 
     root = Path(project_root)
 
-    _setup_ci_auth_if_needed(config)
+    _setup_ci_auth_if_needed(root)
 
     deployer = get_deployer(root)
     deployer.ensure_apis_enabled()
