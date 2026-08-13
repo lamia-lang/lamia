@@ -247,6 +247,7 @@ def handle_remote_run(
     except Exception as exc:
         run_error = exc
 
+    logs_unavailable = False
     try:
         stdout, stderr = deployer.fetch_execution_logs(
             target=target,
@@ -254,6 +255,7 @@ def handle_remote_run(
         )
     except Exception as log_error:
         stdout, stderr = "", ""
+        logs_unavailable = True
         print(f"  Failed to fetch container logs: {log_error}", file=sys.stderr)
 
     if stdout:
@@ -267,7 +269,7 @@ def handle_remote_run(
 
     if elapsed:
         print(f"\n  Completed in {elapsed:.1f}s", file=sys.stderr)
-    if logs_url:
+    if logs_url and (exit_code != 0 or logs_unavailable):
         print(f"  Logs: {logs_url}", file=sys.stderr)
 
     try:

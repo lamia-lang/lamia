@@ -505,6 +505,48 @@ class TestHandleRemoteRun:
         assert "hello err" in captured.err
         assert "Completed in 1.5s" in captured.err
 
+    def _run(self, remote, tmp_path):
+        with pytest.raises(SystemExit) as exc:
+            remote.handle_remote_run(
+                "task.lm", str(tmp_path),
+                {"cloud": {"project_id": "proj", "location": "us-central1"}},
+                verbose=False,
+            )
+        return exc.value.code
+
+    def test_logs_url_hidden_on_success(self, monkeypatch, tmp_path, capsys):
+        """On a clean run the script output is the answer; the URL is noise."""
+        remote = _remote_module()
+        _plain_script(tmp_path)
+        _setup_deployer(monkeypatch, remote, tmp_path)
+
+        assert self._run(remote, tmp_path) == 0
+        assert "Logs:" not in capsys.readouterr().err
+
+    def test_logs_url_shown_on_failure(self, monkeypatch, tmp_path, capsys):
+        remote = _remote_module()
+        _plain_script(tmp_path)
+        deployer = _setup_deployer(monkeypatch, remote, tmp_path)
+        deployer.run_job.return_value = {
+            "exit_code": 3, "elapsed_seconds": 1.5,
+            "logs_url": "https://console.example/logs", "execution_name": "exec-1",
+        }
+
+        assert self._run(remote, tmp_path) == 3
+        assert "Logs: https://console.example/logs" in capsys.readouterr().err
+
+    def test_logs_url_shown_when_log_fetch_fails(self, monkeypatch, tmp_path, capsys):
+        """Without container output the URL is the only way to see anything."""
+        remote = _remote_module()
+        _plain_script(tmp_path)
+        deployer = _setup_deployer(monkeypatch, remote, tmp_path)
+        deployer.fetch_execution_logs.side_effect = RuntimeError("logging denied")
+
+        assert self._run(remote, tmp_path) == 0
+        err = capsys.readouterr().err
+        assert "Failed to fetch container logs" in err
+        assert "Logs: https://logs.example" in err
+
     def test_skips_deploy_when_source_hash_matches(self, monkeypatch, tmp_path, capsys):
         remote = _remote_module()
         _plain_script(tmp_path)
