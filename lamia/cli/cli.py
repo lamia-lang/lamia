@@ -6,6 +6,7 @@ import re
 import signal
 import sys
 import os
+from pathlib import Path
 from typing import Optional
 import argparse
 import select
@@ -893,7 +894,6 @@ For help on a subcommand, run:
                 config_dict = yaml.safe_load(f)
             project_root = os.path.dirname(os.path.abspath(discovered))
         else:
-            from pathlib import Path
             search_start = Path(prompt_file).resolve().parent if prompt_file else Path.cwd()
             msg = (
                 f"fatal: no config.yaml found (searched upwards from {search_start}).\n"
