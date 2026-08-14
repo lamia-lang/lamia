@@ -1,0 +1,56 @@
+name: CI Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  cloud:
+    runs-on: ubuntu-latest
+    name: Cloud integration tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install "lamia-cloud"
+          pip install -e ".[dev]"
+          pip show lamia-cloud | grep -E "^(Name|Version):"
+
+      - name: Run cloud integration tests
+        run: pytest tests/ -m cloud --tb=short -q
+
+      - name: Note on failure
+        if: failure()
+        run: |
+          echo "::warning::Cloud integration tests failed. lamia-cloud is installed from PyPI here, not from local source -- check whether this failure is actually a lamia-cloud change that hasn't been released yet before treating it as a regression in this repo."
+
+  general:
+    runs-on: ubuntu-latest
+    name: General integration tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run general integration tests
+        run: pytest tests/ -m "integration and not cloud" --tb=short -q

@@ -235,6 +235,7 @@ def test_extract_file_refs_no_files_blocks(tmp_path):
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_script_capabilities_contract_field_names():
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     from lamia_cloud.contracts import SCRIPT_CAPABILITY_FIELDS
@@ -248,6 +249,7 @@ def test_script_capabilities_contract_field_names():
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_warn_about_file_uploads_prints_warning(capsys):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     from lamia_cloud.contracts import FileSyncEntry
@@ -265,6 +267,7 @@ def test_warn_about_file_uploads_prints_warning(capsys):
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_path, capsys):
     """_deploy_trigger must build the right TriggerDeploymentPlan and call provider.deploy()."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -300,6 +303,7 @@ def test_deploy_trigger_builds_plan_and_calls_provider_deploy(monkeypatch, tmp_p
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_deploy_trigger_same_script_same_name(monkeypatch, tmp_path):
     """Deploying the same script from the same project twice must produce the same plan name."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -328,6 +332,7 @@ def test_deploy_trigger_same_script_same_name(monkeypatch, tmp_path):
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_deploy_trigger_ids_differ_across_project_roots(monkeypatch, tmp_path):
     """The same script name in two projects must not deploy onto the same trigger."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -361,6 +366,7 @@ def test_deploy_trigger_ids_differ_across_project_roots(monkeypatch, tmp_path):
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_handle_remote_run_routes_to_deploy_trigger_when_script_has_triggers(monkeypatch, tmp_path):
     """handle_remote_run must detect trigger.* calls and hand off to _deploy_trigger."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -392,6 +398,7 @@ def test_handle_remote_run_routes_to_deploy_trigger_when_script_has_triggers(mon
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_handle_remote_run_fetches_logs_when_run_job_raises(monkeypatch, tmp_path, capsys):
     """Even if run_job raises unexpectedly, container logs should still be fetched."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -420,6 +427,7 @@ def test_handle_remote_run_fetches_logs_when_run_job_raises(monkeypatch, tmp_pat
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_handle_remote_run_displays_logs_on_container_failure(monkeypatch, tmp_path, capsys):
     """Failed remote runs must print container logs and the logs URL."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -483,6 +491,8 @@ def _setup_deployer(monkeypatch, remote, tmp_path, **overrides):
     return deployer
 
 
+@pytest.mark.integration
+@pytest.mark.cloud
 class TestHandleRemoteRun:
     def test_happy_path_deploy_run_fetch_logs(self, monkeypatch, tmp_path, capsys):
         remote = _remote_module()
@@ -618,6 +628,7 @@ class TestHandleRemoteRun:
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_handle_remote_run_calls_ensure_apis_enabled_before_deploy(monkeypatch, tmp_path):
     """handle_remote_run must enable cloud APIs before any deploy/run calls."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -655,6 +666,7 @@ def test_handle_remote_run_calls_ensure_apis_enabled_before_deploy(monkeypatch, 
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_handle_remote_run_propagates_ensure_apis_enabled_failure(monkeypatch, tmp_path):
     """If API enablement fails, surface the error instead of deploying regardless."""
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -676,6 +688,8 @@ def test_handle_remote_run_propagates_ensure_apis_enabled_failure(monkeypatch, t
     deployer.deploy.assert_not_called()
 
 
+@pytest.mark.integration
+@pytest.mark.cloud
 class TestResolveDeployMode:
     """_resolve_deploy_mode picks the right source mode and repo URL."""
 
@@ -726,6 +740,7 @@ class TestResolveDeployMode:
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 class TestHandleRemoteRunGitMode:
     """handle_remote_run passes deploy_mode and repo_url through to deployer."""
 
@@ -784,6 +799,7 @@ class TestHandleRemoteRunGitMode:
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 class TestCiAuthMandatoryConnect:
     """CI must fail fast without prior lamia cloud connect."""
 
@@ -860,6 +876,7 @@ class TestCiAuthMandatoryConnect:
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 class TestCiAuthEventGuard:
     """S8: only events running already-merged code may authenticate."""
 
@@ -916,6 +933,7 @@ class TestCiAuthEventGuard:
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 class TestCiAuthRepoValidation:
     """Workspace git remote must match the repository being built."""
 
@@ -966,6 +984,7 @@ class TestCiAuthRepoValidation:
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 class TestCiAuthEnvVarSpoofing:
     """V3: Spoofing GITHUB_ACTIONS has no security escalation."""
 
@@ -1008,6 +1027,7 @@ class TestCiAuthEnvVarSpoofing:
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 class TestCiCredentialConfig:
     """V2: Credential config is created correctly for WIF OIDC exchange."""
 

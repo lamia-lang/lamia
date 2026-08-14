@@ -22,6 +22,7 @@ def test_trigger_stage_defaults():
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_trigger_stage_field_names_match_lamia_cloud():
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     from lamia_cloud.types import TriggerStage as CloudTriggerStage

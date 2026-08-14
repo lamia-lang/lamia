@@ -26,6 +26,8 @@ def _schedule_job(tmp_path: Path) -> ScheduleJob:
     )
 
 
+@pytest.mark.integration
+@pytest.mark.cloud
 class TestCloudSchedulerBridge:
     def test_install_delegates_with_converted_job(self, tmp_path):
         pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -84,6 +86,8 @@ class TestCloudSchedulerBridge:
         assert mock_scheduler.resume.call_args[0][0].schedule_id == "task-abc1"
 
 
+@pytest.mark.integration
+@pytest.mark.cloud
 class TestToCloudJob:
     def test_maps_schedule_job_fields(self, tmp_path):
         pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
@@ -117,6 +121,8 @@ def test_deploy_scheduled_trigger_errors_without_lamia_cloud(monkeypatch, tmp_pa
     assert "lamia-cloud package" in capsys.readouterr().err
 
 
+@pytest.mark.integration
+@pytest.mark.cloud
 def test_deploy_scheduled_trigger_errors_without_provider(tmp_path):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     (tmp_path / "config.yaml").write_text("cloud:\n  location: us-central1\n")
@@ -136,6 +142,7 @@ def test_fetch_cloud_statuses_returns_empty_without_lamia_cloud(monkeypatch):
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_deploy_scheduled_trigger_builds_plan_and_deploys(monkeypatch, tmp_path, capsys):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     from lamia_cloud.types import TriggerDeploymentPlan, TriggerStage
@@ -169,6 +176,7 @@ def test_deploy_scheduled_trigger_builds_plan_and_deploys(monkeypatch, tmp_path,
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_fetch_cloud_statuses_uses_execution_status(monkeypatch, tmp_path):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
 
@@ -198,6 +206,7 @@ def test_fetch_cloud_statuses_uses_execution_status(monkeypatch, tmp_path):
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_fetch_cloud_statuses_fallback_when_no_executions(monkeypatch, tmp_path):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
 
@@ -222,6 +231,7 @@ def test_fetch_cloud_statuses_fallback_when_no_executions(monkeypatch, tmp_path)
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_fetch_cloud_statuses_mixed_jobs(monkeypatch, tmp_path):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
 
@@ -273,6 +283,7 @@ def test_fetch_cloud_statuses_mixed_jobs(monkeypatch, tmp_path):
 
 
 @pytest.mark.integration
+@pytest.mark.cloud
 def test_fetch_cloud_statuses_marks_paused_on_job_dict(monkeypatch, tmp_path):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
 
