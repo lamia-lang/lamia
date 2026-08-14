@@ -224,7 +224,8 @@ def handle_remote_run(
 
     uses_files = capabilities.uses_files or capabilities.uses_file_context
 
-    if source_hash == deployed_hash:
+    just_deployed = source_hash != deployed_hash
+    if not just_deployed:
         print("  Container up to date, skipping build.", file=sys.stderr)
     else:
         print("  Building and deploying...", file=sys.stderr)
@@ -265,10 +266,19 @@ def handle_remote_run(
 
     exit_code = result.get("exit_code", 1)
     elapsed = result.get("elapsed_seconds", 0)
+    pending = result.get("pending_seconds")
+    running = result.get("running_seconds")
     logs_url = result.get("logs_url", "")
 
     if elapsed:
-        print(f"\n  Completed in {elapsed:.1f}s", file=sys.stderr)
+        if pending is not None and running is not None:
+            print(
+                f"\n  Completed in {elapsed:.1f}s "
+                f"(pending {pending:.1f}s, execution {running:.1f}s)",
+                file=sys.stderr,
+            )
+        else:
+            print(f"\n  Completed in {elapsed:.1f}s", file=sys.stderr)
     if logs_url and (exit_code != 0 or logs_unavailable):
         print(f"  Logs: {logs_url}", file=sys.stderr)
 

@@ -505,6 +505,20 @@ class TestHandleRemoteRun:
         assert "hello err" in captured.err
         assert "Completed in 1.5s" in captured.err
 
+    def test_prints_pending_and_running_breakdown_when_available(self, monkeypatch, tmp_path, capsys):
+        remote = _remote_module()
+        _plain_script(tmp_path)
+
+        deployer = _setup_deployer(monkeypatch, remote, tmp_path)
+        deployer.run_job.return_value = {
+            "exit_code": 0, "elapsed_seconds": 100.0,
+            "pending_seconds": 83.0, "running_seconds": 17.0,
+            "logs_url": "https://logs.example", "execution_name": "exec-1",
+        }
+
+        assert self._run(remote, tmp_path) == 0
+        assert "Completed in 100.0s (pending 83.0s, execution 17.0s)" in capsys.readouterr().err
+
     def _run(self, remote, tmp_path):
         with pytest.raises(SystemExit) as exc:
             remote.handle_remote_run(

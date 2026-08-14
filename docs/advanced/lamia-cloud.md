@@ -48,6 +48,15 @@ lamia my_script.lm --remote
 
 Use this first to validate cloud permissions, runtime behavior, and logs before creating a schedule.
 
+**Why it can take a while to start:** each run waits for the cloud platform to schedule and provision an instance for the job before your script starts. In our own testing this has taken anywhere from 60-130 seconds, on top of a few seconds for the interpreter itself to start once the container is running. `--remote` prints the breakdown so you can see the split, e.g.:
+
+```
+Completed in 100.4s (pending 83.1s, execution 17.3s)
+```
+
+`pending` is the wait for GCP to schedule and start your container; `execution` is your
+script actually running. You're only billed for `execution` time, not `pending`.
+
 ## Cloud Scheduling
 
 ```bash
