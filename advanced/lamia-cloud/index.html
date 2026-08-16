@@ -1323,6 +1323,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="API Enablement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#vertex-ai-model-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vertex AI model access
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1747,6 +1764,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="API Enablement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#vertex-ai-model-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vertex AI model access
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2050,8 +2084,7 @@
 <p><strong>Why it can take a while to start:</strong> each run waits for the cloud platform to schedule and provision an instance for the job before your script starts. In our own testing this has taken anywhere from 60-130 seconds, on top of a few seconds for the interpreter itself to start once the container is running. <code>--remote</code> prints the breakdown so you can see the split, e.g.:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Completed in 100.4s (pending 83.1s, execution 17.3s)
 </span></code></pre></div>
-<p><code>pending</code> is the wait for GCP to schedule and start your container; <code>execution</code> is your
-script actually running. You're only billed for <code>execution</code> time, not <code>pending</code>.</p>
+<p><code>pending</code> is the wait for GCP to schedule and start your container; <code>execution</code> is your script actually running. You're only billed for <code>execution</code> time, not <code>pending</code>.</p>
 <h2 id="cloud-scheduling">Cloud Scheduling<a class="headerlink" href="#cloud-scheduling" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>day<span class="w"> </span>--remote
 </span></code></pre></div>
@@ -2069,18 +2102,17 @@ script actually running. You're only billed for <code>execution</code> time, not
 <li>Logs (stdout/stderr) go to Cloud Logging under Cloud Run Job execution logs</li>
 <li>Exit status is reported back to the local lamia registry so <code>lamia schedule list</code> shows it</li>
 </ol>
-<p><strong>Version:</strong> A cloud script is built with the newest version of Lamia at the time you
-deploy it, and it keeps that version until it's rebuilt. Deploying again after you
-change your script rebuilds it with the latest version. Updates stay compatible with
-your existing scripts, so cloud runs behave the same as running on your computer.</p>
+<p><strong>Version:</strong> A cloud script is built with the newest version of Lamia at the time you deploy it, and it keeps that version until it's rebuilt. Deploying again after you change your script rebuilds it with the latest version. Updates stay compatible with your existing scripts, so cloud runs behave the same as running on your computer.</p>
 <h2 id="logs">Logs<a class="headerlink" href="#logs" title="Permanent link">&para;</a></h2>
 <p>View execution logs:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>logs<span class="w"> </span>&lt;id&gt;
 </span></code></pre></div>
 <p>Or directly in GCP Console under Cloud Run &gt; Jobs &gt; <code>lamia-...</code> &gt; Executions &gt; Logs.</p>
 <h2 id="api-enablement">API Enablement<a class="headerlink" href="#api-enablement" title="Permanent link">&para;</a></h2>
-<p>lamia-cloud automatically enables required APIs on first use, for both scheduled
-jobs and <code>--remote</code> runs. No manual <code>gcloud services enable</code> step is needed.</p>
+<p>lamia-cloud automatically enables required APIs on first use. No manual <code>gcloud services enable</code> step is needed.</p>
+<h3 id="vertex-ai-model-access">Vertex AI model access<a class="headerlink" href="#vertex-ai-model-access" title="Permanent link">&para;</a></h3>
+<p>API enablement is separate from Vertex AI's per-model access grant. The first time a project calls a gated publisher model (for example, Anthropic's Claude models) through Vertex AI, Google requires one-time per-project consent, granted from that model's Model Garden page (found under Google Cloud Console's Agent Platform section) — this isn't an API flag, so lamia-cloud cannot complete it on your behalf.</p>
+<p>Before any build or deploy, <code>--remote</code> checks every model in your <code>model_chain</code> against Vertex in one batch and, if any are missing access, reports all of them together with a Model Garden link and a search name for each (e.g. <code>claude-sonnet-4-5-20250929</code> → search "Claude Sonnet 4.5"). If a run reports missing models, open the printed link, search each name in Model Garden, and click <strong>Enable</strong> on its card, then retry.</p>
 <h2 id="file-sync-for-cloud-execution">File Sync for Cloud Execution<a class="headerlink" href="#file-sync-for-cloud-execution" title="Permanent link">&para;</a></h2>
 <p>When your script uses <code>with files(...)</code> to provide context to the LLM, Lamia automatically uploads the referenced files to cloud storage (GCS) so the script runs identically in the cloud.</p>
 <h3 id="what-gets-uploaded">What gets uploaded<a class="headerlink" href="#what-gets-uploaded" title="Permanent link">&para;</a></h3>
@@ -2218,8 +2250,7 @@ jobs and <code>--remote</code> runs. No manual <code>gcloud services enable</cod
 <li>Only GCP is supported currently; additional providers may be added in future versions</li>
 </ul>
 <h2 id="practical-cost-note">Practical cost note<a class="headerlink" href="#practical-cost-note" title="Permanent link">&para;</a></h2>
-<p>You usually do <strong>not</strong> need to build custom cloud agents from scratch to start automation in production.
-<code>lamia-cloud</code> is designed to cover common agentic workflows with much lower setup and maintenance overhead.</p>
+<p>You usually do <strong>not</strong> need to build custom cloud agents from scratch to start automation in production. <code>lamia-cloud</code> is designed to cover common agentic workflows with much lower setup and maintenance overhead.</p>
 
 
 
