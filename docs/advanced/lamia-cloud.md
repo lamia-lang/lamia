@@ -54,8 +54,7 @@ Use this first to validate cloud permissions, runtime behavior, and logs before 
 Completed in 100.4s (pending 83.1s, execution 17.3s)
 ```
 
-`pending` is the wait for GCP to schedule and start your container; `execution` is your
-script actually running. You're only billed for `execution` time, not `pending`.
+`pending` is the wait for GCP to schedule and start your container; `execution` is your script actually running. You're only billed for `execution` time, not `pending`.
 
 ## Cloud Scheduling
 
@@ -81,10 +80,7 @@ lamia schedule remove <id>   # tears down the cloud job + scheduler job
 4. Logs (stdout/stderr) go to Cloud Logging under Cloud Run Job execution logs
 5. Exit status is reported back to the local lamia registry so `lamia schedule list` shows it
 
-**Version:** A cloud script is built with the newest version of Lamia at the time you
-deploy it, and it keeps that version until it's rebuilt. Deploying again after you
-change your script rebuilds it with the latest version. Updates stay compatible with
-your existing scripts, so cloud runs behave the same as running on your computer.
+**Version:** A cloud script is built with the newest version of Lamia at the time you deploy it, and it keeps that version until it's rebuilt. Deploying again after you change your script rebuilds it with the latest version. Updates stay compatible with your existing scripts, so cloud runs behave the same as running on your computer.
 
 ## Logs
 
@@ -98,8 +94,13 @@ Or directly in GCP Console under Cloud Run > Jobs > `lamia-...` > Executions > L
 
 ## API Enablement
 
-lamia-cloud automatically enables required APIs on first use, for both scheduled
-jobs and `--remote` runs. No manual `gcloud services enable` step is needed.
+lamia-cloud automatically enables required APIs on first use. No manual `gcloud services enable` step is needed.
+
+### Vertex AI model access
+
+API enablement is separate from Vertex AI's per-model access grant. The first time a project calls a gated publisher model (for example, Anthropic's Claude models) through Vertex AI, Google requires one-time per-project consent, granted from that model's Model Garden page (found under Google Cloud Console's Agent Platform section) — this isn't an API flag, so lamia-cloud cannot complete it on your behalf.
+
+Before any build or deploy, `--remote` checks every model in your `model_chain` against Vertex in one batch and, if any are missing access, reports all of them together with a Model Garden link and a search name for each (e.g. `claude-sonnet-4-5-20250929` → search "Claude Sonnet 4.5"). If a run reports missing models, open the printed link, search each name in Model Garden, and click **Enable** on its card, then retry.
 
 ## File Sync for Cloud Execution
 
@@ -252,5 +253,4 @@ This ensures the cloud deployment updates whenever the script or its data files 
 
 ## Practical cost note
 
-You usually do **not** need to build custom cloud agents from scratch to start automation in production.
-`lamia-cloud` is designed to cover common agentic workflows with much lower setup and maintenance overhead.
+You usually do **not** need to build custom cloud agents from scratch to start automation in production. `lamia-cloud` is designed to cover common agentic workflows with much lower setup and maintenance overhead.

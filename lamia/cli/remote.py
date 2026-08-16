@@ -7,12 +7,13 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
+from lamia.facade.config_builder import build_config_from_dict
 from lamia.git import get_remote_origin
 from lamia.id_gen import generate_deterministic_id
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
 from lamia.triggers.extraction import extract_all_triggers
 from lamia.cli.script_analysis import analyze_script
-from lamia_cloud import get_connector, get_deployer, get_trigger_provider
+from lamia_cloud import get_connector, get_deployer, get_llm_router, get_trigger_provider
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.types import TriggerDeploymentPlan
 
@@ -162,6 +163,61 @@ def _resolve_deploy_mode(
     return "local", None
 
 
+def _check_cloud_model_access(config: Optional[dict], project_root: Path, deployer) -> None:
+    """Fail before any build/deploy if the model_chain uses models this cloud
+    project hasn't been granted access to.
+
+    Checking every model up front avoids discovering missing access one model
+    at a time as a fallback chain gets exercised inside a deployed job. Access, once granted, doesn't get revoked in normal
+    use, so confirmed models are cached via CloudDeployer.remember_verified_model_access
+    (on GCP: project labels) and never re-checked live; providers with no such
+    persistence (the CloudDeployer default) simply re-check every run.
+    """
+    if not config or not (config.get("cloud") or {}).get("provider"):
+        return
+
+    try:
+        model_chain = build_config_from_dict(config).get_model_chain() or []
+    except ValueError:
+        return  # Let the normal execution path surface config errors.
+
+    all_models = {
+        (model_with_retries.model.get_provider_name(), model_with_retries.model.get_model_name_without_provider())
+        for model_with_retries in model_chain
+    }
+    if not all_models:
+        return
+
+    already_verified = deployer.get_verified_model_access()
+    to_check = sorted(all_models - already_verified)
+    if not to_check:
+        return  # Every model here was confirmed accessible on a previous run.
+
+    llm = get_llm_router(project_root)
+    missing = set(llm.check_model_access(to_check))
+    newly_verified = set(to_check) - missing
+    if newly_verified:
+        deployer.remember_verified_model_access(newly_verified)
+
+    if missing:
+        print(
+            "Error: the following models in your model_chain aren't enabled yet "
+            "for this cloud project:",
+            file=sys.stderr,
+        )
+        for provider, model in sorted(missing):
+            print(
+                f'  - {provider}/{model}  (search "{llm.catalog_display_name(provider, model)}")',
+                file=sys.stderr,
+            )
+        catalog_url = llm.model_catalog_url()
+        if catalog_url:
+            print(f"\nEnable each one once, then retry: {catalog_url}", file=sys.stderr)
+        else:
+            print("\nEnable each one once, then retry.", file=sys.stderr)
+        sys.exit(1)
+
+
 def handle_remote_run(
     script: str,
     project_root: str,
@@ -179,6 +235,7 @@ def handle_remote_run(
 
     deployer = get_deployer(root)
     deployer.ensure_apis_enabled()
+    _check_cloud_model_access(config, root, deployer)
 
     script_path = Path(script)
     if script_path.is_absolute():
