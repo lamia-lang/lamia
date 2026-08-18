@@ -1827,7 +1827,7 @@ clearly:</p>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>Compare against the baseline in {@baseline_report}.
 </span></code></pre></div>
 <p>The caller provides the paths:
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">analyze</span><span class="p">(</span><span class="n">test_report</span><span class="o">=</span><span class="s2">&quot;results/latest.json&quot;</span><span class="p">,</span> <span class="n">baseline_report</span><span class="o">=</span><span class="s2">&quot;results/v1.json&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">analyze</span><span class="p">(</span><span class="n">test_report</span><span class="o">=</span><span class="s2">"results/latest.json"</span><span class="p">,</span> <span class="n">baseline_report</span><span class="o">=</span><span class="s2">"results/v1.json"</span><span class="p">)</span>
 </span></code></pre></div></p>
 <h2 id="return-types">Return types<a class="headerlink" href="#return-types" title="Permanent link">&para;</a></h2>
 <p><code>.hu</code> files are <strong>return-type agnostic</strong>. Never embed output format
@@ -1835,8 +1835,8 @@ instructions in the prompt:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Bad:
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>  Output JSON:
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>  {
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    &quot;summary&quot;: &quot;...&quot;,
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    &quot;score&quot;: 0
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    "summary": "...",
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    "score": 0
 </span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  }
 </span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
 </span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>Good:
@@ -1846,7 +1846,7 @@ instructions in the prompt:</p>
 <code>-&gt; Type[Model]</code>. Currently supported types: JSON, HTML, YAML, XML, CSV, Markdown.
 The caller declares the return type, and Lamia handles validation
 and extraction automatically:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">review_code</span><span class="p">(</span><span class="n">language</span><span class="o">=</span><span class="s2">&quot;python&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">[</span><span class="n">ReviewResult</span><span class="p">]</span> <span class="c1"># where review_code is the `.hu` file name</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">review_code</span><span class="p">(</span><span class="n">language</span><span class="o">=</span><span class="s2">"python"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">[</span><span class="n">ReviewResult</span><span class="p">]</span> <span class="c1"># where review_code is the `.hu` file name</span>
 </span></code></pre></div>
 <h2 id="character-escaping">Character Escaping<a class="headerlink" href="#character-escaping" title="Permanent link">&para;</a></h2>
 <p>When the prompt text itself needs curly braces (e.g., showing JSON
