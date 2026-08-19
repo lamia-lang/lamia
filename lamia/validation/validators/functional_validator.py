@@ -425,6 +425,7 @@ class FunctionalValidator(BaseValidator):
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
             f.write(enhanced_func_code)
             func_file_path = f.name
+        os.chmod(func_file_path, 0o644)
 
         # Get path to docker runner script
         script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
