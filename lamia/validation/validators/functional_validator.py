@@ -264,6 +264,8 @@ class FunctionalValidator(BaseValidator):
             'socket', 'urllib', 'requests', 'http', 'ftp', 'telnet',
             # System operations
             'os', 'sys', 'subprocess', 'exec', 'eval', 'compile', 'globals', 'locals',
+            # Timing (DoS vector via sleep)
+            'time',
             # Import restrictions
             '__import__', 'importlib',
         ]

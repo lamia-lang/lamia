@@ -148,8 +148,8 @@ async def test_functional_validator_blocks_time_import_for_security():
     
     # Function with dangerous import (should fail security check)
     delay_code = """
-import time
 def slow_function(x):
+    import time
     time.sleep(0.1)  # Short delay
     return x
 """
