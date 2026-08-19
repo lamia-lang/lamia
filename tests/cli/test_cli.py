@@ -713,7 +713,7 @@ class TestHandleEvalIntegration:
 sum_py_content = """
 def sum(a, b) -> int:
       return a + b
-sum(10, 15)
+print(sum(10, 15))
 """
 
 config_content = """
@@ -740,7 +740,7 @@ def test_cli_file_modes(tmp_path, cli_args):
         f.write(config_content)
 
     try:
-        cmd = [sys.executable, "-m", "lamia.cli"] + cli_args + ["--config", str(test_dir / "config.yaml")]
+        cmd = ["lamia"] + cli_args + ["--config", str(test_dir / "config.yaml")]
         result = subprocess.run(cmd, cwd=test_dir, capture_output=True, text=True)
         assert result.returncode == 0, f"stderr: {result.stderr}"
         assert "25" in result.stdout

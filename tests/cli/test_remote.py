@@ -48,7 +48,8 @@ def _make_mock_deployer():
 
 @pytest.fixture(autouse=True)
 def _stub_cloud_factories(monkeypatch):
-    """Stub get_deployer and get_trigger_provider so tests never hit real GCP."""
+    """Stub get_deployer, get_trigger_provider, and CI detection so tests never hit real GCP."""
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     if importlib.util.find_spec("lamia_cloud") is None:
         return
     import lamia.cli.remote as remote
