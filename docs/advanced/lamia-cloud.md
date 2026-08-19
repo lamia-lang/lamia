@@ -31,6 +31,7 @@ cloud:
 | `provider` | yes | Cloud provider (`gcp`) |
 | `project_id` | yes | Your GCP project ID |
 | `location` | yes | Region for scheduling and execution (e.g. `us-central1`) |
+| `resources.task_timeout_seconds` | no | Cloud Run Job task timeout in seconds. Default `3600` (1h), max `604800` (7 days). Increase for long-running jobs. |
 
 ## Authentication
 

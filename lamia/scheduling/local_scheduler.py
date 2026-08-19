@@ -129,6 +129,8 @@ class LaunchdScheduler(BaseScheduler):
                 lines.append('    <true/>')
 
         lines.extend([
+            '    <key>ExitTimeOut</key>',
+            '    <integer>86400</integer>',
             '    <key>StandardOutPath</key>',
             f'    <string>{log_file}</string>',
             '    <key>StandardErrorPath</key>',

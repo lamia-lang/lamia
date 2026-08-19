@@ -860,6 +860,7 @@ For help on a subcommand, run:
         schedule._set_id(_active_schedule_id)
         if _should_skip_catchup_run(_active_schedule_id):
             sys.exit(0)
+        _install_schedule_watchdog(_active_schedule_id)
 
     json_flag = getattr(args, 'json', False)
 
@@ -1092,6 +1093,35 @@ def _record_run_on_signal(signum: int) -> None:
         _run_recorded = True
     except Exception:
         pass
+
+
+_SCHEDULE_WATCHDOG_SECONDS = 86400  # 24h — matches Cloud Run Jobs default ceiling
+
+
+def _install_schedule_watchdog(job_id: str) -> None:
+    """Arm a SIGALRM watchdog so scheduled runs cannot hang forever.
+
+    Fires after _SCHEDULE_WATCHDOG_SECONDS, recording a failure and
+    terminating the process.  Only active on Unix (SIGALRM unavailable
+    on Windows; Windows Task Scheduler has its own timeout mechanism).
+    """
+    if sys.platform == "win32":
+        return
+
+    def _watchdog_handler(signum: int, frame: object) -> None:
+        logger.error(
+            f"Schedule watchdog: execution exceeded {_SCHEDULE_WATCHDOG_SECONDS}s, terminating"
+        )
+        _force_kill_browser(_atexit_lamia_ref)
+        from lamia.scheduling.registry import record_run
+        try:
+            record_run(job_id, 1, error="Watchdog timeout — execution exceeded limit")
+        except Exception:
+            pass
+        os._exit(1)
+
+    signal.signal(signal.SIGALRM, _watchdog_handler)
+    signal.alarm(_SCHEDULE_WATCHDOG_SECONDS)
 
 
 def _should_skip_catchup_run(job_id: str) -> bool:
