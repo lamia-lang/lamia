@@ -207,8 +207,8 @@ async def test_functional_validator_security_consistent_between_docker_and_names
     test_cases = [((1, 2), 3)]
     
     dangerous_code = """
-import os
 def bad_function(a, b):
+    import os
     return a + b
 """
     
