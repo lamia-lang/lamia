@@ -142,13 +142,18 @@ class LLMManager(Manager):
         """
         Check that all required providers are supported.
         If any are missing, raise ValueError.
+
+        In cloud mode, unknown providers are handled by the cloud adapter
+        (VertexLLM routes any non-Google/non-Anthropic provider through
+        rawPredict), so only truly unresolvable providers are rejected.
         """
         unsupported = []
         for provider_name in needed_providers:
             try:
                 self.provider_registry.get_adapter_class(provider_name)
-            except ValueError as e:
-                unsupported.append(provider_name)
+            except ValueError:
+                if not self._use_cloud:
+                    unsupported.append(provider_name)
 
         if unsupported:
             raise ValueError(

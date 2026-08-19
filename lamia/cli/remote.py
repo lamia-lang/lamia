@@ -164,14 +164,9 @@ def _resolve_deploy_mode(
 
 
 def _check_cloud_model_access(config: Optional[dict], project_root: Path, deployer) -> None:
-    """Fail before any build/deploy if the model_chain uses models this cloud
-    project hasn't been granted access to.
+    """Fail before any build/deploy if the model_chain uses models this cloud project hasn't been granted access to.
 
-    Checking every model up front avoids discovering missing access one model
-    at a time as a fallback chain gets exercised inside a deployed job. Access, once granted, doesn't get revoked in normal
-    use, so confirmed models are cached via CloudDeployer.remember_verified_model_access
-    (on GCP: project labels) and never re-checked live; providers with no such
-    persistence (the CloudDeployer default) simply re-check every run.
+    Checking every model up front avoids discovering missing access one model at a time as a fallback chain gets exercised inside a deployed job. Access, once granted, doesn't get revoked in normal use, so confirmed models are cached via CloudDeployer.remember_verified_model_access (on GCP: project labels) and never re-checked live; providers with no such persistence (the CloudDeployer default) simply re-check every run. A model whose live check comes back inconclusive (e.g. rate-limited) is neither cached nor reported as missing -- it's surfaced as a separate warning instead, and re-checked on the next run.
     """
     if not config or not (config.get("cloud") or {}).get("provider"):
         return
@@ -194,10 +189,22 @@ def _check_cloud_model_access(config: Optional[dict], project_root: Path, deploy
         return  # Every model here was confirmed accessible on a previous run.
 
     llm = get_llm_router(project_root)
-    missing = set(llm.check_model_access(to_check))
-    newly_verified = set(to_check) - missing
-    if newly_verified:
-        deployer.remember_verified_model_access(newly_verified)
+    missing, verified = llm.check_model_access(to_check)
+    missing = set(missing)
+    verified = set(verified)
+    if verified:
+        deployer.remember_verified_model_access(verified)
+
+    inconclusive = set(to_check) - missing - verified
+    if inconclusive:
+        print(
+            "Warning: couldn't confirm access for the following models "
+            "(e.g. rate-limited) -- not blocking on them, but the deploy "
+            "may still fail if they aren't actually accessible:",
+            file=sys.stderr,
+        )
+        for provider, model in sorted(inconclusive):
+            print(f"  - {provider}/{model}", file=sys.stderr)
 
     if missing:
         print(
