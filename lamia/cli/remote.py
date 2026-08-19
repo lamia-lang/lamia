@@ -245,29 +245,28 @@ def _check_cloud_model_access(
 
     inconclusive = set(to_check) - missing - verified
     if inconclusive:
-        print(
-            "Warning: couldn't confirm access for the following models "
-            "(e.g. rate-limited) -- not blocking on them, but the deploy "
-            "may still fail if they aren't actually accessible:",
-            file=sys.stderr,
-        )
+        print(file=sys.stderr)
+        print("  Warning: couldn't confirm access for these models (e.g. rate-limited).", file=sys.stderr)
+        print("  Not blocking deploy, but they may fail at runtime:", file=sys.stderr)
         for provider, model in sorted(inconclusive):
-            print(f"  - {provider}/{model}", file=sys.stderr)
+            print(f"    - {provider}:{model}", file=sys.stderr)
+        print(file=sys.stderr)
 
     if missing:
-        print(
-            "Error: the following models aren't accessible for this cloud project:",
-            file=sys.stderr,
-        )
+        catalog_url = llm.model_catalog_url()
+        print(file=sys.stderr)
+        print("  Error: these models aren't accessible for this cloud project:", file=sys.stderr)
+        print(file=sys.stderr)
         for provider, model in sorted(missing):
-            line = f"  - {provider}/{model}"
+            print(f"    ✗ {provider}:{model}", file=sys.stderr)
             alts = suggestions.get((provider, model), [])
             if alts:
-                line += f"  (did you mean: {', '.join(alts)}?)"
-            print(line, file=sys.stderr)
-        catalog_url = llm.model_catalog_url()
+                print(f"      Did you mean: {', '.join(alts)}?", file=sys.stderr)
+        print(file=sys.stderr)
         if catalog_url:
-            print(f"\nEnable in Model Garden, then retry: {catalog_url}", file=sys.stderr)
+            print(f"  Enable in Model Garden, then retry:", file=sys.stderr)
+            print(f"  {catalog_url}", file=sys.stderr)
+            print(file=sys.stderr)
         sys.exit(1)
 
 
