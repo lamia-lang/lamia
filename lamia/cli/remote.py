@@ -1,7 +1,9 @@
 """Handle `lamia <script> --remote` — one-shot remote cloud execution."""
 
+import ast
 import hashlib
 import os
+import re
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -163,33 +165,79 @@ def _resolve_deploy_mode(
     return "local", None
 
 
-def _check_cloud_model_access(config: Optional[dict], project_root: Path, deployer) -> None:
-    """Fail before any build/deploy if the model_chain uses models this cloud project hasn't been granted access to.
+def _extract_script_models(script_path: Path) -> set[tuple[str, str]]:
+    """Extract (provider, model) pairs from models= parameters in .lm script functions."""
+    models: set[tuple[str, str]] = set()
+    try:
+        source = script_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except Exception:
+        return models
 
-    Checking every model up front avoids discovering missing access one model at a time as a fallback chain gets exercised inside a deployed job. Access, once granted, doesn't get revoked in normal use, so confirmed models are cached via CloudDeployer.remember_verified_model_access (on GCP: project labels) and never re-checked live; providers with no such persistence (the CloudDeployer default) simply re-check every run. A model whose live check comes back inconclusive (e.g. rate-limited) is neither cached nor reported as missing -- it's surfaced as a separate warning instead, and re-checked on the next run.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for arg, default in zip(
+            reversed(node.args.args), reversed(node.args.defaults)
+        ):
+            if arg.arg != "models":
+                continue
+            raw_values: list[str] = []
+            if isinstance(default, ast.Constant) and isinstance(default.value, str):
+                raw_values.append(default.value)
+            elif isinstance(default, (ast.List, ast.Tuple)):
+                for elt in default.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        raw_values.append(elt.value)
+            for val in raw_values:
+                if ":" in val:
+                    provider, model_name = val.split(":", 1)
+                    models.add((provider.strip(), model_name.strip()))
+    return models
+
+
+def _check_cloud_model_access(
+    config: Optional[dict],
+    project_root: Path,
+    deployer,
+    script_path: Optional[Path] = None,
+) -> None:
+    """Fail before any build/deploy if the model_chain or script uses
+    models this cloud project can't access.
+
+    Checks BOTH config.yaml model_chain AND models= parameters from the
+    .lm script.  For each inaccessible model, attempts auto-enable and
+    suggests closest available names on failure.
     """
     if not config or not (config.get("cloud") or {}).get("provider"):
         return
 
+    all_models: set[tuple[str, str]] = set()
+
     try:
         model_chain = build_config_from_dict(config).get_model_chain() or []
+        all_models.update(
+            (mwr.model.get_provider_name(), mwr.model.get_model_name_without_provider())
+            for mwr in model_chain
+        )
     except ValueError:
-        return  # Let the normal execution path surface config errors.
+        pass
 
-    all_models = {
-        (model_with_retries.model.get_provider_name(), model_with_retries.model.get_model_name_without_provider())
-        for model_with_retries in model_chain
-    }
+    if script_path and script_path.exists():
+        all_models.update(_extract_script_models(script_path))
+
     if not all_models:
         return
 
     already_verified = deployer.get_verified_model_access()
     to_check = sorted(all_models - already_verified)
     if not to_check:
-        return  # Every model here was confirmed accessible on a previous run.
+        return
 
     llm = get_llm_router(project_root)
-    missing, verified = llm.check_model_access(to_check)
+
+    missing, verified, suggestions = llm.check_model_access(to_check)
+
     missing = set(missing)
     verified = set(verified)
     if verified:
@@ -208,20 +256,18 @@ def _check_cloud_model_access(config: Optional[dict], project_root: Path, deploy
 
     if missing:
         print(
-            "Error: the following models in your model_chain aren't enabled yet "
-            "for this cloud project:",
+            "Error: the following models aren't accessible for this cloud project:",
             file=sys.stderr,
         )
         for provider, model in sorted(missing):
-            print(
-                f'  - {provider}/{model}  (search "{llm.catalog_display_name(provider, model)}")',
-                file=sys.stderr,
-            )
+            line = f"  - {provider}/{model}"
+            alts = suggestions.get((provider, model), [])
+            if alts:
+                line += f"  (did you mean: {', '.join(alts)}?)"
+            print(line, file=sys.stderr)
         catalog_url = llm.model_catalog_url()
         if catalog_url:
-            print(f"\nEnable each one once, then retry: {catalog_url}", file=sys.stderr)
-        else:
-            print("\nEnable each one once, then retry.", file=sys.stderr)
+            print(f"\nEnable in Model Garden, then retry: {catalog_url}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -242,7 +288,11 @@ def handle_remote_run(
 
     deployer = get_deployer(root)
     deployer.ensure_apis_enabled()
-    _check_cloud_model_access(config, root, deployer)
+
+    script_path = Path(script)
+    if not script_path.is_absolute():
+        script_path = root / script_path
+    _check_cloud_model_access(config, root, deployer, script_path=script_path)
 
     script_path = Path(script)
     if script_path.is_absolute():
