@@ -1768,7 +1768,7 @@
 <p>This guide defines conventions for writing <code>.lm</code> (Lamia script) files.
 <code>.lm</code> files are the orchestration layer -- they combine Python code
 with Lamia syntax to wire prompts, files, web actions, and validation
-into workflows.</p>
+into workflows. Violations are enforced by <code>lamia inspect</code> -- see the <a href="../../advanced/inspect/">full rule reference</a>.</p>
 <h2 id="core-principle">Core principle<a class="headerlink" href="#core-principle" title="Permanent link">&para;</a></h2>
 <p><code>.lm</code> files are <strong>Python + Lamia</strong>. Follow PEP 8 for the Python parts.
 but keep usage of Python code to a minimum only when Lamia syntax is not sufficient for the task.</p>
