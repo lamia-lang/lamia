@@ -2,7 +2,7 @@
 
 This guide defines conventions for writing `.hu` (human prompt template) files.
 `.hu` files are the interface between humans and LLMs in Lamia projects --
-clean, focused prompts that produce reliable results.
+clean, focused prompts that produce reliable results. Violations are enforced by `lamia inspect` -- see the [full rule reference](../advanced/inspect.md).
 
 ## Core principle
 

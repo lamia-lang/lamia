@@ -3,7 +3,7 @@
 This guide defines conventions for writing `.lm` (Lamia script) files.
 `.lm` files are the orchestration layer -- they combine Python code
 with Lamia syntax to wire prompts, files, web actions, and validation
-into workflows.
+into workflows. Violations are enforced by `lamia inspect` -- see the [full rule reference](../advanced/inspect.md).
 
 ## Core principle
 
