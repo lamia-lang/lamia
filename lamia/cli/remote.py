@@ -236,7 +236,7 @@ def _check_cloud_model_access(
 
     llm = get_llm_router(project_root)
 
-    missing, verified, suggestions = llm.check_model_access(to_check)
+    missing, verified, suggestions, needs_terms = llm.check_model_access(to_check)
 
     missing = set(missing)
     verified = set(verified)
@@ -253,20 +253,34 @@ def _check_cloud_model_access(
         print(file=sys.stderr)
 
     if missing:
-        catalog_url = llm.model_catalog_url()
+        terms_models = [(p, m) for p, m in sorted(missing) if (p, m) in needs_terms]
+        other_models = [(p, m) for p, m in sorted(missing) if (p, m) not in needs_terms]
+
         print(file=sys.stderr)
-        print("  Error: these models aren't accessible for this cloud project:", file=sys.stderr)
-        print(file=sys.stderr)
-        for provider, model in sorted(missing):
-            print(f"    ✗ {provider}:{model}", file=sys.stderr)
-            alts = suggestions.get((provider, model), [])
-            if alts:
-                print(f"      Did you mean: {', '.join(alts)}?", file=sys.stderr)
-        print(file=sys.stderr)
-        if catalog_url:
-            print(f"  Enable in Model Garden, then retry:", file=sys.stderr)
-            print(f"  {catalog_url}", file=sys.stderr)
+        if terms_models:
+            print("  These models require EULA / terms acceptance in Model Garden:", file=sys.stderr)
             print(file=sys.stderr)
+            for provider, model in terms_models:
+                print(f"    ✗ {provider}:{model}", file=sys.stderr)
+                print(f"      Accept terms: {needs_terms[(provider, model)]}", file=sys.stderr)
+            print(file=sys.stderr)
+            print("  Accept terms for each model above, then re-run.", file=sys.stderr)
+            print(file=sys.stderr)
+
+        if other_models:
+            print("  These models aren't available for this cloud project:", file=sys.stderr)
+            print(file=sys.stderr)
+            for provider, model in other_models:
+                print(f"    ✗ {provider}:{model}", file=sys.stderr)
+                alts = suggestions.get((provider, model), [])
+                if alts:
+                    print(f"      Did you mean: {', '.join(alts)}?", file=sys.stderr)
+            print(file=sys.stderr)
+            catalog_url = llm.model_catalog_url()
+            if catalog_url:
+                print(f"  Browse Model Garden: {catalog_url}", file=sys.stderr)
+                print(file=sys.stderr)
+
         sys.exit(1)
 
 
