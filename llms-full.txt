@@ -1,0 +1,4856 @@
+---
+Source: index.md
+---
+
+# Lamia Documentation
+
+Lamia is a concise scripting language for AI workflows. It extends Python with one-line declarations for LLM calls, web scraping, file I/O, and structured output validation. When AI generates automation code, Lamia keeps it short enough to read and trust -- a scraper that takes 200 lines in Python takes 10-15 in Lamia.
+
+## Quick Start
+
+Get started with Lamia in just a few steps:
+
+1. **Installation**
+   ```bash
+   pip install lamia-lang
+   ```
+
+## Navigation
+
+- **[Getting Started](getting-started/index.md)**: Write your first Lamia program — from single-file scripts to multi-file projects
+- **[Installation](getting-started/installation.md)**: Installation and setup instructions
+- **[Using Lamia in Python](getting-started/python-library.md)**: Call Lamia from your Python apps and scripts
+- **[Guide to the Hybrid Syntax](user-guide/lm-syntax.md)**: `.lm` file syntax, web automation, validation
+- **[Guide to the Humans Syntax](user-guide/hu-syntax.md)**: `.hu` file syntax for prompt templates
+- **[Inspect and Lint](advanced/inspect.md)**: `lamia inspect` CLI and full lint rule reference
+- **[API Reference](reference/)**: Complete API documentation
+
+## Community and Support
+
+- **GitHub**: [Repository](https://github.com/lamia-lang/lamia)
+- **Issues**: [Bug Reports & Feature Requests](https://github.com/lamia-lang/lamia/issues)
+---
+
+Ready to get started? Head over to the [Getting Started guide](getting-started/index.md) to write your first Lamia program!
+
+---
+Source: getting-started/installation.md
+---
+
+# Installation
+
+This guide will help you install Lamia and set up your development environment.
+
+## Requirements
+
+- Python 3.10 or higher
+- pip (Python package installer)
+
+## Installation Methods
+
+### Using pip (Recommended)
+
+Install Lamia directly from PyPI:
+
+```bash
+pip install lamia-lang
+```
+
+### Development Installation
+
+For development or to get the latest features, install from source:
+
+```bash
+git clone https://github.com/lamia-lang/lamia.git
+cd lamia
+pip install -e .
+```
+
+## Verification
+
+Verify your installation by running:
+
+
+```bash
+lamia -h
+```
+
+## Configuration
+
+After installation, create a basic configuration file with
+
+```bash
+lamia init
+```
+
+or copy an existing config.yaml file to your project directory.
+
+## Environment Variables
+
+lamia init will ask you to install the LLM API keys. But you can set up your environment variables with the following command:
+
+```bash
+export OPENAI_API_KEY="your-openai-api-key"
+export ANTHROPIC_API_KEY="your-anthropic-api-key"
+```
+
+Or create a `.env` file in your project directory:
+
+```bash
+OPENAI_API_KEY=your-openai-api-key
+ANTHROPIC_API_KEY=your-anthropic-api-key
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Import Error
+If you encounter import errors, ensure you have the correct Python version:
+```bash
+python --version  # Should be 3.10+
+```
+
+#### Permission Error
+On some systems, you might need to use `sudo` or install in a virtual environment:
+```bash
+python -m venv lamia-env
+source lamia-env/bin/activate  # On Windows: lamia-env\Scripts\activate
+pip install lamia-lang
+```
+
+#### Dependency Conflicts
+If you have dependency conflicts, try creating a fresh virtual environment:
+```bash
+python -m venv fresh-env
+source fresh-env/bin/activate
+pip install lamia-lang
+```
+
+For more help, check our [GitHub Issues](https://github.com/lamia-lang/lamia/issues) or create a new issue.
+
+---
+Source: getting-started/configuration.md
+---
+
+# Configuration
+
+You don't need to know every detail of the configuration file. The only part that you need to know is the model_chain section where you configure the default and fallback models.
+
+In a folder where you want to run Lamia, you can run `lamia init`. It will ask you a few questions and create a config.yaml file for you.
+```bash
+lamia init
+```
+
+After running this command, Lamia will create a config.yaml file for you. Let's see what is inside.
+
+## Configuration File Structure
+
+Lamia uses YAML-based configuration files to customize behavior across all components. This guide covers the configuration system in detail.
+
+
+A typical `config.yaml` file has the following structure:
+
+```yaml
+# Core engine settings
+engine:
+  default_timeout: 30
+  max_retries: 3
+  log_level: "INFO"
+
+# LLM provider configurations
+model_chain:
+  - name: "anthropic:claude-3-haiku-20240307" # primary model/provider
+    max_retries: 2
+#    temperature: 0.3          # cooler than provider default
+#    max_tokens: 500
+  - name: "openai"
+    max_retries: 1
+    temperature: 0.2
+
+# Web automation settings
+web_config:
+  browser_engine: selenium          # Browser automation engine: selenium, playwright
+  http_client: requests             # HTTP client library: requests
+  browser_options:
+    headless: false                 # Run browsers in headless mode
+    timeout: 10.0                   # Default timeout in seconds for browser operations
+  http_options:
+    timeout: 30.0                   # Default timeout in seconds for HTTP requests
+    user_agent: "Bot/1.0"           # User agent string for HTTP requests
+```
+
+## Configuration Sections
+
+
+### LLM Configuration for advanced users
+
+#### Anthropic Configuration:
+
+The most important thing to take away from this for non-advanced LLM users is that you can set/change the default model with the default_model property. The default model is used when you don't specify a model, for example, when you specify 'anthropic' the 'anthropic:<default_model>' will be selected.
+
+```yaml
+  # Anthropic Configuration
+  anthropic:
+    enabled: true
+    default_model: claude-3-opus-20240229
+    models:
+      - name: claude-3-opus-20240229
+        temperature: 0.2           # Make Claude more factual
+        max_tokens: 4000
+      - claude-3-sonnet-20240229   # Uses provider defaults
+      - name: claude-3-haiku-20240307
+        temperature: 0.4
+      - claude-2.1
+      - claude-2.0
+    temperature: 0.7     # Higher = more creative, Lower = more focused
+    max_tokens: 1000    # Maximum length of response
+    top_k: 50          # Limit vocabulary for sampling
+    top_p: 1.0         # Alternative to temperature for sampling
+```
+
+## Configuration Profiles
+
+You can use different configuration profiles for different environments:
+
+### Usage with Profiles
+```bash
+# Development
+lamia run workflow.lm --config config-dev.yaml
+
+# Production  
+lamia run workflow.lm --config config-prod.yaml
+```
+
+### Engine Configuration
+
+```yaml
+engine:
+  default_timeout: 30        # Default timeout in seconds
+  max_retries: 3            # Maximum retry attempts
+  log_level: "INFO"         # Logging level (DEBUG, INFO, WARNING, ERROR)
+  parallel_execution: true  # Enable parallel step execution
+```
+
+## Configuration Best Practices
+
+1. **Use Environment Variables**: Keep sensitive data in environment variables
+2. **Reasonable Defaults**: Provide sensible defaults for all optional settings
+
+---
+Source: getting-started/index.md
+---
+
+# Getting Started with Lamia
+
+This guide walks you through writing your first Lamia programs — from a single-file script to a multi-file project with shared models and reusable prompts.
+
+## Setting up a project
+
+Start by creating a project folder and initializing it:
+
+```bash
+mkdir my-lamia-project
+cd my-lamia-project
+lamia init
+```
+
+`lamia init` creates a `config.yaml` with your model chain and a `.env` file for API keys. Follow the prompts to select your LLM provider and enter your API key.
+
+Your project now looks like this:
+
+```
+my-lamia-project/
+├── config.yaml
+└── .env
+```
+
+## Your first program: a single .lm file
+
+Create a file called `hello.lm`:
+
+```python
+def greet():
+    "Write a short, friendly greeting for a new Lamia user"
+
+result = greet()
+print(result)
+```
+
+Run it:
+
+```bash
+lamia hello.lm
+```
+
+That's it. The string inside `greet()` is sent to the LLM configured in your `config.yaml`, and the response is printed.
+
+### Adding a return type
+
+Without a return type, you get raw text. Add `-> HTML` to validate and extract HTML:
+
+```python
+def generate_page() -> HTML:
+    "Create a simple HTML page that says Welcome to Lamia"
+
+page = generate_page()
+print(page)
+```
+
+Or get structured data with a Pydantic model:
+
+```python
+
+class Greeting(BaseModel):
+    message: str = Field(description="The greeting text")
+    language: str = Field(description="Language code, e.g. en, es, de")
+
+def greet() -> JSON[Greeting]:
+    "Write a friendly greeting and identify the language"
+
+result = greet()
+print(f"{result.message} (language: {result.language})")
+```
+
+Save output to a file with `-> File(...)`:
+
+```python
+"Create a simple landing page" -> File(HTML, "landing.html")
+```
+
+## Extracting prompts into .hu files
+
+As your prompts grow, you will want to separate them from your logic. `.hu` (human) files are plain-text prompt templates — they contain just the prompt, with optional parameters.
+
+Create `summarize.hu`:
+
+```
+Summarize the following text in {max_words} words or fewer:
+
+{text}
+```
+
+Now create `pipeline.lm` to call it:
+
+```python
+article = """
+Lamia is a scripting language that combines Python syntax with LLM commands,
+file operations, and web automation. It uses .lm files for logic and .hu files
+for prompt templates.
+"""
+
+result = summarize(text=article, max_words=30)
+print(result)
+```
+
+Run it:
+
+```bash
+lamia pipeline.lm
+```
+
+Lamia automatically discovers `summarize.hu` and makes it callable as a function. The filename (without `.hu`) becomes the function name.
+
+### Multiple .hu files from one .lm file
+
+A single `.lm` file can call as many `.hu` files as needed:
+
+Create `translate.hu`:
+
+```
+Translate the following text to {language}:
+
+{text}
+```
+
+Update `pipeline.lm`:
+
+```python
+article = """
+Lamia is a scripting language that combines Python syntax with LLM commands.
+"""
+
+summary = summarize(text=article, max_words=30)
+spanish = translate(text=summary, language="Spanish")
+print(f"Summary: {summary}")
+print(f"Spanish: {spanish}")
+```
+
+## A real multi-file workflow: analyze then trade
+
+This is a realistic split where each `.lm` file owns a separate workflow:
+
+- `report.lm` defines functions to gather market data and write a structured analyst report.
+- `buy_stocks.lm` defines functions to read that report and place the buy order for the winner.
+- `orchestrator.lm` calls these functions directly — Lamia auto-discovers them from neighboring files.
+
+Create `analyst_report.hu`:
+
+```
+You are a financial analyst.
+Using the stock table below, rank symbols by short-term opportunity.
+Return:
+- winner: top symbol to buy now
+- runner_up: second choice
+- rationale: short explanation for both
+- risk_note: key risk to monitor
+
+Stock data:
+{@stocks.csv}
+```
+
+Create `report.lm`:
+
+```python
+def stock_data(ticker) -> File(CSV[StockQuote], "stocks.csv", append=True):
+    "extract quote summary from https://finance.yahoo.com/quote/{ticker}"
+
+
+def generate_report():
+    tickers = ["AAPL", "NVDA", "MSFT", "GOOG"]
+    for ticker in tickers:
+        stock_data(ticker=ticker)
+        print(f"Scraped {ticker}")
+
+    with files("./"):
+        analyst_report() -> File(JSON[AnalystReport], "analyst_report.json")
+
+    print("Created stocks.csv and analyst_report.json")
+```
+
+Create `buy_stocks.lm`:
+
+```python
+def submit_order(order) -> str:
+    """Submit order via broker website automation with persistent session."""
+    
+    # Login only once - session persists across calls
+    with session("broker_login"):
+        web.navigate("https://broker.example.com/login")
+        web.type_text("Username input field", os.getenv("BROKER_USERNAME"))
+        web.type_text("Password input field", os.getenv("BROKER_PASSWORD"))
+        web.click("Login button")
+        web.wait_for("Dashboard", "visible")
+    
+    # This runs every time - session block skipped if already logged in
+    web.navigate("https://broker.example.com/trades")
+    web.wait_for("Trade form", "visible")
+    
+    # Get portfolio balance
+    balance_text = web.get_text("Portfolio balance")
+    available_budget = float(balance_text.replace("$", "").replace(",", ""))
+    
+    # Use minimum of requested budget or available budget
+    actual_budget = min(order.budget_usd, available_budget)
+    
+    # Search for ticker
+    web.type_text("Symbol search input", order.symbol)
+    web.click("Search button")
+    web.wait_for(f"Symbol result for {order.symbol}", "visible")
+    web.click(f"Symbol result for {order.symbol}")
+    
+    # Place order
+    web.click("Buy order button")
+    web.type_text("Amount input field", str(actual_budget))
+    web.select_option("Order type dropdown", "market")
+    web.click("Submit order button")
+    web.wait_for("Order confirmation", "visible")
+    
+    # Get confirmation
+    confirmation = web.get_text("Order confirmation message")
+    
+    if "success" in confirmation.lower():
+        f"submitted: {order.symbol} for ${actual_budget}"
+    else:
+        f"failed: {confirmation}"
+
+
+def buy_winner_stock(default_budget_usd=1000.0):
+    report = "./analyst_report.json" -> JSON[AnalystReport]
+    winner = report["winner"]
+
+    order = BuyOrder(symbol=winner, side="buy", budget_usd=default_budget_usd, order_type="market")
+    status = submit_order(order)
+    print(f"Order status: {status}")
+```
+
+Create `orchestrator.lm`:
+
+```python
+generate_report()
+buy_winner_stock()
+print("Pipeline complete: analysis generated and winner purchased")
+```
+
+Lamia auto-discovers `generate_report` from `report.lm` and `buy_winner_stock` from `buy_stocks.lm` — no imports needed.
+
+Run the full workflow:
+
+```bash
+lamia orchestrator.lm
+```
+
+## Sharing Pydantic models across files
+
+When multiple `.lm` files need the same schemas, keep them in `models/schemas.py`:
+
+```
+stock-report/
+├── config.yaml
+├── .env
+├── models/
+│   └── schemas.py
+├── analyst_report.hu
+├── report.lm
+├── buy_stocks.lm
+└── orchestrator.lm
+```
+
+`models/schemas.py`:
+
+```python
+
+class StockQuote(BaseModel):
+    ticker: str = Field(description="Stock ticker symbol, e.g. AAPL")
+    open: float = Field(description="Open price from the quote summary section")
+    bid: str = Field(description="Bid price and size")
+    ask: str = Field(description="Ask price and size")
+
+
+class AnalystReport(BaseModel):
+    winner: str = Field(description="Top symbol to buy")
+    runner_up: str = Field(description="Second-best symbol")
+    rationale: str = Field(description="Why these symbols were selected")
+    risk_note: str = Field(description="Main risk to watch")
+
+
+class BuyOrder(BaseModel):
+    symbol: str = Field(description="Ticker to trade")
+    side: str = Field(description="buy or sell")
+    budget_usd: float = Field(gt=0, description="Dollar amount to deploy")
+    order_type: str = Field(description="market or limit")
+```
+
+Any `.lm` file can import these models with standard Python imports.
+
+## Using Lamia Studio
+
+If you prefer a visual environment, [Lamia Studio](https://github.com/lamia-lang/lamia-ide) is a lightweight IDE built for Lamia. It includes a chat interface that can write Lamia programs for you — describe what you want in plain language and the chat generates `.lm` and `.hu` files.
+
+Install it from the [releases page](https://github.com/lamia-lang/lamia-ide/releases/latest).
+
+## What to read next
+
+These guides cover the full language features in depth:
+
+1. **[.hu File Syntax](../user-guide/hu-syntax.md)** — parameter placeholders, file context references, default values, and calling conventions for prompt templates.
+
+2. **[.lm File Syntax](../user-guide/lm-syntax.md)** — return types, model selection, variable substitution, file operations, session management, web automation, and async execution.
+
+3. **[Web Automation](../user-guide/web-automation.md)** — browser control, form filling, screenshots, and scoped element operations.
+
+4. **[File Context](../user-guide/files-context.md)** — referencing local files (PDFs, CSVs, code) in your prompts with `{@filename}` syntax.
+
+5. **[Using Lamia in Python](python-library.md)** — call Lamia from your Python apps and scripts instead of running `.lm` files from the CLI.
+
+---
+Source: user-guide/hu-syntax.md
+---
+
+# .hu File Syntax
+
+`.hu` (human) files are plain-text prompt templates. They contain just the text you want to send to an LLM, with optional parameter placeholders and file-context references.
+
+Each `.hu` file is automatically a callable function whose name matches the filename. You call `.hu` functions from `.lm` files -- `.lm` files are the orchestration layer that ties everything together.
+
+## Quick example
+
+**summarize.hu**
+```
+Summarize the following article: {@article_path}
+Focus on {aspect} and keep it under {max_words} words.
+```
+
+**pipeline.lm**
+```python
+result = summarize(article_path="article.txt", aspect="key findings", max_words=200) -> HTML
+print(result)
+```
+
+Run with:
+```bash
+lamia pipeline.lm
+```
+
+## Parameter placeholders
+
+Use `{name}` to define parameters. They are auto-detected -- no declaration needed.
+
+```
+Write a {tone} email to {recipient} about {topic}.
+```
+
+Defaults are inline with `:`:
+
+```
+Write a {tone:friendly} email to {recipient} about {topic:today's update}.
+```
+
+Call with keyword arguments; override only what you need:
+
+```python
+email = draft_email(recipient="the team")
+# tone -> "friendly", topic -> "today's update"
+email = draft_email(recipient="the team", tone="formal", topic="Q3 results")
+```
+
+`{name:None}` means "optional, empty when omitted".
+
+Only missing required parameters raise an error:
+```
+draft_email() missing required keyword arguments: recipient
+```
+
+To include a literal brace in the text, double it:
+```
+The result is in the format {{key: value}}.
+```
+
+## File context references
+
+Use `{@filename}` to inject the contents of a local file into the prompt. The file is resolved by exact name matching. If same filename exists in multiple directories, the error message will suggest the minimal path suffix to disambiguate. If file does not exist, an error will be raised and files with similar name will be suggested in case user forgot the corrent filename.
+
+```
+Review the code in {@main.py} and suggest improvements.
+Also check {@utils.py} for any issues.
+```
+
+### Variable file references
+
+Use `{@identifier}` where the identifier matches a kwarg name. If the caller provides the file path as an argument -- **no `files()` context needed**:
+
+**analyze.hu**
+```
+Analyze the document: {@doc_path}
+Focus on: {aspect}
+```
+
+If no kwarg matches the identifier, it is treated as a literal filename.
+
+### Literal file names
+
+**caller.lm**
+```python
+# Absolute path -- resolves directly
+result = analyze(doc_path="/Users/me/report.pdf", aspect="financials") -> JSON
+
+# Relative path -- resolves relative to the .hu file location
+result = analyze(doc_path="./data/report.pdf", aspect="financials") -> JSON
+
+# Bare filename -- resolves relative to the .hu file location
+result = analyze(doc_path="report.pdf", aspect="financials") -> JSON
+```
+
+### When to use `files()` vs variable paths
+
+- **`files("~/Documents/", "~/projects/")`** -- use when you want directory-based discovery: "search for files across these folders"
+- **`{@doc_path}` with kwarg** -- use when you have a specific file to pass: "use this exact file"
+
+Passing a single file to `files()` is an anti-pattern. Instead, pass the file path without files() syntax:
+
+```python
+# Anti-pattern:
+with files("~/Documents/resume.pdf"):
+    result = extract(aspect="skills") -> JSON
+
+# Better:
+result = extract(doc_path="~/Documents/resume.pdf", aspect="skills") -> JSON
+```
+
+See the [File Context](files-context.md) documentation for details on directory-based resolution and error handling.
+
+## Return types
+
+`.hu` files are **return-type agnostic**. The return type is specified by the caller in the `.lm` file using the `->` syntax:
+
+```python
+# Returns validated HTML
+page = generate_landing_page(product="Lamia") -> HTML
+
+# Returns a Pydantic model extracted from HTML
+quote = get_stock_data(ticker="AAPL") -> HTML[StockQuote]
+
+# Writes output to a file
+generate_docs(project="lamia") -> File(Markdown, "docs.md")
+```
+
+If called without a return type, the raw LLM response text is returned.
+
+## Calling conventions
+
+- `.hu` functions are called from `.lm` files like regular functions
+- All parameters must be keyword arguments
+- `.hu` files **cannot** call other `.hu` files -- use `.lm` files as the glue
+- Filename (without `.hu` extension) must be unique across the project
+
+## Standalone execution
+
+You can run a `.hu` file directly from the CLI:
+
+```bash
+lamia hello.hu
+```
+
+This sends the prompt (with no parameters) to the default model and prints the response. Parameterized `.hu` files require a `.lm` wrapper to pass arguments.
+
+## Comparison with .lm files
+
+| Feature | `.hu` files | `.lm` files |
+|---------|------------|-------------|
+| Content | Plain text prompt | Python + Lamia syntax |
+| Parameters | `{name}`, `{@name}` file refs | Python function arguments |
+| Return type | Set by caller | Declared with `-> Type` |
+| Python code | Not supported | Full Python support |
+| Imports | Not needed | Implicit Lamia imports |
+| Can call `.hu` | No | Yes |
+| Can call `.lm` | No | Yes |
+| Filename = function | Yes | No (uses `def` names) |
+
+---
+Source: user-guide/lm-syntax.md
+---
+
+# .lm File Syntax
+
+Lamia `.lm` files use a hybrid Python syntax that lets you write LLM commands, file operations, and web actions as regular function definitions. Lamia syntax can be combined with normal Python code. So you get the power of Python combined with human-friendly syntax for LLM commands and other operations needed for daily tasks by non-technical users. You can run Lamia scripts with:
+
+```bash
+lamia your_script.lm
+```
+
+## The execution flow
+
+Lamia detects its own syntax and executes through its engine, the rest of the code is executed as normal Python code. Here are some function definitions that will be executed by Lamia:
+
+```python
+# LLM command — plain text goes to the AI
+def generate_story():
+    "Write a short story about a robot discovering emotions"
+
+# File read — paths are read from disk
+def read_config() -> JSON:
+    "./config.json"
+
+# Web request — URLs trigger HTTP requests
+def fetch_data() -> JSON:
+    "https://api.example.com/data"
+```
+
+Function bodies in Lamia can work in three modes:
+
+```python
+# 1) LLM prompt (plain string body)
+def generate_story() -> Markdown:
+    "Write a short story about a robot discovering emotions"
+
+# 2) LLM prompt (dynamic f-string body)
+def summarize(topic) -> Markdown:
+    f"Summarize latest updates about {topic}"
+
+# 3) Deterministic result (return expression, no LLM call)
+def build_csv_line(ts, job_id) -> CSV:
+    return f"{ts},{job_id},ok"
+```
+
+Lamia uses `->` syntax to return data. In Python `->` is used to define the return type of the function. In Lamia it is used to actually return a value or stream data.
+
+## Return Types
+
+Without return types, Lamia feels incomplete. Return type markers are more than markers, they are extractors and validators at runtime. Here is an example of how to use return types:
+
+```python
+def get_data() -> JSON:
+    "./users.json"   # Must be valid JSON - otherwise the function will fail
+
+def generate_page() -> HTML:
+    "Create a login form"   # Must be valid HTML - otherwise the function will fail
+
+def plain_text() -> TEXT:
+    "Write a summary"   # No validation, just extraction
+```
+
+Available types: `HTML`, `JSON`, `YAML`, `XML`, `Markdown`, `CSV`, `TEXT`
+
+## Simplified Syntax
+
+For one-line functions, defining functions seems like overkill sometimes. That is why Lamia provides a simplified syntax. The functions we wrote above can be shortened to:
+
+```python
+"./users.json" -> JSON:
+
+"Create a login form" -> HTML:
+
+"Write a summary" -> TEXT:
+```
+
+But for these executions we won't be able to catch the result of the function. We need to assign the result to a variable.
+
+```python
+data = "./users.json" -> JSON:
+
+page = "Create a login form" -> HTML:
+
+summary = "Write a summary" -> TEXT:
+```
+
+But if we are not interested in catching the values and we want to save the execution result to a file, we can use the `-> File(...)` syntax.
+
+```python
+"./users.json" -> File(JSON, "users.json")
+
+"Create a login form" -> File(HTML, "login.html")
+
+"Write a summary" -> File(TEXT, "summary.txt")
+```
+
+### Model Selection
+
+Instead of simplified syntax, we need function definitions if we want to execute the function later, execute many times in different parts of the script, etc.
+
+There is however a very important reason to use function definitions: model selection. All LLM commands in Lamia scripts use the global model chain coming from the config.yaml file mostly. But for some LLM commands users might need to use different models and even model chains. Here are examples of how to use model selection:
+
+```python
+def analyze(models="openai:gpt-4"):
+    "Analyze the data"
+
+def with_fallback(models=["openai:gpt-4", "anthropic:sonnet-4"]):
+    "Generate a report with model fallback"
+
+# Same as above but gpt-4 will be retried twice before falling back to sonnet-4
+def with_fallback(models=["openai:gpt-4", 'openai:gpt-4', "anthropic:sonnet-4"]):
+    "Generate a report with model fallback"
+```
+
+## Variable substitution
+
+Variable substitution is a feature that allows you to use variables in your LLM prompts, web actions and file operations. Example:
+
+```python
+def stock_data(ticker="AAPL") -> File(CSV[StockQuote], "stocks.csv", append=True):
+    "extract the stock quote data https://finance.yahoo.com/quote/{ticker}"
+
+for ticker in ["AAPL", "NVDA", "GOOG"]:
+    stock_data(ticker)
+
+# Or with simpler syntax
+for ticker in ["AAPL", "NVDA", "GOOG"]:
+    "extract the stock quote data https://finance.yahoo.com/quote/{ticker}" -> File(CSV[StockQuote], "stocks.csv", append=True)
+```
+
+## Function Body Semantics
+
+Function body syntax chooses execution mode:
+
+- Bare string or bare f-string body: LLM prompt mode
+- `return <expr>` body: deterministic mode (Python evaluation, no LLM call)
+- Path-like string body (`"./x.json"`): file-read mode
+
+```python
+def llm_mode(topic) -> Markdown:
+    f"Write a short brief about {topic}"
+
+def deterministic_mode(ts, job_id) -> File(CSV, "runs.csv", append=True):
+    return f"{ts},{job_id},ok"
+
+def read_mode() -> JSON:
+    "./config.json"
+```
+
+`return`-based deterministic mode works with `CSV`, `JSON`, `YAML`, `XML`, `HTML`, `Markdown`, `str`, and `File(...)`.
+
+## F-strings
+
+F-strings are supported in Lamia syntax:
+
+- Function bodies
+- Inline `-> Type` and `-> File(...)` expressions
+- Function parameters and global-scope variables
+
+```python
+ENV = "prod"
+
+def prompt(topic) -> Markdown:
+    f"[{ENV}] summarize {topic}"
+
+def deterministic_row(ts, status) -> CSV:
+    return f"{ts},{status}"
+```
+
+## File Operations
+
+### Reading Files
+
+Use explicit local path prefixes:
+
+```python
+def read_data():
+    "./data/input.txt"
+
+def load_settings() -> JSON:
+    "../config/settings.json"
+
+def read_logs():
+    "/var/log/application.log"
+```
+
+Rules for local file reads in `.lm` string commands:
+
+- Local file read is detected only for explicit prefixes: `./`, `../`, `/`, `~/`
+- If the path exists, Lamia reads it from local disk (no LLM call)
+- If the path does not exist, Lamia raises `FileNotFoundError`
+- Bare names without prefixes (for example: `"config"` or `"config.json"`) are treated as normal LLM prompt text
+- If the string is not an unambiguous path token (for example: `"./config.json a"`), it is treated as LLM prompt text
+
+Paths with spaces must use shell-like escaping:
+
+```python
+def read_report() -> JSON:
+    "./reports/q1\ summary.json"      # escaped space
+
+def read_report_quoted() -> JSON:
+    '"./reports/q1 summary.json"'     # quoted path token
+```
+
+These path-token rules are POSIX-style and intended for macOS/Linux.
+
+In addition, Lamia's `file` action API can be used:
+
+```python
+content = file.append("/path/to/file.txt")
+content = file.read("data.csv", encoding="latin-1")
+```
+
+### Writing to Files
+
+As we have seen, the `-> File(...)` syntax can be used to save the execution result to a file. For complex file operations:
+
+```python
+# With type validation
+def generate_page() -> File(HTML, "output.html"):
+    "Generate an HTML page about cats"
+
+# Without type validation
+def generate_text() -> File("output.txt"):
+    "Generate some text"
+
+# Append instead of overwrite
+def add_rows() -> File(CSV, "data.csv", append=True):
+    "Generate additional CSV rows"
+
+# Custom encoding
+def generate_latin() -> File("output.txt", encoding="latin-1"):
+    "Generate text with special characters"
+```
+
+For `File(..., append=True)`, Lamia includes the existing file content as context so the model can continue from current data instead of generating unrelated output.
+
+## File Context (`with files()`)
+
+Reference local files in LLM prompts using `{@filename}` syntax:
+
+
+```python
+with files("~/Documents/"):
+    def answer_question(question, models="openai:gpt-4"):
+        """
+        Answer: {question}
+        
+        Use information from {@resume.pdf} and {@cover_letter.txt}
+        """
+```
+
+Files are resolved using smart search (exact match, content grep, fuzzy matching). PDF and DOCX are automatically extracted to text.
+
+```python
+{@resume.pdf}                     # Search indexed directories
+{@/Users/me/Documents/resume.pdf} # Absolute path
+{@resum.pdf}                      # Fuzzy match → resume.pdf
+{@config}                         # Finds config.yaml, config.json, etc.
+```
+
+In `.hu` files, `{@identifier}` can also be a variable: if the caller provides it as a kwarg, the value is used as the filepath. See [.hu Syntax](hu-syntax.md#variable-file-references) for details.
+
+Multiple directories and nested contexts:
+
+```python
+with files("~/Documents/", "~/projects/"):
+    with session("job_application"):
+        def fill_form(models="openai:gpt-4"):
+            "Fill the form using {@resume.pdf}"
+```
+
+For full details see the [File Context Reference](files-context.md).
+
+## Imports and Cross-File Function Discovery
+
+Lamia avoids explicit imports. All Lamia types and interfaces are available without any import statements. But if you mix it with Python code, you will import Python dependencies as usual.
+
+Because of implicit imports, IDEs will show warnings on some Lamia commands. They need to be ignored if the syntax is correct.
+
+### Calling .hu files
+
+Every `.hu` file in your project is automatically available as a function. The filename (without `.hu`) is the function name:
+
+```python
+# analyst_report.hu exists in the project
+result = analyst_report(data=my_data) -> JSON[Report]
+```
+
+### Calling functions from other .lm files
+
+Functions defined in neighboring `.lm` files are auto-discovered at runtime via lazy loading. You call them directly — no imports needed:
+
+```python
+# report.lm defines: def generate_report(): ...
+# buy_stocks.lm defines: def buy_winner_stock(): ...
+
+# orchestrator.lm — just call them:
+generate_report()
+buy_winner_stock()
+print("Pipeline complete")
+```
+
+Lamia scans `.lm` files in the project directory to find function definitions. When `orchestrator.lm` calls `generate_report()`, Lamia finds it in `report.lm` and loads it automatically.
+
+## Session Management
+
+Use `with session()` for multi-step workflows that persist across runs:
+
+```python
+def login_to_site():
+    with session("login"):
+        web.navigate("https://example.com/login")
+        web.type_text("#username", "your_username")
+        web.type_text("#password", "your_password")
+        web.click("#login-button")
+    
+    # Always runs — session block is skipped if already completed
+    web.navigate("https://example.com/dashboard")
+```
+
+**First run**: executes the block, saves session on success.
+**Subsequent runs**: detects valid session, skips the block.
+
+Sessions are stored in `.lamia_sessions/`. Clear with `rm -rf .lamia_sessions/`.
+
+For full details on session blocks and troubleshooting, see [Session Management](web-automation.md#session-management).
+
+## Web Actions
+
+Use the `web` object for browser automation:
+
+```python
+web.navigate("https://example.com")
+web.click("#login-button")
+web.type_text("#username", "user@example.com")
+text = web.get_text(".result")
+web.wait_for(".loading", "hidden")
+web.screenshot("page.png")
+```
+
+Scoped elements:
+
+```python
+modal = web.get_element("div.modal")
+modal.click("button.close")
+
+fields = web.get_elements("div.form-field")
+for field in fields:
+    label = field.get_text("label")
+    field.type_text("input", "answer")
+```
+
+## Parameters and Models
+
+### Parameter Substitution
+
+```python
+def generate_report(data, style):
+    "Create a {style} report based on: {data}"
+```
+
+## Advanced: Async and Parallel Execution
+
+Functions can be defined as async and executed in parallel:
+
+```python
+import asyncio
+
+async def main():
+    results = await asyncio.gather(
+        get_weather(),
+        read_config(),
+        fetch_webpage()
+    )
+
+asyncio.run(main())
+```
+
+---
+Source: user-guide/file-operations.md
+---
+
+# File Operations
+
+Lamia provides a `file` namespace for direct filesystem operations: reading, writing, appending, checking existence, and finding files by pattern — all without involving an LLM.
+
+## Overview
+
+```python
+# Find files by pattern
+csv_files = file.glob("./data/*.csv")
+
+# Check if a file exists
+if file.exists("./config.json"):
+    content = file.read("./config.json")
+
+# Read a file
+content = file.read("./config.json")
+
+# Write to a file
+file.write("./output.txt", "Hello, World!")
+
+# Append to a file
+file.append("./log.txt", "New entry\n")
+```
+
+## API
+
+### `file.read(path, encoding="utf-8")`
+
+Read file contents and return as a string.
+
+```python
+content = file.read("./data.csv")
+settings = file.read("./config.yaml", encoding="utf-8")
+legacy = file.read("./old_data.txt", encoding="latin-1")
+```
+
+**Parameters:**
+
+| Parameter  | Type  | Default   | Description              |
+|-----------|-------|-----------|--------------------------|
+| `path`    | str   | required  | File path to read        |
+| `encoding`| str   | `"utf-8"` | File encoding            |
+
+**Returns:** File content as a string.
+
+### `file.write(path, content, encoding="utf-8")`
+
+Write content to a file. Creates the file if it doesn't exist, overwrites if it does.
+
+```python
+file.write("./output.txt", "Hello, World!")
+file.write("./data.json", json.dumps({"key": "value"}))
+file.write("./legacy.csv", csv_content, encoding="latin-1")
+```
+
+**Parameters:**
+
+| Parameter  | Type  | Default   | Description              |
+|-----------|-------|-----------|--------------------------|
+| `path`    | str   | required  | File path to write       |
+| `content` | str   | required  | Content to write         |
+| `encoding`| str   | `"utf-8"` | File encoding            |
+
+### `file.append(path, content, encoding="utf-8")`
+
+Append content to an existing file. Creates the file if it doesn't exist.
+
+```python
+file.append("./log.txt", f"[{timestamp}] Event occurred\n")
+file.append("./results.csv", "new_row,data,here\n")
+```
+
+**Parameters:**
+
+| Parameter  | Type  | Default   | Description              |
+|-----------|-------|-----------|--------------------------|
+| `path`    | str   | required  | File path to append to   |
+| `content` | str   | required  | Content to append        |
+| `encoding`| str   | `"utf-8"` | File encoding            |
+
+### `file.glob(pattern)`
+
+Find files matching a glob pattern. Returns a sorted list of matching file paths. Use `|` to OR multiple patterns.
+
+```python
+csv_files = file.glob("./data/*.csv")
+configs = file.glob("./**/*.json|./**/*.yaml")
+scripts = file.glob("./**/*.lm|./**/*.hu")
+specific = file.glob("config.json|settings.yaml|.env")
+```
+
+**Parameters:**
+
+| Parameter  | Type  | Default   | Description              |
+|-----------|-------|-----------|--------------------------|
+| `pattern` | str   | required  | Glob pattern, use `\|` for OR |
+
+**Returns:** Sorted list of matching file paths (empty list if no matches).
+
+**Pattern syntax:**
+- `*` — matches any characters within a single directory
+- `**` — matches across directories (recursive)
+- `?` — matches a single character
+- `|` — OR: combines multiple patterns (`"*.lm|*.hu|config.json"`)
+
+### `file.exists(path)`
+
+Check if a file exists. Returns `True` if the file exists, `False` otherwise.
+
+```python
+if file.exists("./data.csv"):
+    data = file.read("./data.csv")
+else:
+    file.write("./data.csv", "header1,header2\n")
+```
+
+**Parameters:**
+
+| Parameter  | Type  | Default   | Description              |
+|-----------|-------|-----------|--------------------------|
+| `path`    | str   | required  | File path to check       |
+
+**Returns:** `True` if the file exists, `False` otherwise.
+
+## Patterns
+
+### Batch file processing
+
+Use `file.glob()` to find and process multiple files at once:
+
+```python
+# Process all CSV files in a directory
+for path in file.glob("./reports/*.csv"):
+    content = file.read(path)
+    # process each file...
+
+# Find multiple file types at once
+configs = file.glob("./**/*.json|./**/*.yaml")
+
+# Find specific files by name
+important = file.glob("config.json|settings.yaml|.env|README.md")
+
+# Check if any matching files exist
+if file.glob("./inbox/*.txt"):
+    # process inbox...
+```
+
+### Conditional file operations
+
+Use `file.exists()` to branch logic based on whether a file is already present:
+
+```python
+if file.exists("./output.csv"):
+    file.append("./output.csv", f"{name},{score}\n")
+else:
+    file.write("./output.csv", "name,score\n")
+    file.append("./output.csv", f"{name},{score}\n")
+```
+
+### CSV operations
+
+```python
+csv_path = "./results.csv"
+
+# Initialize CSV with headers if it doesn't exist
+if not file.exists(csv_path):
+    file.write(csv_path, "timestamp,status,message\n")
+
+# Append rows
+file.append(csv_path, f"{timestamp},success,Completed\n")
+```
+
+### Safe config loading
+
+```python
+config_path = "./config.json"
+
+if file.exists(config_path):
+    raw = file.read(config_path)
+    # parse and use config
+else:
+    # use defaults or create initial config
+    file.write(config_path, '{"retries": 3}')
+```
+
+## Common Mistakes
+
+**Do NOT use Python's built-in `open()` or `with open()`** — Lamia scripts use the `file.*` API:
+
+```python
+# ❌ NOT RECOMMENDED — Lamia syntax is preferred
+with open("data.txt", "r") as f:
+    content = f.read()
+
+# ❌ NOT RECOMMENDED — Lamia syntax is preferred
+try:
+    content = file.read("data.txt")
+except FileNotFoundError:
+    content = ""
+
+# ✅ CORRECT
+if file.exists("data.txt"):
+    content = file.read("data.txt")
+else:
+    content = ""
+
+# ✅ CORRECT — simple read
+content = file.read("data.txt")
+
+# ✅ CORRECT — write
+file.write("data.txt", "hello")
+```
+
+## Comparison with Other File Mechanisms
+
+Lamia has three ways to work with files, each for a different purpose:
+
+| Mechanism | Purpose | Example |
+|-----------|---------|---------|
+| `file.glob/exists/read/write/append` | Direct filesystem I/O | `file.write("out.txt", data)` |
+| `-> File(...)` | LLM-generated content saved to disk | `def report() -> File(HTML, "report.html")` |
+| `with files(...)` | Inject file content into LLM prompts | `{@resume.pdf}` |
+
+### When to use `file.*`
+
+Use `file.glob()`, `file.exists()`, `file.read()`, `file.write()`, `file.append()` when you have content already and want to perform straightforward filesystem operations — no LLM involved.
+
+```python
+# Read a queue, modify it, write it back
+content = file.read("./queue.txt")
+lines = content.strip().split('\n')
+lines.append("new_item")
+file.write("./queue.txt", '\n'.join(lines) + '\n')
+```
+
+### When to use `-> File(...)`
+
+Use `-> File(Type, path)` when you want the LLM to **generate** content and save it directly to a file with optional type validation.
+
+```python
+def generate_report() -> File(HTML, "report.html"):
+    "Create a quarterly sales report"
+```
+
+### When to use `with files(...)`
+
+Use `with files(...)` when you want to **inject file content into LLM prompts** via `{@filename}` syntax.
+
+```python
+with files("~/Documents/"):
+    def summarize():
+        "Summarize {@report.pdf}"
+```
+
+## Reading Files with Type Conversion
+
+To read a file and parse it into a typed Python object, use the `-> Type` syntax:
+
+```python
+data = "./config.json" -> JSON       # Returns a dict
+config = "./settings.yaml" -> YAML   # Returns a dict
+```
+
+This is different from `file.read()` which always returns a raw string.
+
+---
+Source: user-guide/files-context.md
+---
+
+# File Context for AI Prompts
+
+The `files()` context manager allows you to reference files in your LLM prompts using the `{@filename}` syntax. This is perfect for AI-powered form filling, document analysis, and any task where the AI needs access to local files.
+
+## Overview
+
+```python
+with files("~/Documents/", "~/projects/"):
+    def answer_question(question):
+        """
+        Answer: {question}
+
+        Use information from {@resume.pdf} and {@cover_letter.txt}
+        """
+
+answer = answer_question(question="What are my main skills?")
+```
+
+## Key Features
+
+### Exact File Resolution
+
+Files are resolved by **exact suffix matching** against indexed paths. No fuzzy loading — only the file you name gets loaded:
+
+1. Absolute path → used directly
+2. Filename or path suffix → must match exactly (e.g., `resume.pdf` or `docs/resume.pdf`)
+
+If the same filename exists in multiple directories, you'll be asked to disambiguate with a longer path.
+
+### Automatic File Extraction
+
+- **PDF files**: Text extracted using PyPDF2
+- **DOCX files**: Text extracted using python-docx
+- **Text files**: Read directly
+
+### Error Handling
+
+- **AmbiguousFileError**: Same filename exists in multiple indexed directories
+- **FileReferenceError**: File not found (with "Did you mean?" suggestions)
+
+---
+
+## Usage
+
+### Basic Example
+
+```python
+# linkedin_automation.lm
+
+with files("~/Documents/"):
+    def extract_name(models="openai:gpt-4"):
+        """Extract my full name from {@resume.pdf}"""
+    
+    def answer_experience_question(question, models="openai:gpt-4"):
+        """
+        Answer this job application question: {question}
+        
+        Use {@resume.pdf} and {@cover_letter.txt} for context.
+        """
+
+# Call the functions
+name = extract_name()
+answer = answer_experience_question("What are your main skills?")
+```
+
+### Multiple Directories
+
+```python
+with files("~/Documents/", "~/projects/linkedin/", "./config/"):
+    # All files from these directories are indexed
+    def setup(models="openai:gpt-4"):
+        """Load API keys from {@credentials.json}"""
+```
+
+### Nested Contexts
+
+```python
+with files("~/Documents/"):
+    with session("linkedin", "https://linkedin.com/feed"):
+        # Both files and session contexts are active
+        def apply_to_job(models="openai:gpt-4"):
+            """
+            Fill the Easy Apply form using {@resume.pdf}
+            """
+```
+
+---
+
+## File Reference Syntax
+
+### Filename or Path
+
+```python
+{@resume.pdf}                    # Exact filename match in indexed directories
+{@docs/resume.pdf}               # Path suffix — disambiguates when resume.pdf exists in multiple dirs
+{@/Users/me/Documents/resume.pdf} # Absolute path (always works)
+```
+
+File references use **exact suffix matching**. The reference must match the end of an indexed file path. No fuzzy or partial matching is performed — this prevents accidentally loading the wrong file.
+
+### Disambiguating Duplicates
+
+When the same filename exists in multiple directories:
+
+```python
+with files("~/Documents/", "~/Archive/"):
+    # Both dirs have resume.pdf — this will raise AmbiguousFileError:
+    {@resume.pdf}
+
+    # Fix: use enough of the path to be unique:
+    {@Documents/resume.pdf}
+    {@Archive/resume.pdf}
+```
+
+The error message shows the minimal path needed to disambiguate each file.
+
+### Variable File References (`.hu` files)
+
+In `.hu` files, `{@identifier}` can refer to a parameter passed by the caller. If the caller passes a kwarg with that name, its value replaces the reference as a filepath:
+
+```python
+# summarize.hu
+Summarize the following document: {@doc_path}
+```
+
+```python
+# caller.lm
+with files("~/Documents/"):
+    result = summarize(doc_path="report.pdf")
+    # {@doc_path} becomes {@report.pdf} → resolves to ~/Documents/report.pdf
+```
+
+If no kwarg matches, the identifier is treated as a literal filename.
+
+### Variable vs File Reference
+
+- `{variable}` — Python variable substitution (no `@`)
+- `{@filename}` — file content injection (has `@`)
+
+---
+
+## Error Handling
+
+### AmbiguousFileError
+
+Raised when the same filename exists in multiple indexed directories:
+
+```python
+with files("~/Documents/", "~/Archive/"):
+    try:
+        def load_config(models="openai:gpt-4"):
+            "Load {@config.yaml}"  # config.yaml exists in both dirs
+    except AmbiguousFileError as e:
+        print(f"Multiple files match '{e.query}':")
+        for path, minimal in e.matches:
+            print(f"  - {{@{minimal}}}")
+```
+
+**Solution**: Use the minimal unique path shown in the error:
+```python
+def load_config(models="openai:gpt-4"):
+    "Load {@Documents/config.yaml}"
+```
+
+### FileReferenceError
+
+Raised when no file matches the exact reference:
+
+```python
+with files("~/Documents/"):
+    try:
+        def load_data(models="openai:gpt-4"):
+            "Load {@nonexistent.pdf}"
+    except FileReferenceError as e:
+        print(f"File '{e.query}' not found")
+        if e.suggestions:
+            print(f"Did you mean: {e.suggestions}")
+```
+
+When `files()` indexes zero files (e.g., due to a typo in the path), the error shows which paths failed:
+```
+files() indexed 0 files. Provided paths:
+  ~/Dcouments → DOES NOT EXIST (resolved to /Users/sergey/Dcouments)
+```
+
+---
+
+## File Extraction
+
+### PDF Files
+
+Requires `PyPDF2`:
+```bash
+pip install PyPDF2
+```
+
+```python
+with files("~/Documents/"):
+    def extract_info(models="openai:gpt-4"):
+        """
+        Extract name, email, and skills from {@resume.pdf}
+        """
+```
+
+**Output format**:
+```
+--- resume.pdf ---
+--- Page 1 ---
+John Doe
+Senior Python Developer
+...
+--- Page 2 ---
+...
+```
+
+### DOCX Files
+
+Requires `python-docx`:
+```bash
+pip install python-docx
+```
+
+```python
+with files("~/Documents/"):
+    def summarize(models="openai:gpt-4"):
+        "Summarize {@report.docx}"
+```
+
+### Text Files
+
+No dependencies required:
+
+```python
+with files("~/projects/"):
+    def analyze(models="openai:gpt-4"):
+        "Analyze code in {@main.py}"
+```
+
+---
+
+## Advanced Usage
+
+### Multiple File References
+
+```python
+def compare_documents(models="openai:gpt-4"):
+    """
+    Compare {@resume_v1.pdf} and {@resume_v2.pdf}
+    
+    List the differences between these two resumes.
+    """
+```
+
+### Variable Paths
+
+`files()` accepts variables — the paths are resolved at runtime:
+
+```python
+import os
+from pathlib import Path
+
+docs_dir = Path("~/Documents").expanduser()
+resume = str(docs_dir / "resume.pdf") if (docs_dir / "resume.pdf").exists() else "./fallback_resume.pdf"
+
+with files(resume):
+    def get_name(models="openai:gpt-4"):
+        "Extract name from {@resume.pdf}"
+```
+
+You can also pass directory variables:
+
+```python
+project_dir = os.environ.get("PROJECT_DIR", "./projects")
+
+with files(project_dir):
+    def summarize_readme(models="openai:gpt-4"):
+        "Summarize {@README.md}"
+```
+
+### Mixed Contexts
+
+```python
+with files("~/Documents/"):
+    # Variable substitution + file references
+    def answer_question(question, company, models="openai:gpt-4"):
+        """
+        Answer this {company} job application question: {question}
+        
+        Use {@resume.pdf} for background information.
+        """
+```
+
+---
+
+## Configuration
+
+### Ambiguity Threshold
+
+Adjust how strict ambiguity detection is:
+
+```python
+from lamia.engine.managers.files_context_manager import FilesContext
+
+with FilesContext("~/Documents/") as ctx:
+    ctx.AMBIGUITY_THRESHOLD = 20.0  # Default: 10.0
+    # Higher = less likely to trigger AmbiguousFileError
+```
+
+### Search Threshold
+
+Adjust fuzzy matching sensitivity:
+
+```python
+from lamia.engine.managers.files_context_manager import FileSearcher
+
+searcher = FileSearcher(files)
+results = searcher.search("query", threshold=0.7)  # Default: 0.6
+# Higher threshold = stricter matching
+```
+
+---
+
+## Performance
+
+### Indexing
+
+Files are indexed once when entering the context:
+
+```python
+with files("~/Documents/"):  # ← Indexing happens here
+    # Fast lookups inside the context
+    result1 = func1()
+    result2 = func2()
+```
+
+**Best practices**:
+- Use specific directories, not entire home folder
+- Avoid indexing `node_modules/`, `.venv/`, etc. (automatically skipped)
+
+### Caching
+
+File contents are cached during a single context:
+
+```python
+with files("~/Documents/"):
+    # resume.pdf read from disk
+    result1 = extract_name()
+    
+    # resume.pdf from cache (fast)
+    result2 = extract_skills()
+```
+
+---
+
+## Git-Aware Filtering
+
+The context automatically skips:
+- Hidden directories (`.git/`, `.venv/`)
+- `node_modules/`, `__pycache__/`
+- Files matching `.gitignore` patterns
+
+---
+
+## Comparison with Cursor
+
+| Feature | Cursor | Lamia `files()` |
+|---------|--------|-----------------|
+| Syntax | `@filename` | `{@filename}` |
+| Exact path | ✅ | ✅ |
+| Fuzzy search | ✅ | ✅ |
+| Content grep | ✅ | ✅ |
+| Typo tolerance | ✅ | ✅ |
+| PDF extraction | ❌ | ✅ |
+| DOCX extraction | ❌ | ✅ |
+| Error suggestions | ✅ | ✅ |
+
+**Why `{@}` instead of bare `@`?**
+- Avoids conflicts with `@mentions`, `@everyone`, email addresses
+- Consistent with `{variable}` syntax
+- Explicit and unambiguous
+
+---
+
+## Real-World Example: LinkedIn Easy Apply
+
+```python
+# linkedin_automation.lm
+
+with files("~/Documents/"):
+    with session("linkedin", "https://linkedin.com/feed"):
+        
+        def navigate_to_jobs():
+            web.navigate("https://linkedin.com/jobs")
+            web.click("button[aria-label='Easy Apply']")
+        
+        def fill_application_form(models="openai:gpt-4"):
+            """
+            Analyze the current job application form and fill it.
+            
+            Use {@resume.pdf} for my background.
+            Use {@cover_letter_template.txt} for writing style.
+            
+            Return JSON with field selectors and values:
+            {
+              "fields": [
+                {"selector": "input[name='years_experience']", "value": "5"},
+                {"selector": "textarea[name='why_interested']", "value": "..."}
+              ]
+            }
+            """
+        
+        def submit_application():
+            navigate_to_jobs()
+            
+            # AI analyzes form and generates answers
+            form_data = fill_application_form()
+            
+            # Fill fields
+            for field in form_data['fields']:
+                web.type_text(field['selector'], field['value'])
+            
+            # Upload resume
+            web.upload_file("input[type='file']", "~/Documents/resume.pdf")
+            
+            # Submit
+            web.click("button[type='submit']")
+        
+        # Execute
+        submit_application()
+```
+
+---
+
+## Troubleshooting
+
+### "FileReferenceError: File 'resume.pdf' not found"
+
+**Cause**: File not in indexed directories
+
+**Solution**:
+1. Check file exists: `ls ~/Documents/resume.pdf`
+2. Add directory to context: `with files("~/Documents/"):`
+3. Use absolute path: `{@/full/path/to/resume.pdf}`
+
+### "AmbiguousFileError: Multiple files match 'config'"
+
+**Cause**: Multiple files have similar scores
+
+**Solution**:
+- Be more specific: `{@config.yaml}` instead of `{@config}`
+- Use path: `{@linkedin/config.yaml}`
+
+### "PyPDF2 not installed"
+
+**Cause**: PDF extraction requires PyPDF2
+
+**Solution**:
+```bash
+pip install PyPDF2
+```
+
+### Slow indexing
+
+**Cause**: Indexing too many files
+
+**Solution**:
+- Use specific directories, not `~`
+- Files are cached, so subsequent lookups are fast
+
+---
+
+## API Reference
+
+### `files(*paths: str) -> FilesContext`
+
+Create a files context manager.
+
+**Parameters**:
+- `*paths`: File or directory paths to index
+
+**Returns**: `FilesContext` manager
+
+**Example**:
+```python
+with files("~/Documents/", "./config/"):
+    # Use files here
+```
+
+### `FilesContext.resolve_file_reference(query: str) -> str`
+
+Resolve a file reference to absolute path.
+
+**Parameters**:
+- `query`: Filename or pattern
+
+**Returns**: Absolute path to resolved file
+
+**Raises**:
+- `FileReferenceError`: File not found
+- `AmbiguousFileError`: Multiple matches
+
+### `FilesContext.inject_file_references(prompt: str) -> str`
+
+Replace `{@filename}` references with file content.
+
+**Parameters**:
+- `prompt`: Prompt string with `{@}` references
+
+**Returns**: Prompt with injected file contents
+
+---
+
+## Dependencies
+
+### Required
+
+None (uses Python stdlib)
+
+### Optional
+
+- `PyPDF2`: PDF extraction
+- `python-docx`: DOCX extraction
+
+```bash
+pip install PyPDF2 python-docx
+```
+
+---
+
+## See Also
+
+- [Web Automation](web-automation.md)
+- [Validation](validation.md)
+
+---
+Source: user-guide/web-automation.md
+---
+
+# Web Automation
+
+Lamia provides browser automation and HTTP client operations for web-based tasks. You can use traditional CSS/XPath selectors or natural language descriptions powered by AI.
+
+## Web Actions
+
+Use the `web` object in `.lm` files:
+
+```python
+# Navigation
+web.navigate("https://example.com")
+
+# Click, type, hover
+web.click("#login-button")
+web.type_text("#username", "user@example.com")
+web.hover(".dropdown-menu")
+
+# Get information
+text = web.get_text(".result")
+visible = web.is_visible(".modal")
+enabled = web.is_enabled("button.submit")
+
+# Wait and scroll
+web.wait_for(".loading", "hidden")
+web.scroll_to("#footer")
+
+# Forms
+web.select_option("#country", "US")
+web.submit_form("#login-form")
+web.upload_file("/path/to/resume.pdf", "input[type='file']")
+
+# Screenshots
+web.screenshot("page.png")
+```
+
+## Scoped Elements
+
+Work within specific page elements:
+
+```python
+# Single element
+modal = web.get_element("div.modal")
+modal.click("button.close")
+modal.type_text("input", "search term")
+
+# Multiple elements
+fields = web.get_elements("div.form-field")
+for field in fields:
+    label = field.get_text("label")
+    input_type = field.get_input_type()
+    
+    if input_type == InputType.TEXT:
+        field.type_text("input", "answer")
+    elif input_type == InputType.CHECKBOX:
+        if not field.is_checked("input"):
+            field.click("input")
+
+# Get selectable options (radio, checkbox, dropdown)
+options = field.get_options()  # Returns: ["Option A", "Option B", "Option C"]
+```
+
+## AI-Powered Selectors
+
+Instead of CSS/XPath, describe elements in natural language:
+
+```python
+# Natural language selectors
+web.click("Sign in button")
+web.type_text("Search input field", "lamia framework")
+web.wait_for("Loading spinner", "hidden")
+```
+
+### How It Works
+
+1. Lamia detects the selector is natural language (not CSS/XPath)
+2. AI analyzes the page and returns the matching CSS selector
+
+### Writing Good AI Selectors
+
+```python
+# Good — clear and specific
+"Sign in button"
+"Search input field"
+"Close modal button"
+"Primary submit button"
+
+# Bad — too vague
+"button"
+"click here"
+"the thing"
+```
+
+### Ambiguity Handling
+
+When multiple elements match, Lamia shows options:
+
+```
+AMBIGUOUS SELECTOR: 'Sign in'
+Multiple elements match. Please be more specific:
+
+Option 1: "Sign in"          → button.btn-primary
+Option 2: "Sign in with Google" → button.google-signin
+Option 3: "Sign in with Apple"  → button.apple-signin
+```
+
+### Mixing Selector Types
+
+Use both in the same script:
+
+```python
+web.click("button.submit")              # CSS selector
+web.click("Sign in button")             # AI selector
+web.type_text("//input[@name='email']", # XPath selector
+              "user@example.com")
+web.type_text("Email input field",      # AI selector
+              "user@example.com")
+```
+
+## Session Management
+
+Sessions let you persist login state across script runs. Lamia saves browser cookies after a successful login so subsequent runs skip the login flow entirely.
+
+### Basic Usage
+
+```python
+def login():
+    with session("my_app", "https://example.com/dashboard"):
+        web.navigate("https://example.com/login")
+        web.type_text("#email", "user@example.com")
+        web.type_text("#password", "secret")
+        web.click("button[type='submit']")
+        time.sleep(3)
+
+login()
+web.navigate("https://example.com/dashboard")
+```
+
+**First run**: executes the login block, waits for the page to stabilize, saves cookies.
+**Subsequent runs**: loads saved cookies, verifies you're still logged in, skips the block.
+
+### How Session Validation Works
+
+Lamia uses a three-tier check to decide if login can be skipped:
+
+| Tier | What it does | When it skips |
+|------|-------------|---------------|
+| **Tier 1 — Redirect detection** | Navigates to the login page with saved cookies | If the site redirects you away from login (you're already authenticated) |
+| **Tier 2 — Target URL reachability** | Navigates to the target URL (second argument) | If the target page loads without being redirected to login |
+| **Tier 3 — Content validation** | Checks the page content matches expected structure | If return type validation passes (when `-> HTML` or similar is used) |
+
+### The Two-Argument Form
+
+```python
+with session("profile_name", "https://example.com/protected-page"):
+    # login steps...
+```
+
+- **First argument** — session profile name (used for cookie storage folder)
+- **Second argument** — target URL to verify login state against
+
+The target URL is critical: it's how Lamia knows whether saved cookies still work. Choose a page that requires authentication (e.g., a dashboard, settings page, or homepage that shows user-specific content).
+
+### Expected Behavior During Validation
+
+When you run a script with an existing session, you may see the browser briefly navigate to the login page. This is normal — Lamia is checking whether the site redirects you away (proving you're authenticated). The check typically takes 5–15 seconds depending on the site's load time.
+
+If the site is slow or the connection is poor, the validation may take longer. Lamia sets a 30-second timeout for these checks. If the page doesn't respond in time, validation falls through and the login block re-executes.
+
+### Session Storage
+
+Sessions are stored relative to your script in `.lamia_sessions/<profile_name>/`:
+
+```
+.lamia_sessions/
+└── my_app/
+    ├── cookies.json
+    ├── local_storage.json
+    └── session_info.json
+```
+
+To force a fresh login, delete the session folder:
+
+```bash
+rm -rf .lamia_sessions/my_app/
+```
+
+### Limitations
+
+- **Cookie expiration**: Sites may expire cookies after a period (hours or days). When this happens, the session check will fail and Lamia re-executes the login block automatically.
+- **Geo-redirects**: Some sites redirect to country-specific subdomains (e.g., `de.pinterest.com`). Lamia handles this by comparing URL paths rather than full hostnames.
+- **CAPTCHA / 2FA**: If a site presents CAPTCHA or two-factor authentication, the automated login will fail. Run the login manually once and save the session.
+- **Browser fingerprint**: Each Lamia run creates a new Chrome instance. Some sites may invalidate cookies when the browser fingerprint changes.
+
+### Re-login on Failure
+
+If the session check passes but your script still encounters auth errors downstream, delete the session and run again:
+
+```bash
+rm -rf .lamia_sessions/my_app/
+lamia --file my_script.lm
+```
+
+## Configuration
+
+In `config.yaml`:
+
+```yaml
+web_config:
+  browser_engine: selenium        # selenium or playwright
+  http_client: requests           # HTTP client library
+  browser_options:
+    headless: true                # Run without visible window
+    timeout: 10.0                 # Default timeout in seconds
+  http_options:
+    timeout: 30.0                 # HTTP request timeout
+    user_agent: "Lamia/1.0"      # User agent string
+```
+
+### Browser Engines
+
+| Engine | Description |
+|--------|-------------|
+| `selenium` | Traditional WebDriver-based automation (default) |
+| `playwright` | Modern, fast browser automation |
+
+## Selector Cache
+
+AI selector resolutions are cached to avoid repeated LLM calls:
+
+```
+.lamia_cache/selectors/selector_resolutions.json
+```
+
+```bash
+# Clear cache if selectors stop working
+rm -rf .lamia_cache/selectors/
+```
+
+## Troubleshooting
+
+### AI returns wrong selector
+- Use more specific descriptions
+- Check if the page structure changed
+- Clear the selector cache and retry
+
+### Ambiguous selector errors
+- Add distinguishing details: "Primary sign in button" instead of "Sign in"
+- Use CSS selectors for elements that are easy to target
+
+### Slow AI responses
+- Use stronger/faster models in your model chain
+- Cached selectors are instant on repeat runs
+
+---
+Source: user-guide/validation.md
+---
+
+# Validation
+
+Lamia validates LLM/Web/File responses automatically when you specify return types. Validators ensure outputs meet format and quality requirements before your code uses them.
+
+## Built-in Validators
+
+### File Format Validators
+
+| Type | Description |
+|------|-------------|
+| `HTML` | Well-formed HTML |
+| `JSON` | Valid JSON |
+| `YAML` | Valid YAML |
+| `XML` | Valid XML |
+| `Markdown` | Valid Markdown |
+| `CSV` | Valid CSV |
+
+### File Structure Validators
+
+Validate file format AND match a Pydantic model schema:
+
+```python
+
+class UserProfile(BaseModel):
+    name: str
+    age: int
+    email: str
+
+# In .lm files — validates JSON structure matches the model
+def get_user() -> JSON[UserProfile]:
+    "Generate a user profile"
+
+```
+
+Lamia's validation can be used in python code as well with:
+
+```python
+result = lamia.run("Generate a user profile", JSON[UserProfile])
+```
+
+Available structure validators: `JSON[Model]`, `YAML[Model]`, `XML[Model]`, `HTML[Model]`, `Markdown[Model]`, `CSV[Model]`
+
+## Strict vs Permissive Mode
+
+Each validator supports a `strict` flag (default: `true`):
+
+- **`strict: true`**: Only accepts pure, valid output (no extra text around it)
+- **`strict: false`**: Accepts output that contains a valid block within a longer response
+
+When you want to be explicit about validation mode you can define file structure validators with `JSON[Model, True/False]`, `YAML[Model, True/False]`, `XML[Model, True/False]`, `HTML[Model, True/False]`, `Markdown[Model, True/False]`, `CSV[Model, True/False]`
+
+Here is what strictness does for each case:
+
+| Syntax                 | Model   | Strict | What happens                                              |
+| ---------------------- | ------- | ------ | --------------------------------------------------------- |
+| `HTML`                 | None    | True   | Plain HTML validation (well-formedness only), strict mode |
+| `HTML[MyModel]`        | MyModel | False  | Structure validation against model, non-strict (default!) |
+| `HTML[MyModel, True]`  | MyModel | True   | Structure validation against model, strict mode. Strict nesting is enforced           |
+| `HTML[MyModel, False]` | MyModel | False  | Structure validation against model, explicitly non-strict. Any level of nesting |
+
+
+## File Structure Validation
+
+We will consider examples with HTML files, but the same principles apply to other file types.
+
+## HTML Structure Validation for HTML generation
+
+The following Lamia code will generate an HTML file with the structure defined in the `HtmlStructure` model and save it to the `output.html` file.
+
+```python
+class Body(BaseModel):
+    h1: str
+    p: str
+    p: str
+
+class HtmlStructure(BaseModel):
+    title: str
+    body: Body
+
+"Generate a blog post about the benefits of using AI" -> File(HTML[HtmlStructure, True], "output.html") # The True in HTML[HtmlStructure, True] flag means no additional nestings are allowed, the document should have the same nestings as defined in the model
+```
+
+When tried with Claude Sonnet 4, the output was 
+
+```html
+<html>
+<title>The Transformative Benefits of Using AI in Modern Life</title>
+<body>
+  <h1>The Transformative Benefits of Using AI in Modern Life</h1>
+  <p>Artificial Intelligence has revolutionized how we work, learn, and solve problems in today's digital age. From automating repetitive tasks to providing intelligent insights from vast amounts of data, AI empowers individuals and organizations to achieve more with less effort. It enhances decision-making through predictive analytics, personalizes user experiences across platforms, and accelerates innovation in fields ranging from healthcare to education. By augmenting human capabilities rather than replacing them, AI serves as a powerful tool that frees us to focus on creative and strategic work while handling the mundane. As AI technology continues to evolve, its accessibility and applications expand, making it an indispensable asset for anyone looking to stay competitive and efficient in an increasingly complex world.</p>
+</body>
+</html>
+```
+
+This example script shows how you can use Lamia to generate HTML files with a desired structure all the time.
+
+## HTML Structure Validation for HTML parsing
+
+You can use HTML structure validation to parse HTML files to Pydantic models and use the model as you wish in your code. If the HTML structure is not as expected, the validation will fail and the rest of the code will not be executed. Validation makes sure that you extract the right data. When validation stops working, that might be a sign that the HTML structure has changed and you need to update the model.
+
+Here is an example of simple web parsing with Lamia:
+
+```python
+class Body(BaseModel):
+    h1: str
+
+class HtmlStructure(BaseModel):
+    title: str
+    body: Body
+
+website_content = "https://example.com" -> HTML[HtmlStructure]
+if website_content.body.h1 == website_content.title:
+    print("Example.com website header is the same as the title: h1: {website_content.body.h1}, title: {website_content.title}")
+```
+
+If you open the page source of the https://example.com, you will see, at the time of writing this, the HTML structure is like this:
+```html
+<html>
+    <head>
+        <title>Example.com</title>
+    </head>
+    <body>
+      <div>
+        <h1>Example.com</h1>
+      </div>
+    </body>
+    ...
+</html> ```
+
+As you can see, as expected, the title is nested inside the <head> tag. Additionally, the <h1> tag is not nested inside the <body> tag. But the validation will succeed because the HTML structure is valid and we use `HTML[HtmlStructure]` in non-strict mode, which is why validation passes.
+
+For parsing, usually the non-strict mode will be used. Otherwise, extensive Pydantic nested models might be needed to parse the HTML structure.
+
+This is a useful, but simple example. Of course, in many real-world scenarios you will want to validate or extract complex HTML structures and using nested types to define them might be exhausting. That is why Lamia provides multiple additional ways to validate and extract data from the HTML structure. For example, you can use selectors to extract data from the HTML structure.
+
+## Selector Usage with Validators
+
+For details on using selectors within file type validators, see the [Selector Usage Guide](../validation/selector-usage-guide.md).
+
+---
+Source: user-guide/evaluation.md
+---
+
+# Model Evaluation
+
+The evaluation module helps you find the most cost-effective model that meets your validation requirements. It tests models from most expensive to least expensive, finding the cheapest one that passes validation.
+
+## Quick Start
+
+```bash
+lamia eval <your_script.lm>
+```
+
+
+## Search Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| `binary_search` (default) | Efficiently finds cheapest working model |
+| `step_back` | Tests from cheapest up to most expensive model |
+
+
+With both strategies, the eval extracts all LLM prompts from the script and evaluates them one by one.
+The evaluation stops on the first prompt where no model in the range succeeds. But if at least one model passes for a prompt, it moves on to the next prompt.
+
+## Python API
+
+Use `ModelEvaluator` when you want to evaluate prompts or scripts directly from Python:
+
+```python
+import asyncio
+from lamia.eval.evaluator import ModelEvaluator
+from lamia.types import JSON
+
+async def main():
+    async with ModelEvaluator() as evaluator:
+        result = await evaluator.evaluate_prompt(
+            prompt="Generate a user profile with name and age",
+            return_type=JSON,
+            models=[
+                "openai:gpt-4o",           # most expensive
+                "openai:gpt-4o-mini",
+                "openai:gpt-3.5-turbo",    # cheapest
+            ],
+            strategy="binary_search",
+        )
+
+        print(f"Minimum working model: {result.minimum_working_model}")
+        print(f"Success: {result.success}")
+        if result.cost:
+            print(f"Cost: {result.cost}")
+
+asyncio.run(main())
+```
+
+Models must be ordered from **most expensive to least expensive** (most expensive first). The evaluator finds the cheapest model in the list that passes validation.
+
+For scripts with multiple `lamia.run_async()` calls, use `evaluate_script()`:
+
+```python
+from lamia import Lamia
+from lamia.eval.evaluator import ModelEvaluator
+from lamia.types import JSON, HTML
+
+async def my_workflow(lamia: Lamia):
+    user_data = await lamia.run_async("Create user profile", JSON)
+    return await lamia.run_async(f"Create report for: {user_data.result_text}", HTML)
+
+async with ModelEvaluator() as evaluator:
+    result = await evaluator.evaluate_script(
+        script_func=my_workflow,
+        models=["openai:gpt-4o", "openai:gpt-4o-mini"],
+    )
+```
+
+### Result object
+
+`evaluate_prompt()` and `evaluate_script()` return an `EvaluationResult`:
+
+| Attribute | Description |
+|-----------|-------------|
+| `minimum_working_model` | Cheapest model that passed validation, or `None` |
+| `success` | Whether any model succeeded |
+| `validation_pass_rate` | `100.0` if a model succeeded, `0.0` otherwise |
+| `attempts` | List of `ModelAttemptResult` for each model tried |
+| `cost` | Token usage for the winning model (`ModelCost`), or `None` |
+| `error_message` | Error description when all models fail |
+
+Each attempt in `result.attempts` has `model`, `success`, `cost`, `result`, and `error` fields.
+
+For structured validation, pass a Lamia type as `return_type` — for example `JSON`, `HTML`, or `JSON[MyModel]` where `MyModel` is a Pydantic model (see [validation documentation](validation.md)).
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "No models available" | Check API keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or ensure Ollama is running |
+| "No pricing provider found" | Normal — evaluation works without pricing data |
+| "Validation failed for all models" | Simplify prompt, include more expensive models in your `models` list, or check `return_type`; add hints to your return type — see the [validation documentation](validation.md) on how to do this |
+
+---
+Source: user-guide/python-library.md
+---
+
+# Using Lamia in Python Apps
+
+## Why Lamia?
+
+Every LLM provider ships its own SDK — OpenAI has `openai`, Anthropic has `anthropic`, Google has `google-genai`. They work, but they lock you into a single provider. Switch models and you rewrite your integration layer.
+
+Multi-provider libraries solve the lock-in problem but create new ones. Some bury you in abstractions (chains, runnables, LCEL). Others, like Pydantic AI, get both validation and multi-provider support right — and offer a rich ecosystem of built-in tools (web search, code execution, file search, MCP) and agent patterns on top. If you need those capabilities, Pydantic AI is an excellent choice.
+
+Lamia occupies a different niche. It is a **scripting language with a Python library**, not an agent framework. The Python API gives you the same validated LLM calls that `.lm` files use: `run()`, a Pydantic model, and typed data back. On top of that, Lamia has built-in web automation (browser control, form filling, scraping) and file operations that work from the same interface. The model fallback chain is declarative — list your models and Lamia tries them in order.
+
+### Comparison matrix
+
+This table reflects what each tool actually does well today. Lamia is young and the ecosystem is smaller.
+
+| Feature | Lamia | Pydantic AI | OpenAI SDK | Anthropic SDK | LiteLLM | LangChain |
+|---------|-------|-------------|-----------|--------------|---------|-----------|
+| Multi-provider support | OpenAI, Anthropic, Ollama + custom adapters | OpenAI, Anthropic, Gemini, Groq, Mistral, Ollama, and more | OpenAI only | Anthropic only | 100+ providers | 70+ providers |
+| Structured output validation | Built-in with retry feedback loop | First-class Pydantic validation with retries | Native JSON mode (strict) | Native JSON mode + tool use | Client-side JSON validation | Optional, schema-based |
+| Model fallback chain | Built-in, declarative | `FallbackModel` with exception/response handlers | Manual | Manual | Via router | Manual |
+| Built-in tools | Web automation, file I/O | Web search, code execution, file search, MCP, image gen | No | No | No | Via integrations |
+| Custom validators (functional, length, type) | Built-in | Output validators | No | No | No | No |
+| Custom LLM adapters | Drop-in via extensions folder | Model registration | N/A | N/A | Provider plugins | Provider wrappers |
+| Async support | `run()` and `run_async()` | Native async + `run_sync()` | Async client | Async client | Async | Via LCEL |
+
+Use Lamia when you want validated structured output with model fallback, web automation, and file operations in a single interface. Use Pydantic AI when you need agent patterns, built-in tools (web search, code execution, MCP), or deep observability. Use provider SDKs when you need only one provider and want zero abstraction. Use LiteLLM or LangChain when you need 70+ providers or deep ecosystem integrations.
+
+## Install
+
+```bash
+pip install lamia-lang
+```
+
+```python
+from lamia import Lamia
+```
+
+## Environment setup
+
+Lamia loads API keys in two ways, depending on how your app manages secrets.
+
+**Option 1 — Standard `.env` variables (zero-config)**
+
+Lamia automatically loads from the environment variables or the `.env` files using hardcoded variable names. Just set the expected variables and Lamia picks them up:
+
+```bash
+# .env file
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Loading priority (highest to lowest):
+
+1. Shell environment variables (already set by the user)
+2. Project-level `.env` in the current working directory
+
+**Option 2 — Custom variable names via `api_keys`**
+
+When your app uses different env variable names for the model API keys, or when you load them in a different way, pass them explicitly:
+
+```python
+import os
+from lamia import Lamia
+
+lamia = Lamia(
+    "openai:gpt-4o-mini",
+    api_keys={
+        "openai": os.environ["MY_OPENAI_SECRET"],
+        "anthropic": os.environ["MY_ANTHROPIC_SECRET"],
+    }
+)
+```
+
+This way Lamia never touches your environment — you control where the keys come from.
+
+### Supported providers
+
+Out of the box, Lamia ships adapters for:
+
+- **OpenAI** — `openai:gpt-4o`, `openai:gpt-4o-mini`, etc.
+- **Anthropic** — `anthropic:claude-sonnet-4-20250514`, `anthropic:claude-3-5-haiku-latest`, etc.
+- **Ollama** — `ollama:llama3`, `ollama:mixtral`, etc. (requires a running Ollama process on your machine)
+
+Note: Ollama does not work from the Python library when the Ollama service is not running on your machine. Lamia does not auto-start the Ollama process — make sure `ollama serve` is active before calling `Lamia("ollama:llama3")`.
+
+For any provider not listed above, you can add a custom adapter (see [Extensions folder](#extensions-folder) below).
+
+Model fallback is supported by passing multiple models:
+
+```python
+lamia = Lamia(
+    "openai:gpt-4o-mini",
+    "anthropic:claude-3-5-haiku-latest",
+)
+```
+
+To retry with the same model before falling back, repeat it:
+
+```python
+lamia = Lamia(
+    "openai:gpt-4o-mini",
+    "openai:gpt-4o-mini",
+    "anthropic:claude-3-5-haiku-latest",
+)
+```
+
+## Structured output (recommended)
+
+For production use, return typed data instead of free text.
+
+```python
+from pydantic import BaseModel, Field
+from lamia import Lamia
+from lamia.types import JSON
+
+
+class UserSummary(BaseModel):
+    name: str = Field(description="User full name")
+    role: str = Field(description="Current role")
+    risk_level: str = Field(description="low, medium, or high")
+
+
+lamia = Lamia("openai:gpt-4o-mini")
+
+summary = lamia.run(
+    "Summarize user Jane Doe, Staff Engineer, with medium risk profile",
+    return_type=JSON[UserSummary],
+)
+
+print(summary.name, summary.role, summary.risk_level)
+```
+
+Lamia validates the LLM response against your Pydantic model and retries with error feedback if validation fails. For advanced Pydantic model features (field constraints, patterns, descriptions, enums), see the [Pydantic Models Guide](pydantic-models.md).
+
+## Multiple Lamia instances
+
+You can create multiple `Lamia` instances with different models, configurations, or API keys. Each instance is independent:
+
+```python
+import os
+from pydantic import BaseModel, Field
+from lamia import Lamia
+from lamia.types import JSON
+
+
+class Summary(BaseModel):
+    text: str = Field(description="Summary text")
+    confidence: float = Field(description="Confidence 0.0 to 1.0")
+
+
+fast_lamia = Lamia("openai:gpt-4o-mini")
+smart_lamia = Lamia("anthropic:claude-sonnet-4-20250514")
+
+quick_result = fast_lamia.run("Summarize: AI is transforming software", return_type=JSON[Summary])
+deep_result = smart_lamia.run("Summarize: AI is transforming software", return_type=JSON[Summary])
+
+print(f"Fast: {quick_result.text}")
+print(f"Smart: {deep_result.text}")
+```
+
+This is useful when different parts of your app need different models — a cheap model for simple tasks and a powerful one for complex reasoning.
+
+## Async usage
+
+Use `run_async()` in async apps:
+
+```python
+import asyncio
+from lamia import Lamia
+
+
+async def main() -> None:
+    lamia = Lamia("openai:gpt-4o-mini")
+    result = await lamia.run_async("Write a short welcome message")
+    print(result)
+
+
+asyncio.run(main())
+```
+
+### Parallel LLM calls
+
+Use `asyncio.gather` with `run_async` to execute multiple LLM calls concurrently:
+
+```python
+import asyncio
+from pydantic import BaseModel, Field
+from lamia import Lamia, ExternalOperationError
+from lamia.types import JSON
+
+
+class Sentiment(BaseModel):
+    label: str = Field(description="positive, negative, or neutral")
+    confidence: float = Field(description="Confidence score 0.0 to 1.0")
+
+
+async def main() -> None:
+    lamia = Lamia("openai:gpt-4o-mini")
+
+    reviews = [
+        "This product is amazing, best purchase ever!",
+        "Terrible quality, broke after one day.",
+        "It's okay, nothing special.",
+    ]
+
+    results = await asyncio.gather(
+        *[
+            lamia.run_async(
+                f"Analyze the sentiment: {review}",
+                return_type=JSON[Sentiment],
+            )
+            for review in reviews
+        ],
+        return_exceptions=True,
+    )
+
+    for review, result in zip(reviews, results):
+        if isinstance(result, Exception):
+            print(f"{review[:40]}... -> FAILED: {result}")
+        else:
+            print(f"{review[:40]}... -> {result.label} ({result.confidence})")
+
+
+asyncio.run(main())
+```
+
+When using `return_exceptions=True`, failed calls (e.g., all models in the chain exhausted) return as exception objects instead of crashing the entire `gather`. This lets you handle partial failures gracefully — successful results are still available even if some calls failed.
+
+If you omit `return_exceptions=True`, the first exception from any call will cancel the entire batch and propagate immediately.
+
+## Error handling and exceptions
+
+Lamia exports specific exception types you can import and catch:
+
+```python
+from lamia import (
+    Lamia,
+    MissingAPIKeysError,
+    ExternalOperationError,
+    ExternalOperationPermanentError,
+    ExternalOperationTransientError,
+    ExternalOperationRateLimitError,
+    OllamaNotInstalledError,
+)
+
+lamia = Lamia("openai:gpt-4o-mini")
+
+try:
+    result = lamia.run("Generate a report")
+except MissingAPIKeysError:
+    print("API key not configured — check .env or pass api_keys=")
+except ExternalOperationRateLimitError as e:
+    print(f"Rate limited. Retry history: {e.retry_history}")
+except ExternalOperationPermanentError as e:
+    print(f"Permanent failure (bad key, invalid request): {e}")
+except ExternalOperationTransientError as e:
+    print(f"Temporary failure (network, timeout): {e}")
+```
+
+The exception hierarchy:
+
+- `ExternalOperationError` — base class for all external failures
+    - `ExternalOperationPermanentError` — won't resolve by retrying (bad API key, invalid request)
+        - `OllamaNotInstalledError` — Ollama binary not found
+    - `ExternalOperationTransientError` — temporary failures (network issues, timeouts)
+    - `ExternalOperationRateLimitError` — API rate limits exceeded
+
+All `ExternalOperationError` subclasses carry `retry_history` (list of retry attempts) and `original_error` (the underlying exception).
+
+### Available types
+
+Lamia exports these return types from `lamia.types`:
+
+```python
+from lamia.types import JSON, HTML, CSV, YAML, XML, Markdown, TEXT
+```
+
+Use them with `return_type=` to validate and extract structured output:
+
+```python
+result = lamia.run("Create a login form", return_type=HTML)
+data = lamia.run("List users", return_type=JSON[UserModel])
+rows = lamia.run("Generate sales data", return_type=CSV[SalesRow])
+```
+
+Additional public types:
+
+```python
+from lamia import LLMModel, LamiaResult
+from lamia.types import ExternalOperationRetryConfig, InputType
+```
+
+- `LLMModel` — typed model configuration with `temperature`, `max_tokens`, `top_p`, etc.
+- `LamiaResult` — full result object with `result_text`, `typed_result`, and `tracking_context`
+- `ExternalOperationRetryConfig` — retry behavior configuration
+- `InputType` — enum of HTML input types for web form automation
+
+## Extensions folder
+
+The extensions folder lets you extend Lamia with custom LLM adapters and custom validators without modifying the Lamia source code.
+
+By default, Lamia looks for an `extensions/` folder in the **current working directory** at the time the `Lamia` instance is created. Create the following folder structure for this in the root of your project:
+
+```
+your-project/
+├── extensions/
+│   ├── adapters/     # Custom LLM adapters (*.py files)
+│   └── validators/   # Custom validators (*.py files)
+├── your_app/
+│   └── main.py       # Your Python app that uses Lamia
+└── ...
+```
+
+If you need the extensions folder elsewhere (e.g., inside a package), pass it via `from_config()`:
+
+```python
+lamia = Lamia.from_config({
+    "model_chain": [{"name": "openai:gpt-4o-mini"}],
+    "extensions_folder": "path/to/my_extensions",
+})
+```
+
+See [Custom LLM Adapters](custom-llm-adapters.md) on what files will go under the extensions folder.
+
+### Custom validators
+
+Lamia uses validators automatically based on the `return_type` you pass to `run()`. The built-in validators (JSON, HTML, CSV, Markdown, YAML, XML) are selected by the type marker. Custom validators in the extensions folder follow the same pattern — they are discovered and loaded automatically by the engine.
+
+Currently, there is no public API to attach a custom validator directly to a `run()` call from the Python library. Custom validators are used when the engine resolves return types from `.lm` file execution. It is planned to add a public API to attach a custom validator directly to a `run()` call in the future.
+
+```python
+result = lamia.run("Generate a report", return_type=JSON[Report])
+
+# Your custom validation
+if result.confidence < 0.5:
+    raise ValueError(f"Low confidence: {result.confidence}")
+```
+
+To define a custom validator for use in `.lm` workflows, create a Python file in `extensions/validators/` that subclasses `BaseValidator`:
+
+```python
+# extensions/validators/profanity_validator.py
+from lamia.validation.base import BaseValidator, ValidationResult
+
+
+class ProfanityValidator(BaseValidator):
+    BLOCKED_WORDS = {"badword1", "badword2"}
+
+    def __init__(self, strict: bool = True):
+        super().__init__(strict=strict)
+
+    @classmethod
+    def name(cls) -> str:
+        return "profanity"
+
+    @property
+    def initial_hint(self) -> str:
+        return "Please ensure the response contains no profanity."
+
+    async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
+        words = set(response.lower().split())
+        found = words & self.BLOCKED_WORDS
+        if found:
+            return ValidationResult(
+                is_valid=False,
+                error_message=f"Profanity detected: {', '.join(found)}",
+                hint=self.initial_hint,
+            )
+        return ValidationResult(is_valid=True, validated_text=response)
+
+    async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
+        return await self.validate_strict(response, **kwargs)
+```
+
+The `BaseValidator` interface requires:
+
+| Method / Property | Purpose |
+|-------------------|---------|
+| `name()` | Validator identifier |
+| `initial_hint` | Hint text included in the LLM prompt to guide output format |
+| `validate_strict(response)` | Strict validation — rejects anything not exactly right |
+| `validate_permissive(response)` | Permissive validation — tries to extract valid data from noisy output |
+
+Lamia ships several built-in validators: `FunctionalValidator` (test code against test cases), `AtomicTypeValidator` (int, float, bool, string), `LengthValidator` (min/max length constraints), and format validators for JSON, HTML, CSV, Markdown, YAML, and XML.
+
+## Advanced topics
+
+### Config dictionary
+
+Use `from_config()` when you need per-model parameters like temperature, or when your config comes from a file or service:
+
+```python
+import os
+from lamia import Lamia
+
+config = {
+    "model_chain": [
+        {"name": "openai:gpt-4o-mini", "max_retries": 2, "temperature": 0.3},
+        {"name": "anthropic:claude-3-5-haiku-latest", "max_retries": 1},
+    ],
+    "api_keys": {
+        "openai": os.environ.get("OPENAI_API_KEY"),
+        "anthropic": os.environ.get("ANTHROPIC_API_KEY"),
+    },
+}
+
+lamia = Lamia.from_config(config)
+result = lamia.run("Generate 3 release notes bullets")
+print(result)
+```
+
+The config dictionary is another way to set per-model parameters like `temperature`, `max_tokens`, `top_p`, `top_k`, `frequency_penalty`, `presence_penalty`, and `seed`. It also supports all constructor options (`web_config`, `extensions_folder`, etc.) in a single dict.
+
+You can also instantiate with the constructor and pass `web_config` and `retry_config` as typed parameters:
+
+```python
+from lamia import Lamia, LLMModel
+from lamia.types import ExternalOperationRetryConfig
+
+lamia = Lamia(
+    LLMModel(name="openai:gpt-4o-mini", temperature=0.3),
+    retry_config=ExternalOperationRetryConfig(
+        max_attempts=3,
+        base_delay=1.0,
+        max_delay=60.0,
+        exponential_base=2.0,
+        max_total_duration=None,
+    ),
+    web_config={
+        "browser_engine": "selenium",
+        "browser_options": {"headless": True},
+    },
+)
+```
+
+Using `LLMModel` directly in the constructor gives you typed access to model parameters without needing `from_config()`.
+
+## Common errors and what to do
+
+- **Missing API key**: Set provider keys in `.env` or pass `api_keys` to the constructor.
+- **Wrong model name**: Use `provider:model` format (e.g., `openai:gpt-4o-mini`).
+- **Validation failures**: Simplify your prompt and improve `Field(description=...)` in your Pydantic model. See the [Pydantic Models Guide](pydantic-models.md).
+- **Calling sync inside async**: Use `run_async()` instead of `run()` in async contexts.
+- **Ollama not responding**: Make sure `ollama serve` is running before calling Lamia.
+
+## Next steps
+
+- [Pydantic Models Guide](pydantic-models.md) — advanced Pydantic field definitions for better LLM output
+- [Guide to the `.lm` Syntax](../user-guide/lm-syntax.md) — write Lamia programs with the hybrid Python syntax
+- [Guide to the `.hu` Syntax](../user-guide/hu-syntax.md) — plain-text prompt templates
+- [Web Automation](../user-guide/web-automation.md) — browser and HTTP automation
+
+---
+Source: user-guide/custom-llm-adapters.md
+---
+
+# Custom LLM Adapters
+
+Use custom adapters when you want to add a provider Lamia does not ship by default.
+
+## Where adapter files live
+
+Place adapter files in an `extensions/adapters/` folder in your project:
+
+```text
+your-project/
+├── extensions/
+│   └── adapters/
+│       └── mistral.py
+└── app.py
+```
+
+Lamia discovers these adapters automatically.  The file name should match
+the provider name returned by `name()`.
+
+---
+
+## Example 1 — Zero-config (OpenAI-compatible API)
+
+For providers that use the OpenAI `/v1/chat/completions` convention, you
+only need to set `API_URL` and identity methods. Here's an example adapter for Mistral:
+
+```python
+# extensions/adapters/mistral.py
+from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
+from typing import Optional, Type
+from pydantic import BaseModel
+from lamia import LLMModel
+import aiohttp
+
+
+class MistralAdapter(BaseLLMAdapter):
+    API_URL = "https://api.mistral.ai/v1/chat/completions"
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.session: Optional[aiohttp.ClientSession] = None
+
+    @classmethod
+    def name(cls) -> str:
+        return "mistral"
+
+    @classmethod
+    def env_var_names(cls) -> list[str]:
+        return ["MISTRAL_API_KEY"]
+
+    @classmethod
+    def is_remote(cls) -> bool:
+        return True
+
+    async def close(self) -> None:
+        if self.session:
+            await self.session.close()
+            self.session = None
+```
+
+That's it. The base class handles session creation, Bearer auth from
+`self.api_key`, the POST request, response parsing, and HTTP error
+classification. Use it with:
+
+```bash
+export MISTRAL_API_KEY="..."
+```
+
+```python
+from lamia import Lamia
+lamia = Lamia("mistral:mistral-large-latest")
+```
+
+### LLM providers compatible with the default generate() (OpenAI convention)
+
+These providers all use the same `/v1/chat/completions` request/response
+format.  A zero-config adapter (just `API_URL` + identity) works for all:
+
+| Provider | API_URL | Notes |
+|----------|---------|-------|
+| Mistral | `https://api.mistral.ai/v1/chat/completions` | |
+| Groq | `https://api.groq.com/openai/v1/chat/completions` | |
+| Together AI | `https://api.together.xyz/v1/chat/completions` | |
+| Fireworks AI | `https://api.fireworks.ai/inference/v1/chat/completions` | |
+| Perplexity | `https://api.perplexity.ai/chat/completions` | |
+| DeepSeek | `https://api.deepseek.com/v1/chat/completions` | |
+| OpenRouter | `https://openrouter.ai/api/v1/chat/completions` | Aggregator |
+| Anyscale | `https://api.endpoints.anyscale.com/v1/chat/completions` | |
+| vLLM | `http://localhost:8000/v1/chat/completions` | Self-hosted |
+| Ollama | `http://localhost:11434/v1/chat/completions` | Local, OpenAI-compat mode |
+| LM Studio | `http://localhost:1234/v1/chat/completions` | Local |
+| LocalAI | `http://localhost:8080/v1/chat/completions` | Local |
+| text-generation-webui | `http://localhost:5000/v1/chat/completions` | Local, with OpenAI ext |
+
+---
+
+## Example 2 — Custom HTTP (Google Gemini API)
+
+When the API uses HTTP but has a different request or response structure,
+override `generate()`.  Use the public functions `raise_for_status()` and
+`raise_for_connection_error()` from `lamia.adapters.llm.base` to get
+automatic retry classification.
+
+```python
+# extensions/adapters/gemini_http.py
+from lamia.adapters.llm.base import (
+    BaseLLMAdapter, LLMResponse,
+    raise_for_status, raise_for_connection_error,
+)
+from typing import Optional
+from lamia import LLMModel
+import aiohttp
+
+
+class GeminiHttpAdapter(BaseLLMAdapter):
+    """Direct Gemini HTTP adapter (/v1beta/models/*:generateContent)."""
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.session: Optional[aiohttp.ClientSession] = None
+
+    @classmethod
+    def name(cls) -> str:
+        return "gemini-http"
+
+    @classmethod
+    def env_var_names(cls) -> list[str]:
+        return ["GEMINI_API_KEY"]
+
+    @classmethod
+    def is_remote(cls) -> bool:
+        return True
+
+    async def async_initialize(self) -> None:
+        if self.session is None:
+            self.session = aiohttp.ClientSession(headers={"content-type": "application/json"})
+
+    async def generate(self, prompt, model, response_model=None):
+        if self.session is None:
+            await self.async_initialize()
+
+        model_name = model.get_model_name_without_provider() or "gemini-pro"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+        }
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model_name}:generateContent?key={self.api_key}"
+        )
+
+        try:
+            async with self.session.post(url, json=payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise_for_status(response.status, error_text, "Gemini API error")
+                data = await response.json()
+        except aiohttp.ClientError as e:
+            raise_for_connection_error(e, "Failed to communicate with Gemini API")
+
+        text = ""
+        for candidate in data.get("candidates", []):
+            for part in candidate.get("content", {}).get("parts", []):
+                if "text" in part:
+                    text = part["text"]
+                    break
+            if text:
+                break
+
+        return LLMResponse(
+            text=text,
+            raw_response=data,
+            usage=data.get("usage", {}),
+            model=model.name,
+        )
+
+    async def close(self) -> None:
+        if self.session:
+            await self.session.close()
+            self.session = None
+```
+
+Key points:
+- `raise_for_status(status, text, prefix)` — classifies 429/4xx/5xx automatically
+- `raise_for_connection_error(exc, prefix)` — marks network failures as transient
+- These are public functions, not private methods
+
+---
+
+## Example 3 — SDK adapter
+
+When the provider has a Python SDK, use it directly and map exceptions with
+`raise_for_sdk_error()`:
+
+```python
+# extensions/adapters/cohere.py
+from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, raise_for_sdk_error
+from lamia import LLMModel
+import cohere
+
+
+class CohereAdapter(BaseLLMAdapter):
+
+    def __init__(self, api_key: str):
+        self.client = cohere.AsyncClientV2(api_key=api_key)
+
+    @classmethod
+    def name(cls) -> str:
+        return "cohere"
+
+    @classmethod
+    def env_var_names(cls) -> list[str]:
+        return ["COHERE_API_KEY"]
+
+    @classmethod
+    def is_remote(cls) -> bool:
+        return True
+
+    async def generate(self, prompt, model, response_model=None):
+        try:
+            response = await self.client.chat(
+                model=model.get_model_name_without_provider(),
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except Exception as e:
+            raise_for_sdk_error(e, "Cohere API error")
+
+        return LLMResponse(
+            text=response.message.content[0].text,
+            raw_response=response,
+            usage={"total_tokens": response.meta.tokens.input_tokens + response.meta.tokens.output_tokens},
+            model=model.name,
+        )
+
+    async def close(self) -> None:
+        pass
+```
+
+`raise_for_sdk_error(exc, prefix)` reads structured `status_code` / `status`
+fields from the exception object. No string parsing.
+
+---
+
+## Error handling summary
+
+| Adapter type | How errors are classified |
+|---|---|
+| Zero-config (default `generate()`) | Fully automatic — base class handles it |
+| Custom HTTP (`generate()` override) | Call `raise_for_status()` and `raise_for_connection_error()` |
+| SDK (`generate()` override) | Call `raise_for_sdk_error()` |
+
+Classification rules:
+
+- HTTP `429` -> `ExternalOperationRateLimitError`
+- HTTP `4xx` (except `429`) -> `ExternalOperationPermanentError`
+- HTTP `5xx` -> `ExternalOperationTransientError`
+- connection/timeout/client failures -> `ExternalOperationTransientError`
+
+---
+
+## Contract checking
+
+When Lamia loads a custom adapter, it validates the implementation
+automatically. Violations are logged as warnings:
+
+- `name()` returns a non-empty string
+- `is_remote()` returns a boolean
+- `env_var_names()` returns a list of strings
+- `generate()` has the correct signature
+- `close()` exists and is callable
+
+If the adapter overrides `generate()` without defining `API_URL`, an info
+message reminds you to handle HTTP errors via the public helper functions.
+
+---
+
+## Import style (global imports only)
+
+Keep all imports at module top level. Do not use local imports inside methods.
+
+---
+
+## Interface checklist
+
+Must implement:
+
+- `name()`
+- `env_var_names()`
+- `is_remote()`
+- `close()`
+
+For zero-config adapters, also set:
+
+- `API_URL` (class attribute or property)
+
+For custom adapters, override:
+
+- `generate(prompt, model, response_model)` — full control over request/response
+
+Optional:
+
+- `models()` — allows `lamia models --provider <name>`
+- `async_initialize()` — custom startup (default auto-creates session when `API_URL` exists)
+- `supports_structured_output` property
+
+---
+Source: user-guide/pydantic-models.md
+---
+
+# Pydantic Models Guide
+
+This guide covers how to define Pydantic models that work well with Lamia's structured output validation. Good model definitions lead to better LLM output — the `description` fields, type constraints, and field names all become part of the schema that guides the model's response.
+
+## Basic model definition
+
+Every field should have a `description` that tells the LLM what to put there:
+
+```python
+from pydantic import BaseModel, Field
+
+
+class UserSummary(BaseModel):
+    name: str = Field(description="User full name")
+    role: Role = Field(description="Current role or job title")
+    risk_level: int = Field(description="Risk level from 0 to 100")
+```
+
+Without descriptions, the LLM only sees field names and types. With descriptions, it knows exactly what you expect. This is the single most impactful thing you can do for output quality.
+
+## Field constraints
+
+Lamia enforces Pydantic field type and other constraints at validation time. When the LLM returns data that violates a constraint, Lamia rejects the response and retries with a feedback message explaining what went wrong.
+
+### String constraints
+
+```python
+class Product(BaseModel):
+    sku: str = Field(description="Product SKU code", min_length=3, max_length=20)
+    name: str = Field(description="Product display name", min_length=1)
+    category: str = Field(description="Product category", pattern=r"^(electronics|clothing|food|other)$")
+```
+
+Supported string constraints:
+
+| Constraint | Example | What it does |
+|------------|---------|--------------|
+| `min_length` | `Field(min_length=3)` | Rejects strings shorter than 3 characters |
+| `max_length` | `Field(max_length=100)` | Rejects strings longer than 100 characters |
+| `pattern` | `Field(pattern=r"^[A-Z]{3}")` | Rejects strings that don't match the regex |
+
+You can also use `constr` for the same effect:
+
+```python
+class Product(BaseModel):
+    sku: constr(min_length=18, max_length=20)
+```
+
+Multiple constraints can be combined on a single field:
+
+```python
+class Config(BaseModel):
+    code: str = Field(min_length=3, pattern=r"^abc")
+```
+
+### Numeric constraints
+
+```python
+class Metrics(BaseModel):
+    score: float = Field(description="Score from 0.0 to 1.0", ge=0.0, le=1.0)
+    count: int = Field(description="Number of items, must be positive", gt=0)
+    percentage: float = Field(description="Percentage value", ge=0, le=100)
+```
+
+Supported numeric constraints:
+
+| Constraint | Example | What it does |
+|------------|---------|--------------|
+| `gt` | `Field(gt=0)` | Greater than |
+| `ge` | `Field(ge=0)` | Greater than or equal |
+| `lt` | `Field(lt=100)` | Less than |
+| `le` | `Field(le=100)` | Less than or equal |
+| `multiple_of` | `Field(multiple_of=5)` | Must be a multiple of the value |
+
+### Optional fields
+
+Use `Optional` for fields that may not always be present:
+
+```python
+class Contact(BaseModel):
+    name: str = Field(description="Full name")
+    email: str = Field(description="Email address")
+    phone: Optional[str] = Field(default=None, description="Phone number if available")
+```
+
+### Enum fields
+
+Use Python enums to restrict values to a fixed set:
+
+```python
+
+class Priority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class Ticket(BaseModel):
+    title: str = Field(description="Issue title")
+    priority: Priority = Field(description="Issue priority level")
+    assignee: str = Field(description="Person assigned to the issue")
+```
+
+Lamia validates the enum value and provides clear error messages if the LLM returns an invalid option.
+
+## Nested models
+
+Models can reference other models for complex structures:
+
+```python
+from typing import List
+from pydantic import BaseModel, Field
+
+
+class Address(BaseModel):
+    street: str = Field(description="Street address")
+    city: str = Field(description="City name")
+    country: str = Field(description="Country code, e.g. US, DE, JP")
+
+
+class Employee(BaseModel):
+    name: str = Field(description="Full name")
+    title: str = Field(description="Job title")
+    address: Address = Field(description="Home address")
+
+
+class Department(BaseModel):
+    name: str = Field(description="Department name")
+    head: Employee = Field(description="Department head")
+    members: List[Employee] = Field(description="All department members")
+```
+
+## Lists and dictionaries
+
+```python
+
+class AnalysisResult(BaseModel):
+    keywords: List[str] = Field(
+        description="Top 5 keywords from the text",
+        min_length=1,
+        max_length=5,
+    )
+    scores: Dict[str, float] = Field(description="Category scores, e.g. {'relevance': 0.9}")
+    related_topics: List[str] = Field(description="Related topic names", max_length=10)
+```
+
+You can constrain collection sizes (number of elements) with Pydantic field constraints:
+
+| Constraint | Applies to | Example | What it does |
+|------------|------------|---------|--------------|
+| `min_length` | `List`, `Dict`, `str` | `Field(min_length=2)` | Requires at least 2 items (or chars for strings) |
+| `max_length` | `List`, `Dict`, `str` | `Field(max_length=10)` | Allows at most 10 items (or chars for strings) |
+
+For lists of nested objects, constraints still apply to list size:
+
+```python
+class Finding(BaseModel):
+    severity: str = Field(description="Severity level")
+    message: str = Field(description="Issue details")
+
+
+class ReviewOutput(BaseModel):
+    findings: List[Finding] = Field(
+        description="Detected issues",
+        min_length=1,
+        max_length=20,
+    )
+```
+
+For dictionaries, constraints control the number of keys:
+
+```python
+class MetricsByCategory(BaseModel):
+    scores: Dict[str, float] = Field(
+        description="Category scores where key is category name",
+        min_length=1,
+        max_length=12,
+    )
+```
+
+## File type examples with Pydantic models
+
+Lamia supports structure validation for `JSON`, `YAML`, `XML`, `HTML`, `Markdown`, and `CSV` with the same Pydantic model concepts.
+
+### JSON
+
+Use direct field mapping, and `alias` when JSON keys differ from Python field names:
+
+```python
+class UserSummary(BaseModel):
+    user_name: str = Field(alias="userName", description="Display name")
+    is_active: bool = Field(description="Whether the account is active")
+```
+
+### YAML
+
+Use selectors when YAML keys are deeply nested:
+
+```python
+class ServiceConfig(BaseModel):
+    host: str = Field(
+        description="Database host",
+        json_schema_extra={"selector": "$.database.host"},
+    )
+    port: int = Field(
+        description="Database port",
+        json_schema_extra={"selector": "$.database.port"},
+        ge=1,
+        le=65535,
+    )
+```
+
+### XML
+
+Use XPath selectors, including attribute extraction:
+
+```python
+class BookMeta(BaseModel):
+    title: str = Field(
+        description="Book title",
+        json_schema_extra={"selector": "//book/title"},
+    )
+    author_name: str = Field(
+        description="Author name from XML attribute",
+        json_schema_extra={"selector": "//book/author/@name"},
+    )
+```
+
+### HTML
+
+HTML models support CSS and XPath selectors, including tag names, attributes, and fallback selector chains:
+
+```python
+class ProductPage(BaseModel):
+    title: str = Field(
+        description="Main page heading",
+        json_schema_extra={"selectors": [
+            "h1[itemprop='name']",
+            "meta[property='og:title']",
+            "//h1[contains(@class, 'product-title')]",
+        ]},
+    )
+    price_text: str = Field(
+        description="Price label as shown on page",
+        json_schema_extra={"selectors": [
+            "[data-testid='price']",
+            "span[itemprop='price']",
+            "//span[@class='price']",
+        ]},
+    )
+    description: str = Field(
+        description="Product description block",
+        json_schema_extra={"selector": "div[data-section='description'] p"},
+    )
+```
+
+Common HTML selector patterns:
+- Tag by name: `h1`, `article`, `table`
+- Tag + attribute: `meta[property='og:title']`, `a[rel='next']`
+- Data attributes: `[data-testid='price']`
+- XPath by attribute: `//div[@id='main']`, `//a[@href='/checkout']`
+
+### Markdown
+
+Use selectors for document elements like headings and code blocks:
+
+```python
+class ArticleSummary(BaseModel):
+    title: str = Field(description="Main heading", json_schema_extra={"selector": "h1"})
+    intro: str = Field(description="First paragraph", json_schema_extra={"selector": "p[0]"})
+    snippet: str = Field(description="First code block", json_schema_extra={"selector": "code[0]"})
+```
+
+For a deeper selector reference (fallback chains, AI-assisted selectors, best practices), see the [Selector Usage Guide](../validation/selector-usage-guide.md).
+
+## Tips for better output
+
+1. **Be specific in descriptions.** Instead of `"price"`, write `"Open price from the Quote Summary section"`. The more specific, the more accurate the extraction.
+
+2. **Use the right types.** If a value is always numeric, use `int` or `float`, not `str`. Lamia validates types and the LLM gets schema hints showing the expected type.
+
+3. **Use `str` for formatted numbers.** Bid/ask prices like `"185.50 x 200"` contain non-numeric characters — model them as `str`, not `float`.
+
+4. **Add constraints where they matter.** `Field(ge=0, le=1)` for confidence scores catches hallucinated values like `999.0`.
+
+5. **Keep models flat when possible.** Deep nesting makes it harder for the LLM to produce valid output. Flatten when the structure allows it.
+
+6. **Use enums for known categories.** If a field has a fixed set of valid values, use an `Enum` instead of `str` — it gives the LLM the exact options and Lamia validates the choice.
+
+---
+Source: user-guide/scheduling.md
+---
+
+# Scheduling Scripts
+
+Lamia supports scheduling `.lm` scripts to run automatically on your local machine using the native OS scheduler (launchd on macOS, systemd timers on Linux, Windows Task Scheduler on Windows).
+
+All scheduled times are **local machine time**.
+
+## Adding a Schedule
+
+The simplest way — use a preset:
+
+```bash
+lamia schedule add daily_task.lm --every day
+```
+
+Or run it every time you open your computer:
+
+```bash
+lamia schedule add daily_task.lm --every on-wake
+```
+
+For precise control, use a cron expression:
+
+```bash
+lamia schedule add daily_task.lm --cron "0 9 * * *"
+```
+
+The command resolves the script path and registers it with the OS scheduler. The script's parent directory becomes the working directory for execution.
+
+### Presets (`--every`)
+
+| Preset | Behavior |
+|--------|----------|
+| `hour` | Every hour at :00 |
+| `day` | Every day at 9:00 AM |
+| `weekday` | Monday through Friday at 9:00 AM |
+| `week` | Every Monday at 9:00 AM |
+| `on-wake` | Once when the computer starts or wakes from sleep |
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--every` | — | Schedule preset (see above). Use this OR `--cron`. |
+| `--cron` | — | Standard 5-field cron expression. Use this OR `--every`. |
+| `--no-catch-up` | off | If set, missed runs (machine was off) are skipped |
+
+By default, if the machine was off at the scheduled time, the missed run fires once when the machine wakes up. Pass `--no-catch-up` to disable this.
+
+Legacy aliases are still accepted: `hourly`, `daily`, `weekdays`, `weekly`.
+
+## Listing Schedules
+
+```bash
+lamia schedule list
+```
+
+Shows all registered schedules with their cron, project path, and last run status:
+
+```
+  [a3f7c2e1b9d0] daily_task.lm
+    schedule: day  catch_up: True
+    path: /Users/you/project/pinterest_pin_publisher
+    last run: 2026-05-28T09:00:12+00:00  status: ok
+```
+
+If a script fails (e.g., file moved, runtime error), the status shows `FAILED` with the error detail.
+
+## Removing a Schedule
+
+```bash
+lamia schedule remove <id>
+```
+
+The `<id>` is shown in `lamia schedule list` output. This unloads the OS scheduler entry and removes the job from the registry.
+
+## Updating a Schedule
+
+If you used a wrong cron expression or want to change cadence, update in one command:
+
+```bash
+lamia schedule update <id> --every day
+```
+
+Or switch to a custom cron:
+
+```bash
+lamia schedule update <id> --cron "15 10 * * *"
+```
+
+You can also toggle catch-up behavior during update:
+
+```bash
+lamia schedule update <id> --every on-wake --no-catch-up
+```
+
+## How It Works
+
+Schedules are stored globally at `~/.lamia/schedules/` — one JSON file per job (`<id>.json`). Each file holds both the job configuration (script, cron, catch_up, project_root) and the last run status (timestamp, exit code, error). The OS scheduler invokes:
+
+```
+lamia --file /abs/path/to/script.lm --log-file ~/.lamia/logs/<id>/schedule.log --schedule-id <id>
+```
+
+This means:
+
+- One file per job — no companion status files, everything in `<id>.json`
+- Logs are grouped per schedule id under `~/.lamia/logs/schedules/<id>/`
+- After each run, exit status is written back into the job file so `lamia schedule list` can display it
+- When you `lamia schedule remove <id>`, both the OS entry and the file are deleted
+
+## Cron Expression Reference
+
+```
+┌───── minute (0-59)
+│ ┌───── hour (0-23)
+│ │ ┌───── day of month (1-31)
+│ │ │ ┌───── month (1-12)
+│ │ │ │ ┌───── day of week (0-7, 0 and 7 = Sunday)
+│ │ │ │ │
+* * * * *
+```
+
+Common patterns:
+
+| Expression | Meaning |
+|-----------|---------|
+| `0 9 * * *` | Daily at 9:00 AM |
+| `0 */6 * * *` | Every 6 hours |
+| `30 8 * * 1-5` | Weekdays at 8:30 AM |
+| `0 0 1 * *` | First of each month at midnight |
+
+## OS-Specific Behavior
+
+### macOS (launchd)
+
+Creates a plist at `~/Library/LaunchAgents/com.lamia.schedule.<id>.plist`. Uses `StartCalendarInterval` for time-based scheduling. Catch-up of missed runs is handled by Lamia at runtime (comparing last run time to current time).
+
+### Linux (systemd)
+
+Creates a `.service` and `.timer` unit in `~/.config/systemd/user/` named `lamia-schedule-<id>`. Uses `Persistent=true` to catch up on missed runs after boot.
+
+### Windows (Task Scheduler)
+
+Creates a task in `Lamia\<id>` via `schtasks.exe`. The task runs with the user's permissions.
+
+## Best Practices for Scheduled Scripts
+
+Lamia tracks only the **last run** of each scheduled job — its timestamp, exit code, and error message. Previous run information is overwritten. You can access the schedule ID via `schedule.id` in your script to store it in a persistent store.
+
+If you want visibility into run history, keep your own per-run records in a persistent store (file, database, or API) so you can audit trends and troubleshoot faster.
+
+Example — deterministic CSV append (no LLM call):
+
+```python
+from datetime import datetime
+
+class RunResult(BaseModel):
+    timestamp: str
+    job_id: str
+    items_processed: int
+    success: bool
+    error: str
+
+def log_run(job_id, items, success, error="") -> File(CSV[RunResult], "runs/history.csv", append=True):
+    return f"{datetime.now().isoformat()},{job_id},{items},{success},{error}"
+```
+
+You can also chain file-read mode with deterministic append:
+
+```python
+from datetime import datetime
+
+class RunResult(BaseModel):
+    timestamp: str
+    job_id: str
+    items_processed: int
+    success: bool
+    error: str
+
+job_id = schedule.id # schedule.id is the ID of the scheduled job provided by Lamia
+items_processed = 100 # Should be set by your script
+success = True # Should be set by your script
+error = None # Should be set by your script
+
+def append_history(payload: JSON) -> File(CSV[RunResult], "runs/history.csv", append=True):
+    return f"{datetime.now().isoformat()},{job_id},{items_processed},{success},{error:None}"
+
+```
+
+Recommended practices:
+
+1. **Log each run's outcome** — append to CSV rows or write to a database table. Include timestamps, what was processed, and success/failure per item.
+
+2. **Store the run timestamp and exit status** alongside your data. Lamia keeps only the last one, so if you need a history view, maintain your own.
+
+3. **Use idempotent and resumable operations** — catch-up can re-trigger a missed run, and a run can fail halfway. Design steps so retries do not duplicate side effects, and partial failures can resume safely from checkpoints.
+
+4. **Keep scripts self-contained** — the scheduled script runs from its parent directory with no interactive terminal. Avoid prompts, ensure credentials are pre-configured, and handle network failures with retries.
+
+5. **Test manually first** — run `lamia --file your_script.lm` by hand before scheduling. If it works interactively, it will work on schedule.
+
+## Cloud Scheduling
+
+For always-on schedules that don't depend on your local machine being awake, use cloud scheduling with the `--remote` flag:
+
+```bash
+lamia daily_task.lm --remote
+```
+
+Run this one-time cloud invocation first to verify cloud permissions and runtime behavior.
+Then create the schedule:
+
+```bash
+lamia schedule add daily_task.lm --every day --remote
+```
+
+Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (`list`, `update`, `remove`) automatically detect whether a job is local or cloud.
+
+Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package.  
+See the [lamia-cloud user guide](../advanced/lamia-cloud.md) for installation, one-time cloud runs, and scheduler setup.
+
+For team deployments via GitHub and CI, see [GitHub Deployment](github-deployment.md).
+
+## Resource Lifecycle
+
+If a script file is renamed, moved, or deleted, any schedule pointing to it
+shows `SOURCE_MISSING` in `lamia schedule list`. To clean up these entries:
+
+```bash
+lamia schedule remove --orphaned
+```
+
+Unused cloud resources (containers, images) are automatically removed after
+30 days of inactivity. Active schedules and triggers are never affected.
+
+## Troubleshooting
+
+- **Script not found**: If you moved the project after scheduling, the job will fail. Use `lamia schedule list` to see the stale path, then `remove` and `add` with the new location.
+- **Check logs**: Use `lamia schedule list` to get the job id, then run `lamia schedule logs <id>`. Local jobs write to `~/.lamia/logs/schedules/<id>/schedule.log`.
+- **Force fresh login**: If a web automation script's session expired, delete `.lamia_sessions/` and run the script manually once to re-authenticate before the next scheduled run.
+- **Schedule stopped firing (macOS)**: If `lamia schedule list` shows a stale `last run` date and no new runs occur, a previous execution may have hung. Check with `launchctl list <label>` — if a PID is shown, the old process is still alive. Kill it with `kill <pid>` and the schedule will resume on its next interval. Lamia arms a 24-hour watchdog timer (`SIGALRM`) for scheduled runs to prevent this, and launchd's `ExitTimeOut` provides an additional safety net.
+- **Cloud timeout differs from local**: Local scheduled runs use a 24-hour watchdog. Cloud Run Jobs default to a 1-hour task timeout to reduce accidental billing from hung jobs. For heavy workloads, raise `cloud.resources.task_timeout_seconds` in `config.yaml` (up to 7 days).
+- **Cloud: "requires lamia-cloud"**: Run `pip install "lamia-lang[cloud]"`. See [lamia-cloud docs](../advanced/lamia-cloud.md).
+
+---
+Source: style-guides/hu-style.md
+---
+
+# LSG-1: .hu File Style Guide
+
+This guide defines conventions for writing `.hu` (human prompt template) files.
+`.hu` files are the interface between humans and LLMs in Lamia projects --
+clean, focused prompts that produce reliable results. Violations are enforced by `lamia inspect` -- see the [full rule reference](../advanced/inspect.md).
+
+## Core principle
+
+`.hu` files are **plain text**. No markdown, no HTML, no YAML front matter, no emojis.
+The LLM consumes the raw text; visual formatting adds noise without value.
+
+## File structure
+
+A well-structured `.hu` file follows this order:
+
+1. **Role / context** -- who the LLM should act as and what it knows
+2. **Task** -- what to do, stated directly (no fluff)
+3. **Input parameters** -- parameters and file references
+4. **Constraints** -- boundaries, tone, length limits (Note that output constraints should be specified in the -> Type[Model] Model's contraints with Pydantic syntax if possible)
+
+```
+You are a senior code reviewer specializing in {language}.
+
+Review the following code and identify bugs, security issues,
+and style violations. Be concise.
+
+Limit your response to the {max_findings:10} most critical issues.
+
+Code to review:
+{@source_file}
+```
+
+Avoid burying the task deep in the prompt. Lead with context, then
+state the task clearly.
+
+## Parameter naming
+
+Use `snake_case` for all parameter names:
+
+```
+Good:  {user_name}  {max_retries}  {output_format}
+Bad:   {userName}   {MaxRetries}   {OutputFormat}
+```
+
+Keep names descriptive but not verbose:
+
+```
+Good:  {prd_content}  {review_criteria}
+Bad:   {the_product_requirements_document_content}
+Bad:   {x}  {data}  {input}
+```
+
+### Defaults
+
+Use defaults for parameters that have a meaningful fallback value but never for values that must be filled by the caller:
+
+```
+Write a {tone:professional} email to {recipient} about {topic}.
+Keep it under {max_words:200} words.
+```
+
+Use `{param:None}` for truly optional parameters that should be empty
+when omitted, not for parameters that need a fallback value. When the parameter is not provided, an empty string will be used as the value.
+
+## File context references
+
+Use `{@filepath}` to inject file contents. Prefer this over large
+inline parameters:
+
+```
+Good:
+  Review the code in {@main.py} and suggest improvements.
+
+Bad:
+  Review the following code and suggest improvements:
+  {source_code_that_is_500_lines_long}
+```
+
+When a `.hu` file needs more than 10 parameters, it is a sign that
+content should be moved to separate `.hu` files and orchestrated from a `.lm` file.
+
+### Variable file references
+
+When the file to include depends on the caller, name the parameter
+clearly:
+
+```
+Analyze the test results in {@test_report}.
+Compare against the baseline in {@baseline_report}.
+```
+
+The caller provides the paths:
+```python
+analyze(test_report="results/latest.json", baseline_report="results/v1.json")
+```
+
+## Return types
+
+`.hu` files are **return-type agnostic**. Never embed output format
+instructions in the prompt:
+
+```
+Bad:
+  Output JSON:
+  {
+    "summary": "...",
+    "score": 0
+  }
+
+Good:
+  (no format instructions -- the caller specifies -> JSON[Model])
+```
+
+Lamia validates output format and structure at the call site using
+`-> Type[Model]`. Currently supported types: JSON, HTML, YAML, XML, CSV, Markdown.
+The caller declares the return type, and Lamia handles validation
+and extraction automatically:
+
+```python
+result = review_code(language="python") -> JSON[ReviewResult] # where review_code is the `.hu` file name
+```
+
+## Character Escaping
+
+When the prompt text itself needs curly braces (e.g., showing JSON
+examples to the LLM), double them:
+
+```
+The config file uses this format: {{key: value}}.
+```
+
+## What not to include
+
+| Anti-pattern | Why | Rule |
+|---|---|---|
+| `# Heading` | Markdown formatting | HUW002 |
+| `**bold**` | Markdown formatting | HUW003 |
+| `` `code` `` | Markdown formatting | HUW014 |
+| `---` front matter | Not valid in .hu | HUE001 |
+| HTML tags | Not appropriate | HUW012 |
+| Emojis | Decorative noise | HUW013 |
+| Output JSON: {...} | Use -> Type[Model] | HUR018 |
+
+## Naming the file
+
+The filename (without `.hu`) becomes the callable function name.
+Use `snake_case`:
+
+### Verb-based Naming Conventions:
+
+```
+Good:  review_code.hu  generate_report.hu  analyze_data.hu
+Bad:   ReviewCode.hu   generate-report.hu  ANALYZE_DATA.hu
+```
+
+Keep names verb-first when the file performs an action:
+
+```
+Good:  summarize_article.hu  extract_entities.hu  draft_email.hu
+Bad:   article_summary.hu    entity_extraction.hu  email_draft.hu
+```
+
+### Noun-based Naming Conventions:
+
+```
+Good:  groomer.hu  .hu  product_manager.hu
+Bad:   Groomer.hu   Product-manager.hu
+```
+
+---
+Source: style-guides/lm-style.md
+---
+
+# LSG-2: .lm File Style Guide
+
+This guide defines conventions for writing `.lm` (Lamia script) files.
+`.lm` files are the orchestration layer -- they combine Python code
+with Lamia syntax to wire prompts, files, web actions, and validation
+into workflows. Violations are enforced by `lamia inspect` -- see the [full rule reference](../advanced/inspect.md).
+
+## Core principle
+
+`.lm` files are **Python + Lamia**. Follow PEP 8 for the Python parts.
+but keep usage of Python code to a minimum only when Lamia syntax is not sufficient for the task.
+
+## Indentation and formatting
+
+Use 4 spaces for indentation (PEP 8). Never tabs.
+
+```python
+def analyze_code(language="python"):
+    """
+    Review the code in {@source.py} for bugs and style issues.
+    Focus on {language}-specific patterns.
+    """
+
+for ticker in ["AAPL", "NVDA", "GOOG"]:
+    data = get_stock(ticker=ticker) -> JSON[StockQuote]
+    print(f"{ticker}: {data.price}")
+```
+
+## Return types
+
+Always declare return types when you need validated output.
+Lamia supports: `JSON`, `HTML`, `YAML`, `XML`, `CSV`, `Markdown`, `TEXT`.
+
+### Format validation (type only)
+
+```python
+def load_config() -> JSON:
+    "./config.json"
+
+def generate_page() -> HTML[LandingPage]:
+    "Create a login form"
+```
+
+### Strict vs permissive
+
+Skip permissive Boolean flag and use HTML[Model] instead.   
+
+```python
+-> HTML[Model]         # permissive (default) - filler content arround the content you want to extract is allowed and model matched rules are relaxed a bit. Check Lamia documentation for more details.
+-> HTML[Model, True]   # strict - response must be pure HTML, etc. and no drifts are allowed in the document conten
+-> HTML[Model, False]  # Use HTML[Model] instead of this 
+```
+
+Use cases:
+- Use strict mode for content generation (you control the output).
+- Use permissive mode for parsing external content (HTML pages, API responses).
+
+### Don't embed format instructions
+
+Never put output schema in comments, docstrings, or prompt text:
+
+```python
+# Bad -- the schema belongs in a Pydantic model
+def analyze():
+    """
+    Analyze the data.
+    Output JSON:
+    {"score": 0, "summary": "..."}
+    """
+
+# Good -- Pydantic model + return type
+class Analysis(BaseModel):
+    score: int
+    summary: str
+
+def analyze() -> JSON[Analysis]:
+    "Analyze the data"
+```
+
+## Calling .hu functions
+
+`.hu` functions are called like regular Python functions.
+All arguments must be keyword arguments.
+
+```python
+# Good
+result = summarize(aspect="key findings", max_words=200) -> HTML
+
+# Bad -- positional arguments
+result = summarize("key findings", 200) -> HTML
+```
+
+### Return type on the call site
+
+The `-> Type` on `.hu` calls is where you specify what format
+you expect back. The `.hu` file itself stays format-agnostic:
+
+```python
+# Same .hu prompt, different output formats
+html_result = summarize(topic="AI") -> HTML
+json_result = summarize(topic="AI") -> JSON[Summary]
+text_result = summarize(topic="AI") -> TEXT
+```
+
+## Simplified syntax
+
+For one-off commands that don't need a function name, use the
+simplified arrow syntax:
+
+```python
+data = "./users.json" -> JSON:
+page = "Create a login form" -> HTML:
+```
+
+## File operations
+
+### Reading Files
+
+Read files with Lamia syntax. Avoid using Python code to read files. Validation will be done automatically if needed.
+
+```python
+def read_data():
+    "./data/input.txt"
+
+def load_settings() -> JSON:
+    "../config/settings.json"
+
+content = read_data() -> TEXT # We can select the return type during the runtime.
+settings = load_settings() # load_settings will always return a JSON object.
+```
+
+### Writing Files
+
+Write files with Lamia syntax. Avoid using Python code to write files. Validation will be done automatically if needed.
+
+Assign to a variable when you need the result. Use `-> File(...)`
+when you want to write directly to disk: do 
+
+```python
+"Create a landing page" -> File(HTML, "index.html"):
+"Generate test data" -> File(CSV, "fixtures.csv"):
+```
+
+If the result is needed in memory and written to a file, use a single operation:
+
+```python
+im_memory = "Generate test data" -> File(CSV, "fixtures.csv"):
+```
+
+# File context
+
+Instead of using many paths to a directory in your code, use `with files("~/Documents/")` to scope file search directories and to avoid writing many paths to a directory in your code:
+
+```python
+with files("~/Documents/"):
+    def answer_question(question):
+        """
+        Answer: {question}
+        Use information from {@resume.pdf} and {@cover_letter.txt}
+        """
+```
+
+## Variable naming
+
+Follow PEP 8:
+
+```python
+# Good
+review_result = review_code(language="python") -> JSON[Review]
+stock_data = get_stock(ticker="AAPL") -> CSV[StockQuote]
+
+# Bad
+ReviewResult = review_code(language="python") -> JSON[Review]
+x = get_stock(ticker="AAPL") -> CSV[StockQuote]
+```
+
+Pydantic models use `PascalCase` (standard Python class naming):
+
+```python
+class StockQuote(BaseModel):
+    ticker: str
+    price: float
+    volume: int
+```
+
+## Model selection
+
+Use a singular parameter for `models` when a function needs a specific LLM:
+
+```python
+def analyze(models="openai:gpt-4"):
+    "Analyze the data"
+```
+
+Use an array of models for `models` when providing fallback models:
+
+```python
+def with_fallback(models=["openai:gpt-4", "anthropic:sonnet-4"]):
+    "<some complicated task>"
+```
+
+## Imports
+
+Imports are not needed in `.lm` files. All Lamia types and interfaces are available without any import statements. But if you mix it with Python code, you will import Python dependencies as usual.
+
+Avoid import pydantic models as well.
+
+---
+Source: style-guides/project-structure.md
+---
+
+# LSG-3: Project Structure Guide
+
+This guide defines conventions for organizing Lamia projects --
+folder layout, naming, and how to structure multi-agent workflows.
+
+## Basic project layout
+
+A minimal Lamia project:
+
+```
+my-project/
+  config.yaml       # LLM configuration (models, keys)
+  main.lm           # Entry point
+  summarize.hu      # A prompt template
+```
+
+Run with `lamia main.lm` from the project root.
+
+## Recommended layout for larger projects
+
+```
+my-project/
+  config.yaml
+  orchestrator.lm           # Main workflow entry point
+  team/                      # Agent prompt templates
+    researcher.hu
+    developer.hu
+    reviewer.hu
+    qa_analyst.hu
+  models/                    # Pydantic models for validation, one file or multiple files
+    schemas.lm
+  data/                      # Input data, fixtures
+    requirements.txt
+  output/                    # Generated artifacts (gitignored)
+    report.html
+```
+
+### Key conventions
+
+- **`config.yaml`** at project root -- contains model configuration
+- **`orchestrator.lm`** as the main entry point for multi-agent workflows
+- **`team/`** directory for agent `.hu` files
+- **`models/`** for shared Pydantic model definitions
+- **`data/`** for input files referenced via `{@...}`
+- **`output/`** for generated files (add to `.gitignore`)
+
+## Naming conventions
+
+### Files
+
+| Type | Convention | Examples |
+|---|---|---|
+| `.hu` files | `snake_case`, verb-first | `review_code.hu`, `draft_email.hu` |
+| `.lm` files | `snake_case` | `orchestrator.lm`, `pipeline.lm` |
+| Directories | `snake_case` | `team/`, `models/`, `data/` |
+
+### Agent names (`.hu` filenames)
+
+Since `.hu` filenames become callable function names, choose names
+that read naturally at the call site:
+
+```python
+# Good -- reads like natural function calls
+analysis = researcher(topic="market trends") -> JSON[Analysis]
+code = developer(specs=analysis) -> TEXT
+feedback = reviewer(code=code, specs=analysis) -> JSON[Review]
+
+# Bad -- unclear what these do
+result1 = agent1(input="market trends") -> JSON[Analysis]
+output = worker(data=result1) -> TEXT
+```
+
+Use role-based names for agents (`researcher`, `developer`, `reviewer`)
+and action-based names for utility prompts (`summarize`, `extract`,
+`translate`).
+
+## Multi-agent workflows
+
+### The orchestrator pattern
+
+For projects with multiple agents, use a single `orchestrator.lm`
+as the entry point that coordinates the workflow:
+
+```python
+# orchestrator.lm
+
+# Pipeline: research -> develop -> review
+prd = product_manager(brief=brief) -> JSON[PRD]
+code = developer(specs=prd) -> JSON[Implementation]
+review = reviewer(code=code, specs=prd) -> JSON[Review]
+
+if not review.approved:
+    code = developer(specs=prd, feedback=review.findings) -> JSON[Implementation]
+```
+
+### Agent composition
+
+Agents (`.hu` files) cannot call other agents directly.
+All orchestration flows through `.lm` files:
+
+```
+orchestrator.lm
+  -> calls researcher.hu          (auto-callable: filename = function name)
+  -> passes result to developer.hu
+  -> passes result to reviewer.hu
+  -> loops if review fails
+```
+
+Functions defined in other `.lm` files are also auto-discovered. An orchestrator can call functions from any neighboring `.lm` file directly — no imports needed:
+
+```
+orchestrator.lm
+  -> calls generate_report()       (defined in report.lm, auto-discovered)
+  -> calls buy_winner_stock()      (defined in buy_stocks.lm, auto-discovered)
+```
+
+This keeps each agent focused on a single responsibility and makes
+the workflow visible in one place.
+
+### File usage
+
+Use either relative or absolute `{@filepath}` paths or use Lamia's file context manager `with files("~/Documents/")` to inject file contents into the prompt from the `.lm` file invoker:
+
+```
+# team/developer.hu
+You are implementing features based on the project requirements.
+
+Requirements:
+{@../data/requirements.txt}
+
+Implement the following specifications:
+{specs}
+```
+
+or 
+
+```python
+# orchestrator.lm
+with files("data/"):
+    code = developer(specs=prd) -> JSON[Implementation]
+```
+
+where devleoper.hu is:
+
+```python
+# team/developer.hu
+You are implementing features based on the project requirements.
+
+Requirements:
+{@requirements.txt}
+
+Implement the following specifications:
+{specs}
+```
+
+## Configuration
+
+### config.yaml
+
+The most important part for configuration is the model chain. Define the model chain in the first line of the config.yaml file. It is recommended to have at least one fallback model in the model chain.
+
+```yaml
+models:
+  - openai:gpt-4
+  - anthropic:sonnet-4    # fallback
+```
+
+Override per-function only when a specific task needs a different
+model (e.g., a cheaper model, a model that is fine-tuned for the task, etc.):
+
+```python
+def classify(models="openai:gpt-4o-mini"):
+    "Classify the sentiment of: {text}"
+```
+
+## Scaling up
+
+### When a project grows
+
+As projects grow, split orchestration into focused pipelines:
+
+```
+my-project/
+  config.yaml
+  pipelines/
+    research.lm              # Research pipeline
+    implementation.lm        # Implementation pipeline
+    review.lm                # Review pipeline
+  team/
+    researcher.hu
+    developer.hu
+    reviewer.hu
+    qa_analyst.hu
+  models/
+    research_models.py
+    implementation_models.py
+  data/
+    ...
+```
+
+### Function/File name conflics
+
+Per project basis `.lm` functions and `.hu` file names (which are function names) must be unique.
+
+### Avoid these patterns
+
+- **`.hu` files in the project root** mixed with `.lm` files, instead
+  group agents under `team/` or a descriptive directory
+- **Deeply nested directories** - keep the tree shallow (2-3 levels max)
+- **Generic names** - `agent.hu`, `process.lm`, `data.py` say nothing
+  about what they do
+- **Pydantic models inside `.lm` files** for large projects - 
+  extract to `models/` when shared across multiple `.lm` files
+
+---
+Source: advanced/debugger.md
+---
+
+# Lamia Debugger
+
+Lamia includes a built-in debugger for `.lm` files:
+
+```bash
+lamia debug path/to/file.lm
+```
+
+This page covers both interactive terminal debugging and IDE integration.
+
+## CLI Usage
+
+### Basic command
+
+```bash
+lamia debug orchestrator.lm
+```
+
+### Options
+
+- `--break`, `-b <line>`: Set one or more breakpoints before execution starts.
+- `--stop-on-entry`: Pause on the first executable line.
+- `--json`: Machine-readable mode used by IDE integrations.
+
+Examples:
+
+```bash
+# Run until line 51
+lamia debug orchestrator.lm --break 51
+
+# Pause immediately, then step manually
+lamia debug orchestrator.lm --stop-on-entry
+
+# Multiple breakpoints
+lamia debug orchestrator.lm --break 51 --break 87
+```
+
+## Interactive Commands
+
+When running `lamia debug` in terminal mode, use:
+
+- `continue` / `c`: Resume execution
+- `next` / `n`: Step over
+- `step` / `s`: Step into
+- `stepout` / `out`: Step out
+- `break <line>` / `b <line>`: Add a breakpoint
+- `break`: List breakpoints
+- `print <expr>` / `p <expr>`: Evaluate expression
+- `locals` / `l`: Show local variables
+- `backtrace` / `bt`: Show call stack
+- `quit` / `q`: Stop debugging
+- `help` / `h`: Show help
+
+## Config Discovery
+
+If `--config` is not provided, Lamia automatically searches for `config.yaml` or `config.yml` by walking up parent directories from the target file path.
+
+This means debugging works from nested folders without manually changing directories.
+
+If no config file is found, Lamia shows an error with the search starting point and how to fix it.
+
+## Variable Inspection
+
+The debugger supports structured variable inspection for:
+
+- lists / tuples / sets
+- dictionaries
+- Pydantic models (via `model_dump()` when available)
+- regular Python objects (`vars(...)`)
+
+In IDE debug views, expandable values appear as tree nodes so nested items can be inspected individually.
+
+## IDE Integration Notes
+
+The IDE integration uses:
+
+- `lamia debug <file> --json` as the debug runtime process
+- a JSON-lines protocol for debugger commands/events
+- source-map aware line mapping from transformed Python back to original `.lm` lines
+
+Breakpoints can be passed at process start and are also synchronized after initialization for robust startup behavior.
+
+---
+Source: advanced/lamia-cloud.md
+---
+
+# lamia-cloud
+
+Run Lamia scripts in the cloud with the same `.lm` workflow you use locally.
+
+`lamia-cloud` currently supports GCP and gives you:
+
+- one-time cloud execution with `--remote`
+- cloud scheduling with Cloud Scheduler
+- Cloud Run Job execution with logs in Cloud Logging
+- event-driven triggers (see [Triggers](../user-guide/triggers.md))
+
+## Installation
+
+```bash
+pip install "lamia-lang[cloud]"
+```
+
+## Configuration
+
+Add a `cloud` section to your project's `config.yaml`:
+
+```yaml
+cloud:
+  provider: gcp
+  project_id: my-gcp-project
+  location: us-central1
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `provider` | yes | Cloud provider (`gcp`) |
+| `project_id` | yes | Your GCP project ID |
+| `location` | yes | Region for scheduling and execution (e.g. `us-central1`) |
+| `resources.task_timeout_seconds` | no | Cloud Run Job task timeout in seconds. Default `3600` (1h), max `604800` (7 days). Increase for long-running jobs. |
+
+## Authentication
+
+lamia-cloud uses Application Default Credentials. Authenticate once:
+
+```bash
+gcloud auth application-default login
+```
+
+## One-time Cloud Run (`--remote`)
+
+```bash
+lamia my_script.lm --remote
+```
+
+Use this first to validate cloud permissions, runtime behavior, and logs before creating a schedule.
+
+**Why it can take a while to start:** each run waits for the cloud platform to schedule and provision an instance for the job before your script starts. In our own testing this has taken anywhere from 60-130 seconds, on top of a few seconds for the interpreter itself to start once the container is running. `--remote` prints the breakdown so you can see the split, e.g.:
+
+```
+Completed in 100.4s (pending 83.1s, execution 17.3s)
+```
+
+`pending` is the wait for GCP to schedule and start your container; `execution` is your script actually running. You're only billed for `execution` time, not `pending`.
+
+## Cloud Scheduling
+
+```bash
+lamia schedule add daily_task.lm --every day --remote
+```
+
+This uses the same cloud runtime as one-time `--remote` execution.
+
+All other commands work transparently:
+
+```bash
+lamia schedule list          # shows both local and cloud jobs
+lamia schedule update <id> --cron "0 12 * * *"
+lamia schedule remove <id>   # tears down the cloud job + scheduler job
+```
+
+## How It Works
+
+1. `lamia <script>.lm --remote` packages your project and deploys a Cloud Run Job
+2. Your script runs via the `lamia` CLI inside the job container (same script semantics as local)
+3. `lamia schedule add --remote` creates a Cloud Scheduler trigger for that job
+4. Logs (stdout/stderr) go to Cloud Logging under Cloud Run Job execution logs
+5. Exit status is reported back to the local lamia registry so `lamia schedule list` shows it
+
+**Version:** A cloud script is built with the newest version of Lamia at the time you deploy it, and it keeps that version until it's rebuilt. Deploying again after you change your script rebuilds it with the latest version. Updates stay compatible with your existing scripts, so cloud runs behave the same as running on your computer.
+
+## Logs
+
+View execution logs:
+
+```bash
+lamia schedule logs <id>
+```
+
+Or directly in GCP Console under Cloud Run > Jobs > `lamia-...` > Executions > Logs.
+
+## API Enablement
+
+lamia-cloud automatically enables required APIs on first use. No manual `gcloud services enable` step is needed.
+
+### Vertex AI model access
+
+API enablement is separate from Vertex AI's per-model access grant. The first time a project calls a gated publisher model (for example, Anthropic's Claude models) through Vertex AI, Google requires one-time per-project consent, granted from that model's Model Garden page (found under Google Cloud Console's Agent Platform section) — this isn't an API flag, so lamia-cloud cannot complete it on your behalf.
+
+Before any build or deploy, `--remote` checks every model in your `model_chain` against Vertex in one batch and, if any are missing access, reports all of them together with a Model Garden link and a search name for each (e.g. `claude-sonnet-4-5-20250929` → search "Claude Sonnet 4.5"). If a run reports missing models, open the printed link, search each name in Model Garden, and click **Enable** on its card, then retry.
+
+## File Sync for Cloud Execution
+
+When your script uses `with files(...)` to provide context to the LLM, Lamia automatically uploads the referenced files to cloud storage (GCS) so the script runs identically in the cloud.
+
+### What gets uploaded
+
+**Only** the folders and files specified in `with files(...)` syntax are uploaded. Nothing else.
+
+```python
+with files("./docs", "./data/input.csv"):
+    def summarize():
+        "Summarize {@report.pdf} and {@input.csv}"
+```
+
+In this example, every file inside `./docs/` and the single file `./data/input.csv` are synced to cloud storage.
+
+### How it works at runtime
+
+When files are synced, the GCS bucket is mounted as the container's working directory via GCS FUSE. All relative file paths in your script resolve directly into the mounted bucket. Reads pull from the bucket, writes go to the bucket. No copying, no configuration — transparent filesystem.
+
+### Incremental sync
+
+Lamia tracks file checksums. On subsequent deploys, only changed or new files are uploaded. Files already in the bucket with matching content are skipped. This keeps re-deploy times fast.
+
+When multiple team members sync the same project, Lamia issues a warning before overwriting files that have been modified by someone else.
+
+### Security considerations
+
+All files in `with files(...)` directories are uploaded recursively. This includes every file in the folder — Lamia uploads everything so the LLM context resolution works exactly as on your local machine.
+
+**Risks to be aware of:**
+
+1. **Secrets** — Lamia scans for common secret file patterns (`.env`, files containing `API_KEY`, `private key`, etc.) and blocks the upload with a clear error. Nevertheless, review what's in your directories before deploying.
+
+2. **Security surface** — Every file you upload exists in cloud storage. Fewer files = smaller attack surface. Only upload what the script actually needs.
+
+3. **Sync speed** — Larger directories mean more files to check and upload on every script update. Every time you modify your script, Lamia must scan the referenced directories and sync changes. Hundreds of large files slow this down.
+
+4. **Storage and bandwidth cost** — GCS storage is cheap (~$0.02/GB/month for Standard), but bandwidth adds up with large syncs. For typical Lamia usage (documents, configs, CSVs), costs are negligible — a few cents per month. If you're syncing gigabytes of data, consider limiting scope.
+
+### Best practices
+
+| Practice | Why |
+|----------|-----|
+| Create a dedicated folder for your script's data (e.g., `./context/`) | Keeps scope clear, fast sync, no surprise files |
+| Avoid pointing `with files(...)` at `~/Documents` or home directories | Personal files, secrets, irrelevant data — all gets uploaded |
+| Use relative paths from the project root | Portable across machines and team members |
+| Keep referenced directories small and focused | Faster sync, lower cost, better LLM context quality |
+
+**It is not terrible to reference a larger directory** — Lamia handles it correctly and securely. The practical concern is that LLMs can get lost in large file sets (context dilution), sync gets slower, and the security surface grows. If your workflow genuinely needs many files, it works — just understand the tradeoffs.
+
+---
+
+## Gitflow for Lamia (Team Workflows)
+
+When multiple developers work on a shared Lamia project, file paths must be consistent across machines. The recommended approach: **use paths relative to the Git repository root**.
+
+### The problem with absolute paths
+
+```python
+# BAD for teams — breaks on other machines
+with files("~/Documents/company_data/"):
+    def analyze():
+        "Summarize {@quarterly_report.pdf}"
+```
+
+This works for one developer but fails for everyone else (different home directory, different folder structure).
+
+### The solution: repository-relative paths
+
+```python
+# GOOD for teams — works for everyone who clones the repo
+with files("./data/"):
+    def analyze():
+        "Summarize {@quarterly_report.pdf}"
+```
+
+Place the files your script needs inside the Git repository (or a subdirectory of it). Every team member gets the same structure after cloning.
+
+### Recommended project structure for teams
+
+```
+my-project/              ← Git repository root
+├── config.yaml          ← cloud configuration
+├── daily_report.lm      ← script
+├── data/                ← files referenced in with files("./data/")
+│   ├── templates/
+│   │   └── report_template.html
+│   └── reference_data.csv
+└── requirements.txt
+```
+
+### Rules for team-shared projects
+
+1. **All `with files(...)` paths must be relative** — no `~/`, no `/absolute/paths`
+2. **Referenced directories must be inside the Git repository** — otherwise teammates won't have them
+3. **Git is the recommended source control** — Lamia assumes Git when detecting project boundaries for teams
+4. **Uploading to Git does NOT eliminate cloud sync** — Lamia still syncs files to the GCS bucket for fast runtime access. Git is the source of truth; the bucket is the execution cache.
+
+### Sensitive files in team repos
+
+Be careful:
+
+- Don't commit secrets to the repository
+- Lamia will still block uploads of detected secret files but you will still have a problem if you commit them to the repository.
+- If you have not committed files in the repository lamia --remote command will upload your locale executable and instead of the state that is in the remote git repo as the team would expecct you local state would be running on the cloud. That is why CI/CD flow is a recommened appoach for the team projects.
+
+### CI/CD integration (GitHub Flow)
+
+For automated deployments, set up a CI workflow that triggers `lamia <script>.lm --remote` when relevant files change:
+
+```yaml
+# .github/workflows/lamia-deploy.yml
+name: Deploy Lamia Script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'daily_report.lm'
+      - 'data/**'
+      - 'config.yaml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install "lamia-lang[cloud]"
+      - run: lamia daily_report.lm --remote
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+```
+
+This ensures the cloud deployment updates whenever the script or its data files change in the repository — no manual `--remote` runs needed.
+
+**Benefits over manual sync:**
+
+- Only committed and pushed changes get deployed (no accidental local files)
+- Full audit trail of what was deployed and when
+- Team members don't need individual GCP credentials for deployment
+
+---
+
+## Limitations
+
+- Scripts using browser automation uses headless browser setup in cloud environments which is inferior to the 
+- Only GCP is supported currently; additional providers may be added in future versions
+
+## Practical cost note
+
+You usually do **not** need to build custom cloud agents from scratch to start automation in production. `lamia-cloud` is designed to cover common agentic workflows with much lower setup and maintenance overhead.
+
+---
+Source: validation/selector-usage-guide.md
+---
+
+# Selector Usage Guide
+
+This guide explains when and how to use `json_schema_extra` selectors with different file type validators.
+
+## When to Use Selectors
+
+Use selectors when field names don't directly map to document elements:
+
+#### **HTML Structure Validator**
+```python
+
+class UserProfile(BaseModel):
+    name: str = Field(json_schema_extra={'selector': '.profile-name'})
+    email: str = Field(json_schema_extra={'selector': '#user-email'})
+    bio: str = Field(json_schema_extra={'selectors': ['.bio-text', '.description', 'p']})  # Fallback chain
+```
+
+**HTML Input:**
+```html
+<div class="profile-name">John Doe</div>
+<span id="user-email">john@example.com</span>
+<p class="bio-text">Software developer</p>
+```
+
+#### **XML Structure Validator**
+```python
+class BookInfo(BaseModel):
+    title: str = Field(json_schema_extra={'selector': '//book/title'})
+    author: str = Field(json_schema_extra={'selector': '//book/author/@name'})
+    pages: int = Field(json_schema_extra={'selectors': ['//pages', '//page-count']})  # Fallback
+```
+
+**XML Input:**
+```xml
+<book>
+    <title>Python Guide</title>
+    <author name="Jane Smith" />
+    <pages>250</pages>
+</book>
+```
+
+#### **YAML Structure Validator**
+```python
+class Config(BaseModel):
+    db_host: str = Field(json_schema_extra={'selector': '$.database.host'})
+    db_port: int = Field(json_schema_extra={'selector': '$.database.port'})
+```
+
+**YAML Input:**
+```yaml
+database:
+  host: localhost
+  port: 5432
+```
+
+#### **CSV Structure Validator**
+```python
+class Employee(BaseModel):
+    full_name: str = Field(json_schema_extra={'selector': 'Full Name'})  # Column header
+    employee_id: int = Field(json_schema_extra={'selector': 'EmpID'})
+```
+
+**CSV Input:**
+```csv
+Full Name,EmpID,Department
+John Doe,12345,Engineering
+```
+
+#### **Markdown Structure Validator**
+```python
+class Article(BaseModel):
+    title: str = Field(json_schema_extra={'selector': 'h1'})
+    summary: str = Field(json_schema_extra={'selector': 'blockquote'})
+```
+
+---
+
+## ❌ **NOT RECOMMENDED - Direct Mapping Validators**
+
+### **JSON Structure Validator**
+
+**⚠️ WARNING:** JSON field names map directly to keys. Use aliases instead of selectors.
+
+```python
+# ❌ DON'T DO THIS (triggers warning)
+class User(BaseModel):
+    name: str = Field(json_schema_extra={'selector': 'user_name'})  # Redundant!
+
+# ✅ DO THIS INSTEAD
+class User(BaseModel):
+    name: str = Field(alias='user_name')  # Use alias for different JSON keys
+```
+
+**JSON Input:**
+```json
+{
+    "user_name": "John Doe",  // Maps to 'name' field via alias
+    "age": 30
+}
+```
+
+### **Object Validator**
+
+**No selectors needed** - ObjectValidator is for pure JSON → Pydantic validation without document parsing.
+
+---
+
+## 🔧 **Selector Types Supported**
+
+### **HTML Selectors**
+- **CSS Selectors**: `.class`, `#id`, `tag[attr="value"]`
+- **XPath**: `//div[@class="name"]`, `/html/body/div[1]`
+- **Combination**: `['#primary-name', '.backup-name', 'h1']`
+
+### **XML Selectors**
+- **XPath**: `//element`, `//element/@attribute`, `/root/child[1]`
+- **Fallback chains**: `['//title', '//name', '//heading']`
+
+### **YAML Selectors**
+- **JSONPath**: `$.root.field`, `$.array[0].value`
+- **Dot notation**: `database.host`, `users[0].name`
+
+### **CSV Selectors**
+- **Column headers**: `"Full Name"`, `"Employee ID"`
+- **Column indices**: `0`, `1`, `2` (zero-based)
+
+### **Markdown Selectors**
+- **Element types**: `h1`, `h2`, `blockquote`, `code`
+- **Position-based**: `h1[0]`, `p[2]`
+
+---
+
+## 🤖 **AI-Powered Selectors**
+
+All validators support AI-powered selector resolution:
+
+```python
+class SmartExtraction(BaseModel):
+    # AI will try to fix invalid selectors or convert natural language
+    title: str = Field(json_schema_extra={'selector': 'find the main heading'})
+    price: float = Field(json_schema_extra={'selectors': [
+        '.price',           # Try CSS first
+        '//span[@class="cost"]',  # Try XPath second  
+        'extract the price'       # AI fallback
+    ]})
+```
+
+**Features:**
+- **Auto-correction**: Fixes invalid CSS/XPath syntax
+- **Natural language**: Converts descriptions to selectors
+- **No prefix needed**: No `ai:` prefix required - automatic detection
+
+## Common Mistakes
+
+### **1. Using Selectors with JSON**
+```python
+# Wrong - triggers warning
+class JSONModel(BaseModel):
+    name: str = Field(json_schema_extra={'selector': 'user_name'})
+
+# Correct - use alias
+class JSONModel(BaseModel):
+    name: str = Field(alias='user_name')
+```
+
+### **2. Forgetting Fallbacks for Fragile Selectors**
+```python
+# Fragile - breaks if CSS changes
+title: str = Field(json_schema_extra={'selector': 'div.header-container > h1.main-title-text'})
+
+# Robust - multiple fallbacks
+title: str = Field(json_schema_extra={'selectors': [
+    'div.header-container > h1.main-title-text',
+    'h1.main-title-text', 
+    'h1',
+    '.title'
+]})
+```
+
+### **3. Not Testing Selectors**
+Always test your selectors with real data to ensure they work correctly!
+
+---
+
+## Summary
+
+- **Use selectors**: HTML, XML, YAML, CSV, Markdown validators
+- **Don't use selectors**: JSON validators (use aliases instead)  
+- **Provide fallbacks**: For robust extraction
+- **Test thoroughly**: With real document samples
+- **Leverage AI**: For natural language and auto-correction

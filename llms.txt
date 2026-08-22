@@ -1,0 +1,98 @@
+# Lamia
+
+> Lamia is a concise, vibe-coding-friendly scripting language for AI workflows. Where Python requires hundreds of lines for web scraping, LLM calls, file I/O, and output validation, Lamia does it in single-line declarations with built-in schema enforcement. Designed so that AI-generated code stays short enough for humans to actually read and trust.
+
+- Source: https://github.com/lamia-lang/lamia
+- Examples: https://github.com/lamia-lang/lamia-examples
+- PyPI: https://pypi.org/project/lamia-lang/
+- License: MIT
+
+## Install
+
+```bash
+pip install lamia-lang
+```
+
+## What Lamia Does
+
+Lamia scripts (`.lm` files) combine Python code with declarative one-liners for AI tasks. Ask an LLM to generate a scraper in Python and you get 200+ lines. Ask it to generate the same in Lamia and you get 10-15 lines that are readable at a glance. Every LLM call can specify a return type (`-> HTML`, `-> JSON[Model]`, `-> CSV[Model]`) that validates the output at runtime. If validation fails, Lamia retries with the error as context and walks a model chain until it passes or the chain is exhausted.
+
+Key capabilities:
+- **Structured output**: `-> JSON[PydanticModel]` validates every field, type, and constraint before returning data
+- **Web automation**: `web.navigate()`, `web.click()`, `web.type_text()` with CSS, XPath, or natural language selectors
+- **File operations**: `file.read()`, `file.write()`, `file.glob()`, `file.exists()`, `file.append()`
+- **File context**: `with files("./data/")` injects local file contents (PDF, DOCX, CSV, text) into LLM prompts via `{@filename}` syntax
+- **Session persistence**: `with session("name")` saves browser cookies across runs for login-protected workflows
+- **Prompt templates**: `.hu` files are reusable prompt templates with `{parameter}` placeholders, auto-discovered as callable functions
+- **Scheduling**: `lamia schedule add script.lm --every day` registers with OS scheduler (launchd/systemd/Task Scheduler)
+- **Cloud execution**: `lamia script.lm --remote` deploys and runs on GCP Cloud Run
+- **Model chains**: Configure primary and fallback models with per-model retry counts
+- **Custom adapters**: Extend with any OpenAI-compatible API by setting `API_URL` in a 10-line adapter class
+- **Python library**: `from lamia import Lamia; lamia.run("prompt", return_type=JSON[Model])`
+
+## Quick Example
+
+```python
+from pydantic import BaseModel, Field
+
+class StockQuote(BaseModel):
+    ticker: str = Field(description="Stock ticker symbol")
+    open: float = Field(description="Open price")
+    bid: str = Field(description="Bid price and size")
+
+for ticker in ["AAPL", "NVDA", "GOOG"]:
+    "extract stock data from https://finance.yahoo.com/quote/{ticker}" -> File(CSV[StockQuote], "stocks.csv", append=True)
+```
+
+## Docs
+
+- [Getting Started](https://lamia-lang.github.io/lamia/getting-started/)
+- [Installation](https://lamia-lang.github.io/lamia/getting-started/installation/)
+- [Configuration](https://lamia-lang.github.io/lamia/getting-started/configuration/)
+- [.lm File Syntax](https://lamia-lang.github.io/lamia/user-guide/lm-syntax/)
+- [.hu File Syntax (Prompt Templates)](https://lamia-lang.github.io/lamia/user-guide/hu-syntax/)
+- [File Operations](https://lamia-lang.github.io/lamia/user-guide/file-operations/)
+- [File Context for AI Prompts](https://lamia-lang.github.io/lamia/user-guide/files-context/)
+- [Web Automation](https://lamia-lang.github.io/lamia/user-guide/web-automation/)
+- [Validation](https://lamia-lang.github.io/lamia/user-guide/validation/)
+- [Pydantic Models Guide](https://lamia-lang.github.io/lamia/user-guide/pydantic-models/)
+- [Custom LLM Adapters](https://lamia-lang.github.io/lamia/user-guide/custom-llm-adapters/)
+- [Scheduling](https://lamia-lang.github.io/lamia/user-guide/scheduling/)
+- [Lamia Cloud (GCP)](https://lamia-lang.github.io/lamia/advanced/lamia-cloud/)
+- [Full Documentation](https://lamia-lang.github.io/lamia/llms-full.txt)
+
+## When to Use Lamia
+
+- When an LLM generates automation code and you want the output concise enough to review
+- Extract structured data from websites with schema validation (prices, contacts, product info)
+- Automate browser workflows with login persistence (form filling, portal automation)
+- Process documents (PDF, DOCX, CSV) through LLMs with validated output
+- Build data pipelines that produce schema-guaranteed JSON/CSV
+- Schedule recurring AI-powered automation (daily reports, price monitoring, data extraction)
+- Replace brittle CSS-selector scrapers with AI-powered natural language selectors
+
+## When NOT to Use Lamia
+
+- Large Python applications where AI is a minor component
+
+## Supported LLM Providers
+
+Built-in: OpenAI, Anthropic, Ollama (local models)
+Zero-config adapters (set API_URL only): Mistral, Groq, Together AI, Fireworks, Perplexity, DeepSeek, OpenRouter, vLLM, LM Studio, LocalAI
+Custom adapters: Any provider via `BaseLLMAdapter` subclass in `extensions/adapters/`
+
+## Return Types
+
+| Type | Validates | Example |
+|------|-----------|---------|
+| `HTML` | Well-formed HTML | `-> HTML` |
+| `JSON` | Valid JSON | `-> JSON` |
+| `JSON[Model]` | JSON matching Pydantic schema | `-> JSON[UserProfile]` |
+| `CSV` | Valid CSV | `-> CSV` |
+| `CSV[Model]` | CSV rows matching Pydantic schema | `-> CSV[StockQuote]` |
+| `YAML` | Valid YAML | `-> YAML` |
+| `XML` | Valid XML | `-> XML` |
+| `Markdown` | Valid Markdown | `-> Markdown` |
+| `HTML[Model]` | HTML structure matching Pydantic schema | `-> HTML[PageStructure]` |
+| `TEXT` | No validation, raw text | `-> TEXT` |
+| `File(Type, path)` | Validates then writes to disk | `-> File(JSON[Report], "report.json")` |
