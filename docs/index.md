@@ -1,6 +1,6 @@
 # Lamia Documentation
 
-Lamia is a human-friendly scripting language with seamless Python integration and a comprehensive automation and validation framework that provides powerful tools for data validation, web automation, and LLM integration. It is designed for non-technical users.
+Lamia is a concise scripting language for AI workflows. It extends Python with one-line declarations for LLM calls, web scraping, file I/O, and structured output validation. When AI generates automation code, Lamia keeps it short enough to read and trust -- a scraper that takes 200 lines in Python takes 10-15 in Lamia.
 
 ## Quick Start
 

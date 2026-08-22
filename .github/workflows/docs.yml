@@ -40,5 +40,41 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
+      - name: Generate llms-full.txt
+        run: |
+          python -c "
+          import yaml, os
+
+          with open('mkdocs.yml') as f:
+              nav = yaml.safe_load(f)['nav']
+
+          def collect_paths(items):
+              paths = []
+              for item in items:
+                  if isinstance(item, str):
+                      paths.append(item)
+                  elif isinstance(item, dict):
+                      for v in item.values():
+                          if isinstance(v, str) and v.endswith('.md'):
+                              paths.append(v)
+                          elif isinstance(v, list):
+                              paths.extend(collect_paths(v))
+              return paths
+
+          doc_paths = collect_paths(nav)
+          parts = []
+          for rel in doc_paths:
+              path = os.path.join('docs', rel)
+              if not os.path.isfile(path):
+                  continue
+              with open(path) as f:
+                  content = f.read().rstrip()
+              parts.append(f'---\nSource: {rel}\n---\n\n{content}')
+
+          with open('docs/llms-full.txt', 'w') as f:
+              f.write('\n\n'.join(parts))
+          print(f'Generated docs/llms-full.txt: {sum(len(p) for p in parts):,} chars, {len(parts)} sections')
+          "
+
       - name: Deploy to GitHub Pages
         run: mkdocs gh-deploy --force
