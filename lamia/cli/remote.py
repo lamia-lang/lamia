@@ -17,7 +17,6 @@ from lamia.triggers.extraction import extract_all_triggers
 from lamia.cli.script_analysis import analyze_script
 from lamia_cloud import get_connector, get_deployer, get_llm_router, get_trigger_provider
 from lamia_cloud.file_sync import build_file_sync_plan
-from lamia_cloud.gcp.llm.vertex import _quota_filter_url
 from lamia_cloud.types import TriggerDeploymentPlan
 
 
@@ -237,7 +236,7 @@ def _check_cloud_model_access(
 
     llm = get_llm_router(project_root)
 
-    missing, verified, suggestions, needs_terms = llm.check_model_access(to_check)
+    missing, verified, closest_found_models, hints = llm.check_model_access(to_check)
 
     missing = set(missing)
     verified = set(verified)
@@ -251,28 +250,24 @@ def _check_cloud_model_access(
         print("  Not blocking deploy, but they may fail at runtime:", file=sys.stderr)
         for provider, model in sorted(inconclusive):
             print(f"    - {provider}:{model}", file=sys.stderr)
-            if provider == "anthropic":
-                quota_url = _quota_filter_url(deployer.project_id, provider, model)
-                print(
-                    f"      Partner models like Anthropic's often start with 0 default "
-                    f"quota on Vertex AI -- worth checking: {quota_url}",
-                    file=sys.stderr,
-                )
+            hint = hints.get((provider, model))
+            if hint:
+                print(f"      {hint}", file=sys.stderr)
         print(file=sys.stderr)
 
     if missing:
-        terms_models = [(p, m) for p, m in sorted(missing) if (p, m) in needs_terms]
-        other_models = [(p, m) for p, m in sorted(missing) if (p, m) not in needs_terms]
+        hinted_models = [(p, m) for p, m in sorted(missing) if (p, m) in hints]
+        other_models = [(p, m) for p, m in sorted(missing) if (p, m) not in hints]
 
         print(file=sys.stderr)
-        if terms_models:
-            print("  These models require EULA / terms acceptance in Model Garden:", file=sys.stderr)
+        if hinted_models:
+            print("  These models need action before they can be used:", file=sys.stderr)
             print(file=sys.stderr)
-            for provider, model in terms_models:
+            for provider, model in hinted_models:
                 print(f"    ✗ {provider}:{model}", file=sys.stderr)
-                print(f"      Accept terms: {needs_terms[(provider, model)]}", file=sys.stderr)
+                print(f"      {hints[(provider, model)]}", file=sys.stderr)
             print(file=sys.stderr)
-            print("  Accept terms for each model above, then re-run.", file=sys.stderr)
+            print("  Resolve the issue for each model above, then re-run.", file=sys.stderr)
             print(file=sys.stderr)
 
         if other_models:
@@ -280,13 +275,13 @@ def _check_cloud_model_access(
             print(file=sys.stderr)
             for provider, model in other_models:
                 print(f"    ✗ {provider}:{model}", file=sys.stderr)
-                alts = suggestions.get((provider, model), [])
+                alts = closest_found_models.get((provider, model), [])
                 if alts:
                     print(f"      Did you mean: {', '.join(alts)}?", file=sys.stderr)
             print(file=sys.stderr)
             catalog_url = llm.model_catalog_url()
             if catalog_url:
-                print(f"  Browse Model Garden: {catalog_url}", file=sys.stderr)
+                print(f"  Browse available models: {catalog_url}", file=sys.stderr)
                 print(file=sys.stderr)
 
         sys.exit(1)

@@ -1122,3 +1122,93 @@ class TestExtractScriptModels:
         from lamia.cli.remote import _extract_script_models
         result = _extract_script_models(tmp_path / "nope.lm")
         assert result == set()
+
+
+@pytest.mark.integration
+@pytest.mark.cloud
+class TestCheckCloudModelAccessHints:
+    """_check_cloud_model_access must print provider-supplied hints verbatim
+    without adding any GCP/Vertex/Model-Garden-specific text of its own."""
+
+    @pytest.fixture(autouse=True)
+    def _require_cloud(self):
+        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+
+    def _run(self, monkeypatch, tmp_path, capsys, check_result):
+        """Run _check_cloud_model_access with a fake LLM router and deployer."""
+        import lamia.cli.remote as remote
+        from lamia_cloud.interfaces import CloudDeployer
+
+        deployer = mock.MagicMock(spec=CloudDeployer)
+        deployer.get_verified_model_access.return_value = set()
+        deployer.remember_verified_model_access.return_value = None
+
+        fake_llm = mock.MagicMock()
+        fake_llm.check_model_access.return_value = check_result
+        fake_llm.model_catalog_url.return_value = "https://example.com/catalog"
+        monkeypatch.setattr(remote, "get_llm_router", lambda root: fake_llm)
+
+        script = tmp_path / "task.lm"
+        script.write_text('def ask(models="anthropic:claude-sonnet-4-5"):\n    "hi"\n')
+
+        try:
+            remote._check_cloud_model_access(
+                {"cloud": {"provider": "test"}},
+                str(tmp_path),
+                deployer,
+                script_path=script,
+            )
+        except SystemExit:
+            pass
+
+        return capsys.readouterr().err
+
+    def test_inconclusive_hint_printed_verbatim(self, monkeypatch, tmp_path, capsys):
+        """Hints for inconclusive models must appear verbatim in stderr."""
+        hint_text = "Some opaque provider hint about quota."
+        result = (
+            [],
+            [],
+            {},
+            {("anthropic", "claude-sonnet-4-5"): hint_text},
+        )
+        stderr = self._run(monkeypatch, tmp_path, capsys, result)
+        assert hint_text in stderr
+
+    def test_missing_hint_printed_verbatim(self, monkeypatch, tmp_path, capsys):
+        """Hints for missing models must appear verbatim in stderr."""
+        hint_text = "Accept terms at https://example.com/terms"
+        result = (
+            [("anthropic", "claude-sonnet-4-5")],
+            [],
+            {},
+            {("anthropic", "claude-sonnet-4-5"): hint_text},
+        )
+        stderr = self._run(monkeypatch, tmp_path, capsys, result)
+        assert hint_text in stderr
+        assert "need action" in stderr
+
+    def test_no_gcp_wording_in_output(self, monkeypatch, tmp_path, capsys):
+        """remote.py must never inject its own GCP/Vertex/Model Garden text."""
+        hint_text = "Provider-agnostic hint."
+        result = (
+            [("anthropic", "claude-sonnet-4-5")],
+            [],
+            {},
+            {("anthropic", "claude-sonnet-4-5"): hint_text},
+        )
+        stderr = self._run(monkeypatch, tmp_path, capsys, result)
+        assert "Vertex AI" not in stderr
+        assert "Model Garden" not in stderr
+
+    def test_catalog_url_label_is_generic(self, monkeypatch, tmp_path, capsys):
+        """The catalog link label should say 'Browse available models', not
+        'Browse Model Garden'."""
+        result = (
+            [("anthropic", "claude-sonnet-4-5")],
+            [],
+            {},
+            {},
+        )
+        stderr = self._run(monkeypatch, tmp_path, capsys, result)
+        assert "Browse available models:" in stderr
