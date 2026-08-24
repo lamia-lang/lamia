@@ -17,6 +17,7 @@ from lamia.triggers.extraction import extract_all_triggers
 from lamia.cli.script_analysis import analyze_script
 from lamia_cloud import get_connector, get_deployer, get_llm_router, get_trigger_provider
 from lamia_cloud.file_sync import build_file_sync_plan
+from lamia_cloud.gcp.llm.vertex import _quota_filter_url
 from lamia_cloud.types import TriggerDeploymentPlan
 
 
@@ -250,6 +251,13 @@ def _check_cloud_model_access(
         print("  Not blocking deploy, but they may fail at runtime:", file=sys.stderr)
         for provider, model in sorted(inconclusive):
             print(f"    - {provider}:{model}", file=sys.stderr)
+            if provider == "anthropic":
+                quota_url = _quota_filter_url(deployer.project_id, provider, model)
+                print(
+                    f"      Partner models like Anthropic's often start with 0 default "
+                    f"quota on Vertex AI -- worth checking: {quota_url}",
+                    file=sys.stderr,
+                )
         print(file=sys.stderr)
 
     if missing:
