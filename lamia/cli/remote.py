@@ -339,7 +339,7 @@ def handle_remote_run(
         sys.exit(1)
     _warn_about_file_uploads(entries)
 
-    sync_feedback = deployer.sync_runtime_files(entries=entries)
+    sync_feedback = deployer.sync_runtime_files(entries=entries, files_namespace=run_name)
     for overwrite in sync_feedback.get("overwrite_warnings", []):
         print(f"  Warning: {overwrite}", file=sys.stderr)
     if sync_feedback.get("uploaded", 0):
@@ -367,6 +367,7 @@ def handle_remote_run(
             uses_files=uses_files,
             deploy_mode=deploy_mode,
             repo_url=repo_url,
+            files_namespace=run_name,
         )
         deployer.set_deployed_source_hash(target, source_hash)
 
