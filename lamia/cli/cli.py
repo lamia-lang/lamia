@@ -767,6 +767,7 @@ Subcommands:
   init          Initialize a new Lamia project
   models        List available models
   schedule      Manage scheduled script execution (add, list, remove)
+  trigger       Manage event-driven script triggers (list, drain, clear, logs)
   cloud         Manage cloud provider integrations (connect, status)
   eval          Evaluate model quality
   inspect       Inspect .lm/.hu files

@@ -252,6 +252,8 @@ with files("~/Documents/"):
         "Summarize {@report.pdf}"
 ```
 
+For running scripts in the cloud with `--remote`, including how file writes are stored and persist between runs, see [lamia-cloud — File Sync for Cloud Execution](../advanced/lamia-cloud.md#file-sync-for-cloud-execution).
+
 ## Reading Files with Type Conversion
 
 To read a file and parse it into a typed Python object, use the `-> Type` syntax:

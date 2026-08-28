@@ -103,12 +103,14 @@ nav:
     - Custom LLM Adapters: user-guide/custom-llm-adapters.md
     - Pydantic Models Guide: user-guide/pydantic-models.md
     - Scheduling: user-guide/scheduling.md
+    - Triggers: user-guide/triggers.md
   - Style Guides:
     - "LSG-1: .hu Files": style-guides/hu-style.md
     - "LSG-2: .lm Files": style-guides/lm-style.md
     - "LSG-3: Project Structure": style-guides/project-structure.md
   - Advanced:
     - Lamia Debugger: advanced/debugger.md
+    - Inspect: advanced/inspect.md
     - Lamia Cloud: advanced/lamia-cloud.md
   - Reference:
     - Selector Usage Guide: validation/selector-usage-guide.md

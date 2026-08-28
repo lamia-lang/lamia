@@ -121,7 +121,33 @@ In this example, every file inside `./docs/` and the single file `./data/input.c
 
 ### How it works at runtime
 
-When files are synced, the GCS bucket is mounted as the container's working directory via GCS FUSE. All relative file paths in your script resolve directly into the mounted bucket. Reads pull from the bucket, writes go to the bucket. No copying, no configuration — transparent filesystem.
+When files are synced, the GCS bucket is mounted as the container's working directory. All relative file paths in your script resolve directly into the mounted bucket. Reads pull from the bucket, writes go to the bucket.
+
+### Persistence and cleanup
+
+Files written during cloud execution are **not deleted** when the job finishes — they remain in GCS until removed manually.
+
+- A scheduled script that appends to a CSV on each run accumulates data across runs.
+- A one-time `--remote` run that writes `output.txt` leaves that file in the bucket after completion.
+- Re-running the same script sees files from previous runs.
+- Trigger stages can read files written by earlier stages of the same trigger.
+
+Each script's files are stored under a namespace subdirectory in the bucket. `lamia schedule list` and `lamia trigger list` show that namespace for any script with file-write operations.
+
+To inspect or remove stored files directly:
+
+```bash
+# List everything stored for this project
+gsutil ls gs://<project-id>/
+
+# Remove one script's files (namespace from `schedule list` / `trigger list`)
+gsutil -m rm -r gs://<project-id>/<namespace>/
+
+# Remove everything
+gsutil -m rm -r gs://<project-id>/**
+```
+
+Your project ID is in `config.yaml` under `cloud.project_id`.
 
 ### Incremental sync
 
