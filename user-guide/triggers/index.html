@@ -13,6 +13,10 @@
         <link rel="canonical" href="https://lamia-lang.github.io/lamia/user-guide/triggers/">
       
       
+        <link rel="prev" href="../scheduling/">
+      
+      
+        <link rel="next" href="../../style-guides/hu-style/">
       
       
         
@@ -274,10 +278,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../hu-syntax/" class="md-tabs__link">
           
   
@@ -570,28 +576,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
-        
-          
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -609,7 +618,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -928,6 +937,314 @@
 
               
             
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Triggers
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Triggers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#writing-a-triggered-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing a Triggered Script
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#available-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available Events
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Available Events">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#email-received" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Email received
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-created-modified-deleted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File created / modified / deleted
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deploying" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deploying
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a Mode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Choosing a Mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reactive-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reactive mode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scheduled-mode-similar-to-how-an-employee-would-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scheduled mode (similar to how an employee would work)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-step-scripts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-Step Scripts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Multi-Step Scripts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#example-enterprise-pricing-approval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example: Enterprise Pricing Approval
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Best Practices
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Best Practices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-keyword-filters-to-avoid-unnecessary-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use keyword filters to avoid unnecessary execution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-triggerreject-when-filtering-depends-on-runtime-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use trigger.reject() when filtering depends on runtime data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#unhandled-exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unhandled exceptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-isolation-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Isolation Works
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#listing-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Listing Triggers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#viewing-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewing Logs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-vs-cloud-triggers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local vs Cloud Triggers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1149,6 +1466,34 @@
     
   
     Lamia Debugger
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced/inspect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inspect
   
 
     
@@ -1590,6 +1935,46 @@
 
   
 
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  <span class="md-ellipsis">
+    Home
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
+        <a href="../hu-syntax/" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    User Guide
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
 
               
               <article class="md-content__inner md-typeset">

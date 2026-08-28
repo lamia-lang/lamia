@@ -1354,6 +1354,8 @@ with files("~/Documents/"):
         "Summarize {@report.pdf}"
 ```
 
+For running scripts in the cloud with `--remote`, including how file writes are stored and persist between runs, see [lamia-cloud — File Sync for Cloud Execution](../advanced/lamia-cloud.md#file-sync-for-cloud-execution).
+
 ## Reading Files with Type Conversion
 
 To read a file and parse it into a typed Python object, use the `-> Type` syntax:
@@ -3710,6 +3712,303 @@ Unused cloud resources (containers, images) are automatically removed after
 - **Cloud: "requires lamia-cloud"**: Run `pip install "lamia-lang[cloud]"`. See [lamia-cloud docs](../advanced/lamia-cloud.md).
 
 ---
+Source: user-guide/triggers.md
+---
+
+# Triggers
+
+Triggers make your Lamia scripts react to real-world events automatically.
+Instead of running a script manually, you define what should start it — an
+incoming email, a new file appearing, etc.
+
+## Writing a Triggered Script
+
+Add a `trigger` line at the point in your script where you want to wait for
+an event. The parameters you list will be filled in with information from that
+event:
+
+```python
+trigger.email_received(sender, subject, body)
+
+# From here on, sender/subject/body are available as regular variables.
+reply_to_lead(sender, subject, body)
+```
+
+String keyword arguments are configuration (they tell Lamia *where* to listen, what to filter out, etc.):
+
+```python
+trigger.file_created(name, size, path="sales/pricing")
+```
+
+Here `name` and `size` will come from the event, while `path` tells Lamia
+which folder to watch.
+
+## Available Events
+
+### Email received
+
+```python
+trigger.email_received(sender, subject, body)
+```
+
+Fields you can request: `sender`, `subject`, `body`, `html_body`, `message_id`,
+`thread_id`, `timestamp`, `attachments`, `labels`.
+
+### File created / modified / deleted
+
+```python
+trigger.file_created(name, size, content_type, path="reports/incoming")
+trigger.file_modified(name, timestamp, path="shared/data")
+trigger.file_deleted(name, path="archive/temp")
+```
+
+Fields: `name`, `size`, `content_type`, `timestamp`, `metadata`.
+
+The `path` parameter specifies the folder or location to monitor.
+
+## Deploying
+
+When you deploy a script that contains `trigger.*` calls, Lamia automatically
+sets up the event infrastructure for you.
+
+## Choosing a Mode
+
+### Reactive mode
+
+Each event starts its own independent script execution right away.
+
+Best for: notifications that must be handled immediately (order confirmations,
+alerts, time-sensitive replies).
+
+To deploy a script that contains `trigger.*`s in reactive mode use:
+
+```bash
+lamia pricing_reply.lm --remote
+```
+
+### Scheduled mode (similar to how an employee would work)
+
+Events accumulate. At the scheduled time, the script wakes up, processes every
+pending event in parallel (one script execution per event), then sleeps until
+the next scheduled time.
+
+Best for: tasks where you want to appear human
+(answering emails in the morning, processing daily uploads).
+
+To deploy a script that contains `trigger.*`s in scheduled mode use:
+
+```bash
+lamia schedule add pricing_reply.lm --remote --cron "33 9 * * *"
+```
+
+This will deploy the script to the cloud and set up a cron job to run the script at 9:33 AM every day.
+
+## Multi-Step Scripts
+
+A script can wait for more than one event. Each additional `trigger.*` call
+pauses the script until that event arrives (up to 72 hours).
+
+Every script execution is parallel and fully **isolated**. Each execution waits for its own event and runs independently.
+
+### Example: Enterprise Pricing Approval
+
+Below is a complete script that handles pricing inquiries. Regular requests
+get an automated response. Enterprise requests need a human to prepare custom
+pricing, so the script waits for that file to appear.
+
+```python
+from enum import Enum
+from pydantic import BaseModel, Field
+
+
+class LeadType(str, Enum):
+    ENTERPRISE = "enterprise"
+    STANDARD = "standard"
+
+
+class LeadClassification(BaseModel):
+    lead_type: LeadType = Field(description="Whether this is an enterprise or standard lead")
+    company_slug: str = Field(description="Short lowercase identifier for the company, e.g. 'bigcorp'")
+
+
+trigger.email_received(sender, subject, body, to="pricing@ourcompany.com")
+
+classification = classify_lead(sender, subject, body) -> LeadClassification
+
+if classification.lead_type == LeadType.STANDARD:
+    pricing_page = web.get_text("https://ourcompany.com/pricing")
+    compose_reply(sender, subject, pricing_page) -> File("drafts/reply.txt")
+else:
+    notify_sales_team(sender, subject, classification.company_slug)
+
+    trigger.file_created(name, timestamp, path="sales/custom-pricing")
+
+    if not name.startswith(classification.company_slug):
+        trigger.reject()
+    else:
+        pricing_content = file.read(f"sales/custom-pricing/{name}")
+        compose_custom_reply(sender, name, pricing_content) -> File("drafts/reply.txt")
+```
+
+How this works at runtime:
+
+1. An email arrives to `pricing@ourcompany.com`. Lamia starts a new, isolated
+   execution of the script. Emails to other addresses are filtered out at the
+   infrastructure level and never start the script.
+2. The AI classifies the lead with a validated return type — you get a typed
+   `LeadClassification` object with `lead_type` and `company_slug`.
+3. **Standard lead**: reply is composed immediately, execution finishes.
+4. **Enterprise lead**: the script notifies the sales team and pauses (up to
+   72 hours) waiting for a file in `sales/custom-pricing`.
+5. When a team member uploads a file, the waiting execution resumes and checks
+   whether the filename starts with the expected company slug.
+6. **Wrong file**: `trigger.reject()` skips this event and the script keeps
+   waiting for the next file event.
+7. **Correct file**: reads the content and sends the custom reply.
+
+If no file appears within 72 hours, the execution times out gracefully.
+
+## Best Practices
+
+### Use keyword filters to avoid unnecessary execution
+
+Any keyword argument with a string value acts as an infrastructure-level
+filter. The script never starts for events that don't match. You can combine
+multiple filters on a single trigger:
+
+```python
+trigger.email_received(sender, subject, body,
+                       to="pricing@ourcompany.com",
+                       from_domain="enterprise.com")
+
+trigger.file_created(name, size, path="sales/invoices")
+```
+
+Filters are the most efficient approach — they prevent the job from launching
+entirely, saving both time and cost.
+
+### Use `trigger.reject()` when filtering depends on runtime data
+
+When the filter can't be known at deploy time (e.g. it depends on a value
+computed earlier in the script), use `trigger.reject()` to skip the event
+and keep waiting for a different one:
+
+```python
+trigger.file_created(name, timestamp, path="sales/custom-pricing")
+
+if not name.startswith(expected_prefix):
+    trigger.reject()
+```
+
+`trigger.reject()` applies to the most recent trigger. It acknowledges the
+event (so it won't come back to this execution) and the script continues
+waiting for the next event on its private listener.
+
+Since each execution has its own isolated listener, rejecting an event in one
+execution does not affect other concurrent executions — they each receive
+their own independent copy of every event.
+
+### Unhandled exceptions
+
+If your script raises an unhandled exception after a trigger resumes, the
+event is retried automatically (up to 5 attempts). After all retries are
+exhausted, the event is saved as a **failed event** and can be inspected
+via `lamia trigger list --verbose`.
+
+To clear failed events for a trigger:
+
+```bash
+lamia trigger drain a3f2c8b1d4e5
+```
+
+To stop and fully remove a trigger:
+
+```bash
+lamia trigger clear a3f2c8b1d4e5
+```
+
+## How Isolation Works
+
+Each script execution that reaches a waiting point creates its own private
+event listener. This means:
+
+- There is no queue contention — concurrent waits run in full isolation.
+- Finished executions clean up their listeners automatically.
+
+## Listing Triggers
+
+To see what triggers are configured:
+
+```bash
+lamia trigger list
+```
+
+Example output:
+
+```
+  [a3f2c8b1d4e5] pricing_reply.lm (local)
+    event: email_received
+    mode: reactive
+    last run: 2026-07-09  status: ok
+    failed events: 2
+```
+
+The id in brackets is a random 12-character hex string assigned once
+when the trigger is first created.
+
+To see details of failed events (what data they contained):
+
+```bash
+lamia trigger list --verbose
+```
+
+This shows the actual event payload and timestamp for each failure, so you
+can understand what went wrong and take action.
+
+## Viewing Logs
+
+For cloud triggers, output never reaches your terminal. Take the id shown
+in brackets by `lamia trigger list` and read the most recent run:
+
+```bash
+lamia trigger logs a3f2c8b1d4e5
+```
+
+Local triggers print output to the terminal where they were started.
+Multi-stage triggers print each stage in order.
+
+## Local vs Cloud Triggers
+
+Triggers run **locally** by default — Lamia watches for events on your
+machine and executes the script as a local process. No cloud setup is
+required.
+
+To deploy triggers to the cloud instead, use `--remote`:
+
+```bash
+lamia pricing_reply.lm --remote
+```
+
+Cloud triggers require:
+
+- `pip install "lamia-lang[cloud]"`
+- `cloud.project_id` set in your project `config.yaml`
+
+For team deployments via GitHub and CI, see [GitHub Deployment](github-deployment.md).
+
+## Resource Lifecycle
+
+If a script file is renamed, moved, or deleted, any trigger pointing to it
+shows `SOURCE_MISSING` in `lamia trigger list`. To clean up these entries:
+
+```bash
+lamia trigger clear --orphaned
+```
+
+Unused cloud resources (containers, images) are automatically removed after
+30 days of inactivity. Active schedules and triggers are never affected.
+
+---
 Source: style-guides/hu-style.md
 ---
 
@@ -4398,6 +4697,197 @@ The IDE integration uses:
 Breakpoints can be passed at process start and are also synchronized after initialization for robust startup behavior.
 
 ---
+Source: advanced/inspect.md
+---
+
+# Inspect and Lint
+
+`lamia inspect` analyzes `.lm` and `.hu` files for syntax errors, semantic issues, and style violations. It powers IDE diagnostics (Lamia IDE extension) and can be run standalone for CI or manual checks.
+
+## Usage
+
+```bash
+lamia inspect script.lm
+lamia inspect script.lm --json
+lamia inspect *.lm
+```
+
+Single file output:
+
+```
+daily_report.lm: executable
+  steps at lines: [3, 7, 12]
+  warning: line 5: [LMW005] 2 line(s) use tab indentation
+  error: line 9: [LME020] web.click() called without a selector
+```
+
+Batch mode (`lamia inspect *.lm`) reports each file with its status and diagnostics.
+
+### JSON output
+
+Use `--json` for machine-readable output (IDE integration, CI pipelines):
+
+```bash
+lamia inspect script.lm --json
+```
+
+```json
+{
+  "executable": true,
+  "steps": [3, 7, 12],
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "message": "[LMW005] 2 line(s) use tab indentation",
+      "line": 5,
+      "col": 0,
+      "source": "lamia-lint"
+    }
+  ]
+}
+```
+
+Batch JSON returns `{"results": {"path": {...}, ...}}`.
+
+## What inspect checks
+
+Inspect runs three analysis passes:
+
+1. **Syntax** -- Parses via the Lamia parser pipeline, reports syntax errors with line numbers mapped back to the original source.
+2. **Semantic** -- Validates function calls against `.hu` definitions, flags duplicate functions, checks cross-file name collisions, validates inline template placeholders.
+3. **Lint** -- Applies all lint rules (listed below) for style, conventions, and common mistakes.
+
+## Executable vs definitions-only
+
+Inspect reports whether a file has top-level executable statements (steps) or only contains definitions and imports. This distinction matters for IDE run buttons and scheduling -- a file with no steps has nothing to execute on its own.
+
+---
+
+## Lint Rules
+
+Lamia has two linters: one for `.lm` files and one for `.hu` files. Each rule has a code, severity, and description.
+
+Severities:
+
+| Level | Meaning |
+|-------|---------|
+| **Error (E)** | Must fix. The script will fail or produce wrong results. |
+| **Warning (W)** | Should fix. Likely a bug or bad practice. |
+| **Convention (C)** | Style convention. Follow unless you have a reason not to. |
+| **Refactor (R)** | Structural suggestion. Consider for maintainability. |
+
+### .lm rules
+
+`.lm` files are Python + Lamia syntax. The linter enforces PEP 8 basics plus Lamia-specific patterns.
+
+#### Errors
+
+| Code | Name | Description |
+|------|------|-------------|
+| LME002 | missing-required-params | `.hu` call is missing required parameters. Every required parameter in the `.hu` file must be passed as a keyword argument. |
+| LME014 | unknown-hu-kwargs | `.hu` call passes keyword arguments that the `.hu` file does not accept. Check parameter names against the `.hu` definition. |
+| LME016 | unknown-namespace | Uses a namespace that is not part of Lamia. Valid namespaces: `web`, `http`, `file`, `db`, `email`. |
+| LME017 | unknown-namespace-method | Calls a method that does not exist on a Lamia namespace. Check available methods with `lamia inspect --json`. |
+| LME020 | global-web-no-selector | `web.action()` called without a selector on the global `web` object. Provide a selector: `web.click("button.submit")`. |
+
+#### Warnings
+
+| Code | Name | Description |
+|------|------|-------------|
+| LMW001 | excessive-growth | Content grew more than 2x the original file size. Make minimal, targeted changes. |
+| LMW005 | tab-indentation | Use 4 spaces for indentation, not tabs (PEP 8). |
+| LMW006 | positional-hu-args | `.hu` calls must use keyword arguments. Positional arguments are not allowed. |
+| LMW007 | empty-file | `.lm` file has no meaningful content. |
+| LMW008 | trailing-whitespace | Lines have trailing whitespace. |
+| LMW018 | single-file-in-files-ctx | `files()` with a single file path is an anti-pattern. `files()` is for directory-based discovery; pass the file path directly as a kwarg to the `.hu` function instead. |
+| LMW019 | prefer-atomic-web-action | Prefer `web.click("selector")` over `el = web.get_element("selector")` followed by `el.click()` when the variable is only used once. Atomic calls are more readable and less error-prone. |
+| LMW024 | session-no-target-url | `session("name")` without a target URL. Adding a target URL enables reliable session-skip detection: `session("name", "https://...")`. |
+
+#### Convention
+
+| Code | Name | Description |
+|------|------|-------------|
+| LMC009 | variable-naming | Variables should use `snake_case` (PEP 8). PascalCase is reserved for Pydantic model classes. |
+| LMC010 | filename-naming | `.lm` filenames should be `snake_case` (e.g. `daily_report.lm`, not `DailyReport.lm`). |
+| LMC011 | leading-blank-lines | File starts with blank lines. Code should begin on line 1. |
+| LMC015 | generic-filename | Generic names like `process.lm`, `main.lm`, `task.lm` say nothing about what the script does. Use a descriptive name. |
+
+#### Refactor
+
+| Code | Name | Description |
+|------|------|-------------|
+| LMR003 | output-format-hint | Don't embed output schema in comments or strings. Define a Pydantic model and use `-> Type[Model]` return type annotation. |
+| LMR012 | inline-pydantic-model | More than 2 Pydantic models defined inline in a single `.lm` file. For larger projects, extract shared models to a `models/` directory. |
+| LMR013 | long-script | Script exceeds 5000 characters. Consider splitting into focused sub-scripts or moving orchestration to separate pipeline `.lm` files. |
+
+### .hu rules
+
+`.hu` files are plain-text prompt templates. The linter enforces plain-text purity and parameter conventions.
+
+#### Errors
+
+| Code | Name | Description |
+|------|------|-------------|
+| HUE001 | yaml-front-matter | YAML front matter (`---...---`) is not valid in `.hu` files. `.hu` files are plain text, not markdown. |
+| HUE019 | escaped-param | `{{param}}` escapes the braces, making it a literal string, but an `.lm` caller passes `param=` as an argument. Use `{param}` instead. |
+
+#### Warnings
+
+| Code | Name | Description |
+|------|------|-------------|
+| HUW002 | markdown-header | `# headings` are markdown formatting. `.hu` files are plain text. |
+| HUW003 | markdown-bold | `**bold**` or `__bold__` is markdown formatting. |
+| HUW004 | markdown-italic | `*italic*` or `_italic_` is markdown formatting. |
+| HUW005 | markdown-strikethrough | `~~strike~~` is markdown formatting. |
+| HUW006 | markdown-link | `[text](url)` is markdown formatting. Use plain URLs. |
+| HUW007 | markdown-image | `![alt](url)` is not useful in prompt templates. |
+| HUW008 | markdown-code-fence | Code fences (`` ``` ``) are markdown formatting. |
+| HUW009 | markdown-blockquote | `> quotes` are markdown formatting. |
+| HUW010 | markdown-table | Pipe tables (`| col | col |`) are markdown formatting. |
+| HUW011 | markdown-horizontal-rule | `---` / `***` / `___` are markdown formatting. |
+| HUW012 | html-tag | HTML tags don't belong in prompt templates. |
+| HUW013 | emoji | Emojis are decorative noise. `.hu` files should be clean text. |
+| HUW014 | markdown-inline-code | Inline code (`` `code` ``) is markdown formatting. |
+| HUW015 | markdown-task-list | `- [ ]` / `- [x]` task lists are markdown formatting. |
+| HUW016 | excessive-growth | Content grew more than 2x the original file size. |
+| HUW017 | too-many-params | More than 10 `{param}` placeholders. Consider using `{@file}` references to include large content. |
+| HUW021 | empty-file | `.hu` file has no meaningful content. |
+| HUW022 | trailing-whitespace | Lines have trailing whitespace. |
+| HUW029 | example-output-block | Embedded example outputs (JSON objects, YAML blocks, XML fragments) belong in Lamia types, not in the prompt. Use `-> Type[Model]` on the call site. |
+
+#### Convention
+
+| Code | Name | Description |
+|------|------|-------------|
+| HUC020 | param-naming | Parameters should use `snake_case` (e.g. `{user_name}`, not `{userName}`). |
+| HUC023 | short-param-name | Single-character parameter names are unclear. Use descriptive names. |
+| HUC024 | verbose-param-name | Parameter name exceeds 30 characters. Consider a shorter name. |
+| HUC025 | filename-naming | `.hu` filenames should be `snake_case`. The filename becomes the callable function name. |
+| HUC026 | leading-blank-lines | File starts with blank lines. Content should begin on line 1. |
+| HUC028 | generic-filename | Generic names like `agent.hu`, `prompt.hu`, `template.hu` say nothing. Use a role-based name (`reviewer.hu`) or action-based name (`summarize.hu`). |
+
+#### Refactor
+
+| Code | Name | Description |
+|------|------|-------------|
+| HUR018 | output-format-hint | Don't embed output format instructions in the prompt. Lamia handles output format validation via `-> Type[Model]` on the call site. |
+| HUR027 | long-prompt | Prompt exceeds 3000 characters. Consider splitting into focused sub-prompts or moving large content to `{@file}` references. |
+
+## CI integration
+
+Run inspect as a CI step to catch issues before deployment:
+
+```yaml
+- run: lamia inspect **/*.lm --json
+```
+
+Non-zero exit code on syntax errors makes it usable as a gate.
+
+## IDE integration
+
+The Lamia IDE extension calls `lamia inspect <file> --json` on save and maps diagnostics to editor squiggles. No configuration needed -- the extension discovers `lamia` from `PATH` or the active virtual environment.
+
+---
 Source: advanced/lamia-cloud.md
 ---
 
@@ -4524,7 +5014,33 @@ In this example, every file inside `./docs/` and the single file `./data/input.c
 
 ### How it works at runtime
 
-When files are synced, the GCS bucket is mounted as the container's working directory via GCS FUSE. All relative file paths in your script resolve directly into the mounted bucket. Reads pull from the bucket, writes go to the bucket. No copying, no configuration — transparent filesystem.
+When files are synced, the GCS bucket is mounted as the container's working directory. All relative file paths in your script resolve directly into the mounted bucket. Reads pull from the bucket, writes go to the bucket.
+
+### Persistence and cleanup
+
+Files written during cloud execution are **not deleted** when the job finishes — they remain in GCS until removed manually.
+
+- A scheduled script that appends to a CSV on each run accumulates data across runs.
+- A one-time `--remote` run that writes `output.txt` leaves that file in the bucket after completion.
+- Re-running the same script sees files from previous runs.
+- Trigger stages can read files written by earlier stages of the same trigger.
+
+Each script's files are stored under a namespace subdirectory in the bucket. `lamia schedule list` and `lamia trigger list` show that namespace for any script with file-write operations.
+
+To inspect or remove stored files directly:
+
+```bash
+# List everything stored for this project
+gsutil ls gs://<project-id>/
+
+# Remove one script's files (namespace from `schedule list` / `trigger list`)
+gsutil -m rm -r gs://<project-id>/<namespace>/
+
+# Remove everything
+gsutil -m rm -r gs://<project-id>/**
+```
+
+Your project ID is in `config.yaml` under `cloud.project_id`.
 
 ### Incremental sync
 
