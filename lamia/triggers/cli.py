@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from lamia.cli.script_analysis import script_writes_files
 from lamia.triggers.local.provider import LocalTriggerProvider
 
 
@@ -80,6 +81,8 @@ def _handle_list(verbose: bool = False) -> None:
         print(f"  [{d['name']}] {d.get('script', '?')} ({location})")
         print(f"    event: {d.get('trigger_method', '?')}")
         print(f"    mode: {d.get('mode', 'reactive')}")
+        if location != "local" and d.get("script") and script_writes_files(Path.cwd() / d["script"]):
+            print(f"    files: written under namespace '{d['name']}'")
         print(f"    last run: {d.get('last_run', 'never')}  status: {status_str}")
         if verbose and active_execs > 0:
             print(f"    active executions: {active_execs}")

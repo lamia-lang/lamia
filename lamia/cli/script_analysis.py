@@ -24,6 +24,12 @@ def script_capability_field_names() -> tuple[str, ...]:
     return tuple(field.name for field in fields(ScriptCapabilities))
 
 
+def script_writes_files(script_path: Path) -> bool:
+    """Whether the script references file-write operations anywhere in source."""
+    capabilities = analyze_script(script_path)
+    return capabilities.uses_files or capabilities.uses_file_context
+
+
 def analyze_script(script_path: Path) -> ScriptCapabilities:
     """Analyze a .lm script using existing Lamia AST infrastructure.
 

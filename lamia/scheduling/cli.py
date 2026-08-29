@@ -18,6 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from lamia.cli.script_analysis import script_writes_files
 from lamia.id_gen import generate_unique_id
 from lamia.runtime import find_lamia_bin
 
@@ -217,6 +218,8 @@ def _print_job(job: dict, last_run: dict | None = None) -> None:
     print(f"    path: {job['project_root']}")
     if job.get("source_missing"):
         print("    source: MISSING (script file not found at path)")
+    elif backend == "cloud" and script_writes_files(Path(job['project_root']) / job['script']):
+        print(f"    files: written under namespace '{job['id']}'")
 
     if last_run is None:
         last_run = job.get("last_run")
