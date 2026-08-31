@@ -2109,6 +2109,7 @@ Then create the schedule:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>day<span class="w"> </span>--remote
 </span></code></pre></div>
 <p>Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (<code>list</code>, <code>update</code>, <code>remove</code>) automatically detect whether a job is local or cloud.</p>
+<p>If the scheduled script reads credentials from the environment, only keys listed in <code>cloud.secrets</code> are sent to Secret Manager at deploy time — the container itself never receives your <code>.env</code> file. Keys not listed in <code>cloud.secrets</code> are not available in cloud runtime. Removing the schedule removes the secrets it was using. See <a href="../../advanced/lamia-cloud/#secrets-for-cloud-execution">lamia-cloud — Secrets</a>.</p>
 <p>Cloud scheduling requires the <a href="../../advanced/lamia-cloud/"><code>lamia-cloud</code></a> package.<br />
 See the <a href="../../advanced/lamia-cloud/">lamia-cloud user guide</a> for installation, one-time cloud runs, and scheduler setup.</p>
 <p>For team deployments via GitHub and CI, see <a href="../github-deployment/">GitHub Deployment</a>.</p>

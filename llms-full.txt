@@ -3685,6 +3685,8 @@ lamia schedule add daily_task.lm --every day --remote
 
 Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (`list`, `update`, `remove`) automatically detect whether a job is local or cloud.
 
+If the scheduled script reads credentials from the environment, only keys listed in `cloud.secrets` are sent to Secret Manager at deploy time — the container itself never receives your `.env` file. Keys not listed in `cloud.secrets` are not available in cloud runtime. Removing the schedule removes the secrets it was using. See [lamia-cloud — Secrets](../advanced/lamia-cloud.md#secrets-for-cloud-execution).
+
 Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package.  
 See the [lamia-cloud user guide](../advanced/lamia-cloud.md) for installation, one-time cloud runs, and scheduler setup.
 
@@ -4995,6 +4997,57 @@ lamia-cloud automatically enables required APIs on first use. No manual `gcloud 
 API enablement is separate from Vertex AI's per-model access grant. The first time a project calls a gated publisher model (for example, Anthropic's Claude models) through Vertex AI, Google requires one-time per-project consent, granted from that model's Model Garden page (found under Google Cloud Console's Agent Platform section) — this isn't an API flag, so lamia-cloud cannot complete it on your behalf.
 
 Before any build or deploy, `--remote` checks every model in your `model_chain` against Vertex in one batch and, if any are missing access, reports all of them together with a Model Garden link and a search name for each (e.g. `claude-sonnet-4-5-20250929` → search "Claude Sonnet 4.5"). If a run reports missing models, open the printed link, search each name in Model Garden, and click **Enable** on its card, then retry.
+
+## Secrets for Cloud Execution
+
+`.env` files are never copied into the deployed container, so a script that reads a key from the environment finds nothing in the cloud until you name that key. List the ones your script needs under `cloud.secrets`:
+
+```yaml
+cloud:
+  provider: gcp
+  project_id: my-gcp-project
+  location: us-central1
+  secrets:
+    - THIRD_PARTY_API_KEY
+```
+
+Leave the values where they already are — your project's `.env` — and deploy:
+
+```bash
+lamia my_script.lm --remote
+```
+
+Each listed key is written to Secret Manager, and the Cloud Run Job is given a *reference* to it rather than the value. GCP injects it as an environment variable when the job runs, so `os.environ["THIRD_PARTY_API_KEY"]` works exactly as it does locally, and the value never appears in the job's configuration.
+
+Nothing outside that list leaves your machine. Model provider keys get no special treatment — an unlisted key is simply missing at runtime, whatever it is. Note that you should not add API keys for built-in models to the cloud.secrets list, as they authenticate through Vertex AI.
+
+### Cleanup
+
+Removing a schedule or trigger deletes the secrets it was using:
+
+```bash
+lamia schedule remove <id>
+lamia trigger clear <id>
+```
+
+A secret shared by several deployments survives until the last one referencing it is gone, so removing one of two schedules that use the same key leaves the key in place.
+
+Editing a value in `.env` does not reach a running deployment on its own — deploy again to push the new value.
+
+### CI/CD environments
+
+In CI, there is no `.env` file. Lamia resolves secret values from the process environment (`os.getenv`), so any key listed in `cloud.secrets` that is available as an environment variable will be picked up.
+
+For GitHub Actions, pass repository secrets as env vars in your workflow:
+
+```yaml
+env:
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+```
+
+For GitLab CI, add the variable in **Settings > CI/CD > Variables** — GitLab injects it automatically.
+
+For other CI platforms, ensure each `cloud.secrets` key is available as an environment variable in the runner. The mechanism is the same: Lamia reads `os.getenv(key)` when no `.env` file is present.
 
 ## File Sync for Cloud Execution
 
