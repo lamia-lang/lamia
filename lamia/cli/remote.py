@@ -13,6 +13,7 @@ from lamia.facade.config_builder import build_config_from_dict
 from lamia.git import get_remote_origin
 from lamia.id_gen import generate_deterministic_id
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
+from lamia.deploy_secrets import resolve_deploy_secrets
 from lamia.triggers.extraction import extract_all_triggers
 from lamia.cli.script_analysis import analyze_script
 from lamia_cloud import get_connector, get_deployer, get_llm_router, get_trigger_provider
@@ -318,11 +319,11 @@ def handle_remote_run(
 
     stages = extract_all_triggers(root / script_name)
     if stages:
-        _deploy_trigger(script_name, root, stages)
+        _deploy_trigger(script_name, root, stages, config=config, deployer=deployer)
         return
 
     deploy_mode, repo_url = _resolve_deploy_mode(config, root)
-    run_name = _run_service_name(script_name, str(root))
+    run_name = generate_deterministic_id(script_name, str(root))
     target = deployer.deployment_name(run_name)
 
     print(f"Remote execution: {script_name} (source: {deploy_mode})", file=sys.stderr)
@@ -349,7 +350,9 @@ def handle_remote_run(
             file=sys.stderr,
         )
 
-    source_hash = _compute_source_hash(root, deployer)
+    secret_keys = _sync_deploy_secrets(config, root, deployer, run_name)
+
+    source_hash = _compute_source_hash(root, deployer, secret_keys)
     deployed_hash = deployer.get_deployed_source_hash(target)
 
     uses_files = capabilities.uses_files or capabilities.uses_file_context
@@ -368,6 +371,8 @@ def handle_remote_run(
             deploy_mode=deploy_mode,
             repo_url=repo_url,
             files_namespace=run_name,
+            secret_keys=secret_keys,
+            secrets_namespace=run_name,
         )
         deployer.set_deployed_source_hash(target, source_hash)
 
@@ -430,6 +435,8 @@ def _deploy_trigger(
     script_name: str,
     project_root: Path,
     stages: list,
+    config: Optional[dict] = None,
+    deployer=None,
 ) -> None:
     """Deploy always-reactive trigger infrastructure for a script with trigger.* calls.
 
@@ -439,12 +446,20 @@ def _deploy_trigger(
     name = generate_deterministic_id(script_name, str(project_root))
     capabilities = analyze_script(project_root / script_name)
 
+    secret_keys = (
+        _sync_deploy_secrets(config, project_root, deployer, name)
+        if deployer is not None
+        else []
+    )
+
     plan = TriggerDeploymentPlan(
         name=name,
         stages=stages,
         capabilities=asdict(capabilities),
         mode="reactive",
         script_name=script_name,
+        secret_keys=secret_keys,
+        secrets_namespace=name,
     )
 
     provider = get_trigger_provider(project_root)
@@ -459,11 +474,37 @@ def _deploy_trigger(
     print(f"View triggers: lamia trigger list", file=sys.stderr)
 
 
-def _compute_source_hash(project_root: Path, deployer) -> str:
+def _declared_secret_keys(config: Optional[dict]) -> list[str]:
+    """Return the secret names opted in under ``cloud.secrets`` in config."""
+    return list(((config or {}).get("cloud") or {}).get("secrets") or [])
+
+
+def _sync_deploy_secrets(
+    config: Optional[dict],
+    project_root: Path,
+    deployer,
+    namespace: str,
+) -> list[str]:
+    """Upload the secrets this deploy may use. Returns the names stored."""
+    values = resolve_deploy_secrets(project_root, _declared_secret_keys(config))
+    if not values:
+        return []
+
+    stored = deployer.sync_secrets(values, namespace)
+    if stored:
+        print(f"  Synced secrets: {', '.join(sorted(stored))}", file=sys.stderr)
+    return stored
+
+
+def _compute_source_hash(
+    project_root: Path, deployer, secret_keys: Optional[list[str]] = None
+) -> str:
     hasher = hashlib.sha256()
     for f in sorted(deployer.collect_project_files(project_root)):
         hasher.update(str(f.relative_to(project_root)).encode())
         hasher.update(f.read_bytes())
+    for key in sorted(secret_keys or []):
+        hasher.update(key.encode())
     return hasher.hexdigest()[:16]
 
 
@@ -476,12 +517,3 @@ def _warn_about_file_uploads(entries: list) -> None:
         print(f"    - {raw}", file=sys.stderr)
 
 
-def _run_service_name(script: str, project_root: str) -> str:
-    """Deterministic service name for one-shot remote runs.
-
-    Derived from script + project_root so the same script always reuses
-    the same cloud resource (enables container caching). This is an
-    internal resource name, not a user-facing resource ID.
-    """
-    raw = f"{script}:{project_root}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]

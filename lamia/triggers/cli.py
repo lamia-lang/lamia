@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from lamia.cli.script_analysis import script_writes_files
+from lamia.scheduling.cloud_scheduler import cleanup_cloud_secrets_by_namespace
 from lamia.triggers.local.provider import LocalTriggerProvider
 
 
@@ -199,6 +200,8 @@ def _handle_clear(args: argparse.Namespace | str) -> None:
         try:
             cloud_provider.clear_trigger(trigger_id)
             print(f"Trigger {trigger_id} stopped and cleared (cloud)")
+            for key in cleanup_cloud_secrets_by_namespace(Path.cwd(), trigger_id):
+                print(f"  Removed cloud secret: {key}")
             return
         except Exception:
             pass

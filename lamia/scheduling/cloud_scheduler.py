@@ -14,11 +14,40 @@ from lamia.scheduling.base import BaseScheduler, JobStatus, ScheduleJob
 from lamia.cli.script_analysis import analyze_script
 
 try:
-    from lamia_cloud import get_scheduler, get_trigger_provider, CloudScheduleJob, CloudJobStatus
+    from lamia_cloud import (
+        get_deployer,
+        get_scheduler,
+        get_trigger_provider,
+        CloudScheduleJob,
+        CloudJobStatus,
+    )
     from lamia_cloud.types import TriggerDeploymentPlan
     LAMIA_CLOUD_AVAILABLE = True
 except ImportError:
     LAMIA_CLOUD_AVAILABLE = False
+
+
+def cleanup_cloud_secrets(project_root: Path, script_name: str) -> list[str]:
+    """Delete cloud secrets for *script_name* that no deployment references."""
+    if not LAMIA_CLOUD_AVAILABLE:
+        return []
+    try:
+        deployer = get_deployer(project_root)
+        namespace = generate_deterministic_id(script_name, str(project_root))
+        return deployer.cleanup_secrets(namespace)
+    except Exception:
+        return []
+
+
+def cleanup_cloud_secrets_by_namespace(project_root: Path, namespace: str) -> list[str]:
+    """Delete cloud secrets for an already-computed *namespace* ID."""
+    if not LAMIA_CLOUD_AVAILABLE:
+        return []
+    try:
+        deployer = get_deployer(project_root)
+        return deployer.cleanup_secrets(namespace)
+    except Exception:
+        return []
 
 
 def _to_cloud_job(job: ScheduleJob) -> "CloudScheduleJob":

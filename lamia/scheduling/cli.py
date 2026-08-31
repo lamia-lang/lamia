@@ -24,6 +24,7 @@ from lamia.runtime import find_lamia_bin
 
 from .base import BaseScheduler, ScheduleJob
 from .cloud_scheduler import (
+    cleanup_cloud_secrets,
     get_cloud_scheduler,
     LAMIA_CLOUD_AVAILABLE,
     deploy_scheduled_trigger,
@@ -311,6 +312,10 @@ def _handle_remove(args: argparse.Namespace) -> None:
     scheduler.uninstall(job)
     remove_job(job_id)
     print(f"Removed schedule: {job_data['script']} [{job_id}]")
+
+    if job_data.get("backend") == "cloud":
+        for key in cleanup_cloud_secrets(Path(job_data["project_root"]), job_data["script"]):
+            print(f"  Removed cloud secret: {key}")
 
 
 def _handle_remove_orphaned() -> None:

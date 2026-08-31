@@ -216,6 +216,8 @@ lamia schedule add daily_task.lm --every day --remote
 
 Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (`list`, `update`, `remove`) automatically detect whether a job is local or cloud.
 
+If the scheduled script reads credentials from the environment, only keys listed in `cloud.secrets` are sent to Secret Manager at deploy time — the container itself never receives your `.env` file. Keys not listed in `cloud.secrets` are not available in cloud runtime. Removing the schedule removes the secrets it was using. See [lamia-cloud — Secrets](../advanced/lamia-cloud.md#secrets-for-cloud-execution).
+
 Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package.  
 See the [lamia-cloud user guide](../advanced/lamia-cloud.md) for installation, one-time cloud runs, and scheduler setup.
 
