@@ -221,7 +221,7 @@ If the scheduled script reads credentials from the environment, only keys listed
 Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package.  
 See the [lamia-cloud user guide](../advanced/lamia-cloud.md) for installation, one-time cloud runs, and scheduler setup.
 
-For team deployments via GitHub and CI, see [GitHub Deployment](github-deployment.md).
+For team deployments via Git-based CI pipelines, see [Git-Based Deployment](github-deployment.md).
 
 ## Resource Lifecycle
 

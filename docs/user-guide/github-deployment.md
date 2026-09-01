@@ -63,9 +63,36 @@ cloud:
 
 Private repositories work after `lamia cloud connect`. The cloud provider's app is installed on the repository with read access for cloning. No SSH keys or personal tokens are needed.
 
-## CI Integration
+## Automatic Deployments (CI)
 
-Add a GitHub Actions workflow to redeploy on push:
+To deploy automatically on every push, you need a CI pipeline:
+
+- GitHub: **GitHub Actions**
+- GitLab: **GitLab CI/CD pipelines**
+
+This is not Lamia-specific. CI is the standard way any project runs commands after code is pushed.
+
+### Common Rule (All CI Systems)
+
+Only keys listed in `cloud.secrets` are uploaded to Secret Manager.  
+If a key is not listed there, Lamia ignores it even if it exists in CI environment.
+
+```yaml
+cloud:
+  provider: gcp
+  project_id: my-project
+  secrets:
+    - OPENROUTER_API_KEY
+    - THIRD_PARTY_API_KEY
+```
+
+### GitHub Actions
+
+Create this file in your repository:
+
+- Path: `.github/workflows/lamia-deploy.yml`
+
+Example workflow:
 
 ```yaml
 name: Deploy Lamia Scripts
@@ -81,45 +108,57 @@ jobs:
       contents: read
     env:
       LAMIA_CONNECTION_ID: ${{ vars.LAMIA_CONNECTION_ID }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      THIRD_PARTY_API_KEY: ${{ secrets.THIRD_PARTY_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - run: pip install "lamia-lang[cloud]"
       - run: lamia schedule add daily_task.lm --every day --remote
 ```
 
-`lamia cloud connect` already stored `LAMIA_CONNECTION_ID` as a repository variable, so there is nothing to copy or paste. The `env:` line exists only because GitHub Actions does not expose repository variables to the job automatically — a variable is readable by the process only when the workflow references it through `vars`. Which repository is being deployed comes from the runner itself, so it needs no variable at all.
+About `LAMIA_CONNECTION_ID`:
 
-For a monorepo, add a `paths` filter:
+- It is created by `lamia cloud connect` and saved as a GitHub **repository variable**.
+- It is not a secret API key.
+- GitHub does not inject repository variables automatically, so workflow YAML must map it to `env`.
 
-```yaml
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'my_project/**'
-```
+Add values in GitHub UI:
 
-Keep the same job permissions in monorepo workflows:
+1. Open repository **Settings**.
+2. Go to **Secrets and variables > Actions**.
+3. In **Variables**, confirm `LAMIA_CONNECTION_ID` exists (created by `lamia cloud connect`).
+4. In **Secrets**, add keys like `OPENROUTER_API_KEY`, `THIRD_PARTY_API_KEY`.
+5. Reference those names in workflow `env:` (as shown above).
 
-```yaml
-permissions:
-  id-token: write
-  contents: read
-```
+### GitLab CI/CD
 
-The `permissions: id-token: write` line is required for CI authentication. If GitHub authorization is interrupted during `lamia cloud connect`, rerun `lamia cloud connect` to complete variable setup.
+Create this file in your repository:
 
-### CI Secrets
+- Path: `.gitlab-ci.yml`
 
-Use repository secrets for runtime API keys and pass them through workflow environment variables:
+Example pipeline:
 
 ```yaml
-env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+deploy_lamia:
+  image: python:3.12
+  script:
+    - pip install "lamia-lang[cloud]"
+    - lamia schedule add daily_task.lm --every day --remote
 ```
 
-Lamia reads these values from process environment in CI. For local development, Lamia continues to read shell env, project `.env`, and global `~/.lamia/.env`.
+Add values in GitLab UI:
+
+1. Open project **Settings > CI/CD**.
+2. Expand **Variables**.
+3. Add keys like `OPENROUTER_API_KEY`, `THIRD_PARTY_API_KEY`.
+4. Mark them **Masked** and **Protected** when appropriate.
+
+GitLab injects CI/CD variables into job environment automatically, so no extra `env:` mapping block is required in `.gitlab-ci.yml` unless you want to rename variables.
+
+### Self-hosted Git / Other CI
+
+Lamia does not depend on a specific Git host for secret resolution.  
+If your CI runner can execute `lamia ... --remote` and expose environment variables, Lamia will read them and upload only `cloud.secrets` keys.
 
 The example above installs the latest release, so CI picks up fixes without any maintenance. If you would rather a lamia release never change your deploys until you say so, pin the version explicitly:
 

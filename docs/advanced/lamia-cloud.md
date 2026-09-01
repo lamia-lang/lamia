@@ -141,18 +141,7 @@ Editing a value in `.env` does not reach a running deployment on its own — dep
 
 ### CI/CD environments
 
-In CI, there is no `.env` file. Lamia resolves secret values from the process environment (`os.getenv`), so any key listed in `cloud.secrets` that is available as an environment variable will be picked up.
-
-For GitHub Actions, pass repository secrets as env vars in your workflow:
-
-```yaml
-env:
-  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-```
-
-For GitLab CI, add the variable in **Settings > CI/CD > Variables** — GitLab injects it automatically.
-
-For other CI platforms, ensure each `cloud.secrets` key is available as an environment variable in the runner. The mechanism is the same: Lamia reads `os.getenv(key)` when no `.env` file is present.
+In CI, there is no `.env` file. Lamia resolves secret values from the process environment (`os.getenv`), so any key listed in `cloud.secrets` that is available as an environment variable will be picked up. For step-by-step setup, see [Git-Based Deployment](../user-guide/github-deployment.md).
 
 ## File Sync for Cloud Execution
 
