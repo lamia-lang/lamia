@@ -1475,22 +1475,55 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ci-integration" class="md-nav__link">
+  <a href="#automatic-deployments-ci" class="md-nav__link">
     <span class="md-ellipsis">
       
-        CI Integration
+        Automatic Deployments (CI)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="CI Integration">
+    <nav class="md-nav" aria-label="Automatic Deployments (CI)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#ci-secrets" class="md-nav__link">
+  <a href="#common-rule-all-ci-systems" class="md-nav__link">
     <span class="md-ellipsis">
       
-        CI Secrets
+        Common Rule (All CI Systems)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GitHub Actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gitlab-cicd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GitLab CI/CD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#self-hosted-git-other-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Self-hosted Git / Other CI
       
     </span>
   </a>
@@ -1628,49 +1661,88 @@
 </span></code></pre></div>
 <h3 id="private-repositories">Private Repositories<a class="headerlink" href="#private-repositories" title="Permanent link">&para;</a></h3>
 <p>Private repositories work after <code>lamia cloud connect</code>. The cloud provider's app is installed on the repository with read access for cloning. No SSH keys or personal tokens are needed.</p>
-<h2 id="ci-integration">CI Integration<a class="headerlink" href="#ci-integration" title="Permanent link">&para;</a></h2>
-<p>Add a GitHub Actions workflow to redeploy on push:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deploy Lamia Scripts</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nt">on</span><span class="p">:</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">push</span><span class="p">:</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="nt">jobs</span><span class="p">:</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nt">deploy</span><span class="p">:</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="nt">permissions</span><span class="p">:</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">      </span><span class="nt">id-token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">      </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">    </span><span class="nt">env</span><span class="p">:</span>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">      </span><span class="nt">LAMIA_CONNECTION_ID</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ vars.LAMIA_CONNECTION_ID }}</span>
-</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
-</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
-</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install "lamia-lang[cloud]"</span>
-</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lamia schedule add daily_task.lm --every day --remote</span>
+<h2 id="automatic-deployments-ci">Automatic Deployments (CI)<a class="headerlink" href="#automatic-deployments-ci" title="Permanent link">&para;</a></h2>
+<p>To deploy automatically on every push, you need a CI pipeline:</p>
+<ul>
+<li>GitHub: <strong>GitHub Actions</strong></li>
+<li>GitLab: <strong>GitLab CI/CD pipelines</strong></li>
+</ul>
+<p>This is not Lamia-specific. CI is the standard way any project runs commands after code is pushed.</p>
+<h3 id="common-rule-all-ci-systems">Common Rule (All CI Systems)<a class="headerlink" href="#common-rule-all-ci-systems" title="Permanent link">&para;</a></h3>
+<p>Only keys listed in <code>cloud.secrets</code> are uploaded to Secret Manager.<br />
+If a key is not listed there, Lamia ignores it even if it exists in CI environment.</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">cloud</span><span class="p">:</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gcp</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">project_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-project</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nt">secrets</span><span class="p">:</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">OPENROUTER_API_KEY</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">THIRD_PARTY_API_KEY</span>
 </span></code></pre></div>
-<p><code>lamia cloud connect</code> already stored <code>LAMIA_CONNECTION_ID</code> as a repository variable, so there is nothing to copy or paste. The <code>env:</code> line exists only because GitHub Actions does not expose repository variables to the job automatically — a variable is readable by the process only when the workflow references it through <code>vars</code>. Which repository is being deployed comes from the runner itself, so it needs no variable at all.</p>
-<p>For a monorepo, add a <code>paths</code> filter:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">on</span><span class="p">:</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">push</span><span class="p">:</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nt">paths</span><span class="p">:</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'my_project/**'</span>
+<h3 id="github-actions">GitHub Actions<a class="headerlink" href="#github-actions" title="Permanent link">&para;</a></h3>
+<p>Create this file in your repository:</p>
+<ul>
+<li>Path: <code>.github/workflows/lamia-deploy.yml</code></li>
+</ul>
+<p>Example workflow:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Deploy Lamia Scripts</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nt">on</span><span class="p">:</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">push</span><span class="p">:</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nt">branches</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main</span><span class="p p-Indicator">]</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="nt">jobs</span><span class="p">:</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">  </span><span class="nt">deploy</span><span class="p">:</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="nt">runs-on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu-latest</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">    </span><span class="nt">permissions</span><span class="p">:</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">      </span><span class="nt">id-token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">      </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">    </span><span class="nt">env</span><span class="p">:</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">      </span><span class="nt">LAMIA_CONNECTION_ID</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ vars.LAMIA_CONNECTION_ID }}</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">      </span><span class="nt">OPENROUTER_API_KEY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.OPENROUTER_API_KEY }}</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">      </span><span class="nt">THIRD_PARTY_API_KEY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.THIRD_PARTY_API_KEY }}</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">actions/checkout@v4</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install "lamia-lang[cloud]"</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lamia schedule add daily_task.lm --every day --remote</span>
 </span></code></pre></div>
-<p>Keep the same job permissions in monorepo workflows:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">permissions</span><span class="p">:</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">id-token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read</span>
+<p>About <code>LAMIA_CONNECTION_ID</code>:</p>
+<ul>
+<li>It is created by <code>lamia cloud connect</code> and saved as a GitHub <strong>repository variable</strong>.</li>
+<li>It is not a secret API key.</li>
+<li>GitHub does not inject repository variables automatically, so workflow YAML must map it to <code>env</code>.</li>
+</ul>
+<p>Add values in GitHub UI:</p>
+<ol>
+<li>Open repository <strong>Settings</strong>.</li>
+<li>Go to <strong>Secrets and variables &gt; Actions</strong>.</li>
+<li>In <strong>Variables</strong>, confirm <code>LAMIA_CONNECTION_ID</code> exists (created by <code>lamia cloud connect</code>).</li>
+<li>In <strong>Secrets</strong>, add keys like <code>OPENROUTER_API_KEY</code>, <code>THIRD_PARTY_API_KEY</code>.</li>
+<li>Reference those names in workflow <code>env:</code> (as shown above).</li>
+</ol>
+<h3 id="gitlab-cicd">GitLab CI/CD<a class="headerlink" href="#gitlab-cicd" title="Permanent link">&para;</a></h3>
+<p>Create this file in your repository:</p>
+<ul>
+<li>Path: <code>.gitlab-ci.yml</code></li>
+</ul>
+<p>Example pipeline:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">deploy_lamia</span><span class="p">:</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python:3.12</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">script</span><span class="p">:</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install "lamia-lang[cloud]"</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lamia schedule add daily_task.lm --every day --remote</span>
 </span></code></pre></div>
-<p>The <code>permissions: id-token: write</code> line is required for CI authentication. If GitHub authorization is interrupted during <code>lamia cloud connect</code>, rerun <code>lamia cloud connect</code> to complete variable setup.</p>
-<h3 id="ci-secrets">CI Secrets<a class="headerlink" href="#ci-secrets" title="Permanent link">&para;</a></h3>
-<p>Use repository secrets for runtime API keys and pass them through workflow environment variables:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">env</span><span class="p">:</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">ANTHROPIC_API_KEY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.ANTHROPIC_API_KEY }}</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="nt">OPENAI_API_KEY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ secrets.OPENAI_API_KEY }}</span>
-</span></code></pre></div>
-<p>Lamia reads these values from process environment in CI. For local development, Lamia continues to read shell env, project <code>.env</code>, and global <code>~/.lamia/.env</code>.</p>
+<p>Add values in GitLab UI:</p>
+<ol>
+<li>Open project <strong>Settings &gt; CI/CD</strong>.</li>
+<li>Expand <strong>Variables</strong>.</li>
+<li>Add keys like <code>OPENROUTER_API_KEY</code>, <code>THIRD_PARTY_API_KEY</code>.</li>
+<li>Mark them <strong>Masked</strong> and <strong>Protected</strong> when appropriate.</li>
+</ol>
+<p>GitLab injects CI/CD variables into job environment automatically, so no extra <code>env:</code> mapping block is required in <code>.gitlab-ci.yml</code> unless you want to rename variables.</p>
+<h3 id="self-hosted-git-other-ci">Self-hosted Git / Other CI<a class="headerlink" href="#self-hosted-git-other-ci" title="Permanent link">&para;</a></h3>
+<p>Lamia does not depend on a specific Git host for secret resolution.<br />
+If your CI runner can execute <code>lamia ... --remote</code> and expose environment variables, Lamia will read them and upload only <code>cloud.secrets</code> keys.</p>
 <p>The example above installs the latest release, so CI picks up fixes without any maintenance. If you would rather a lamia release never change your deploys until you say so, pin the version explicitly:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install "lamia-lang[cloud]==1.4.0"</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip install "lamia-lang[cloud]==1.4.0"</span>
 </span></code></pre></div>
 <p>Pinning is the safer default for production deploys; using latest is fine while iterating.</p>
 <h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>
@@ -1714,7 +1786,7 @@
 <p>This check is defense-in-depth and produces a clear error message. The binding restriction is the cloud-side trust condition, which accepts only the exact repository and branch regardless of event type.</p>
 <h2 id="updating-scripts">Updating Scripts<a class="headerlink" href="#updating-scripts" title="Permanent link">&para;</a></h2>
 <p>Run the same command again:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>day<span class="w"> </span>--remote
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>daily_task.lm<span class="w"> </span>--every<span class="w"> </span>day<span class="w"> </span>--remote
 </span></code></pre></div>
 <p>The command is idempotent. The same script in the same repository maps to the same cloud resource.</p>
 <p>For local schedules, no redeployment is needed. The schedule references the script file on disk.</p>

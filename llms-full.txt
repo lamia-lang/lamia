@@ -3690,7 +3690,7 @@ If the scheduled script reads credentials from the environment, only keys listed
 Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package.  
 See the [lamia-cloud user guide](../advanced/lamia-cloud.md) for installation, one-time cloud runs, and scheduler setup.
 
-For team deployments via GitHub and CI, see [GitHub Deployment](github-deployment.md).
+For team deployments via Git-based CI pipelines, see [Git-Based Deployment](github-deployment.md).
 
 ## Resource Lifecycle
 
@@ -3996,7 +3996,7 @@ Cloud triggers require:
 - `pip install "lamia-lang[cloud]"`
 - `cloud.project_id` set in your project `config.yaml`
 
-For team deployments via GitHub and CI, see [GitHub Deployment](github-deployment.md).
+For team deployments via Git-based CI pipelines, see [Git-Based Deployment](github-deployment.md).
 
 ## Resource Lifecycle
 
@@ -5036,18 +5036,7 @@ Editing a value in `.env` does not reach a running deployment on its own — dep
 
 ### CI/CD environments
 
-In CI, there is no `.env` file. Lamia resolves secret values from the process environment (`os.getenv`), so any key listed in `cloud.secrets` that is available as an environment variable will be picked up.
-
-For GitHub Actions, pass repository secrets as env vars in your workflow:
-
-```yaml
-env:
-  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-```
-
-For GitLab CI, add the variable in **Settings > CI/CD > Variables** — GitLab injects it automatically.
-
-For other CI platforms, ensure each `cloud.secrets` key is available as an environment variable in the runner. The mechanism is the same: Lamia reads `os.getenv(key)` when no `.env` file is present.
+In CI, there is no `.env` file. Lamia resolves secret values from the process environment (`os.getenv`), so any key listed in `cloud.secrets` that is available as an environment variable will be picked up. For step-by-step setup, see [Git-Based Deployment](../user-guide/github-deployment.md).
 
 ## File Sync for Cloud Execution
 

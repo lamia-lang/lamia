@@ -2112,7 +2112,7 @@ Then create the schedule:</p>
 <p>If the scheduled script reads credentials from the environment, only keys listed in <code>cloud.secrets</code> are sent to Secret Manager at deploy time — the container itself never receives your <code>.env</code> file. Keys not listed in <code>cloud.secrets</code> are not available in cloud runtime. Removing the schedule removes the secrets it was using. See <a href="../../advanced/lamia-cloud/#secrets-for-cloud-execution">lamia-cloud — Secrets</a>.</p>
 <p>Cloud scheduling requires the <a href="../../advanced/lamia-cloud/"><code>lamia-cloud</code></a> package.<br />
 See the <a href="../../advanced/lamia-cloud/">lamia-cloud user guide</a> for installation, one-time cloud runs, and scheduler setup.</p>
-<p>For team deployments via GitHub and CI, see <a href="../github-deployment/">GitHub Deployment</a>.</p>
+<p>For team deployments via Git-based CI pipelines, see <a href="../github-deployment/">Git-Based Deployment</a>.</p>
 <h2 id="resource-lifecycle">Resource Lifecycle<a class="headerlink" href="#resource-lifecycle" title="Permanent link">&para;</a></h2>
 <p>If a script file is renamed, moved, or deleted, any schedule pointing to it
 shows <code>SOURCE_MISSING</code> in <code>lamia schedule list</code>. To clean up these entries:</p>
