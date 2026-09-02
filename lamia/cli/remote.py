@@ -343,12 +343,15 @@ def handle_remote_run(
     sync_feedback = deployer.sync_runtime_files(entries=entries, files_namespace=run_name)
     for overwrite in sync_feedback.get("overwrite_warnings", []):
         print(f"  Warning: {overwrite}", file=sys.stderr)
+    sync_parts = []
     if sync_feedback.get("uploaded", 0):
-        print(
-            f"  Synced files: uploaded={sync_feedback['uploaded']}, "
-            f"skipped={sync_feedback.get('skipped', 0)}",
-            file=sys.stderr,
-        )
+        sync_parts.append(f"uploaded={sync_feedback['uploaded']}")
+    if sync_feedback.get("skipped", 0):
+        sync_parts.append(f"skipped={sync_feedback['skipped']}")
+    if sync_feedback.get("deleted", 0):
+        sync_parts.append(f"deleted={sync_feedback['deleted']}")
+    if sync_parts:
+        print(f"  Synced files: {', '.join(sync_parts)}", file=sys.stderr)
 
     secret_keys = _sync_deploy_secrets(config, root, deployer, run_name)
 
