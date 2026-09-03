@@ -13,12 +13,25 @@ from lamia.errors import MissingAPIKeysError, ExternalOperationError
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import LLMCommand
 from .files_context_manager import get_active_files_context, get_current_source_file, resolve_standalone_file_references
+from lamia.tools.file_context import (
+    FileContextToolExecutor,
+    build_file_context_tools_prompt,
+)
+from lamia.tools.loop import (
+    process_response,
+    execute_tool_calls,
+    build_continuation_prompt,
+    build_correction_prompt,
+)
 from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
 from lamia.validation.validators.object_validator import ObjectValidator
 from lamia.hooks import POST_LLM
+import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+FILE_CONTEXT_TOOL_MAX_ROUNDS = 10
 
 
 class LLMManager(Manager):
@@ -76,12 +89,83 @@ class LLMManager(Manager):
         
         # Inject file references if in a files context
         prompt = self._inject_file_references(prompt)
+
+        # If a files context is active with indexed files, enable scoped
+        # file tools so the model can discover/read files dynamically.
+        files_ctx = get_active_files_context()
+        if files_ctx and files_ctx.indexed_files and files_ctx.paths:
+            return await self._execute_with_tool_loop(
+                prompt=prompt,
+                validator=validator,
+                files_context_paths=files_ctx.paths,
+            )
         
         # Use the existing validation logic
         return await self._execute_with_retries(
             prompt=prompt,
             validator=validator
         )
+
+    # TODO: Instead of text-based loop processing use structured user-assistant loops
+    async def _execute_with_tool_loop(
+        self,
+        prompt: str,
+        validator: Optional[BaseValidator],
+        files_context_paths: tuple,
+    ) -> ValidationResult:
+        """Run the LLM with a text-based tool loop for file discovery.
+
+        Prepends scoped tool descriptions to the prompt.  After each LLM
+        response, checks for tool-call JSON.  If found, executes the tool
+        in the sandbox, appends the result to the prompt, and re-sends.
+        Loops until the model returns plain text or the round limit is hit.
+        """
+        executor = FileContextToolExecutor(files_context_paths)
+        tools_prompt = build_file_context_tools_prompt()
+        current_prompt = tools_prompt + "\n\n" + prompt
+
+        for _round in range(FILE_CONTEXT_TOOL_MAX_ROUNDS + 1):
+            is_last = _round >= FILE_CONTEXT_TOOL_MAX_ROUNDS
+            result = await self._execute_with_retries(
+                prompt=current_prompt,
+                validator=validator if is_last else None,
+            )
+
+            text = result.validated_text or ""
+            tool_calls, is_malformed, clean_text = process_response(text)
+
+            if not tool_calls:
+                if is_malformed and not is_last:
+                    logger.debug("Malformed tool call in files context, sending correction")
+                    current_prompt = build_correction_prompt(current_prompt, text)
+                    continue
+
+                if clean_text != text:
+                    result = ValidationResult(
+                        is_valid=result.is_valid,
+                        validated_text=clean_text,
+                        execution_context=result.execution_context,
+                    )
+                if validator is not None and _round > 0:
+                    return await self._execute_with_retries(
+                        prompt=current_prompt,
+                        validator=validator,
+                    )
+                return result
+
+            entries = execute_tool_calls(tool_calls, executor.execute)
+
+            if not is_last:
+                current_prompt = build_continuation_prompt(current_prompt, text, entries)
+                continue
+
+            return ValidationResult(
+                is_valid=result.is_valid,
+                validated_text=clean_text,
+                execution_context=result.execution_context,
+            )
+
+        return result
 
     def _inject_file_references(self, prompt: str) -> str:
         """Inject file references from active files context or standalone resolution."""

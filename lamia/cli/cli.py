@@ -36,6 +36,12 @@ from lamia.adapters.llm.base import sanitize_api_error
 from lamia.errors import LLMProviderError
 from lamia.actions.trigger import TriggerRejectError, TRIGGER_REJECT_EXIT_CODE
 from lamia.scheduling.registry import record_run, load_job
+from lamia.tools.loop import (
+    process_response as _process_response,
+    build_continuation_prompt as _build_continuation_prompt,
+    build_correction_prompt as _build_correction_prompt,
+)
+from lamia.tools.parsing import build_tool_result_entry as _build_tool_result_entry
 
 HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
@@ -306,6 +312,7 @@ async def json_mode(lamia: Lamia) -> None:
             write_counts: dict[str, int] = {}
 
             for _round in range(MAX_TOOL_ROUNDS + 1):
+                is_last = _round >= MAX_TOOL_ROUNDS
                 result = await lamia.run_async(prompt, _full_result=True)
 
                 ctx = result.tracking_context
@@ -320,17 +327,14 @@ async def json_mode(lamia: Lamia) -> None:
                     total_tokens["total"] = total_tokens["input"] + total_tokens["output"]
 
                 text = result.result_text or ""
-                tool_calls = _extract_tool_calls(text)
+                tool_calls, is_malformed, clean_text = _process_response(text)
 
                 if not tool_calls:
-                    if _detect_malformed_tool_call(text) and _round < MAX_TOOL_ROUNDS:
+                    if is_malformed and not is_last:
                         logger.debug("Malformed tool call detected, sending correction")
-                        prompt = (
-                            f"{prompt}\n\nAssistant: {text}\n\n"
-                            f"System: {TOOL_FORMAT_CORRECTION}"
-                        )
+                        prompt = _build_correction_prompt(prompt, text)
                         continue
-                    response_to_caller_text = _strip_tool_calls(text)
+                    response_to_caller_text = clean_text
                     break
 
                 tool_result_entries: list[dict[str, object]] = []
@@ -348,7 +352,7 @@ async def json_mode(lamia: Lamia) -> None:
                                 "Loop detected: %s written %d times, breaking",
                                 target, write_counts[target],
                             )
-                            response_to_caller_text = _strip_tool_calls(text)
+                            response_to_caller_text = clean_text
                             should_break = True
                             break
 
@@ -374,24 +378,14 @@ async def json_mode(lamia: Lamia) -> None:
                 if should_break:
                     break
 
-                if _round < MAX_TOOL_ROUNDS:
+                if not is_last:
                     if tool_result_entries:
-                        tool_results_json = json.dumps(
-                            {"tool_results": tool_result_entries},
-                            ensure_ascii=False,
-                        )
-                        prompt = (
-                            f"{prompt}\n\n"
-                            f"Tool results JSON:\n{tool_results_json}\n\n"
-                            f"Continue your response to the user based on these tool results."
-                        )
+                        prompt = _build_continuation_prompt(prompt, text, tool_result_entries)
                     else:
-                        # Should not happen, but just in case
                         break
-
                     continue
 
-                response_to_caller_text = _strip_tool_calls(text)
+                response_to_caller_text = clean_text
                 break
 
             response: dict = {"type": "response", "text": response_to_caller_text}
@@ -419,140 +413,6 @@ async def json_mode(lamia: Lamia) -> None:
             pe = LLMProviderError.from_exception(exc)
             logger.error("json_mode error: %s", pe.sanitized_detail)
             _json_write(_make_json_error(exc))
-
-
-def _extract_tool_calls(text: str) -> list[dict]:
-    """Extract all tool calls from LLM response text.
-
-    Supports two formats:
-    - JSON:  {"tool": "name", "args": {"k": "v"}}
-    - XML:   <invoke ...><tool_name>name</tool_name><parameter name="k">v</parameter></invoke>
-    """
-    calls: list[dict] = []
-    for line in text.strip().split("\n"):
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            obj = json.loads(line)
-            if "tool" in obj and isinstance(obj.get("tool"), str):
-                calls.append(obj)
-        except json.JSONDecodeError:
-            continue
-
-    for invoke_match in re.finditer(r"<invoke\b[^>]*>(.*?)</invoke>", text, re.DOTALL):
-        block = invoke_match.group(1)
-        name_match = re.search(r"<tool_name>\s*(\w+)\s*</tool_name>", block)
-        if name_match:
-            args: dict = {}
-            for pm in re.finditer(
-                r'<parameter\s+name="(\w+)">(.*?)</parameter>', block, re.DOTALL
-            ):
-                args[pm.group(1)] = pm.group(2)
-            calls.append({"tool": name_match.group(1), "args": args})
-
-    return calls
-
-
-_MALFORMED_TOOL_PATTERNS = [
-    re.compile(r"<function_calls>", re.IGNORECASE),
-    re.compile(r"<tool_call>", re.IGNORECASE),
-    re.compile(r"<tool_use>", re.IGNORECASE),
-    re.compile(r'<invoke\s+name\s*=\s*["\']', re.IGNORECASE),
-    re.compile(r"```tool", re.IGNORECASE),
-    re.compile(r"```json\s*\n\s*\{\s*\"tool", re.IGNORECASE),
-]
-
-_MALFORMED_JSON_KEYS = [
-    ("name", "input"),       # Anthropic native tool_use
-    ("function", "arguments"),  # OpenAI function_call
-    ("name", "parameters"),  # Generic
-    ("tool_name", "args"),   # Close but wrong key
-    ("tool_name", "parameters"),
-]
-
-
-def _detect_malformed_tool_call(text: str) -> bool:
-    """Detect if the LLM attempted a tool call in an unsupported format.
-
-    Casts a wide net: XML wrappers (function_calls, tool_call, tool_use,
-    invoke-with-name-attr), JSON with wrong keys (name+input, function+arguments),
-    and fenced code blocks containing tool-like JSON.
-    """
-    for pattern in _MALFORMED_TOOL_PATTERNS:
-        if pattern.search(text):
-            return True
-
-    for line in text.strip().split("\n"):
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            obj = json.loads(line)
-            if not isinstance(obj, dict):
-                continue
-            for key_a, key_b in _MALFORMED_JSON_KEYS:
-                if key_a in obj and key_b in obj:
-                    return True
-        except json.JSONDecodeError:
-            continue
-
-    return False
-
-
-TOOL_FORMAT_CORRECTION = (
-    "Your tool call was NOT in the correct format and could not be executed. "
-    "Do NOT use XML tags like <function_calls>, <invoke>, <tool_call>, or <tool_use>. "
-    "Do NOT use JSON keys like \"name\"/\"input\" or \"function\"/\"arguments\".\n\n"
-    "You MUST use this EXACT JSON format on its own line:\n"
-    '{"tool": "tool_name", "args": {"param": "value"}}\n\n'
-    "Retry your tool call now using the correct format."
-)
-
-
-def _strip_tool_calls(text: str) -> str:
-    """Remove tool-call JSON and XML blocks from LLM response text."""
-    lines = []
-    for line in text.split("\n"):
-        stripped = line.strip()
-        if stripped.startswith("{"):
-            try:
-                obj = json.loads(stripped)
-                if not isinstance(obj, dict):
-                    lines.append(line)
-                    continue
-                if "tool" in obj and isinstance(obj.get("tool"), str):
-                    continue
-                for key_a, key_b in _MALFORMED_JSON_KEYS:
-                    if key_a in obj and key_b in obj:
-                        break
-                else:
-                    lines.append(line)
-                    continue
-            except json.JSONDecodeError:
-                lines.append(line)
-                continue
-        else:
-            lines.append(line)
-    result = "\n".join(lines)
-
-    result = re.sub(r"<function_calls>.*?</function_calls>", "", result, flags=re.DOTALL)
-    result = re.sub(r"<tool_call>.*?</tool_call>", "", result, flags=re.DOTALL)
-    result = re.sub(r"<tool_use>.*?</tool_use>", "", result, flags=re.DOTALL)
-    result = re.sub(r"<tool_result>.*?</tool_result>", "", result, flags=re.DOTALL)
-    result = re.sub(r"<invoke\b[^>]*>.*?</invoke>", "", result, flags=re.DOTALL)
-    result = re.sub(r"\n{3,}", "\n\n", result)
-
-    return result.strip()
-
-
-def _build_tool_result_entry(tool_name: str, tool_args: dict, tool_result: str) -> dict[str, object]:
-    """Build a single tool result entry for the next LLM round."""
-    return {
-        "tool": tool_name,
-        "args": tool_args,
-        "result": tool_result,
-    }
 
 
 def _tool_result_success(tool_result: str) -> bool:
