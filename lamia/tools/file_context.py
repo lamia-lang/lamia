@@ -1,6 +1,6 @@
 """Sandboxed read-only tool executor for ``with files()`` contexts.
 
-Only exposes list_files, read_file, and glob_files — all restricted to
+Only exposes list_files, read_file, and glob — all restricted to
 the directories declared in the active files context.
 """
 
@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 from lamia.tools.definitions import (
+    ToolName,
     FILE_CONTEXT_TOOL_DEFINITIONS,
     MAX_FILE_CONTEXT_READ_CHARS,
     MAX_FILE_CONTEXT_LIST_DEPTH,
@@ -27,8 +28,10 @@ def build_file_context_tools_prompt() -> str:
         tool_desc.append(f"- {t['name']}({params}): {t['description']}")
 
     return (
-        "You have the following file tools available to explore files in your context. "
-        "To use a tool, respond with a JSON object on its own line in this exact format:\n"
+        "You have access to a sandboxed file context. You do NOT know what files "
+        "exist in it — you MUST use the tools below to discover and read files. "
+        "NEVER guess or assume filenames.\n\n"
+        "To call a tool, output a JSON object on its own line in this EXACT format:\n"
         '{"tool": "tool_name", "args": {"param": "value"}}\n\n'
         "Available tools:\n" + "\n".join(tool_desc) + "\n\n"
         "After receiving tool results, continue your response to the user. "
@@ -46,12 +49,12 @@ class FileContextToolExecutor:
             self.allowed_roots.append(Path(os.path.expanduser(path)).resolve())
 
     def execute(self, tool_name: str, args: dict) -> str:
-        if tool_name == "list_files":
+        if tool_name == ToolName.LIST_FILES:
             return self._list_files(args.get("directory", "."))
-        if tool_name == "read_file":
+        if tool_name == ToolName.READ_FILE:
             return self._read_file(args.get("path", ""))
-        if tool_name == "glob_files":
-            return self._glob_files(args.get("pattern", ""))
+        if tool_name == ToolName.GLOB:
+            return self._glob(args.get("pattern", ""))
         return f"Error: unknown tool '{tool_name}'"
 
     def _validate_path(self, path_str: str) -> Path:
@@ -135,7 +138,7 @@ class FileContextToolExecutor:
             content = content[:MAX_FILE_CONTEXT_READ_CHARS] + f"\n\n... (truncated, total {len(content)} chars)"
         return content
 
-    def _glob_files(self, pattern: str) -> str:
+    def _glob(self, pattern: str) -> str:
         if not pattern:
             return "Error: pattern is required"
         matches: list[str] = []

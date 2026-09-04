@@ -1079,6 +1079,10 @@ class TestCiCredentialConfig:
         monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("lamia_cloud") is None,
+    reason="lamia_cloud not installed",
+)
 class TestExtractScriptModels:
     """Tests for _extract_script_models which parses models= from .lm scripts."""
 
