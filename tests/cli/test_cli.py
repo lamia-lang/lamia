@@ -16,11 +16,13 @@ from lamia.cli.cli import (
     HUMAN_EXTENSIONS,
     HYBRID_EXTENSIONS,
     interactive_mode,
-    _extract_tool_calls,
-    _strip_tool_calls,
-    _build_tool_result_entry,
 )
-from lamia.cli.tools import ToolName
+from lamia.tools.parsing import (
+    extract_tool_calls as _extract_tool_calls,
+    strip_tool_calls as _strip_tool_calls,
+    build_tool_result_entry as _build_tool_result_entry,
+)
+from lamia.tools.definitions import ToolName
 from lamia.cli.eval_cli import (
     _extract_llm_prompts,
     _print_attempt_results,

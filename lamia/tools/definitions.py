@@ -1,9 +1,10 @@
 """Tool definitions for Lamia.
 
-This is the single source of truth for:
-- ToolName enum (all tools the IDE can call)
-- TOOL_DEFINITIONS (full IDE tool list sent in the system prompt)
-- FILE_CONTEXT_TOOL_DEFINITIONS (restricted read-only subset for ``with files()`` contexts)
+Single source of truth for:
+- ToolName enum (all tool names as constants)
+- TOOL_DEFINITIONS (master list — every tool defined once)
+- IDE_TOOL_DEFINITIONS (what IDE sees — currently all tools)
+- FILE_CONTEXT_TOOL_DEFINITIONS (read-only subset for ``with files()`` contexts)
 """
 
 import enum
@@ -114,6 +115,8 @@ TOPIC_TO_FILE = {
     "cloud-trigger": "user-guide/triggers.md",
     "trigger": "user-guide/triggers.md",
     "triggers": "user-guide/triggers.md",
+    "inspect": "advanced/inspect.md",
+    "linting": "advanced/inspect.md"
 }
 
 
@@ -510,51 +513,12 @@ TOOL_DEFINITIONS = [
 ]
 
 
-# ── File-context tool definitions (read-only subset for ``with files()``) ────
+# ── Scoped views ─────────────────────────────────────────────────────────────
+
+IDE_TOOL_DEFINITIONS = TOOL_DEFINITIONS
 
 MAX_FILE_CONTEXT_READ_CHARS = 100_000
 MAX_FILE_CONTEXT_LIST_DEPTH = 4
 
-FILE_CONTEXT_TOOL_DEFINITIONS = [
-    {
-        "name": "list_files",
-        "description": "List files and subdirectories (up to 4 levels deep) within the file context.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "directory": {
-                    "type": "string",
-                    "description": "Directory path relative to the file context root (default: '.')",
-                }
-            },
-        },
-    },
-    {
-        "name": "read_file",
-        "description": "Read the contents of a file within the file context.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "File path relative to the file context root",
-                }
-            },
-            "required": ["path"],
-        },
-    },
-    {
-        "name": "glob_files",
-        "description": "Find files matching a glob pattern within the file context. Use | to combine patterns.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "pattern": {
-                    "type": "string",
-                    "description": "Glob pattern (e.g. '*.txt', '**/*.csv', '*.json|*.yaml')",
-                }
-            },
-            "required": ["pattern"],
-        },
-    },
-]
+_FILE_CONTEXT_TOOL_NAMES = {ToolName.LIST_FILES, ToolName.READ_FILE, ToolName.GLOB}
+FILE_CONTEXT_TOOL_DEFINITIONS = [t for t in TOOL_DEFINITIONS if t["name"] in _FILE_CONTEXT_TOOL_NAMES]
