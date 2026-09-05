@@ -415,7 +415,7 @@ def test_handle_remote_run_fetches_logs_when_run_job_raises(monkeypatch, tmp_pat
     monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
     monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
-    monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d: "abc")
+    monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d, sk=None: "abc")
 
     with pytest.raises(RuntimeError, match="container exited with an error"):
         remote.handle_remote_run(
@@ -449,7 +449,7 @@ def test_handle_remote_run_displays_logs_on_container_failure(monkeypatch, tmp_p
     monkeypatch.setattr(remote, "get_deployer", lambda root: deployer)
     monkeypatch.setattr(remote, "extract_all_triggers", lambda path: [])
     monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: [])
-    monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d: "abc")
+    monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d, sk=None: "abc")
 
     with pytest.raises(SystemExit) as exc_info:
         remote.handle_remote_run(
@@ -578,7 +578,7 @@ class TestHandleRemoteRun:
 
         deployer = _setup_deployer(monkeypatch, remote, tmp_path)
         deployer.get_deployed_source_hash.return_value = "abc123"
-        monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d: "abc123")
+        monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d, sk=None: "abc123")
 
         with pytest.raises(SystemExit):
             remote.handle_remote_run(
@@ -614,7 +614,7 @@ class TestHandleRemoteRun:
         deployer = _setup_deployer(monkeypatch, remote, tmp_path)
         deployer.get_deployed_source_hash.return_value = "same"
         monkeypatch.setattr(remote, "build_file_sync_plan", lambda **kwargs: entries)
-        monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d: "same")
+        monkeypatch.setattr(remote, "_compute_source_hash", lambda root, d, sk=None: "same")
 
         with pytest.raises(SystemExit):
             remote.handle_remote_run(
