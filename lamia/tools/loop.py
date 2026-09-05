@@ -152,7 +152,7 @@ async def run_tool_loop(
             result.result_text = clean_text
             break
 
-        entries, looping = _run_response_blocks(
+        entries = _run_response_blocks(
             response_blocks,
             lamia=lamia,
             allowed_tools=allowed_tools,
@@ -163,7 +163,7 @@ async def run_tool_loop(
             on_message=on_message,
         )
 
-        if looping or is_last:
+        if is_last:
             result.result_text = clean_text
             break
 
@@ -185,10 +185,10 @@ def _run_response_blocks(
     max_calls_by_tool: Optional[Mapping[str, int]],
     call_counts: dict[str, int],
     on_message: Optional[Callable],
-) -> tuple[list[dict], bool]:
+) -> list[dict]:
     """Run one round's tool calls.
 
-    Returns result entries and whether a configured tool call cap was reached.
+    Returns result entries, including failures for calls over a configured cap.
     """
     entries: list[dict] = []
     for block in response_blocks:
@@ -202,12 +202,15 @@ def _run_response_blocks(
         args = tool_call.get("args", {})
         logger.debug("Tool call: %s(%s)", name, args)
 
-        if _exceeds_call_limit(name, max_calls_by_tool, call_counts):
-            return entries, True
-
         _emit(on_message, ToolCallMessage(tool=name, args=args, label=tool_progress_label(name, args)))
 
-        if allowed_tools is not None and name not in allowed_tools:
+        if _exceeds_call_limit(name, max_calls_by_tool, call_counts):
+            result = (
+                f"Error: tool call limit reached for '{name}'. "
+                "Use another tool or answer from the available results."
+            )
+            success = False
+        elif allowed_tools is not None and name not in allowed_tools:
             result, success = f"Unknown tool: {name}", False
         else:
             result, success = execute_tool(
@@ -220,7 +223,7 @@ def _run_response_blocks(
 
         _emit(on_message, ToolResultMessage(tool=name, success=success, result=result))
         entries.append(build_tool_result_entry(name, args, result))
-    return entries, False
+    return entries
 
 
 def _exceeds_call_limit(

@@ -1,4 +1,6 @@
-from lamia.tools.loop import _exceeds_call_limit
+from pathlib import Path
+
+from lamia.tools.loop import _exceeds_call_limit, _run_response_blocks
 from lamia.tools.parsing import extract_response_blocks
 
 
@@ -33,3 +35,22 @@ def test_response_blocks_keep_assistant_text_between_calls():
         "Now I will update it.\n",
         {"tool": "patch_file", "args": {"path": "one.txt"}},
     ]
+
+
+def test_call_over_limit_is_returned_to_the_model(monkeypatch, tmp_path):
+    emitted = []
+    monkeypatch.setattr("lamia.tools.loop.execute_tool", lambda *args, **kwargs: ("ok", True))
+
+    entries = _run_response_blocks(
+        [{"tool": "read_file", "args": {"path": "a.txt"}}],
+        lamia=None,
+        allowed_tools=None,
+        allowed_dirs=[Path(tmp_path)],
+        restrict_to_allowed_dirs=False,
+        max_calls_by_tool={"read_file": 0},
+        call_counts={},
+        on_message=emitted.append,
+    )
+
+    assert "limit reached" in entries[0]["result"]
+    assert emitted[-1].success is False
