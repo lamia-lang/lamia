@@ -451,15 +451,20 @@ answer = answer_question(question="What are my main skills?")
 class TestModelsParameterInFilesContext:
     """Ensure functions with models= default defined inside with files() work correctly."""
 
-    def _lamia_run_call_contains(self, transformed: str, substring: str) -> bool:
-        """Check if substring appears in a lamia.run(...) call line."""
+    def _llm_call_contains(self, transformed: str, substring: str) -> bool:
+        """Check if substring appears in the generated LLM call line.
+
+        Inside a ``with files()`` block the call goes through the file-tools
+        runner instead of straight to the facade.
+        """
+        call_markers = ("lamia.run(", "lamia.run_async(", "run_with_file_tools")
         for line in transformed.splitlines():
-            if "lamia.run(" in line and substring in line:
+            if any(marker in line for marker in call_markers) and substring in line:
                 return True
         return False
 
     def test_models_string_default_uses_variable_ref(self):
-        """models='openai:gpt-4' default: lamia.run() must use models=models, not the constant."""
+        """models='openai:gpt-4' default: the LLM call must use models=models, not the constant."""
         src = """
 with files("~/Documents/"):
     def compare(models="openai:gpt-4"):
@@ -467,8 +472,8 @@ with files("~/Documents/"):
 result = compare()
 """
         t = _transform(src)
-        assert self._lamia_run_call_contains(t, "models=models")
-        assert not self._lamia_run_call_contains(t, "models='openai:gpt-4'")
+        assert self._llm_call_contains(t, "models=models")
+        assert not self._llm_call_contains(t, "models='openai:gpt-4'")
         assert _has_capture(t)
         ast.parse(t)
 
@@ -485,7 +490,7 @@ name = get_name()
         assert code is not None
 
     def test_models_list_default_uses_variable_ref(self):
-        """models=['a', 'b'] default: lamia.run() must reference the variable."""
+        """models=['a', 'b'] default: the LLM call must reference the variable."""
         src = """
 with files("~/Documents/"):
     def extract(models=["openai:gpt-4", "anthropic:claude-3"]):
@@ -493,19 +498,19 @@ with files("~/Documents/"):
 result = extract()
 """
         t = _transform(src)
-        assert self._lamia_run_call_contains(t, "models=models")
+        assert self._llm_call_contains(t, "models=models")
         assert _has_capture(t)
         ast.parse(t)
 
     def test_models_none_default_uses_variable_ref(self):
-        """models=None still injects models=models into lamia.run()."""
+        """models=None still injects models=models into the LLM call."""
         src = """
 with files("~/Documents/"):
     def run_task(models=None):
         "Run the task with {@context.txt}"
 """
         t = _transform(src)
-        assert self._lamia_run_call_contains(t, "models=models")
+        assert self._llm_call_contains(t, "models=models")
         ast.parse(t)
 
     def test_models_outside_with_also_uses_variable_ref(self):
@@ -515,8 +520,8 @@ def summarize(models="openai:gpt-4"):
     "Summarize this document"
 """
         t = _transform(src)
-        assert self._lamia_run_call_contains(t, "models=models")
-        assert not self._lamia_run_call_contains(t, "models='openai:gpt-4'")
+        assert self._llm_call_contains(t, "models=models")
+        assert not self._llm_call_contains(t, "models='openai:gpt-4'")
         ast.parse(t)
 
     def test_define_inside_with_models_and_params(self):
@@ -528,7 +533,7 @@ with files("~/Documents/"):
 result = answer(question="What are my skills?")
 """
         t = _transform(src)
-        assert self._lamia_run_call_contains(t, "models=models")
+        assert self._llm_call_contains(t, "models=models")
         assert _has_capture(t)
         assert _has_enter_exit(t)
         ast.parse(t)

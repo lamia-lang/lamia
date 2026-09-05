@@ -1,6 +1,6 @@
 """Tests for web_fetch tool using Lamia HTTP actions."""
 
-from lamia.cli.tools import ToolName, _web_fetch, execute_tool
+from lamia.tools.dispatch import ToolName, _web_fetch, execute_tool
 from lamia.interpreter.commands import WebActionType
 
 
@@ -60,7 +60,7 @@ class TestWebFetch:
     def test_execute_tool_routes_web_fetch(self):
         lamia = DummyLamia("hello")
         result, success = execute_tool(
-            ToolName.WEB_FETCH, {"url": "https://example.com"}, ".", lamia=lamia
+            ToolName.WEB_FETCH, {"url": "https://example.com"}, lamia=lamia
         )
         assert success
         assert result == "hello"

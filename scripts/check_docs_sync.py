@@ -15,7 +15,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from lamia.cli.tools import TOPIC_TO_FILE  # noqa: E402
+from lamia.tools.definitions import TOPIC_TO_FILE  # noqa: E402
 
 SKIP_PATTERNS = {"index.md", "reference/"}
 
@@ -66,7 +66,7 @@ def main() -> int:
         stem = Path(doc_file).stem
         print(f'  - {doc_file}  (suggested alias: "{stem}")')
     print()
-    print("Add mappings to lamia/cli/tools.py TOPIC_TO_FILE dict.")
+    print("Add mappings to lamia/tools/definitions.py TOPIC_TO_FILE dict.")
     return 1
 
 

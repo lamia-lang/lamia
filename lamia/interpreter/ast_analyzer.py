@@ -189,8 +189,11 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
     
     if FILES_NAMESPACE in used_namespaces:
         from lamia.engine.managers.llm.files_context_manager import files, capture_files_context
+        from lamia.tools.file_context import run_with_file_tools, run_with_file_tools_sync
         execution_globals[FILES_NAMESPACE] = files
         execution_globals['capture_files_context'] = capture_files_context
+        execution_globals['run_with_file_tools'] = run_with_file_tools
+        execution_globals['run_with_file_tools_sync'] = run_with_file_tools_sync
     
     # Always inject InputType for form automation
     from lamia.types import InputType, schedule

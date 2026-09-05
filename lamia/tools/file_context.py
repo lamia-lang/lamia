@@ -1,23 +1,27 @@
-"""Sandboxed read-only tool executor for ``with files()`` contexts.
+"""File discovery for ``with files()`` contexts.
 
-Only exposes list_files, read_file, and glob — all restricted to
-the directories declared in the active files context.
+Runs LLM calls made inside a files context.  Exploration uses the ordinary
+read-only tools — list_files, read_file and glob — scoped to the paths the
+context declares and refused anywhere outside them.
 """
 
 from __future__ import annotations
 
-import fnmatch
 import os
 from pathlib import Path
+from typing import Any, TYPE_CHECKING
 
+from lamia.async_bridge import EventLoopManager
+from lamia.engine.managers.llm.files_context_manager import get_active_files_context
 from lamia.tools.definitions import (
-    ToolName,
     FILE_CONTEXT_TOOL_DEFINITIONS,
-    MAX_FILE_CONTEXT_READ_CHARS,
-    MAX_FILE_CONTEXT_LIST_DEPTH,
+    FILE_CONTEXT_TOOL_MAX_ROUNDS,
+    FILE_CONTEXT_TOOL_NAMES,
 )
+from lamia.tools.loop import run_tool_loop
 
-_SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv", ".tox", ".mypy_cache"}
+if TYPE_CHECKING:
+    from lamia.facade.lamia import Lamia
 
 
 def build_file_context_tools_prompt() -> str:
@@ -40,123 +44,40 @@ def build_file_context_tools_prompt() -> str:
     )
 
 
-class FileContextToolExecutor:
-    """Executes read-only file tools restricted to allowed file-context roots."""
+async def run_with_file_tools(lamia: "Lamia", prompt: str, **run_kwargs: Any) -> Any:
+    """Run one LLM call made inside a ``with files()`` block.
 
-    def __init__(self, allowed_paths: tuple[str, ...]):
-        self.allowed_roots: list[Path] = []
-        for path in allowed_paths:
-            self.allowed_roots.append(Path(os.path.expanduser(path)).resolve())
+    A context that names only files has nothing to discover, so their content
+    is appended to the prompt and the call runs normally.  A context holding a
+    directory runs a tool loop instead, letting the model list and read its way
+    through the files it needs.
 
-    def execute(self, tool_name: str, args: dict) -> str:
-        if tool_name == ToolName.LIST_FILES:
-            return self._list_files(args.get("directory", "."))
-        if tool_name == ToolName.READ_FILE:
-            return self._read_file(args.get("path", ""))
-        if tool_name == ToolName.GLOB:
-            return self._glob(args.get("pattern", ""))
-        return f"Error: unknown tool '{tool_name}'"
+    *run_kwargs* are forwarded to :meth:`Lamia.run_async` — the tool rounds
+    themselves run untyped, and a requested ``return_type`` is applied by a
+    final call over the prompt the loop accumulated.
+    """
+    context = get_active_files_context()
+    if context is None or not context.indexed_files:
+        return await lamia.run_async(prompt, **run_kwargs)
 
-    def _validate_path(self, path_str: str) -> Path:
-        if not path_str:
-            if self.allowed_roots:
-                return self.allowed_roots[0]
-            raise PermissionError("No allowed paths configured")
+    if context.has_only_explicit_files:
+        return await lamia.run_async(context.append_indexed_files(prompt), **run_kwargs)
 
-        candidate = Path(path_str)
+    loop_result = await run_tool_loop(
+        lamia,
+        build_file_context_tools_prompt() + "\n\n" + prompt,
+        allowed_tools=FILE_CONTEXT_TOOL_NAMES,
+        allowed_dirs=[Path(os.path.expanduser(path)) for path in context.paths],
+        restrict_to_allowed_dirs=True,
+        max_rounds=FILE_CONTEXT_TOOL_MAX_ROUNDS,
+    )
+    if run_kwargs.get("return_type") is None:
+        if run_kwargs.get("_full_result"):
+            return loop_result.result
+        return loop_result.result.result_text
+    return await lamia.run_async(loop_result.prompt, **run_kwargs)
 
-        if not candidate.is_absolute():
-            for root in self.allowed_roots:
-                resolved = (root / candidate).resolve()
-                if resolved.exists() and self._is_under_allowed(resolved):
-                    return resolved
-            resolved = (self.allowed_roots[0] / candidate).resolve()
-            if self._is_under_allowed(resolved):
-                return resolved
-            raise PermissionError(f"Access denied: '{path_str}' is outside the allowed file context")
 
-        resolved = candidate.resolve()
-        if not self._is_under_allowed(resolved):
-            raise PermissionError(f"Access denied: '{path_str}' is outside the allowed file context")
-        return resolved
-
-    def _is_under_allowed(self, resolved: Path) -> bool:
-        for root in self.allowed_roots:
-            try:
-                resolved.relative_to(root)
-                return True
-            except ValueError:
-                continue
-        return False
-
-    def _list_files(self, directory: str) -> str:
-        try:
-            resolved = self._validate_path(directory)
-        except PermissionError as exc:
-            return str(exc)
-
-        if not resolved.is_dir():
-            return f"Not a directory: {directory}"
-
-        lines: list[str] = []
-
-        def _walk(dir_path: Path, prefix: str, depth: int) -> None:
-            if depth > MAX_FILE_CONTEXT_LIST_DEPTH:
-                return
-            try:
-                children = sorted(dir_path.iterdir())
-            except OSError:
-                return
-            for entry in children:
-                if entry.name.startswith(".") or entry.name in _SKIP_DIRS:
-                    continue
-                if entry.is_dir():
-                    lines.append(f"{prefix}{entry.name}/")
-                    _walk(entry, prefix + "  ", depth + 1)
-                else:
-                    lines.append(f"{prefix}{entry.name}")
-
-        _walk(resolved, "  ", 0)
-        if not lines:
-            return f"Empty directory: {directory}"
-        return f"{resolved.name}/\n" + "\n".join(lines)
-
-    def _read_file(self, filepath: str) -> str:
-        if not filepath:
-            return "Error: path is required"
-        try:
-            resolved = self._validate_path(filepath)
-        except PermissionError as exc:
-            return str(exc)
-        if not resolved.is_file():
-            return f"File not found: {filepath}"
-        try:
-            content = resolved.read_text(encoding="utf-8", errors="replace")
-        except OSError as exc:
-            return f"Error reading file: {exc}"
-        if len(content) > MAX_FILE_CONTEXT_READ_CHARS:
-            content = content[:MAX_FILE_CONTEXT_READ_CHARS] + f"\n\n... (truncated, total {len(content)} chars)"
-        return content
-
-    def _glob(self, pattern: str) -> str:
-        if not pattern:
-            return "Error: pattern is required"
-        matches: list[str] = []
-        for sub_pattern in pattern.split("|"):
-            sub_pattern = sub_pattern.strip()
-            for root in self.allowed_roots:
-                if not root.is_dir():
-                    continue
-                for match in root.rglob("*"):
-                    if not match.is_file():
-                        continue
-                    rel_parts = match.relative_to(root).parts
-                    if any(p in _SKIP_DIRS or p.startswith(".") for p in rel_parts):
-                        continue
-                    rel_path = str(match.relative_to(root))
-                    if fnmatch.fnmatch(rel_path, sub_pattern) or fnmatch.fnmatch(match.name, sub_pattern):
-                        if rel_path not in matches:
-                            matches.append(rel_path)
-        if not matches:
-            return f"No files matching '{pattern}'"
-        return "\n".join(sorted(matches))
+def run_with_file_tools_sync(lamia: "Lamia", prompt: str, **run_kwargs: Any) -> Any:
+    """Synchronous entry point for :func:`run_with_file_tools`."""
+    return EventLoopManager.run_coroutine(run_with_file_tools(lamia, prompt, **run_kwargs))

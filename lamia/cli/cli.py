@@ -36,12 +36,8 @@ from lamia.adapters.llm.base import sanitize_api_error
 from lamia.errors import LLMProviderError
 from lamia.actions.trigger import TriggerRejectError, TRIGGER_REJECT_EXIT_CODE
 from lamia.scheduling.registry import record_run, load_job
-from lamia.tools.loop import (
-    process_response as _process_response,
-    build_continuation_prompt as _build_continuation_prompt,
-    build_correction_prompt as _build_correction_prompt,
-)
-from lamia.tools.parsing import build_tool_result_entry as _build_tool_result_entry
+from lamia.tools.loop import run_tool_loop, AssistantMessage, ToolCallMessage, ToolResultMessage
+from lamia.tools.definitions import ToolName
 
 HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
@@ -195,6 +191,36 @@ def _friendly_error(raw: str) -> str:
     return msg
 
 
+def _json_write_tool_message(message) -> None:
+    """Forward tool-loop messages to the IDE as protocol events.
+
+    Assistant text is emitted before tool activity so an IDE can show progress
+    such as an explanation of the work about to be performed.
+    """
+    if isinstance(message, AssistantMessage):
+        if message.text.strip():
+            _json_write({"type": "assistant_message", "text": message.text})
+    elif isinstance(message, ToolCallMessage):
+        _json_write({
+            "type": "tool_use",
+            "tool": message.tool,
+            "args": message.args,
+            "label": message.label,
+        })
+    elif isinstance(message, ToolResultMessage):
+        evt: dict = {
+            "type": "tool_result",
+            "tool": message.tool,
+            "success": message.success,
+        }
+        if not message.success:
+            evt["error"] = _friendly_error(message.result)
+        _json_write(evt)
+    else:
+        if message.text.strip():
+            _json_write({"type": "uncategorized", "text": message.text})
+
+
 def _make_json_error(exc: Exception) -> dict:
     """Build a typed JSON error payload for IDE/JSON callers."""
     pe = LLMProviderError.from_exception(exc)
@@ -233,7 +259,7 @@ async def json_mode(lamia: Lamia) -> None:
     Error    : {"type": "error", "message": "..."}
     Ready    : {"type": "ready"}  (sent once after startup)
     """
-    from lamia.cli.tools import execute_tool, get_tools_system_prompt, reset_file_writes, get_file_writes, tool_progress_label, ToolName
+    from lamia.tools.dispatch import get_tools_system_prompt, reset_file_writes, get_file_writes
 
     MAX_TOOL_ROUNDS = 50
     tools_prompt = get_tools_system_prompt()
@@ -302,91 +328,33 @@ async def json_mode(lamia: Lamia) -> None:
                 prompt = prompt + "\n\n<attached_files>\n" + "\n".join(file_sections) + "\n</attached_files>"
 
         try:
-            response_to_caller_text = "" # responce of the execution to the m2m callee e.g. to The Lamia IDE
-            model_name = None
-            total_tokens: dict = {}
             reset_file_writes()
 
-            MAX_SAME_FILE_WRITES = 3
+            max_calls_by_tool = {
+                ToolName.WRITE_FILE: 3,
+                ToolName.PATCH_FILE: 3,
+            }
 
-            write_counts: dict[str, int] = {}
+            loop_result = await run_tool_loop(
+                lamia,
+                prompt,
+                allowed_dirs=[Path(os.getcwd())],
+                max_rounds=MAX_TOOL_ROUNDS,
+                max_calls_by_tool=max_calls_by_tool,
+                on_message=_json_write_tool_message,
+            )
 
-            for _round in range(MAX_TOOL_ROUNDS + 1):
-                is_last = _round >= MAX_TOOL_ROUNDS
-                result = await lamia.run_async(prompt, _full_result=True)
-
-                ctx = result.tracking_context
-                if ctx and ctx.data_provider_name:
-                    model_name = ctx.data_provider_name
-                if ctx and ctx.metadata and "usage" in ctx.metadata:
-                    usage = ctx.metadata["usage"]
-                    inp = usage.get("prompt_tokens") or usage.get("input_tokens", 0)
-                    out = usage.get("completion_tokens") or usage.get("output_tokens", 0)
-                    total_tokens["input"] = total_tokens.get("input", 0) + inp
-                    total_tokens["output"] = total_tokens.get("output", 0) + out
-                    total_tokens["total"] = total_tokens["input"] + total_tokens["output"]
-
-                text = result.result_text or ""
-                tool_calls, is_malformed, clean_text = _process_response(text)
-
-                if not tool_calls:
-                    if is_malformed and not is_last:
-                        logger.debug("Malformed tool call detected, sending correction")
-                        prompt = _build_correction_prompt(prompt, text)
-                        continue
-                    response_to_caller_text = clean_text
-                    break
-
-                tool_result_entries: list[dict[str, object]] = []
-                should_break = False
-                for tool_call in tool_calls:
-                    tool_name = tool_call.get("tool", "")
-                    tool_args = tool_call.get("args", {})
-                    logger.debug(f"Tool call: {tool_name}({tool_args})")
-
-                    if tool_name in (ToolName.WRITE_FILE, ToolName.PATCH_FILE):
-                        target = tool_args.get("path", "")
-                        write_counts[target] = write_counts.get(target, 0) + 1
-                        if write_counts[target] > MAX_SAME_FILE_WRITES:
-                            logger.warning(
-                                "Loop detected: %s written %d times, breaking",
-                                target, write_counts[target],
-                            )
-                            response_to_caller_text = clean_text
-                            should_break = True
-                            break
-
-                    _json_write({
-                        "type": "tool_use",
-                        "tool": tool_name,
-                        "args": tool_args,
-                        "label": tool_progress_label(tool_name, tool_args),
-                    })
-                    tool_result, tool_success = execute_tool(tool_name, tool_args, os.getcwd(), lamia=lamia)
-                    evt: dict = {
-                        "type": "tool_result",
-                        "tool": tool_name,
-                        "success": tool_success,
-                    }
-                    if not tool_success:
-                        evt["error"] = _friendly_error(tool_result)
-                    _json_write(evt)
-                    tool_result_entries.append(
-                        _build_tool_result_entry(tool_name, tool_args, tool_result)
-                    )
-
-                if should_break:
-                    break
-
-                if not is_last:
-                    if tool_result_entries:
-                        prompt = _build_continuation_prompt(prompt, text, tool_result_entries)
-                    else:
-                        break
-                    continue
-
-                response_to_caller_text = clean_text
-                break
+            response_to_caller_text = loop_result.result.result_text or ""
+            ctx = loop_result.result.tracking_context
+            model_name = ctx.data_provider_name if ctx else None
+            total_tokens = {}
+            if ctx and ctx.metadata and "usage" in ctx.metadata:
+                usage = ctx.metadata["usage"]
+                total_tokens = {
+                    "input": usage.get("prompt_tokens", 0),
+                    "output": usage.get("completion_tokens", 0),
+                    "total": usage.get("total_tokens", 0),
+                }
 
             response: dict = {"type": "response", "text": response_to_caller_text}
             if model_name:
@@ -1126,4 +1094,4 @@ def _log_external_error(prefix: str, exc: Exception) -> None:
         logger.debug(traceback.format_exc())
 
 if __name__ == "__main__":
-    main() 
+    main()

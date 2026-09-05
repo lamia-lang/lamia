@@ -477,6 +477,7 @@ _SKIP_NAMES = frozenset([
     "ConfigDict", "computed_field", "PrivateAttr",
     # Lamia context managers and builtins
     "files", "session", "File", "capture_files_context",
+    "run_with_file_tools", "run_with_file_tools_sync",
     # Lamia validation types
     "JSON", "YAML", "XML", "HTML", "CSV", "Markdown", "TEXT", "TXT",
     # Python stdlib commonly used in .lm files

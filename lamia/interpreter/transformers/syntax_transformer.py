@@ -1069,21 +1069,37 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             return None
         return ast.keyword(arg='return_type', value=return_type_node)
     
+    def _build_llm_call(self, args, keywords, is_async: bool) -> ast.expr:
+        """Build the LLM call for a generated function body.
+
+        Inside a ``with files()`` block the call is routed through the
+        file-tools runner, which lets the model explore the context before
+        answering.  Everywhere else it goes straight to the facade.
+        """
+        if self._current_files_ctx_var:
+            runner = 'run_with_file_tools' if is_async else 'run_with_file_tools_sync'
+            call = ast.Call(
+                func=ast.Name(id=runner, ctx=ast.Load()),
+                args=[ast.Name(id=self.lamia_var_name, ctx=ast.Load())] + list(args),
+                keywords=list(keywords),
+            )
+        else:
+            call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                    attr='run_async' if is_async else 'run',
+                    ctx=ast.Load(),
+                ),
+                args=list(args),
+                keywords=list(keywords),
+            )
+        return ast.Await(value=call) if is_async else call
+
     def _build_async_lamia_function(self, node, args, keywords) -> ast.AsyncFunctionDef:
         """Build async function with lamia.run_async() call."""
         call_keywords = list(keywords)
         call_keywords.append(ast.keyword(arg='_function_name', value=ast.Constant(value=node.name)))
-        lamia_call = ast.Await(
-            value=ast.Call(
-                func=ast.Attribute(
-                    value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
-                    attr='run_async',
-                    ctx=ast.Load()
-                ),
-                args=args,
-                keywords=call_keywords
-            )
-        )
+        lamia_call = self._build_llm_call(args, call_keywords, is_async=True)
         body: List[ast.stmt] = [ast.Return(value=lamia_call)]
         if self._current_files_ctx_var:
             body = self._build_files_context_wrapped_body(body, self._current_files_ctx_var)
@@ -1102,15 +1118,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         """Build sync function with lamia.run() call."""
         call_keywords = list(keywords)
         call_keywords.append(ast.keyword(arg='_function_name', value=ast.Constant(value=node.name)))
-        lamia_call = ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
-                attr='run',
-                ctx=ast.Load()
-            ),
-            args=args,
-            keywords=call_keywords
-        )
+        lamia_call = self._build_llm_call(args, call_keywords, is_async=False)
         body: List[ast.stmt] = [ast.Return(value=lamia_call)]
         if self._current_files_ctx_var:
             body = self._build_files_context_wrapped_body(body, self._current_files_ctx_var)
@@ -1265,17 +1273,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             ]
 
         # Step 1 – execute the command
-        lamia_call = ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
-                attr=method,
-                ctx=ast.Load(),
-            ),
-            args=args,
-            keywords=keywords,
-        )
-        if is_async:
-            lamia_call = ast.Await(value=lamia_call)
+        lamia_call = self._build_llm_call(args, keywords, is_async)
 
         assign_stmt = ast.Assign(
             targets=[ast.Name(id=tmp_var, ctx=ast.Store())],

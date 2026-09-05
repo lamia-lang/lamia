@@ -212,6 +212,13 @@ class FilesContext:
         self.indexed_files: List[str] = []
         self._entered = False
     
+    @property
+    def has_only_explicit_files(self) -> bool:
+        """True when every path names a file, so there is no directory to explore."""
+        return bool(self.paths) and all(
+            Path(os.path.expanduser(p)).resolve().is_file() for p in self.paths
+        )
+
     def __enter__(self):
         """Load files on context enter."""
         self.indexed_files = self._index_files(self.paths)
@@ -338,6 +345,31 @@ class FilesContext:
         """Read file content with appropriate extraction."""
         return read_file_content(filepath)
     
+    def append_indexed_files(self, prompt: str) -> str:
+        """Append the content of every indexed file to *prompt*.
+
+        Files the prompt already references with ``{@filename}`` are skipped;
+        :meth:`inject_file_references` puts their content in place instead.
+        """
+        already_referenced = set()
+        for ref in _FILE_REF_RE.findall(prompt):
+            try:
+                already_referenced.add(self.resolve_file_reference(ref.strip()))
+            except (FileReferenceError, AmbiguousFileError):
+                continue
+
+        sections = []
+        for filepath in self.indexed_files:
+            if filepath in already_referenced:
+                continue
+            try:
+                content = self.read_file_content(filepath)
+            except Exception as e:
+                logger.error(f"Error reading '{filepath}' for files context: {e}")
+                continue
+            sections.append(f"\n\n--- {os.path.basename(filepath)} ---\n{content}\n")
+        return prompt + "".join(sections)
+
     def inject_file_references(self, prompt: str) -> str:
         """Replace {@filename} references with actual file content.
         

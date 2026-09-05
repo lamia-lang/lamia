@@ -1,6 +1,5 @@
 """Handle `lamia <script> --remote` — one-shot remote cloud execution."""
 
-import ast
 import hashlib
 import os
 import re
@@ -15,7 +14,7 @@ from lamia.id_gen import generate_deterministic_id
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
 from lamia.deploy_secrets import resolve_deploy_secrets
 from lamia.triggers.extraction import extract_all_triggers
-from lamia.cli.script_analysis import analyze_script
+from lamia.cli.script_analysis import analyze_script, extract_script_models
 from lamia_cloud import get_connector, get_deployer, get_llm_router, get_trigger_provider
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.types import TriggerDeploymentPlan
@@ -166,37 +165,6 @@ def _resolve_deploy_mode(
     return "local", None
 
 
-def _extract_script_models(script_path: Path) -> set[tuple[str, str]]:
-    """Extract (provider, model) pairs from models= parameters in .lm script functions."""
-    models: set[tuple[str, str]] = set()
-    try:
-        source = script_path.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-    except Exception:
-        return models
-
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef):
-            continue
-        for arg, default in zip(
-            reversed(node.args.args), reversed(node.args.defaults)
-        ):
-            if arg.arg != "models":
-                continue
-            raw_values: list[str] = []
-            if isinstance(default, ast.Constant) and isinstance(default.value, str):
-                raw_values.append(default.value)
-            elif isinstance(default, (ast.List, ast.Tuple)):
-                for elt in default.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                        raw_values.append(elt.value)
-            for val in raw_values:
-                if ":" in val:
-                    provider, model_name = val.split(":", 1)
-                    models.add((provider.strip(), model_name.strip()))
-    return models
-
-
 def _check_cloud_model_access(
     config: Optional[dict],
     project_root: Path,
@@ -225,7 +193,7 @@ def _check_cloud_model_access(
         pass
 
     if script_path and script_path.exists():
-        all_models.update(_extract_script_models(script_path))
+        all_models.update(extract_script_models(script_path))
 
     if not all_models:
         return

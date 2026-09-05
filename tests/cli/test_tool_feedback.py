@@ -1,11 +1,11 @@
-"""Tests for cross-file entity reference feedback in CLI tools."""
+"""Tests for cross-file entity reference feedback in tools."""
 
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from lamia.cli.tools import (
+from lamia.tools.dispatch import (
     entity_reference_feedback,
     entity_references_footer,
     FileAction,
@@ -139,7 +139,7 @@ class TestToolIntegration:
         _write(project_dir, "team/helper.hu", "{task}")
         _write(project_dir, "main.lm", "r = helper(task=t)")
 
-        result = _read_file("team/helper.hu", project_dir)
+        result = _read_file("team/helper.hu", (Path(project_dir),))
         assert "Referenced by" in result
 
     def test_write_file_includes_entity_ref_warning(self, project_dir):

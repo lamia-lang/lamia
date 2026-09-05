@@ -1,8 +1,12 @@
-"""Agentic tools for lamia interactive/json mode.
+"""Tool execution.
 
 Tool definitions live in ``lamia.tools.definitions``; this module provides
-the execution logic and CLI-specific helpers (file writes tracking, linting
-feedback, browser lifecycle, etc.).
+the execution logic for every tool, plus the helpers around it (file writes
+tracking, linting feedback, browser lifecycle, etc.).
+
+Read-only path tools resolve against explicitly supplied allowed directories rather than a single directory,
+so a caller can scope them to several directories and, with
+``restrict_to_allowed_dirs``, refuse anything outside them.
 """
 import enum
 import json
@@ -13,7 +17,7 @@ import logging
 import re
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 from lamia.actions.http import HttpActions
 from lamia.interpreter.commands import WebCommand, WebActionType
@@ -24,10 +28,8 @@ from lamia.lint import HuLinter, LmLinter
 from lamia.tools.definitions import (
     ToolName,
     TOOL_DEFINITIONS,
-    TOOL_LABELS,
     TOPIC_TO_FILE,
     MAX_READ_CHUNK_CHARS,
-    tool_progress_label,
 )
 
 
@@ -73,9 +75,79 @@ def _find_docs_dir() -> Optional[Path]:
     return None
 
 
-def execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> tuple[str, bool]:
-    """Execute a tool by name and return (result_text, success)."""
-    result = _execute_tool(name, args, cwd, lamia)
+def _normalize_roots(roots: Sequence[Path]) -> tuple[Path, ...]:
+    """Expand and resolve *roots*, falling back to the process directory."""
+    resolved = tuple(
+        Path(os.path.expanduser(str(root))).resolve() for root in roots
+    )
+    return resolved or (Path(os.getcwd()).resolve(),)
+
+
+def _resolve_in_roots(
+    path_str: str,
+    roots: tuple[Path, ...],
+    restrict_to_roots: bool,
+) -> Path:
+    """Resolve a tool path argument against *roots*.
+
+    A relative path is tried against each root in turn and resolves to the
+    first that exists, falling back to the first root.  With
+    *restrict_to_roots*, anything landing outside every root raises
+    ``PermissionError`` instead.
+    """
+    def contained(candidate: Path) -> bool:
+        return any(candidate == root or root in candidate.parents for root in roots)
+
+    def check(candidate: Path) -> Path:
+        if restrict_to_roots and not contained(candidate):
+            raise PermissionError(f"'{path_str}' is outside the allowed file context")
+        return candidate
+
+    if not path_str:
+        return roots[0]
+
+    candidate = Path(os.path.expanduser(path_str))
+    if candidate.is_absolute():
+        return check(candidate.resolve())
+
+    for root in roots:
+        resolved = (root / candidate).resolve()
+        if resolved.exists() and (not restrict_to_roots or contained(resolved)):
+            return resolved
+    return check((roots[0] / candidate).resolve())
+
+
+def _display_path(resolved: Path, roots: tuple[Path, ...], restrict_to_roots: bool) -> str:
+    """Render a path for tool output.
+
+    Enforced roots are a sandbox, so paths are shown relative to them rather
+    than exposing where the context sits on disk.
+    """
+    if not restrict_to_roots:
+        return str(resolved)
+    for root in roots:
+        if resolved == root:
+            return resolved.name
+        if root in resolved.parents:
+            return str(resolved.relative_to(root))
+    return resolved.name
+
+
+def execute_tool(
+    name: str,
+    args: dict,
+    allowed_dirs: Sequence[Path] = (),
+    lamia=None,
+    restrict_to_allowed_dirs: bool = False,
+) -> tuple[str, bool]:
+    """Execute a tool by name and return (result_text, success).
+
+    *allowed_dirs* are the directories path arguments resolve against; the first is
+    the working directory for tools that need a single one.  With
+    *restrict_to_allowed_dirs*, path tools refuse anything resolving outside them.
+    """
+    resolved_roots = _normalize_roots(allowed_dirs)
+    result = _execute_tool(name, args, resolved_roots, lamia, restrict_to_allowed_dirs)
     success = not (
         result.startswith("Error")
         or result.startswith("File not found")
@@ -84,18 +156,25 @@ def execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> tuple[str
     return result, success
 
 
-def _execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
+def _execute_tool(
+    name: str,
+    args: dict,
+    roots: tuple[Path, ...],
+    lamia=None,
+    restrict_to_roots: bool = False,
+) -> str:
     """Internal: execute a tool and return raw result string."""
+    cwd = str(roots[0])
     if name == ToolName.GET_DOCS:
         return _get_docs(args.get("topic", ""))
     elif name == ToolName.READ_FILE:
         return _read_file(
-            args.get("path", ""), cwd,
+            args.get("path", ""), roots, restrict_to_roots,
             offset=int(args.get("offset", 0)),
             chunk_size=int(args.get("chunk_size", 0)),
         )
     elif name == ToolName.LIST_FILES:
-        return _list_files(args.get("directory", "."), cwd)
+        return _list_files(args.get("directory", "."), roots, restrict_to_roots)
     elif name == ToolName.WRITE_FILE:
         return _write_file(args.get("path", ""), args.get("content", ""), cwd)
     elif name == ToolName.PATCH_FILE:
@@ -118,7 +197,7 @@ def _execute_tool(name: str, args: dict, cwd: str = ".", lamia=None) -> str:
     elif name == ToolName.GREP:
         return _grep(args.get("pattern", ""), args.get("directory", "."), args.get("include", ""), cwd)
     elif name == ToolName.GLOB:
-        return _glob(args.get("pattern", ""), args.get("directory", "."), cwd)
+        return _glob(args.get("pattern", ""), args.get("directory", "."), roots, restrict_to_roots)
     elif name == ToolName.WEB_FETCH:
         return _web_fetch(args.get("url", ""), lamia)
     elif name == ToolName.LINT_CODE:
@@ -159,26 +238,37 @@ def _get_docs(topic: str) -> str:
         return f"Error reading docs: {exc}"
 
 
-def _read_file(filepath: str, cwd: str, offset: int = 0, chunk_size: int = 0) -> str:
+def _read_file(
+    filepath: str,
+    roots: tuple[Path, ...],
+    restrict_to_roots: bool = False,
+    offset: int = 0,
+    chunk_size: int = 0,
+) -> str:
     if not filepath:
         return "Error: path is required"
 
-    resolved = Path(filepath) if os.path.isabs(filepath) else Path(cwd) / filepath
+    try:
+        resolved = _resolve_in_roots(filepath, roots, restrict_to_roots)
+    except PermissionError as exc:
+        return f"Error: {exc}"
+
     if resolved.exists() and resolved.is_dir():
         return (
-            f"Error: path is a directory, not a file: {resolved}\n\n"
+            f"Error: path is a directory, not a file: {_display_path(resolved, roots, restrict_to_roots)}\n\n"
             "Use list_files to inspect directory contents."
         )
     if not resolved.is_file():
-        basename = resolved.name
         candidates = []
-        search_root = Path(cwd)
-        for match in search_root.rglob(basename):
-            if match.is_file() and not any(p in _SKIP_DIRS for p in match.parts):
-                candidates.append(str(match))
-                if len(candidates) >= 5:
-                    break
-        msg = f"Error: file not found: {resolved}"
+        for root in roots:
+            for match in root.rglob(resolved.name):
+                if match.is_file() and not any(p in _SKIP_DIRS for p in match.parts):
+                    candidates.append(_display_path(match, roots, restrict_to_roots))
+                    if len(candidates) >= 5:
+                        break
+            if len(candidates) >= 5:
+                break
+        msg = f"Error: file not found: {_display_path(resolved, roots, restrict_to_roots)}"
         if candidates:
             msg += "\n\nDid you mean:\n" + "\n".join(f"  - {c}" for c in candidates)
         msg += "\n\nUse list_files to explore the directory structure."
@@ -204,7 +294,7 @@ def _read_file(filepath: str, cwd: str, offset: int = 0, chunk_size: int = 0) ->
                 f"Call read_file with offset={end_offset} to continue. ---"
             )
 
-        footer = entity_references_footer(resolved, cwd)
+        footer = entity_references_footer(resolved, str(roots[0]))
         if footer:
             content += footer
         return content
@@ -215,10 +305,13 @@ def _read_file(filepath: str, cwd: str, offset: int = 0, chunk_size: int = 0) ->
 _SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv", ".tox", ".mypy_cache"}
 
 
-def _list_files(directory: str, cwd: str) -> str:
-    resolved = Path(directory) if os.path.isabs(directory) else Path(cwd) / directory
+def _list_files(directory: str, roots: tuple[Path, ...], restrict_to_roots: bool = False) -> str:
+    try:
+        resolved = _resolve_in_roots(directory, roots, restrict_to_roots)
+    except PermissionError as exc:
+        return f"Error: {exc}"
     if not resolved.is_dir():
-        return f"Directory not found: {resolved}"
+        return f"Directory not found: {_display_path(resolved, roots, restrict_to_roots)}"
 
     MAX_DEPTH = 4
     lines: list = []
@@ -242,9 +335,9 @@ def _list_files(directory: str, cwd: str) -> str:
     _walk(resolved, "  ", 0)
 
     if not lines:
-        return f"Empty directory: {resolved}"
+        return f"Empty directory: {_display_path(resolved, roots, restrict_to_roots)}"
 
-    return f"{resolved}/\n" + "\n".join(lines)
+    return f"{_display_path(resolved, roots, restrict_to_roots)}/\n" + "\n".join(lines)
 
 
 _hu_linter = HuLinter()
@@ -821,37 +914,59 @@ def _grep(pattern: str, directory: str, include: str, cwd: str) -> str:
     return output
 
 
-def _glob(pattern: str, directory: str, cwd: str) -> str:
+def _glob(
+    pattern: str,
+    directory: str,
+    roots: tuple[Path, ...],
+    restrict_to_roots: bool = False,
+) -> str:
     if not pattern:
         return "Error: pattern is required"
 
-    search_dir = Path(directory) if os.path.isabs(directory) else Path(cwd) / directory
-    if not search_dir.is_dir():
-        return f"Directory not found: {search_dir}"
+    search_dirs: list[Path] = []
+    if directory and directory != ".":
+        try:
+            search_dirs.append(_resolve_in_roots(directory, roots, restrict_to_roots))
+        except PermissionError as exc:
+            return f"Error: {exc}"
+    else:
+        search_dirs.extend(roots)
+    search_dirs = [d for d in search_dirs if d.is_dir()]
+    if not search_dirs:
+        return f"Directory not found: {directory}"
 
     MAX_RESULTS = 200
-    seen: set[str] = set()
-    for sub in pattern.split("|"):
-        for match in glob.glob(sub.strip(), root_dir=str(search_dir), recursive=True):
-            seen.add(match)
-
     matches: list[tuple[float, str]] = []
-    for rel_match in sorted(seen):
-        if any(p in _SKIP_DIRS or p.startswith(".") for p in Path(rel_match).parts):
-            continue
-        abs_path = search_dir / rel_match
-        if not abs_path.is_file():
-            continue
-        try:
-            mtime = abs_path.stat().st_mtime
-        except OSError:
-            mtime = 0
-        matches.append((mtime, os.path.relpath(str(abs_path), cwd)))
+    seen_paths: set[Path] = set()
+    for search_dir in search_dirs:
+        seen: set[str] = set()
+        for sub in pattern.split("|"):
+            for match in glob.glob(sub.strip(), root_dir=str(search_dir), recursive=True):
+                seen.add(match)
+
+        for rel_match in sorted(seen):
+            if any(p in _SKIP_DIRS or p.startswith(".") for p in Path(rel_match).parts):
+                continue
+            abs_path = search_dir / rel_match
+            if not abs_path.is_file() or abs_path in seen_paths:
+                continue
+            seen_paths.add(abs_path)
+            try:
+                mtime = abs_path.stat().st_mtime
+            except OSError:
+                mtime = 0
+            if restrict_to_roots:
+                match_path = _display_path(abs_path, roots, restrict_to_roots)
+            else:
+                match_path = os.path.relpath(str(abs_path), str(roots[0]))
+            matches.append((mtime, match_path))
+            if len(matches) >= MAX_RESULTS:
+                break
         if len(matches) >= MAX_RESULTS:
             break
 
     if not matches:
-        return f"No files matching '{pattern}' in {search_dir}"
+        return f"No files matching '{pattern}'"
 
     matches.sort(key=lambda x: x[0], reverse=True)
     output = "\n".join(p for _, p in matches)

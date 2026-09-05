@@ -24,6 +24,37 @@ def script_capability_field_names() -> tuple[str, ...]:
     return tuple(field.name for field in fields(ScriptCapabilities))
 
 
+def extract_script_models(script_path: Path) -> set[tuple[str, str]]:
+    """Extract (provider, model) pairs from ``models=`` parameters in .lm script functions."""
+    models: set[tuple[str, str]] = set()
+    try:
+        source = script_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except Exception:
+        return models
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for arg, default in zip(
+            reversed(node.args.args), reversed(node.args.defaults)
+        ):
+            if arg.arg != "models":
+                continue
+            raw_values: list[str] = []
+            if isinstance(default, ast.Constant) and isinstance(default.value, str):
+                raw_values.append(default.value)
+            elif isinstance(default, (ast.List, ast.Tuple)):
+                for elt in default.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        raw_values.append(elt.value)
+            for val in raw_values:
+                if ":" in val:
+                    provider, model_name = val.split(":", 1)
+                    models.add((provider.strip(), model_name.strip()))
+    return models
+
+
 def script_writes_files(script_path: Path) -> bool:
     """Whether the script references file-write operations anywhere in source."""
     capabilities = analyze_script(script_path)

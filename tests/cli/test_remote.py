@@ -1079,52 +1079,48 @@ class TestCiCredentialConfig:
         monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
 
 
-@pytest.mark.skipif(
-    importlib.util.find_spec("lamia_cloud") is None,
-    reason="lamia_cloud not installed",
-)
 class TestExtractScriptModels:
-    """Tests for _extract_script_models which parses models= from .lm scripts."""
+    """Tests for extract_script_models which parses models= from .lm scripts."""
 
     def test_single_model(self, tmp_path):
-        from lamia.cli.remote import _extract_script_models
+        from lamia.cli.script_analysis import extract_script_models
         script = tmp_path / "test.lm"
         script.write_text('def my_func(models="openai:gpt-4"):\n    "do stuff"\n')
-        result = _extract_script_models(script)
+        result = extract_script_models(script)
         assert result == {("openai", "gpt-4")}
 
     def test_multiple_functions(self, tmp_path):
-        from lamia.cli.remote import _extract_script_models
+        from lamia.cli.script_analysis import extract_script_models
         script = tmp_path / "test.lm"
         script.write_text(
             'def a(models="google:gemini-2.5-flash"):\n    "a"\n\n'
             'def b(models="mistralai:mistral-small-2503"):\n    "b"\n'
         )
-        result = _extract_script_models(script)
+        result = extract_script_models(script)
         assert ("google", "gemini-2.5-flash") in result
         assert ("mistralai", "mistral-small-2503") in result
 
     def test_list_models(self, tmp_path):
-        from lamia.cli.remote import _extract_script_models
+        from lamia.cli.script_analysis import extract_script_models
         script = tmp_path / "test.lm"
         script.write_text(
             'def my_func(models=["openai:gpt-4", "anthropic:claude-sonnet-4-5"]):\n'
             '    "do stuff"\n'
         )
-        result = _extract_script_models(script)
+        result = extract_script_models(script)
         assert ("openai", "gpt-4") in result
         assert ("anthropic", "claude-sonnet-4-5") in result
 
     def test_no_models_param(self, tmp_path):
-        from lamia.cli.remote import _extract_script_models
+        from lamia.cli.script_analysis import extract_script_models
         script = tmp_path / "test.lm"
         script.write_text('def my_func():\n    "do stuff"\n')
-        result = _extract_script_models(script)
+        result = extract_script_models(script)
         assert result == set()
 
     def test_nonexistent_file(self, tmp_path):
-        from lamia.cli.remote import _extract_script_models
-        result = _extract_script_models(tmp_path / "nope.lm")
+        from lamia.cli.script_analysis import extract_script_models
+        result = extract_script_models(tmp_path / "nope.lm")
         assert result == set()
 
 
