@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Mapping, Optional, Sequence, TYPE_CHECKING
+from typing import Callable, Deque, Mapping, Optional, Sequence, TYPE_CHECKING
 
 from lamia.tools.definitions import (
     tool_progress_label,
 )
 from lamia.tools.dispatch import execute_tool
+from lamia.tools.loop_detection import exceeds_call_limit, history_size
 from lamia.tools.parsing import (
     extract_response_blocks,
     detect_malformed_tool_call,
@@ -117,8 +119,10 @@ async def run_tool_loop(
         restrict_to_allowed_dirs: Refuse path access outside *allowed_dirs*.
             Keep this enabled for untrusted or multi-tenant file contexts.
         max_rounds: Maximum number of LLM calls.
-        max_calls_by_tool: Per-tool call caps. Tools absent from this map are
-            unlimited (apart from *max_rounds*); ``None`` applies no caps.
+        max_calls_by_tool: Per-tool repeat limits, enforced by
+            :mod:`lamia.tools.loop_detection`. Tools absent from this map
+            are unlimited (apart from *max_rounds*); ``None`` applies no
+            caps.
         on_message: Called with each :class:`AssistantMessage`,
             :class:`ToolCallMessage` and :class:`ToolResultMessage` as it
             happens, for callers that report progress.
@@ -130,7 +134,7 @@ async def run_tool_loop(
     totals: dict = {}
     model_name = None
     result = None
-    repeats: dict = {}
+    history: Deque[str] = deque(maxlen=history_size(max_calls_by_tool))
 
     for _round in range(max_rounds + 1):
         is_last = _round >= max_rounds
@@ -159,7 +163,7 @@ async def run_tool_loop(
             allowed_dirs=allowed_dirs,
             restrict_to_allowed_dirs=restrict_to_allowed_dirs,
             max_calls_by_tool=max_calls_by_tool,
-            call_counts=repeats,
+            history=history,
             on_message=on_message,
         )
 
@@ -183,12 +187,13 @@ def _run_response_blocks(
     allowed_dirs: Sequence[Path],
     restrict_to_allowed_dirs: bool,
     max_calls_by_tool: Optional[Mapping[str, int]],
-    call_counts: dict[str, int],
+    history: Deque[str],
     on_message: Optional[Callable],
 ) -> list[dict]:
     """Run one round's tool calls.
 
-    Returns result entries, including failures for calls over a configured cap.
+    Returns result entries, including failures for calls repeated past a
+    configured limit.
     """
     entries: list[dict] = []
     for block in response_blocks:
@@ -204,9 +209,9 @@ def _run_response_blocks(
 
         _emit(on_message, ToolCallMessage(tool=name, args=args, label=tool_progress_label(name, args)))
 
-        if _exceeds_call_limit(name, max_calls_by_tool, call_counts):
+        if exceeds_call_limit(name, args, max_calls_by_tool, history):
             result = (
-                f"Error: tool call limit reached for '{name}'. "
+                f"Error: repeated the same '{name}' call too many times. "
                 "Use another tool or answer from the available results."
             )
             success = False
@@ -224,24 +229,6 @@ def _run_response_blocks(
         _emit(on_message, ToolResultMessage(tool=name, success=success, result=result))
         entries.append(build_tool_result_entry(name, args, result))
     return entries
-
-
-def _exceeds_call_limit(
-    name: str,
-    max_calls_by_tool: Optional[Mapping[str, int]],
-    call_counts: dict[str, int],
-) -> bool:
-    """Count a call only when its tool has an explicit configured cap."""
-    if max_calls_by_tool is None or name not in max_calls_by_tool:
-        return False
-
-    call_counts[name] = call_counts.get(name, 0) + 1
-    limit = max_calls_by_tool[name]
-    if call_counts[name] <= limit:
-        return False
-
-    logger.warning("Tool call cap reached: %s called %d times (limit %d)", name, call_counts[name], limit)
-    return True
 
 
 def _emit(on_message: Optional[Callable], message) -> None:

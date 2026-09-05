@@ -71,6 +71,7 @@ async def run_with_file_tools(lamia: "Lamia", prompt: str, **run_kwargs: Any) ->
         restrict_to_allowed_dirs=True,
         max_rounds=FILE_CONTEXT_TOOL_MAX_ROUNDS,
     )
+  
     if run_kwargs.get("return_type") is None:
         if run_kwargs.get("_full_result"):
             return loop_result.result
