@@ -1101,10 +1101,16 @@ def _browser_tool(name: str, args: dict, cwd: str, lamia) -> str:
     return f"Unknown browser tool: {name}"
 
 
-def get_tools_system_prompt() -> str:
-    """Return a system prompt fragment describing available tools."""
+def get_tools_system_prompt(allowed_tools: Optional[set] = None) -> str:
+    """Return a system prompt fragment describing available tools.
+
+    Args:
+        allowed_tools: Tool names to describe; ``None`` describes all of them.
+    """
     tool_desc = []
     for t in TOOL_DEFINITIONS:
+        if allowed_tools is not None and t["name"] not in allowed_tools:
+            continue
         params = ", ".join(
             f"{p}" for p in t["parameters"].get("properties", {}).keys()
         )

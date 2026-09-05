@@ -18,7 +18,7 @@ from typing import Callable, Deque, Mapping, Optional, Sequence, TYPE_CHECKING
 from lamia.tools.definitions import (
     tool_progress_label,
 )
-from lamia.tools.dispatch import execute_tool
+from lamia.tools.dispatch import execute_tool, get_tools_system_prompt
 from lamia.tools.loop_detection import exceeds_call_limit, history_size
 from lamia.tools.parsing import (
     extract_response_blocks,
@@ -111,8 +111,10 @@ async def run_tool_loop(
 
     Args:
         lamia: Facade instance the rounds are run through.
-        prompt: Initial prompt.  Tool descriptions must already be prepended
-            by the caller.
+        prompt: Initial prompt.  The loop prepends the tool listing itself,
+            scoped to *allowed_tools* — callers should not include their own
+            generic tool listing, though prepending domain-specific framing
+            (e.g. what a sandboxed file context is) is still fine.
         allowed_tools: Tool names the model may call; ``None`` allows all.
         allowed_dirs: Directories path arguments resolve against. Defaults to
             the process working directory.
@@ -131,6 +133,8 @@ async def run_tool_loop(
         A :class:`ToolLoopResult` holding the final result and the prompt the
         loop accumulated.
     """
+    prompt = get_tools_system_prompt(allowed_tools) + "\n\n" + prompt
+
     totals: dict = {}
     model_name = None
     result = None

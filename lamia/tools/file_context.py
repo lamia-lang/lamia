@@ -14,7 +14,6 @@ from typing import Any, TYPE_CHECKING
 from lamia.async_bridge import EventLoopManager
 from lamia.engine.managers.llm.files_context_manager import get_active_files_context
 from lamia.tools.definitions import (
-    FILE_CONTEXT_TOOL_DEFINITIONS,
     FILE_CONTEXT_TOOL_MAX_ROUNDS,
     FILE_CONTEXT_TOOL_NAMES,
 )
@@ -25,20 +24,16 @@ if TYPE_CHECKING:
 
 
 def build_file_context_tools_prompt() -> str:
-    """Build the system-prompt fragment for file-context scoped tools."""
-    tool_desc = []
-    for t in FILE_CONTEXT_TOOL_DEFINITIONS:
-        params = ", ".join(t["parameters"].get("properties", {}).keys())
-        tool_desc.append(f"- {t['name']}({params}): {t['description']}")
+    """Build the file-context-specific framing prepended to the tool loop's prompt.
 
+    The tool listing and call-format instructions come from
+    :func:`lamia.tools.loop.run_tool_loop` itself; this only adds what's
+    specific to a sandboxed file context.
+    """
     return (
         "You have access to a sandboxed file context. You do NOT know what files "
         "exist in it — you MUST use the tools below to discover and read files. "
         "NEVER guess or assume filenames.\n\n"
-        "To call a tool, output a JSON object on its own line in this EXACT format:\n"
-        '{"tool": "tool_name", "args": {"param": "value"}}\n\n'
-        "Available tools:\n" + "\n".join(tool_desc) + "\n\n"
-        "After receiving tool results, continue your response to the user. "
         "Use tools only when you need to discover or read file contents that "
         "were not already provided in the prompt."
     )

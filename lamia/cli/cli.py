@@ -259,10 +259,9 @@ async def json_mode(lamia: Lamia) -> None:
     Error    : {"type": "error", "message": "..."}
     Ready    : {"type": "ready"}  (sent once after startup)
     """
-    from lamia.tools.dispatch import get_tools_system_prompt, reset_file_writes, get_file_writes
+    from lamia.tools.dispatch import reset_file_writes, get_file_writes
 
     MAX_TOOL_ROUNDS = 50
-    tools_prompt = get_tools_system_prompt()
 
     _json_write({"type": "ready", "ide_api": IDE_API_VERSION})
 
@@ -296,10 +295,6 @@ async def json_mode(lamia: Lamia) -> None:
             continue
 
         system_prefix = request.get("system", "")
-        if system_prefix:
-            system_prefix = system_prefix.rstrip() + "\n\n" + tools_prompt
-        else:
-            system_prefix = tools_prompt
 
         raw_messages = request.get("messages", [])
         if raw_messages:
