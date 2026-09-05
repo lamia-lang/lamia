@@ -19,7 +19,7 @@ from lamia.tools.definitions import (
 )
 from lamia.tools.dispatch import execute_tool
 from lamia.tools.parsing import (
-    extract_tool_calls,
+    extract_response_blocks,
     detect_malformed_tool_call,
     strip_tool_calls,
     build_tool_result_entry,
@@ -72,20 +72,20 @@ class ToolLoopResult:
     prompt: str
 
 
-def process_response(text: str) -> tuple[list[dict], bool, str]:
+def _process_response(text: str) -> tuple[list[str | dict], bool, str]:
     """Process one LLM response: extract tool calls, detect malformed, strip.
 
     Returns:
-        tool_calls: extracted valid tool calls (empty list if none)
+        response_blocks: ordered assistant-text and valid-tool-call blocks
         is_malformed: True if the model *tried* to call tools in a wrong format
         clean_text: response text with all tool-call artifacts removed
     """
-    tool_calls = extract_tool_calls(text)
-    if tool_calls:
-        return tool_calls, False, strip_tool_calls(text)
+    response_blocks = extract_response_blocks(text)
+    if any(isinstance(block, dict) for block in response_blocks):
+        return response_blocks, False, strip_tool_calls(text)
     is_malformed = detect_malformed_tool_call(text)
     clean_text = strip_tool_calls(text)
-    return [], is_malformed, clean_text
+    return response_blocks, is_malformed, clean_text
 
 
 # TODO: Instead of text-based loop processing use structured user-assistant loops
@@ -142,9 +142,9 @@ async def run_tool_loop(
         _accumulate_usage(ctx, totals)
 
         text = result.result_text or ""
-        tool_calls, is_malformed, clean_text = process_response(text)
+        response_blocks, is_malformed, clean_text = _process_response(text)
 
-        if not tool_calls:
+        if not any(isinstance(block, dict) for block in response_blocks): # 0 tool calls
             if is_malformed and not is_last:
                 logger.debug("Malformed tool call detected, sending correction")
                 prompt = _build_correction_prompt(prompt, text)
@@ -152,9 +152,8 @@ async def run_tool_loop(
             result.result_text = clean_text
             break
 
-        _emit(on_message, AssistantMessage(text=clean_text))
-        entries, looping = _run_tool_calls(
-            tool_calls,
+        entries, looping = _run_response_blocks(
+            response_blocks,
             lamia=lamia,
             allowed_tools=allowed_tools,
             allowed_dirs=allowed_dirs,
@@ -176,8 +175,8 @@ async def run_tool_loop(
 
 # ── Tool calls ──────────────────────────────────────────────────────────────
 
-def _run_tool_calls(
-    tool_calls: list[dict],
+def _run_response_blocks(
+    response_blocks: list[str | dict],
     *,
     lamia: "Lamia",
     allowed_tools: Optional[set],
@@ -192,7 +191,13 @@ def _run_tool_calls(
     Returns result entries and whether a configured tool call cap was reached.
     """
     entries: list[dict] = []
-    for tool_call in tool_calls:
+    for block in response_blocks:
+        if isinstance(block, str):
+            if block.strip():
+                _emit(on_message, AssistantMessage(text=block.strip()))
+            continue
+
+        tool_call = block
         name = tool_call.get("tool", "")
         args = tool_call.get("args", {})
         logger.debug("Tool call: %s(%s)", name, args)

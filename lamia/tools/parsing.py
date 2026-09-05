@@ -71,6 +71,50 @@ def extract_tool_calls(text: str) -> list[dict]:
     return calls
 
 
+def extract_response_blocks(text: str) -> list[str | dict]:
+    """Split a response into ordered assistant-text and tool-call blocks."""
+    spans: list[tuple[int, int, dict]] = []
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith("{"):
+            try:
+                obj = json.loads(stripped)
+                if "tool" in obj and isinstance(obj.get("tool"), str):
+                    spans.append((offset, offset + len(line), obj))
+            except json.JSONDecodeError:
+                pass
+        offset += len(line)
+
+    for invoke_match in re.finditer(r"<invoke\b[^>]*>(.*?)</invoke>", text, re.DOTALL):
+        block = invoke_match.group(1)
+        name_match = re.search(r"<tool_name>\s*(\w+)\s*</tool_name>", block)
+        if not name_match:
+            continue
+        args = {
+            pm.group(1): pm.group(2)
+            for pm in re.finditer(
+                r'<parameter\s+name="(\w+)">(.*?)</parameter>', block, re.DOTALL
+            )
+        }
+        spans.append((invoke_match.start(), invoke_match.end(), {
+            "tool": name_match.group(1), "args": args,
+        }))
+
+    response_blocks: list[str | dict] = []
+    position = 0
+    for start, end, call in sorted(spans):
+        if start < position:
+            continue
+        if start > position:
+            response_blocks.append(text[position:start])
+        response_blocks.append(call)
+        position = end
+    if position < len(text):
+        response_blocks.append(text[position:])
+    return response_blocks
+
+
 def detect_malformed_tool_call(text: str) -> bool:
     """Detect attempted tool calls in unsupported formats."""
     for pattern in MALFORMED_TOOL_PATTERNS:

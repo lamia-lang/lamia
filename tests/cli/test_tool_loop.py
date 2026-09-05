@@ -1,4 +1,5 @@
 from lamia.tools.loop import _exceeds_call_limit
+from lamia.tools.parsing import extract_response_blocks
 
 
 def test_unconfigured_tools_have_no_call_limit():
@@ -16,3 +17,19 @@ def test_configured_tool_stops_after_its_call_cap():
     assert not _exceeds_call_limit("write_file", {"write_file": 2}, call_counts)
     assert not _exceeds_call_limit("write_file", {"write_file": 2}, call_counts)
     assert _exceeds_call_limit("write_file", {"write_file": 2}, call_counts)
+
+
+def test_response_blocks_keep_assistant_text_between_calls():
+    response_blocks = extract_response_blocks(
+        'I will read it.\n'
+        '{"tool": "read_file", "args": {"path": "one.txt"}}\n'
+        'Now I will update it.\n'
+        '{"tool": "patch_file", "args": {"path": "one.txt"}}\n'
+    )
+
+    assert response_blocks == [
+        "I will read it.\n",
+        {"tool": "read_file", "args": {"path": "one.txt"}},
+        "Now I will update it.\n",
+        {"tool": "patch_file", "args": {"path": "one.txt"}},
+    ]
