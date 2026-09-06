@@ -39,6 +39,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git fetch origin gh-pages --depth=1 || true
 
       - name: Generate llms-full.txt
         run: |
@@ -77,4 +78,4 @@ jobs:
           "
 
       - name: Deploy to GitHub Pages
-        run: mkdocs gh-deploy --force
+        run: mkdocs gh-deploy
