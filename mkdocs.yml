@@ -48,42 +48,6 @@ theme:
 
 plugins:
   - search
-  - gen-files:
-      scripts:
-        - gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - section-index
-  - mkdocstrings:
-      handlers:
-        python:
-          options:
-            # Docstring options
-            docstring_style: google
-            docstring_options:
-              ignore_init_summary: true
-            
-            # Signature options
-            show_signature_annotations: true
-            show_root_heading: true
-            show_root_toc_entry: false
-            show_source: true
-            show_symbol_type_heading: true
-            show_symbol_type_toc: true
-            
-            # Member options
-            inherited_members: true
-            members_order: source
-            separate_signature: true
-            
-            # Filtering options
-            filters:
-              - "!^_"  # Exclude private members
-              - "^__init__$"  # Include __init__ method
-            
-            # Other options
-            heading_level: 2
-            show_category_heading: true
 
 nav:
   - Home: index.md
@@ -114,7 +78,6 @@ nav:
     - Lamia Cloud: advanced/lamia-cloud.md
   - Reference:
     - Selector Usage Guide: validation/selector-usage-guide.md
-    - API Reference: reference/
 
 markdown_extensions:
   - pymdownx.highlight:

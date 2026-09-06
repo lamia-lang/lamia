@@ -5,9 +5,7 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
-      - 'lamia/**'
       - 'mkdocs.yml'
-      - 'gen_ref_pages.py'
       - '.github/workflows/docs.yml'
 
   workflow_dispatch:
