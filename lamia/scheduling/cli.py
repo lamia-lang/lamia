@@ -206,6 +206,14 @@ def _format_error_line(error_msg: str, job: dict) -> str:
     return f"{first_line}  (see cloud logs)"
 
 
+def _format_local_timestamp(ts: str) -> str:
+    """Render a stored UTC timestamp in local time, matching the cron line's clock."""
+    try:
+        return datetime.fromisoformat(ts).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    except (ValueError, TypeError):
+        return ts
+
+
 def _print_job(job: dict, last_run: dict | None = None) -> None:
     """Print a single job entry."""
     backend = job.get("backend", "local")
@@ -229,7 +237,7 @@ def _print_job(job: dict, last_run: dict | None = None) -> None:
         print("    last run: unavailable  status: SOURCE_MISSING")
     elif last_run:
         status_icon = "ok" if last_run.get("success") else "FAILED"
-        ts = last_run.get("timestamp", "unknown")
+        ts = _format_local_timestamp(last_run.get("timestamp", "unknown"))
         error_msg = last_run.get("error", "")
         print(f"    last run: {ts}  status: {status_icon}")
         if error_msg:

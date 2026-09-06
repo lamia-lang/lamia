@@ -12,6 +12,7 @@ from lamia.scheduling.local_scheduler import (
     LocalScheduler,
     SystemdScheduler,
     WindowsTaskScheduler,
+    _expand_cron_field,
     _parse_cron_fields,
 )
 
@@ -48,6 +49,42 @@ class TestParseCronFields:
     def test_too_many_fields_raises(self):
         with pytest.raises(ValueError, match="expected 5 fields"):
             _parse_cron_fields("0 9 * * * *")
+
+    def test_step_expression_is_valid(self):
+        result = _parse_cron_fields("*/5 * * * *")
+        assert result["minute"] == "*/5"
+
+
+class TestExpandCronField:
+    def test_star_returns_none(self):
+        assert _expand_cron_field("*", 0, 59, "minute") is None
+
+    def test_single_value(self):
+        assert _expand_cron_field("30", 0, 59, "minute") == [30]
+
+    def test_range(self):
+        assert _expand_cron_field("9-11", 0, 23, "hour") == [9, 10, 11]
+
+    def test_step(self):
+        assert _expand_cron_field("*/5", 0, 59, "minute") == [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+
+    def test_range_with_step(self):
+        assert _expand_cron_field("0-20/10", 0, 59, "minute") == [0, 10, 20]
+
+    def test_comma_list(self):
+        assert _expand_cron_field("1,3,5", 0, 7, "weekday") == [1, 3, 5]
+
+    def test_out_of_range_raises(self):
+        with pytest.raises(ValueError, match="out of range"):
+            _expand_cron_field("99", 0, 59, "minute")
+
+    def test_invalid_value_raises(self):
+        with pytest.raises(ValueError, match="Invalid minute value"):
+            _expand_cron_field("abc", 0, 59, "minute")
+
+    def test_zero_step_raises(self):
+        with pytest.raises(ValueError, match="Invalid minute step"):
+            _expand_cron_field("*/0", 0, 59, "minute")
 
 
 class TestLaunchdScheduler:
@@ -126,17 +163,39 @@ class TestLaunchdScheduler:
         plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
         assert "<key>RunAtLoad</key>" not in plist
 
-    def test_cron_to_calendar_interval_all_stars(self, scheduler):
+    def test_cron_to_calendar_intervals_all_stars(self, scheduler):
         cron = {"minute": "*", "hour": "*", "day": "*", "month": "*", "weekday": "*"}
-        lines = scheduler._cron_to_calendar_interval(cron)
-        assert lines == []
+        intervals = scheduler._cron_to_calendar_intervals(cron)
+        assert intervals == [[]]
 
-    def test_cron_to_calendar_interval_specific(self, scheduler):
+    def test_cron_to_calendar_intervals_specific(self, scheduler):
         cron = {"minute": "30", "hour": "14", "day": "*", "month": "*", "weekday": "1"}
-        lines = scheduler._cron_to_calendar_interval(cron)
+        intervals = scheduler._cron_to_calendar_intervals(cron)
+        assert len(intervals) == 1
+        lines = intervals[0]
         assert any("Minute" in l and "30" in l for l in lines)
         assert any("Hour" in l and "14" in l for l in lines)
         assert any("Weekday" in l and "1" in l for l in lines)
+
+    def test_cron_to_calendar_intervals_step_expands_to_multiple_entries(self, scheduler):
+        cron = {"minute": "*/5", "hour": "*", "day": "*", "month": "*", "weekday": "*"}
+        intervals = scheduler._cron_to_calendar_intervals(cron)
+        minutes = sorted(int(lines[0].split("<integer>")[1].split("<")[0]) for lines in intervals)
+        assert minutes == [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+
+    def test_build_plist_step_cron_uses_array(self, scheduler, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        (tmp_path / ".lamia" / "logs").mkdir(parents=True)
+        job = ScheduleJob(
+            script="probe.lm",
+            cron="*/5 * * * *",
+            schedule_id="test_step_cron",
+            project_root=Path("/Users/test/project"),
+        )
+        plist = scheduler._build_plist(job, "/usr/local/bin/lamia")
+        assert "<key>StartCalendarInterval</key>" in plist
+        assert "<array>" in plist
+        assert plist.count("<key>Minute</key><integer>") == 12
 
     def test_build_plist_on_wake_uses_run_at_load(self, scheduler, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path)

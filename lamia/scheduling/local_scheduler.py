@@ -7,7 +7,7 @@ import platform
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from .base import BaseScheduler, JobStatus, ScheduleJob
 
@@ -21,11 +21,11 @@ def _parse_cron_fields(cron_expr: str) -> dict:
         raise ValueError(f"Invalid cron expression (expected 5 fields): {cron_expr}")
 
     minute, hour, day, month, weekday = parts
-    _validate_cron_field(minute, 0, 59, "minute")
-    _validate_cron_field(hour, 0, 23, "hour")
-    _validate_cron_field(day, 1, 31, "day")
-    _validate_cron_field(month, 1, 12, "month")
-    _validate_cron_field(weekday, 0, 7, "weekday")
+    _expand_cron_field(minute, 0, 59, "minute")
+    _expand_cron_field(hour, 0, 23, "hour")
+    _expand_cron_field(day, 1, 31, "day")
+    _expand_cron_field(month, 1, 12, "month")
+    _expand_cron_field(weekday, 0, 7, "weekday")
 
     return {
         "minute": minute,
@@ -36,31 +36,42 @@ def _parse_cron_fields(cron_expr: str) -> dict:
     }
 
 
-def _validate_cron_field(value: str, min_val: int, max_val: int, name: str) -> None:
-    """Validate a single cron field value is within allowed range."""
+def _expand_cron_field(value: str, min_val: int, max_val: int, name: str) -> Optional[List[int]]:
+    """Validate a cron field and expand it to the values it matches.
+
+    Returns None for '*' (any value in range). Supports comma lists, ranges
+    ('N-M'), steps ('*/N', 'N-M/N'), and plain integers.
+    """
     if value == "*":
-        return
+        return None
+    values = set()
     for part in value.split(","):
-        part = part.split("/")[0]
-        if "-" in part:
-            low, high = part.split("-", 1)
+        base, sep, step_str = part.partition("/")
+        step = 1
+        if sep:
             try:
-                low_int, high_int = int(low), int(high)
+                step = int(step_str)
+            except ValueError:
+                raise ValueError(f"Invalid {name} step in cron: {value}")
+            if step <= 0:
+                raise ValueError(f"Invalid {name} step in cron: {value}")
+        if base == "*":
+            low, high = min_val, max_val
+        elif "-" in base:
+            low_str, high_str = base.split("-", 1)
+            try:
+                low, high = int(low_str), int(high_str)
             except ValueError:
                 raise ValueError(f"Invalid {name} value in cron: {value}")
-            if low_int < min_val or high_int > max_val:
-                raise ValueError(
-                    f"Cron {name} out of range ({min_val}-{max_val}): {value}"
-                )
         else:
             try:
-                int_val = int(part)
+                low = high = int(base)
             except ValueError:
                 raise ValueError(f"Invalid {name} value in cron: {value}")
-            if int_val < min_val or int_val > max_val:
-                raise ValueError(
-                    f"Cron {name} out of range ({min_val}-{max_val}): {value}"
-                )
+        if low < min_val or high > max_val or low > high:
+            raise ValueError(f"Cron {name} out of range ({min_val}-{max_val}): {value}")
+        values.update(range(low, high + 1, step))
+    return sorted(values)
 
 
 def _schedule_log_path(job: ScheduleJob) -> str:
@@ -120,10 +131,19 @@ class LaunchdScheduler(BaseScheduler):
             lines.append('    <true/>')
         else:
             cron = _parse_cron_fields(job.cron)
+            intervals = self._cron_to_calendar_intervals(cron)
             lines.append('    <key>StartCalendarInterval</key>')
-            lines.append('    <dict>')
-            lines.extend(self._cron_to_calendar_interval(cron))
-            lines.append('    </dict>')
+            if len(intervals) == 1:
+                lines.append('    <dict>')
+                lines.extend(intervals[0])
+                lines.append('    </dict>')
+            else:
+                lines.append('    <array>')
+                for interval_lines in intervals:
+                    lines.append('        <dict>')
+                    lines.extend(f'    {line}' for line in interval_lines)
+                    lines.append('        </dict>')
+                lines.append('    </array>')
             if job.catch_up:
                 lines.append('    <key>RunAtLoad</key>')
                 lines.append('    <true/>')
@@ -140,20 +160,32 @@ class LaunchdScheduler(BaseScheduler):
         ])
         return "\n".join(lines) + "\n"
 
-    def _cron_to_calendar_interval(self, cron: dict) -> list:
-        """Convert parsed cron fields to launchd StartCalendarInterval plist entries."""
-        lines = []
-        if cron["minute"] != "*":
-            lines.append(f'        <key>Minute</key><integer>{cron["minute"]}</integer>')
-        if cron["hour"] != "*":
-            lines.append(f'        <key>Hour</key><integer>{cron["hour"]}</integer>')
-        if cron["day"] != "*":
-            lines.append(f'        <key>Day</key><integer>{cron["day"]}</integer>')
-        if cron["month"] != "*":
-            lines.append(f'        <key>Month</key><integer>{cron["month"]}</integer>')
-        if cron["weekday"] != "*":
-            lines.append(f'        <key>Weekday</key><integer>{cron["weekday"]}</integer>')
-        return lines
+    def _cron_to_calendar_intervals(self, cron: dict) -> list:
+        """Expand parsed cron fields into launchd StartCalendarInterval entries.
+
+        launchd has no native step/list/range syntax, so a field naming several
+        values (e.g. '*/5' or '9-17') is expanded into its explicit values and
+        combined by cartesian product across fields — one dict of plist lines
+        per matching point in time.
+        """
+        plist_keys = [
+            ("minute", "Minute", 0, 59),
+            ("hour", "Hour", 0, 23),
+            ("day", "Day", 1, 31),
+            ("month", "Month", 1, 12),
+            ("weekday", "Weekday", 0, 7),
+        ]
+        constrained = []
+        for field, key, min_val, max_val in plist_keys:
+            expanded = _expand_cron_field(cron[field], min_val, max_val, field)
+            if expanded is not None:
+                constrained.append((key, expanded))
+
+        combos = [[]]
+        for key, values in constrained:
+            combos = [combo + [f'        <key>{key}</key><integer>{value}</integer>']
+                      for combo in combos for value in values]
+        return combos
 
     def install(self, job: ScheduleJob, lamia_bin: str) -> None:
         plist_path = self._plist_path(job)
