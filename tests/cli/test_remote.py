@@ -7,6 +7,16 @@ from unittest import mock
 import pytest
 from pathlib import Path
 
+from lamia.cli.remote_helpers import (
+    is_ci,
+    reject_dangerous_event,
+    connected_repo_url,
+    validate_connected_repo,
+    resolve_deploy_mode,
+    declared_secret_keys,
+    warn_about_file_uploads,
+    ALLOWED_CI_EVENTS,
+)
 from lamia.cli.script_analysis import (
     ScriptCapabilities,
     analyze_script,
@@ -254,13 +264,12 @@ def test_script_capabilities_contract_field_names():
 def test_warn_about_file_uploads_prints_warning(capsys):
     pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
     from lamia_cloud.contracts import FileSyncEntry
-    from lamia.cli.remote import _warn_about_file_uploads
 
     entries = [
         FileSyncEntry(raw_path="docs/a.txt", resolved_path="/tmp/a.txt", bucket_key="docs/a.txt"),
         FileSyncEntry(raw_path="docs/b.txt", resolved_path="/tmp/b.txt", bucket_key="docs/b.txt"),
     ]
-    _warn_about_file_uploads(entries)
+    warn_about_file_uploads(entries)
     stderr = capsys.readouterr().err
     assert "will upload local files" in stderr
     assert "docs/a.txt" in stderr
@@ -689,52 +698,49 @@ def test_handle_remote_run_propagates_ensure_apis_enabled_failure(monkeypatch, t
     deployer.deploy.assert_not_called()
 
 
-@pytest.mark.integration
-@pytest.mark.cloud
 class TestResolveDeployMode:
-    """_resolve_deploy_mode picks the right source mode and repo URL."""
+    """resolve_deploy_mode picks the right source mode and repo URL.
 
-    @pytest.fixture(autouse=True)
-    def _require_cloud(self):
-        pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+    Pure-lamia logic in remote_helpers.py — no lamia_cloud needed.
+    """
 
     def test_defaults_to_git_when_remote_exists(self, monkeypatch, tmp_path):
-        import lamia.cli.remote as remote
+        import lamia.cli.remote_helpers as rh
         monkeypatch.setattr(
-            remote, "get_remote_origin",
+            rh, "get_remote_origin",
             lambda path: "https://github.com/lamia-lang/lamia",
         )
 
-        mode, url = remote._resolve_deploy_mode(None, tmp_path)
+        mode, url = resolve_deploy_mode(None, tmp_path)
         assert mode == "git"
         assert url == "https://github.com/lamia-lang/lamia"
 
     def test_defaults_to_local_when_no_git(self, monkeypatch, tmp_path):
-        import lamia.cli.remote as remote
-        monkeypatch.setattr(remote, "get_remote_origin", lambda path: None)
+        import lamia.cli.remote_helpers as rh
+        monkeypatch.setattr(rh, "get_remote_origin", lambda path: None)
 
-        mode, url = remote._resolve_deploy_mode(None, tmp_path)
+        mode, url = resolve_deploy_mode(None, tmp_path)
         assert mode == "local"
         assert url is None
 
     def test_config_override_local_ignores_git(self, monkeypatch, tmp_path):
-        import lamia.cli.remote as remote
+        import lamia.cli.remote_helpers as rh
         monkeypatch.setattr(
-            remote, "get_remote_origin",
+            rh, "get_remote_origin",
             lambda path: "https://github.com/lamia-lang/lamia",
         )
 
         config = {"cloud": {"deploy_mode": "local"}}
-        mode, url = remote._resolve_deploy_mode(config, tmp_path)
+        mode, url = resolve_deploy_mode(config, tmp_path)
         assert mode == "local"
         assert url is None
 
     def test_config_git_without_remote_falls_back(self, monkeypatch, tmp_path, capsys):
-        import lamia.cli.remote as remote
-        monkeypatch.setattr(remote, "get_remote_origin", lambda path: None)
+        import lamia.cli.remote_helpers as rh
+        monkeypatch.setattr(rh, "get_remote_origin", lambda path: None)
 
         config = {"cloud": {"deploy_mode": "git"}}
-        mode, url = remote._resolve_deploy_mode(config, tmp_path)
+        mode, url = resolve_deploy_mode(config, tmp_path)
         assert mode == "local"
         assert url is None
         assert "Falling back to local" in capsys.readouterr().err
@@ -748,6 +754,7 @@ class TestHandleRemoteRunGitMode:
     def test_git_mode_passes_repo_url_to_deploy(self, monkeypatch, tmp_path):
         pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
         import lamia.cli.remote as remote
+        import lamia.cli.remote_helpers as rh
 
         _write_script(tmp_path, "task.lm", 'def run():\n    return 1\n')
 
@@ -759,7 +766,7 @@ class TestHandleRemoteRunGitMode:
             remote, "analyze_script", lambda path: ScriptCapabilities(),
         )
         monkeypatch.setattr(
-            remote, "get_remote_origin",
+            rh, "get_remote_origin",
             lambda path: "https://github.com/lamia-lang/lamia",
         )
 
@@ -776,6 +783,7 @@ class TestHandleRemoteRunGitMode:
     def test_local_mode_no_repo_url(self, monkeypatch, tmp_path):
         pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
         import lamia.cli.remote as remote
+        import lamia.cli.remote_helpers as rh
 
         _write_script(tmp_path, "task.lm", 'def run():\n    return 1\n')
 
@@ -786,7 +794,7 @@ class TestHandleRemoteRunGitMode:
         monkeypatch.setattr(
             remote, "analyze_script", lambda path: ScriptCapabilities(),
         )
-        monkeypatch.setattr(remote, "get_remote_origin", lambda path: None)
+        monkeypatch.setattr(rh, "get_remote_origin", lambda path: None)
 
         with pytest.raises(SystemExit) as exc_info:
             remote.handle_remote_run(
@@ -912,6 +920,7 @@ class TestCiAuthEventGuard:
 
     def test_push_event_allowed(self, monkeypatch):
         import lamia.cli.remote as remote
+        import lamia.cli.remote_helpers as rh
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
@@ -923,7 +932,7 @@ class TestCiAuthEventGuard:
         monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
         monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
-            remote, "get_remote_origin",
+            rh, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
         )
         monkeypatch.setattr(remote, "get_connector", _gcp_connector)
@@ -944,13 +953,14 @@ class TestCiAuthRepoValidation:
 
     def test_mismatched_repo_rejected(self, monkeypatch, capsys):
         import lamia.cli.remote as remote
+        import lamia.cli.remote_helpers as rh
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
         monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
         monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
-            remote, "get_remote_origin",
+            rh, "get_remote_origin",
             lambda path: "https://github.com/attacker/malware.git",
         )
 
@@ -963,6 +973,7 @@ class TestCiAuthRepoValidation:
 
     def test_matching_repo_passes(self, monkeypatch):
         import lamia.cli.remote as remote
+        import lamia.cli.remote_helpers as rh
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
@@ -974,7 +985,7 @@ class TestCiAuthRepoValidation:
         monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
         monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
-            remote, "get_remote_origin",
+            rh, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
         )
         monkeypatch.setattr(remote, "get_connector", _gcp_connector)
@@ -996,6 +1007,7 @@ class TestCiAuthEnvVarSpoofing:
     def test_spoofed_ci_without_oidc_token_fails(self, monkeypatch, capsys):
         """Spoofing GITHUB_ACTIONS without OIDC runtime -> exit."""
         import lamia.cli.remote as remote
+        import lamia.cli.remote_helpers as rh
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
@@ -1004,7 +1016,7 @@ class TestCiAuthEnvVarSpoofing:
         monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
         monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
-            remote, "get_remote_origin",
+            rh, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
         )
         monkeypatch.setattr(remote, "get_connector", _gcp_connector)
@@ -1042,6 +1054,7 @@ class TestCiCredentialConfig:
         import os
         import stat
         import lamia.cli.remote as remote
+        import lamia.cli.remote_helpers as rh
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
@@ -1053,7 +1066,7 @@ class TestCiCredentialConfig:
         monkeypatch.setenv("GITHUB_REPOSITORY", "acme/widgets")
         monkeypatch.setenv("LAMIA_CONNECTION_ID", "v1-123456-f60ecdb16e5e")
         monkeypatch.setattr(
-            remote, "get_remote_origin",
+            rh, "get_remote_origin",
             lambda path: "https://github.com/acme/widgets.git",
         )
         monkeypatch.setattr(remote, "get_connector", _gcp_connector)

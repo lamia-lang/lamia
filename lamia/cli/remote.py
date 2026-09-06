@@ -2,89 +2,29 @@
 
 import hashlib
 import os
-import re
 import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
 from lamia.facade.config_builder import build_config_from_dict
-from lamia.git import get_remote_origin
 from lamia.id_gen import generate_deterministic_id
 from lamia.interpreter.ast_analyzer import extract_script_file_refs
 from lamia.deploy_secrets import resolve_deploy_secrets
 from lamia.triggers.extraction import extract_all_triggers
 from lamia.cli.script_analysis import analyze_script, extract_script_models
+from lamia.cli.remote_helpers import (
+    is_ci,
+    reject_dangerous_event,
+    connected_repo_url,
+    validate_connected_repo,
+    resolve_deploy_mode,
+    declared_secret_keys,
+    warn_about_file_uploads,
+)
 from lamia_cloud import get_connector, get_deployer, get_llm_router, get_trigger_provider
 from lamia_cloud.file_sync import build_file_sync_plan
 from lamia_cloud.types import TriggerDeploymentPlan
-
-
-def _is_ci() -> bool:
-    """Detect CI environment for UX adjustments only.
-
-    SECURITY: this is NEVER used for authorization decisions.
-    Authorization comes from WIF OIDC token exchange verified by GCP.
-    Spoofing this env var locally has no security impact -- the OIDC
-    token exchange will fail without a valid GitHub Actions runtime.
-    """
-    return os.environ.get("GITHUB_ACTIONS") == "true"
-
-
-# Events that run only code already merged into the target branch.
-_ALLOWED_CI_EVENTS = frozenset(
-    {"push", "workflow_dispatch", "schedule", "release"}
-)
-
-
-def _reject_dangerous_event() -> None:
-    """Reject CI auth for events outside _ALLOWED_CI_EVENTS."""
-    event = os.environ.get("GITHUB_EVENT_NAME", "")
-    if event and event not in _ALLOWED_CI_EVENTS:
-        allowed = ", ".join(sorted(_ALLOWED_CI_EVENTS))
-        print(
-            f"ERROR: Refusing to authenticate for '{event}' event.\n"
-            "This trigger can run code that was never merged to the deploy "
-            "branch, with production credentials.\n"
-            f"Supported events: {allowed}.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-
-def _connected_repo_url() -> str:
-    """Repository URL for this CI run, from GITHUB_REPOSITORY."""
-    repository = os.environ.get("GITHUB_REPOSITORY", "").strip()
-    if not repository:
-        print(
-            "ERROR: GITHUB_REPOSITORY is not set.\n"
-            "Lamia CI authentication requires a GitHub Actions runner.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
-    return f"{server}/{repository}"
-
-
-def _validate_connected_repo(connected_repo: str) -> None:
-    """Verify the workspace git remote matches the repository being built."""
-    from lamia.git import canonical_remote_identity
-    workspace_remote = get_remote_origin(os.getcwd())
-    if not workspace_remote:
-        return
-
-    expected = canonical_remote_identity(connected_repo)
-    actual = canonical_remote_identity(workspace_remote)
-    if expected and actual and expected != actual:
-        print(
-            f"ERROR: Git remote mismatch.\n"
-            f"  GitHub Actions repository: {expected}\n"
-            f"  workspace git remote:      {actual}\n"
-            f"Refusing to authenticate. This could indicate a tampered "
-            f"git remote.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
 
 
 def _validate_connection_matches_repo(connection_id: str, connected_repo: str) -> None:
@@ -104,12 +44,12 @@ def _validate_connection_matches_repo(connection_id: str, connected_repo: str) -
 
 def _setup_ci_auth_if_needed(project_root: Path) -> None:
     """In CI, authenticate using LAMIA_CONNECTION_ID. No-op otherwise."""
-    if not _is_ci():
+    if not is_ci():
         return
 
-    _reject_dangerous_event()
+    reject_dangerous_event()
 
-    connected_repo = _connected_repo_url()
+    repo_url = connected_repo_url()
     connection_id = os.environ.get("LAMIA_CONNECTION_ID", "")
 
     if not connection_id:
@@ -124,45 +64,14 @@ def _setup_ci_auth_if_needed(project_root: Path) -> None:
         )
         sys.exit(1)
 
-    _validate_connection_matches_repo(connection_id, connected_repo)
-    _validate_connected_repo(connected_repo)
+    _validate_connection_matches_repo(connection_id, repo_url)
+    validate_connected_repo(repo_url)
 
     try:
-        get_connector(project_root).configure_ci_auth(connected_repo, connection_id)
+        get_connector(project_root).configure_ci_auth(repo_url, connection_id)
     except (RuntimeError, ValueError) as exc:
         print(f"ERROR: CI authentication failed: {exc}", file=sys.stderr)
         sys.exit(1)
-
-
-def _resolve_deploy_mode(
-    config: Optional[dict], project_root: Path,
-) -> tuple[str, str | None]:
-    """Determine deploy_mode and repo_url from config and git state.
-
-    Returns (deploy_mode, repo_url).
-    """
-    cloud_cfg = (config or {}).get("cloud", {})
-    explicit_mode = cloud_cfg.get("deploy_mode")
-
-    if explicit_mode == "local":
-        return "local", None
-
-    repo_url = get_remote_origin(str(project_root))
-
-    if explicit_mode == "git":
-        if not repo_url:
-            print(
-                "Warning: deploy_mode is 'git' but no git remote found. "
-                "Falling back to local mode.",
-                file=sys.stderr,
-            )
-            return "local", None
-        return "git", repo_url
-
-    if repo_url:
-        return "git", repo_url
-
-    return "local", None
 
 
 def _check_cloud_model_access(
@@ -290,7 +199,7 @@ def handle_remote_run(
         _deploy_trigger(script_name, root, stages, config=config, deployer=deployer)
         return
 
-    deploy_mode, repo_url = _resolve_deploy_mode(config, root)
+    deploy_mode, repo_url = resolve_deploy_mode(config, root)
     run_name = generate_deterministic_id(script_name, str(root))
     target = deployer.deployment_name(run_name)
 
@@ -306,7 +215,7 @@ def handle_remote_run(
     except Exception as exc:
         print(f"Error: file sync planning failed: {exc}", file=sys.stderr)
         sys.exit(1)
-    _warn_about_file_uploads(entries)
+    warn_about_file_uploads(entries)
 
     sync_feedback = deployer.sync_runtime_files(entries=entries, files_namespace=run_name)
     for overwrite in sync_feedback.get("overwrite_warnings", []):
@@ -445,11 +354,6 @@ def _deploy_trigger(
     print(f"View triggers: lamia trigger list", file=sys.stderr)
 
 
-def _declared_secret_keys(config: Optional[dict]) -> list[str]:
-    """Return the secret names opted in under ``cloud.secrets`` in config."""
-    return list(((config or {}).get("cloud") or {}).get("secrets") or [])
-
-
 def _sync_deploy_secrets(
     config: Optional[dict],
     project_root: Path,
@@ -457,7 +361,7 @@ def _sync_deploy_secrets(
     namespace: str,
 ) -> list[str]:
     """Upload the secrets this deploy may use. Returns the names stored."""
-    values = resolve_deploy_secrets(project_root, _declared_secret_keys(config))
+    values = resolve_deploy_secrets(project_root, declared_secret_keys(config))
     if not values:
         return []
 
@@ -477,14 +381,3 @@ def _compute_source_hash(
     for key in sorted(secret_keys or []):
         hasher.update(key.encode())
     return hasher.hexdigest()[:16]
-
-
-def _warn_about_file_uploads(entries: list) -> None:
-    if not entries:
-        return
-    unique_paths = sorted({e.raw_path for e in entries})
-    print("  Warning: this remote run will upload local files to cloud storage.", file=sys.stderr)
-    for raw in unique_paths:
-        print(f"    - {raw}", file=sys.stderr)
-
-
