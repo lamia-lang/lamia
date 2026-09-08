@@ -16,6 +16,7 @@ from lamia.scheduling.registry import (
     list_jobs,
     load_job,
     record_run,
+    record_run_start,
     remove_job,
     save_job,
 )
@@ -231,7 +232,7 @@ class TestRunStatus:
         assert status is not None
         assert status["success"] is True
         assert status["exit_code"] == 0
-        assert "timestamp" in status
+        assert "finished_at" in status
 
     def test_record_and_get_failure(self, temp_schedules_dir):
         job = ScheduleJob(
@@ -363,3 +364,45 @@ class TestAtomicWrite:
         assert data is not None
         assert data["script"] == "atomic.lm"
         assert data["last_run"]["success"] is True
+
+
+class TestRecordRunStart:
+    def test_sets_started_at_with_pending_result(self, temp_schedules_dir):
+        job = ScheduleJob(
+            script="start.lm", cron="0 0 * * *",
+            schedule_id="start-test1",
+            project_root=Path("/p"),
+        )
+        save_job(job, "/bin/lamia")
+        record_run_start("start-test1")
+        data = load_job("start-test1")
+        assert data["last_run"]["started_at"] is not None
+        assert data["last_run"]["finished_at"] is None
+        assert data["last_run"]["success"] is None
+
+    def test_record_run_carries_started_at_forward(self, temp_schedules_dir):
+        job = ScheduleJob(
+            script="start.lm", cron="0 0 * * *",
+            schedule_id="start-test2",
+            project_root=Path("/p"),
+        )
+        save_job(job, "/bin/lamia")
+        record_run_start("start-test2")
+        started_at = load_job("start-test2")["last_run"]["started_at"]
+        record_run("start-test2", exit_code=0)
+        data = load_job("start-test2")
+        assert data["last_run"]["started_at"] == started_at
+        assert data["last_run"]["finished_at"] is not None
+        assert data["last_run"]["success"] is True
+
+    def test_record_run_without_prior_start_has_no_started_at(self, temp_schedules_dir):
+        job = ScheduleJob(
+            script="start.lm", cron="0 0 * * *",
+            schedule_id="start-test3",
+            project_root=Path("/p"),
+        )
+        save_job(job, "/bin/lamia")
+        record_run("start-test3", exit_code=1, error="boom")
+        data = load_job("start-test3")
+        assert data["last_run"]["started_at"] is None
+        assert data["last_run"]["success"] is False

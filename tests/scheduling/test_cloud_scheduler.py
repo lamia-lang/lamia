@@ -186,7 +186,7 @@ def test_fetch_cloud_statuses_uses_execution_status(monkeypatch, tmp_path):
         "last_attempt_time": "2026-07-01T00:00:00Z",
     }
     mock_scheduler.get_last_execution_status.return_value = {
-        "timestamp": "2026-07-01T01:00:00Z",
+        "finished_at": "2026-07-01T01:00:00Z",
         "success": False,
         "exit_code": 1,
     }
@@ -199,8 +199,11 @@ def test_fetch_cloud_statuses_uses_execution_status(monkeypatch, tmp_path):
     results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
 
     assert results["job-1"] == {
-        "timestamp": "2026-07-01T01:00:00Z",
+        "started_at": None,
+        "finished_at": "2026-07-01T01:00:00Z",
         "success": False,
+        "error": "",
+        "logs_url": "",
     }
     mock_scheduler.get_last_execution_status.assert_called_once()
 
@@ -225,8 +228,43 @@ def test_fetch_cloud_statuses_fallback_when_no_executions(monkeypatch, tmp_path)
     results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
 
     assert results["job-1"] == {
-        "timestamp": "2026-07-01T00:00:00Z",
+        "finished_at": "2026-07-01T00:00:00Z",
         "success": None,
+    }
+
+
+@pytest.mark.integration
+@pytest.mark.cloud
+def test_fetch_cloud_statuses_scheduler_level_failure_recovers_timestamp(monkeypatch, tmp_path):
+    """A scheduler-side invocation failure (no execution ever created) still needs a
+    timestamp and error surfaced, recovered from the scheduler job's own attempt record."""
+    pytest.importorskip("lamia_cloud", reason="lamia[cloud] extra not installed")
+
+    mock_scheduler = mock.MagicMock()
+    mock_scheduler.get_installed_config.return_value = {
+        "state": "ENABLED",
+        "last_attempt_time": "2026-07-01T00:00:00Z",
+    }
+    mock_scheduler.get_last_execution_status.return_value = {
+        "finished_at": None,
+        "success": False,
+        "error": "Scheduler invocation failed: PERMISSION_DENIED",
+        "logs_url": "https://console.cloud.google.com/logs/query;foo",
+    }
+    monkeypatch.setattr(cloud_scheduler, "get_scheduler", lambda root: mock_scheduler)
+
+    cloud_jobs = [
+        {"id": "job-1", "script": "task.lm", "cron": "0 * * * *", "project_root": str(tmp_path)}
+    ]
+
+    results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
+
+    assert results["job-1"] == {
+        "started_at": None,
+        "finished_at": "2026-07-01T00:00:00Z",
+        "success": False,
+        "error": "Scheduler invocation failed: PERMISSION_DENIED",
+        "logs_url": "https://console.cloud.google.com/logs/query;foo",
     }
 
 
@@ -245,7 +283,7 @@ def test_fetch_cloud_statuses_mixed_jobs(monkeypatch, tmp_path):
     def exec_status_for_job(cloud_job):
         if cloud_job.schedule_id == "with-exec":
             return {
-                "timestamp": "2026-07-01T01:00:00Z",
+                "finished_at": "2026-07-01T01:00:00Z",
                 "success": True,
                 "exit_code": 0,
             }
@@ -273,11 +311,14 @@ def test_fetch_cloud_statuses_mixed_jobs(monkeypatch, tmp_path):
     results = cloud_scheduler.fetch_cloud_statuses(cloud_jobs)
 
     assert results["with-exec"] == {
-        "timestamp": "2026-07-01T01:00:00Z",
+        "started_at": None,
+        "finished_at": "2026-07-01T01:00:00Z",
         "success": True,
+        "error": "",
+        "logs_url": "",
     }
     assert results["no-exec"] == {
-        "timestamp": "2026-07-02T00:00:00Z",
+        "finished_at": "2026-07-02T00:00:00Z",
         "success": None,
     }
 

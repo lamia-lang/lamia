@@ -151,15 +151,18 @@ def _handle_add(args: argparse.Namespace) -> None:
     else:
         scheduler = LocalScheduler()
 
-    if existing:
-        old_scheduler = _scheduler_for_job(existing, project_root)
-        old_scheduler.uninstall(ScheduleJob(
+    if existing and existing.get("backend") != backend:
+        # Backend changed (local -> --remote) or vice versa. Uninstall the old one to mgrate.
+        old_job = ScheduleJob(
             script=existing["script"],
             cron=existing["cron"],
             schedule_id=existing["id"],
             project_root=Path(existing["project_root"]),
-        ))
+        )
+        _scheduler_for_job(existing, project_root).uninstall(old_job)
 
+    # install() is idempotent for an existing schedule_id: backends update
+    # in place, so this also serves as the update path.
     try:
         scheduler.install(job, lamia_bin)
     except ValueError as e:
@@ -181,7 +184,7 @@ def _handle_add(args: argparse.Namespace) -> None:
 
 
 
-def _format_error_line(error_msg: str, job: dict) -> str:
+def _format_error_line(error_msg: str, job: dict, logs_url: str = "") -> str:
     """Truncate a potentially huge error to a single readable line.
 
     If the error is multi-line or longer than 120 chars, show only the first
@@ -203,7 +206,9 @@ def _format_error_line(error_msg: str, job: dict) -> str:
         log_path = Path.home() / ".lamia" / "logs" / "schedules" / job_id / "schedule.log"
         return f"{first_line}  (see {log_path})"
 
-    return f"{first_line}  (see cloud logs)"
+    if logs_url:
+        return f"{first_line}  (see {logs_url})"
+    return first_line
 
 
 def _format_local_timestamp(ts: str) -> str:
@@ -236,12 +241,16 @@ def _print_job(job: dict, last_run: dict | None = None) -> None:
     if job.get("source_missing"):
         print("    last run: unavailable  status: SOURCE_MISSING")
     elif last_run:
-        status_icon = "ok" if last_run.get("success") else "FAILED"
-        ts = _format_local_timestamp(last_run.get("timestamp", "unknown"))
+        started_at = last_run.get("started_at")
+        ts = _format_local_timestamp(
+            started_at or last_run.get("finished_at") or last_run.get("timestamp", "unknown")
+        )
+        still_running = started_at and last_run.get("success") is None and last_run.get("exit_code") is None
+        status_icon = "running" if still_running else ("ok" if last_run.get("success") else "FAILED")
         error_msg = last_run.get("error", "")
         print(f"    last run: {ts}  status: {status_icon}")
         if error_msg:
-            print(f"    error: {_format_error_line(error_msg, job)}")
+            print(f"    error: {_format_error_line(error_msg, job, last_run.get('logs_url', ''))}")
     else:
         print(f"    last run: never")
     print()
@@ -334,7 +343,7 @@ def _handle_remove_orphaned() -> None:
     for j in orphaned:
         last_run = j.get("last_run")
         if last_run:
-            ts_str = last_run.get("timestamp", "")
+            ts_str = last_run.get("finished_at") or last_run.get("started_at") or last_run.get("timestamp", "")
             if ts_str:
                 try:
                     run_time = datetime.fromisoformat(ts_str)
@@ -401,19 +410,11 @@ def _handle_update(args: argparse.Namespace) -> None:
         project_root=Path(job_data["project_root"]),
     )
 
-    old_job = ScheduleJob(
-        script=job_data["script"],
-        cron=job_data["cron"],
-        schedule_id=job_id,
-        catch_up=job_data.get("catch_up", True),
-        project_root=Path(job_data["project_root"]),
-    )
-
     backend = job_data.get("backend", "local")
     scheduler = _scheduler_for_job(job_data, Path(job_data["project_root"]))
     lamia_bin = find_lamia_bin()
 
-    scheduler.uninstall(old_job)
+    # install() is idempotent for an existing schedule_id — no uninstall() first.
     try:
         scheduler.install(updated_job, lamia_bin)
     except ValueError as e:

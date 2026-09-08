@@ -210,15 +210,23 @@ def fetch_cloud_statuses(cloud_jobs: list[dict]) -> dict[str, dict | None]:
 
                 exec_status = scheduler.get_last_execution_status(cloud_job)
                 if exec_status:
+                    finished_at = exec_status.get("finished_at")
+                    if finished_at is None and config:
+                        # Scheduler-level failure (no execution was ever created) —
+                        # fall back to the scheduler job's own attempt timestamp.
+                        finished_at = config.get("last_attempt_time")
                     results[job["id"]] = {
-                        "timestamp": exec_status.get("timestamp"),
+                        "started_at": exec_status.get("started_at"),
+                        "finished_at": finished_at,
                         "success": exec_status.get("success"),
+                        "error": exec_status.get("error", ""),
+                        "logs_url": exec_status.get("logs_url", ""),
                     }
                 elif config:
                     last_attempt = config.get("last_attempt_time")
                     if last_attempt:
                         results[job["id"]] = {
-                            "timestamp": last_attempt,
+                            "finished_at": last_attempt,
                             "success": None,
                         }
             except Exception as exc:

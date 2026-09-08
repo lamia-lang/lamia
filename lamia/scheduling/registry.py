@@ -123,6 +123,32 @@ def find_job_by_script(script: str, project_root: str) -> Optional[dict]:
     return None
 
 
+def record_run_start(job_id: str) -> None:
+    """Record that a scheduled run has begun, into the job file.
+
+    Called once a run passes the catch-up dedup check. record_run carries
+    this timestamp forward into the final last_run entry.
+    """
+    _ensure_dir()
+    path = _job_file(job_id)
+
+    data = {}
+    if path.exists():
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            data = {}
+
+    data["last_run"] = {
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "finished_at": None,
+        "exit_code": None,
+        "success": None,
+        "error": "",
+    }
+    atomic_write(path, json.dumps(data, indent=2))
+
+
 def record_run(job_id: str, exit_code: int, error: str = "") -> None:
     """Record the result of a scheduled run into the job file.
 
@@ -139,8 +165,10 @@ def record_run(job_id: str, exit_code: int, error: str = "") -> None:
         except (json.JSONDecodeError, OSError):
             data = {}
 
+    started_at = (data.get("last_run") or {}).get("started_at")
     data["last_run"] = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "started_at": started_at,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
         "exit_code": exit_code,
         "success": exit_code == 0,
         "error": error,

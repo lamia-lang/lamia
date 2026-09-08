@@ -35,7 +35,7 @@ from lamia.interpreter.human.executor import HuCallable
 from lamia.adapters.llm.base import sanitize_api_error
 from lamia.errors import LLMProviderError
 from lamia.actions.trigger import TriggerRejectError, TRIGGER_REJECT_EXIT_CODE
-from lamia.scheduling.registry import record_run, load_job
+from lamia.scheduling.registry import record_run, record_run_start, load_job
 from lamia.tools.loop import run_tool_loop, AssistantMessage, ToolCallMessage, ToolResultMessage
 from lamia.tools.definitions import ToolName
 
@@ -685,6 +685,7 @@ For help on a subcommand, run:
         if _should_skip_catchup_run(_active_schedule_id):
             sys.exit(0)
         _install_schedule_watchdog(_active_schedule_id)
+        record_run_start(_active_schedule_id)
 
     json_flag = getattr(args, 'json', False)
 
@@ -988,7 +989,8 @@ def _should_skip_catchup_run(job_id: str) -> bool:
         else:
             last_scheduled = scheduled_today - timedelta(days=1)
 
-        last_run_iso = last_run_data.get("timestamp", "")
+        last_run_iso = last_run_data.get("started_at") or last_run_data.get("finished_at")
+
         last_run = datetime.fromisoformat(last_run_iso)
         if last_run.tzinfo:
             last_run = last_run.astimezone().replace(tzinfo=None)

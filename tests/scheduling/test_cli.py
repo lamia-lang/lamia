@@ -13,6 +13,8 @@ from lamia.scheduling.cli import (
     EVERY_PRESETS,
     _cron_to_friendly,
     _format_error_line,
+    _format_local_timestamp,
+    _print_job,
     _resolve_cron,
     handle_schedule,
     _handle_add,
@@ -107,7 +109,7 @@ class TestHandleAdd:
 
         installed_job = mock_scheduler.install.call_args[0][0]
         assert installed_job.schedule_id == "existingid123"
-        mock_scheduler.uninstall.assert_called_once()
+        mock_scheduler.uninstall.assert_not_called()
         captured = capsys.readouterr()
         assert "existingid123" in captured.out
 
@@ -241,8 +243,8 @@ class TestHandleUpdate:
         args.no_catch_up = True
 
         _handle_update(args)
-        mock_scheduler.uninstall.assert_called_once()
         mock_scheduler.install.assert_called_once()
+        mock_scheduler.uninstall.assert_not_called()
         captured = capsys.readouterr()
         assert "Updated schedule" in captured.out
 
@@ -439,17 +441,68 @@ class TestFormatErrorLine:
         assert "my-job-abc1" in result
         assert "schedule.log" in result
 
-    def test_cloud_job_shows_cloud_logs(self):
+    def test_cloud_job_multiline_without_logs_url_shows_bare_message(self):
         job = {"id": "cloud-job-1", "backend": "cloud"}
         error = "line1\nline2"
         result = _format_error_line(error, job)
-        assert "cloud logs" in result
+        assert result == "line1"
+
+    def test_cloud_job_multiline_with_logs_url_shows_it(self):
+        job = {"id": "cloud-job-1", "backend": "cloud"}
+        error = "line1\nline2"
+        result = _format_error_line(error, job, "https://console.cloud.google.com/logs/query;foo")
+        assert "https://console.cloud.google.com/logs/query;foo" in result
+
+    def test_cloud_job_short_error_has_no_logs_url(self):
+        """A short cloud error already fits on one line — same rule as local."""
+        job = {"id": "cloud-job-1", "backend": "cloud"}
+        result = _format_error_line("short", job, "https://example.com/logs")
+        assert result == "short"
 
     def test_single_line_within_limit_no_reference(self):
         job = {"id": "test-1234", "backend": "local"}
         result = _format_error_line("simple error", job)
         assert "schedule.log" not in result
         assert result == "simple error"
+
+
+class TestPrintJobLastRunStatus:
+    """`last run` must reflect when a run started, not when it ended."""
+
+    def test_uses_started_at_over_finished_at(self, capsys):
+        job = {"id": "job1", "backend": "local", "cron": "0 9 * * *", "script": "x.lm", "project_root": "/p"}
+        last_run = {
+            "started_at": "2026-09-07T09:00:00+00:00",
+            "finished_at": "2026-09-07T09:05:00+00:00",
+            "success": True,
+            "error": "",
+        }
+        _print_job(job, last_run=last_run)
+        out = capsys.readouterr().out
+        assert _format_local_timestamp(last_run["started_at"]) in out
+        assert _format_local_timestamp(last_run["finished_at"]) not in out
+
+    def test_in_progress_run_shows_running_not_failed(self, capsys):
+        job = {"id": "job1", "backend": "local", "cron": "0 9 * * *", "script": "x.lm", "project_root": "/p"}
+        last_run = {
+            "started_at": "2026-09-07T09:00:00+00:00",
+            "finished_at": None,
+            "success": None,
+            "exit_code": None,
+            "error": "",
+        }
+        _print_job(job, last_run=last_run)
+        out = capsys.readouterr().out
+        assert "status: running" in out
+        assert "FAILED" not in out
+
+    def test_completed_run_without_started_at_falls_back_to_finished_at(self, capsys):
+        job = {"id": "job1", "backend": "local", "cron": "0 9 * * *", "script": "x.lm", "project_root": "/p"}
+        last_run = {"finished_at": "2026-09-07T09:05:00+00:00", "success": True, "error": ""}
+        _print_job(job, last_run=last_run)
+        out = capsys.readouterr().out
+        assert _format_local_timestamp(last_run["finished_at"]) in out
+        assert "status: ok" in out
 
 
 class TestGracefulShutdownRecordsRun:
@@ -709,6 +762,9 @@ class TestSchedulerInvocationFlow:
         old_ts = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
         path = temp_schedules_dir / "flow-test-02.json"
         data = json.loads(path.read_text())
+        # Pre-rename record shape (only "timestamp", no started_at/finished_at) —
+        # doubles as coverage for the backward-compat fallback in
+        # _should_skip_catchup_run's field lookup.
         data["last_run"] = {
             "timestamp": old_ts,
             "exit_code": 1,
@@ -719,3 +775,30 @@ class TestSchedulerInvocationFlow:
 
         should_skip = cli_mod._should_skip_catchup_run("flow-test-02")
         assert should_skip is False
+
+    def test_catchup_dedup_uses_started_at_for_in_progress_run(self, temp_schedules_dir):
+        """A run that has started but not finished must still count as claimed."""
+        import lamia.cli.cli as cli_mod
+        from lamia.scheduling.registry import save_job
+        from datetime import datetime, timezone
+
+        job = ScheduleJob(
+            script="pins.lm", cron="0 19 * * *",
+            schedule_id="flow-test-03",
+            project_root=Path("/p"),
+        )
+        save_job(job, "/bin/lamia")
+
+        path = temp_schedules_dir / "flow-test-03.json"
+        data = json.loads(path.read_text())
+        data["last_run"] = {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": None,
+            "exit_code": None,
+            "success": None,
+            "error": "",
+        }
+        path.write_text(json.dumps(data, indent=2))
+
+        should_skip = cli_mod._should_skip_catchup_run("flow-test-03")
+        assert should_skip is True
