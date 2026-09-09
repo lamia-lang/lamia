@@ -3685,6 +3685,23 @@ lamia schedule add daily_task.lm --every day --remote
 
 Cloud jobs are guaranteed to run on time — no catch-up needed, no local machine required. All other commands (`list`, `update`, `remove`) automatically detect whether a job is local or cloud.
 
+### Migrating Between Local and Cloud
+
+`schedule add` matches an existing schedule by script filename and project path — running it again for the same script updates that schedule instead of creating a second one. Add `--remote` (or drop it) to move an existing schedule to the other backend, using the same command you'd use to create it:
+
+```bash
+# was local, now runs in the cloud instead
+lamia schedule add daily_task.lm --every day --remote
+```
+
+The cron expression, catch-up setting, and the script itself don't need to match what was there before — a migration can change any of them in the same command.
+
+The old backend's job is torn down and the new one created under the same schedule ID. For local -> cloud that's a fresh deploy; for cloud -> local the Cloud Run Job and its execution history are deleted, since nothing carries over across backends.
+
+Migrating removes the script from the old environment before scheduling it in the new one, so it never ends up running in both places at once. That matters for anything with side effects that shouldn't repeat: sending an email, posting a pin, writing to an external system.
+
+This match is per machine — it only sees schedules recorded in your own `~/.lamia/schedules/`. If a teammate created a cloud schedule for a script from their machine, running `schedule add` for that same script on yours won't detect it and will create a second, independent schedule rather than migrating theirs. Coordinate with your team before scheduling a script that's already running on a schedule elsewhere.
+
 If the scheduled script reads credentials from the environment, only keys listed in `cloud.secrets` are sent to Secret Manager at deploy time — the container itself never receives your `.env` file. Keys not listed in `cloud.secrets` are not available in cloud runtime. Removing the schedule removes the secrets it was using. See [lamia-cloud — Secrets](../advanced/lamia-cloud.md#secrets-for-cloud-execution).
 
 Cloud scheduling requires the [`lamia-cloud`](../advanced/lamia-cloud.md) package.  
