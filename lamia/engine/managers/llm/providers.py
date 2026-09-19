@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 _BUILTIN_ADAPTERS = [
     ("lamia.adapters.llm.openai_adapter", "OpenAIAdapter", "openai"),
     ("lamia.adapters.llm.anthropic_adapter", "AnthropicAdapter", "anthropic"),
+    ("lamia.adapters.llm.openrouter_adapter", "OpenRouterAdapter", "openrouter"),
     ("lamia.adapters.llm.local.ollama_adapter", "OllamaAdapter", "ollama"),
     ("lamia.adapters.llm.lamia_adapter", "LamiaAdapter", "lamia"),
 ]
@@ -142,4 +143,4 @@ class ProviderRegistry:
     def get_providers_requiring_api_keys(self) -> Set[str]:
         """Get providers that need API keys."""
         return {name for name, adapter_cls in self._adapter_map.items() 
-                if adapter_cls.env_var_names()} 
+                if adapter_cls.env_var_names()}

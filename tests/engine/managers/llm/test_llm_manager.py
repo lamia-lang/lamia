@@ -193,7 +193,7 @@ class TestLLMManagerAPIKeyResolution:
             
             result = self.manager._resolve_api_key("local_provider")
             assert result == (None, False)
-    
+
     def test_resolve_api_key_missing_required(self):
         """Test resolving API key when required key is missing."""
         with patch.object(self.manager.provider_registry, 'get_api_key_from_env', return_value=None):

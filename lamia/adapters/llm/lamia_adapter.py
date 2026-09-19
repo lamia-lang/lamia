@@ -39,7 +39,7 @@ class LamiaAdapter(BaseLLMAdapter):
     def get_supported_providers(cls) -> Set[str]:
         return cls._supported_providers
     
-    def __init__(self, api_key: str, api_url: str = "http://209.151.237.90:3389"):
+    def __init__(self, api_key: str, api_url: str = os.getenv("LAMIA_API_URL", "http://localhost:3389")):
         self.api_key = api_key
         self.api_url = api_url
         self.session = None
