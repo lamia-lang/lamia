@@ -120,6 +120,21 @@ class TypeMatcher:
                     return TypeMatchResult(False, None, error_msg_dict_elements_invalid(invalid_keys, invalid_values))
                 return TypeMatchResult(True, coerced, info_loss=combined_info_loss)
 
+            # Handle Literal types
+            if typing.get_origin(expected_type) is typing.Literal:
+                allowed = typing.get_args(expected_type)
+                if value in allowed:
+                    return TypeMatchResult(True, value)
+                if not self.strict and isinstance(value, str):
+                    value_lower = value.lower()
+                    for option in allowed:
+                        if isinstance(option, str) and option.lower() == value_lower:
+                            return TypeMatchResult(True, option)
+                return TypeMatchResult(
+                    False, None,
+                    f"Value '{value}' is not one of the allowed values: {list(allowed)}"
+                )
+
             # Handle Enum types
             if isinstance(expected_type, type) and issubclass(expected_type, Enum):
                 return self._convert_enum(value, expected_type)

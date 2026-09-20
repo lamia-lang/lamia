@@ -542,6 +542,69 @@ def test_type_matcher_field_constraints(expected_type, value, is_valid, expected
     else:
         assert result.error is None
 
+# Literal Type Validation Tests
+class TestLiteralTypeValidation:
+    """Test Literal[...] type validation support in TypeMatcher."""
+
+    def test_literal_string_exact_match(self):
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("positive", typing.Literal["positive", "negative", "neutral"])
+        assert result.is_valid
+        assert result.value == "positive"
+
+    def test_literal_string_invalid_value(self):
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("unknown", typing.Literal["positive", "negative", "neutral"])
+        assert not result.is_valid
+        assert "not one of the allowed values" in result.error
+
+    def test_literal_int_exact_match(self):
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(1, typing.Literal[1, 2, 3])
+        assert result.is_valid
+        assert result.value == 1
+
+    def test_literal_int_invalid_value(self):
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(5, typing.Literal[1, 2, 3])
+        assert not result.is_valid
+
+    def test_literal_case_insensitive_permissive(self):
+        matcher = TypeMatcher(strict=False)
+        result = matcher.validate_and_convert("POSITIVE", typing.Literal["positive", "negative", "neutral"])
+        assert result.is_valid
+        assert result.value == "positive"
+
+    def test_literal_case_sensitive_strict(self):
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("POSITIVE", typing.Literal["positive", "negative", "neutral"])
+        assert not result.is_valid
+
+    def test_literal_mixed_types(self):
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("auto", typing.Literal["auto", 0, True])
+        assert result.is_valid
+        assert result.value == "auto"
+
+    def test_literal_bool_value(self):
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert(True, typing.Literal[True, False])
+        assert result.is_valid
+        assert result.value is True
+
+    def test_literal_single_value(self):
+        matcher = TypeMatcher(strict=True)
+        result = matcher.validate_and_convert("only", typing.Literal["only"])
+        assert result.is_valid
+
+    def test_literal_many_string_options(self):
+        matcher = TypeMatcher(strict=True)
+        options = typing.Literal["billing", "product", "support", "onboarding", "feature_request", "bug", "shipping", "other"]
+        result = matcher.validate_and_convert("feature_request", options)
+        assert result.is_valid
+        assert result.value == "feature_request"
+
+
 # Test enums for enum validation tests
 class Color(str, Enum):
     RED = "red"
