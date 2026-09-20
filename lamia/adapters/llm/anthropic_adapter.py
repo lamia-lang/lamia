@@ -3,7 +3,7 @@ import asyncio
 import aiohttp
 import logging
 
-from .base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error, raise_for_sdk_error
+from .base import BaseLLMAdapter, LLMResponse, LLMModel, make_strict_schema, strip_for_anthropic, sanitize_api_error, raise_for_status, raise_for_connection_error, raise_for_sdk_error
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ class AnthropicAdapter(BaseLLMAdapter):
             request_kwargs["output_config"] = {
                 "format": {
                     "type": "json_schema",
-                    "schema": make_strict_schema(response_model),
+                    "schema": strip_for_anthropic(make_strict_schema(response_model)),
                 }
             }
 
@@ -207,10 +207,10 @@ class AnthropicAdapter(BaseLLMAdapter):
             payload["output_config"] = {
                 "format": {
                     "type": "json_schema",
-                    "schema": make_strict_schema(response_model),
+                    "schema": strip_for_anthropic(make_strict_schema(response_model)),
                 }
             }
-        
+
         try:
             async with self.session.post(self.API_URL, json=payload) as response:
                 if response.status != 200:

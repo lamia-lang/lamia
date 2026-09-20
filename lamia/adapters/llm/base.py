@@ -64,6 +64,110 @@ def raise_for_sdk_error(error: Exception, prefix: str) -> None:
     raise ExternalOperationTransientError(msg)
 
 
+_ANTHROPIC_REJECTED = frozenset({
+    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
+    "multipleOf",
+    "minLength", "maxLength",
+    "minItems", "maxItems",
+    "uniqueItems",
+})
+
+
+def strip_for_anthropic(schema: dict) -> dict:
+    """Return a deep copy of *schema* with keywords Anthropic rejects removed.
+
+    Anthropic's structured-output endpoint returns 400 for constraint
+    keywords like ``minimum``, ``maxLength``, etc.  Other providers
+    (OpenAI, Ollama) accept or silently ignore them, so this function
+    is called only on the Anthropic code-path.
+
+    ``pattern`` is intentionally kept — Anthropic accepts it.
+    """
+    import copy
+    stripped = copy.deepcopy(schema)
+    _strip_rejected(stripped)
+    return stripped
+
+
+def _strip_rejected(node: Any) -> None:
+    """Recursively delete Anthropic-rejected keys from *node* in-place."""
+    if not isinstance(node, dict):
+        return
+    for key in _ANTHROPIC_REJECTED & node.keys():
+        del node[key]
+    for value in node.values():
+        if isinstance(value, dict):
+            _strip_rejected(value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _strip_rejected(item)
+
+
+def extract_constraint_hints(model: Type[BaseModel]) -> str:
+    """Build a compact JSON-schema fragment containing only constraint keywords.
+
+    Returns an empty string when no constraints are present.  The fragment
+    is appended to the prompt so the LLM knows about value bounds even when
+    providers silently ignore the constraint keywords in the schema or when
+    the keywords had to be stripped (Anthropic).
+    """
+    schema = model.model_json_schema()
+    defs = schema.get("$defs", {})
+    trimmed = _keep_constraints(schema, defs)
+    if not trimmed:
+        return ""
+    import json
+    return (
+        "Value constraints for the JSON response (ensure all values satisfy these):\n"
+        + json.dumps(trimmed, separators=(",", ":"))
+    )
+
+
+def _keep_constraints(node: Any, defs: dict) -> dict | None:
+    """Return a minimal schema tree keeping only constraint-bearing nodes."""
+    if not isinstance(node, dict):
+        return None
+
+    if "$ref" in node:
+        ref_name = node["$ref"].rsplit("/", 1)[-1]
+        if ref_name in defs:
+            return _keep_constraints(defs[ref_name], defs)
+        return None
+
+    result: dict = {}
+    constraint_keys = _ANTHROPIC_REJECTED | {"pattern"}
+    for key in constraint_keys:
+        if key in node:
+            result[key] = node[key]
+
+    if "properties" in node:
+        props = {}
+        for prop_name, prop_schema in node["properties"].items():
+            trimmed = _keep_constraints(prop_schema, defs)
+            if trimmed:
+                props[prop_name] = trimmed
+        if props:
+            result["properties"] = props
+
+    if "items" in node and isinstance(node["items"], dict):
+        trimmed = _keep_constraints(node["items"], defs)
+        if trimmed:
+            result["items"] = trimmed
+
+    for combiner in ("anyOf", "oneOf"):
+        if combiner in node:
+            branches = []
+            for branch in node[combiner]:
+                trimmed = _keep_constraints(branch, defs)
+                if trimmed:
+                    branches.append(trimmed)
+            if branches:
+                result[combiner] = branches
+
+    return result or None
+
+
 def make_strict_schema(model: Type[BaseModel]) -> dict:
     """Generate a JSON schema with additionalProperties: false on all objects.
 

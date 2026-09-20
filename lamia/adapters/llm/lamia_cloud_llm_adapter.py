@@ -12,7 +12,7 @@ from typing import Optional, Type
 
 from pydantic import BaseModel
 
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMModel, LLMResponse, make_strict_schema
+from lamia.adapters.llm.base import BaseLLMAdapter, LLMModel, LLMResponse, make_strict_schema, strip_for_anthropic
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,8 @@ class LamiaCloudLLMAdapter(BaseLLMAdapter):
         schema = None
         if response_model is not None:
             schema = make_strict_schema(response_model)
+            if model.get_provider_name() == "anthropic":
+                schema = strip_for_anthropic(schema)
 
         request = CloudLLMRequest(
             prompt=prompt,

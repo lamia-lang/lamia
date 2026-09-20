@@ -1,9 +1,21 @@
 """Tests for base LLM adapter."""
 
+import json
 import pytest
 from abc import ABC
+from typing import List, Optional
 from unittest.mock import Mock
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, sanitize_api_error
+
+from pydantic import BaseModel, Field
+
+from lamia.adapters.llm.base import (
+    BaseLLMAdapter,
+    LLMResponse,
+    extract_constraint_hints,
+    make_strict_schema,
+    sanitize_api_error,
+    strip_for_anthropic,
+)
 from lamia.errors import LLMProviderError, LLMErrorType
 from lamia import LLMModel
 
@@ -505,3 +517,196 @@ class TestBaseLLMAdapterVariants:
         assert response.usage["input_tokens"] == 2  # "hello world" split
         assert response.usage["output_tokens"] == 3  # "HELLO WORLD" split + 1
         assert response.model == "complex-model"
+
+
+class TestStripForAnthropic:
+    """Test strip_for_anthropic removes only Anthropic-rejected keywords."""
+
+    def test_strips_numeric_constraints(self):
+        class M(BaseModel):
+            score: float = Field(ge=0.0, le=1.0)
+            count: int = Field(gt=0, lt=100)
+
+        schema = make_strict_schema(M)
+        stripped = strip_for_anthropic(schema)
+
+        assert "minimum" not in stripped["properties"]["score"]
+        assert "maximum" not in stripped["properties"]["score"]
+        assert "exclusiveMinimum" not in stripped["properties"]["count"]
+        assert "exclusiveMaximum" not in stripped["properties"]["count"]
+
+    def test_strips_string_constraints(self):
+        class M(BaseModel):
+            name: str = Field(min_length=3, max_length=50)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert "minLength" not in stripped["properties"]["name"]
+        assert "maxLength" not in stripped["properties"]["name"]
+
+    def test_preserves_pattern(self):
+        class M(BaseModel):
+            code: str = Field(pattern=r"^[A-Z]{3}$")
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert stripped["properties"]["code"]["pattern"] == "^[A-Z]{3}$"
+
+    def test_strips_multiple_of(self):
+        class M(BaseModel):
+            step: int = Field(multiple_of=5)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert "multipleOf" not in stripped["properties"]["step"]
+
+    def test_strips_list_constraints(self):
+        class M(BaseModel):
+            tags: List[str] = Field(min_length=1, max_length=10)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert "minItems" not in stripped["properties"]["tags"]
+        assert "maxItems" not in stripped["properties"]["tags"]
+
+    def test_recurses_nested_models(self):
+        class Inner(BaseModel):
+            rating: float = Field(ge=1, le=5)
+
+        class Outer(BaseModel):
+            item: Inner
+
+        stripped = strip_for_anthropic(make_strict_schema(Outer))
+        inner = stripped["properties"]["item"]["properties"]["rating"]
+        assert "minimum" not in inner
+        assert "maximum" not in inner
+
+    def test_does_not_modify_original(self):
+        class M(BaseModel):
+            val: int = Field(ge=0)
+
+        schema = make_strict_schema(M)
+        strip_for_anthropic(schema)
+        assert "minimum" in schema["properties"]["val"]
+
+    def test_preserves_non_constraint_keys(self):
+        class M(BaseModel):
+            name: str = Field(description="A name", min_length=1)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        props = stripped["properties"]["name"]
+        assert props["description"] == "A name"
+        assert props["type"] == "string"
+        assert "minLength" not in props
+
+    def test_preserves_additional_properties_false(self):
+        class M(BaseModel):
+            x: int = Field(ge=0)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert stripped["additionalProperties"] is False
+
+    def test_no_change_when_no_constraints(self):
+        class M(BaseModel):
+            name: str = Field(description="A name")
+
+        schema = make_strict_schema(M)
+        stripped = strip_for_anthropic(schema)
+        assert stripped["properties"]["name"] == schema["properties"]["name"]
+
+
+class TestExtractConstraintHints:
+    """Test extract_constraint_hints generates a compact constraint fragment."""
+
+    def test_returns_empty_when_no_constraints(self):
+        class M(BaseModel):
+            name: str = Field(description="A name")
+            count: int
+
+        assert extract_constraint_hints(M) == ""
+
+    def test_includes_numeric_constraints(self):
+        class M(BaseModel):
+            score: float = Field(ge=0.0, le=1.0)
+
+        hints = extract_constraint_hints(M)
+        parsed = json.loads(hints.split("\n", 1)[1])
+        assert parsed["properties"]["score"]["minimum"] == 0.0
+        assert parsed["properties"]["score"]["maximum"] == 1.0
+
+    def test_includes_string_constraints(self):
+        class M(BaseModel):
+            name: str = Field(min_length=3, max_length=50)
+
+        hints = extract_constraint_hints(M)
+        parsed = json.loads(hints.split("\n", 1)[1])
+        assert parsed["properties"]["name"]["minLength"] == 3
+        assert parsed["properties"]["name"]["maxLength"] == 50
+
+    def test_includes_pattern(self):
+        class M(BaseModel):
+            code: str = Field(pattern=r"^[A-Z]+$")
+
+        hints = extract_constraint_hints(M)
+        parsed = json.loads(hints.split("\n", 1)[1])
+        assert parsed["properties"]["code"]["pattern"] == "^[A-Z]+$"
+
+    def test_includes_list_constraints(self):
+        class M(BaseModel):
+            tags: List[str] = Field(min_length=1, max_length=5)
+
+        hints = extract_constraint_hints(M)
+        parsed = json.loads(hints.split("\n", 1)[1])
+        assert parsed["properties"]["tags"]["minItems"] == 1
+        assert parsed["properties"]["tags"]["maxItems"] == 5
+
+    def test_handles_nested_models(self):
+        class Inner(BaseModel):
+            confidence: float = Field(ge=0.0, le=1.0)
+
+        class Outer(BaseModel):
+            results: List[Inner] = Field(min_length=1)
+
+        hints = extract_constraint_hints(Outer)
+        parsed = json.loads(hints.split("\n", 1)[1])
+        assert "minItems" in parsed["properties"]["results"]
+        inner_conf = parsed["properties"]["results"]["items"]["properties"]["confidence"]
+        assert inner_conf["minimum"] == 0.0
+        assert inner_conf["maximum"] == 1.0
+
+    def test_omits_unconstrained_fields(self):
+        class M(BaseModel):
+            name: str = Field(description="No constraints")
+            score: float = Field(ge=0, le=1)
+
+        hints = extract_constraint_hints(M)
+        parsed = json.loads(hints.split("\n", 1)[1])
+        assert "name" not in parsed.get("properties", {})
+        assert "score" in parsed["properties"]
+
+    def test_starts_with_header_line(self):
+        class M(BaseModel):
+            x: int = Field(ge=0)
+
+        hints = extract_constraint_hints(M)
+        assert hints.startswith("Value constraints for the JSON response")
+
+
+class TestMakeStrictSchemaUnchanged:
+    """Confirm make_strict_schema still includes all constraint keywords."""
+
+    def test_includes_all_constraints(self):
+        class M(BaseModel):
+            name: str = Field(min_length=3, max_length=50, pattern=r"^[A-Z]")
+            score: float = Field(ge=0.0, le=1.0)
+            count: int = Field(gt=0, lt=100)
+            step: int = Field(multiple_of=5)
+            tags: List[str] = Field(min_length=1, max_length=10)
+
+        schema = make_strict_schema(M)
+        assert "minLength" in schema["properties"]["name"]
+        assert "maxLength" in schema["properties"]["name"]
+        assert "pattern" in schema["properties"]["name"]
+        assert "minimum" in schema["properties"]["score"]
+        assert "maximum" in schema["properties"]["score"]
+        assert "exclusiveMinimum" in schema["properties"]["count"]
+        assert "exclusiveMaximum" in schema["properties"]["count"]
+        assert "multipleOf" in schema["properties"]["step"]
+        assert "minItems" in schema["properties"]["tags"]
+        assert "maxItems" in schema["properties"]["tags"]
