@@ -518,6 +518,81 @@ class TestInlineVariableSubstitution:
         assert ".format" not in result
 
 
+class TestFileWriteExpressionPaths:
+    """File(Type, expr) where expr is a variable or BinOp must emit the
+    original expression, not an empty string."""
+
+    def setup_method(self):
+        self.transformer = HybridSyntaxTransformer()
+
+    def test_function_file_write_with_variable_path(self):
+        """def func() -> File(CSV, OUTPUT_CSV): emits OUTPUT_CSV, not ''."""
+        source = '''
+OUTPUT_CSV = "./output/contacts.csv"
+def save_data() -> File(CSV, OUTPUT_CSV):
+    "Generate contacts CSV"
+'''
+        result = self.transformer.transform_code(source)
+        assert "FileCommand" in result
+        assert "OUTPUT_CSV" in result
+        # Must not contain an empty-string path
+        assert "path=''" not in result
+        assert 'path=""' not in result
+
+    def test_function_file_write_with_binop_path(self):
+        """def func() -> File(CSV, OUTPUT_DIR + 'file.csv'): emits the addition."""
+        source = '''
+OUTPUT_DIR = "./output/"
+def save_data() -> File(CSV, OUTPUT_DIR + "contacts.csv"):
+    "Generate contacts CSV"
+'''
+        result = self.transformer.transform_code(source)
+        assert "FileCommand" in result
+        assert "OUTPUT_DIR" in result
+        assert "contacts.csv" in result
+
+    def test_inline_file_write_with_variable_path(self):
+        """Expression-level -> File(CSV, var_name) emits the variable."""
+        source = '''
+OUTPUT_CSV = "./output/contacts.csv"
+__LAMIA_FILE_WRITE__("Generate contacts CSV", File(CSV, OUTPUT_CSV))
+'''
+        result = self.transformer.transform_code(source)
+        assert "FileCommand" in result
+        assert "OUTPUT_CSV" in result
+
+    def test_inline_file_write_with_binop_path(self):
+        """Expression-level -> File(JSON, dir + name) emits the BinOp."""
+        source = '''
+DIR = "./out/"
+__LAMIA_FILE_WRITE__("Generate data", File(JSON, DIR + "data.json"))
+'''
+        result = self.transformer.transform_code(source)
+        assert "FileCommand" in result
+        assert "DIR" in result
+        assert "data.json" in result
+
+    def test_literal_path_still_works(self):
+        """File(CSV, "literal.csv") continues to emit the literal string."""
+        source = '''
+def save() -> File(CSV, "output.csv"):
+    "Generate CSV"
+'''
+        result = self.transformer.transform_code(source)
+        assert "output.csv" in result
+
+    def test_web_function_file_write_with_variable_path(self):
+        """def func() -> File(HTML, OUT_PATH): return web.get_text(...)."""
+        source = '''
+OUT_PATH = "./page.html"
+def scrape() -> File(HTML, OUT_PATH):
+    return web.get_text(".content")
+'''
+        result = self.transformer.transform_code(source)
+        assert "FileCommand" in result
+        assert "OUT_PATH" in result
+
+
 # =============================================================================
 # WEB METHOD MAPPING COMPLETENESS AND TRANSFORMATION TESTS
 # =============================================================================
