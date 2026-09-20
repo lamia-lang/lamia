@@ -64,13 +64,44 @@ def raise_for_sdk_error(error: Exception, prefix: str) -> None:
     raise ExternalOperationTransientError(msg)
 
 
-def make_strict_schema(model: Type[BaseModel]) -> dict:
-    """Generate a JSON schema with additionalProperties: false on all objects.
+_UNSUPPORTED_CONSTRAINT_KEYS = frozenset({
+    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
+    "multipleOf",
+    "minLength", "maxLength",
+    "pattern",
+    "minItems", "maxItems",
+    "uniqueItems",
+})
 
-    Most LLM providers (Anthropic, OpenAI strict mode) require every object
-    node to explicitly forbid extra keys.  Pydantic's model_json_schema()
-    does not set this, so we patch the tree after generation.  Also inlines
-    any $defs references for maximum provider compatibility.
+_CONSTRAINT_LABEL = {
+    "minimum": "minimum value: {v}",
+    "maximum": "maximum value: {v}",
+    "exclusiveMinimum": "must be greater than {v}",
+    "exclusiveMaximum": "must be less than {v}",
+    "multipleOf": "must be a multiple of {v}",
+    "minLength": "minimum length: {v}",
+    "maxLength": "maximum length: {v}",
+    "pattern": "must match pattern: {v}",
+    "minItems": "minimum items: {v}",
+    "maxItems": "maximum items: {v}",
+    "uniqueItems": "items must be unique",
+}
+
+
+def make_strict_schema(model: Type[BaseModel]) -> dict:
+    """Generate a provider-safe JSON schema from a Pydantic model.
+
+    LLM providers (Anthropic, OpenAI strict mode) reject constraint keywords
+    like ``minimum``, ``maxLength``, or ``pattern`` in structured-output
+    schemas.  This function:
+
+    1. Inlines ``$defs`` references for provider compatibility.
+    2. Sets ``additionalProperties: false`` on every object node.
+    3. Strips unsupported constraint keywords and appends their meaning to
+       each field's ``description`` so the LLM still sees the intent.
+
+    Lamia validates the LLM response against the *original* Pydantic model
+    with full constraints, so stripping them from the schema is safe.
     """
     schema = model.model_json_schema()
     defs = schema.pop("$defs", {})
@@ -97,9 +128,31 @@ def make_strict_schema(model: Type[BaseModel]) -> dict:
             if combiner in node:
                 node[combiner] = [_patch(branch) for branch in node[combiner]]
 
+        _strip_constraints(node)
+
         return node
 
     return _patch(schema)
+
+
+def _strip_constraints(node: dict) -> None:
+    """Remove unsupported constraint keywords and append them to description."""
+    found = {k: node[k] for k in _UNSUPPORTED_CONSTRAINT_KEYS if k in node}
+    if not found:
+        return
+
+    hints = []
+    for key, value in found.items():
+        template = _CONSTRAINT_LABEL.get(key, f"{key}: {{v}}")
+        hints.append(template.format(v=value))
+        del node[key]
+
+    existing = node.get("description", "")
+    constraint_text = "Constraints: " + "; ".join(hints) + "."
+    if existing:
+        node["description"] = existing + " " + constraint_text
+    else:
+        node["description"] = constraint_text
 
 
 @dataclass

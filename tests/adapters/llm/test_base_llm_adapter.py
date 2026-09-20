@@ -2,8 +2,18 @@
 
 import pytest
 from abc import ABC
+from enum import Enum
+from typing import List, Optional
 from unittest.mock import Mock
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, sanitize_api_error
+
+from pydantic import BaseModel, Field
+
+from lamia.adapters.llm.base import (
+    BaseLLMAdapter,
+    LLMResponse,
+    make_strict_schema,
+    sanitize_api_error,
+)
 from lamia.errors import LLMProviderError, LLMErrorType
 from lamia import LLMModel
 
@@ -505,3 +515,176 @@ class TestBaseLLMAdapterVariants:
         assert response.usage["input_tokens"] == 2  # "hello world" split
         assert response.usage["output_tokens"] == 3  # "HELLO WORLD" split + 1
         assert response.model == "complex-model"
+
+
+class TestMakeStrictSchema:
+    """Test make_strict_schema strips unsupported constraints for LLM providers."""
+
+    def test_numeric_ge_le_stripped(self):
+        class M(BaseModel):
+            score: float = Field(ge=0.0, le=1.0)
+
+        schema = make_strict_schema(M)
+        props = schema["properties"]["score"]
+        assert "minimum" not in props
+        assert "maximum" not in props
+        assert "minimum value: 0.0" in props["description"]
+        assert "maximum value: 1.0" in props["description"]
+
+    def test_numeric_gt_lt_stripped(self):
+        class M(BaseModel):
+            count: int = Field(gt=0, lt=100)
+
+        schema = make_strict_schema(M)
+        props = schema["properties"]["count"]
+        assert "exclusiveMinimum" not in props
+        assert "exclusiveMaximum" not in props
+        assert "must be greater than 0" in props["description"]
+        assert "must be less than 100" in props["description"]
+
+    def test_multiple_of_stripped(self):
+        class M(BaseModel):
+            step: int = Field(multiple_of=5)
+
+        schema = make_strict_schema(M)
+        props = schema["properties"]["step"]
+        assert "multipleOf" not in props
+        assert "must be a multiple of 5" in props["description"]
+
+    def test_string_min_max_length_stripped(self):
+        class M(BaseModel):
+            name: str = Field(min_length=3, max_length=50)
+
+        schema = make_strict_schema(M)
+        props = schema["properties"]["name"]
+        assert "minLength" not in props
+        assert "maxLength" not in props
+        assert "minimum length: 3" in props["description"]
+        assert "maximum length: 50" in props["description"]
+
+    def test_string_pattern_stripped(self):
+        class M(BaseModel):
+            code: str = Field(pattern=r"^[A-Z]{3}$")
+
+        schema = make_strict_schema(M)
+        props = schema["properties"]["code"]
+        assert "pattern" not in props
+        assert "must match pattern: ^[A-Z]{3}$" in props["description"]
+
+    def test_list_min_max_items_stripped(self):
+        class M(BaseModel):
+            tags: List[str] = Field(min_length=1, max_length=10)
+
+        schema = make_strict_schema(M)
+        props = schema["properties"]["tags"]
+        assert "minItems" not in props
+        assert "maxItems" not in props
+        assert "minimum items: 1" in props["description"]
+        assert "maximum items: 10" in props["description"]
+
+    def test_existing_description_preserved(self):
+        class M(BaseModel):
+            score: float = Field(description="Quality score", ge=0, le=10)
+
+        schema = make_strict_schema(M)
+        desc = schema["properties"]["score"]["description"]
+        assert desc.startswith("Quality score ")
+        assert "Constraints:" in desc
+        assert "minimum value: 0" in desc
+
+    def test_no_description_when_no_constraints(self):
+        class M(BaseModel):
+            name: str = Field(description="A name")
+
+        schema = make_strict_schema(M)
+        assert schema["properties"]["name"]["description"] == "A name"
+
+    def test_field_without_description_gets_constraint_only(self):
+        class M(BaseModel):
+            val: int = Field(ge=0)
+
+        schema = make_strict_schema(M)
+        desc = schema["properties"]["val"]["description"]
+        assert desc == "Constraints: minimum value: 0."
+
+    def test_additional_properties_false_still_set(self):
+        class M(BaseModel):
+            x: int
+
+        schema = make_strict_schema(M)
+        assert schema["additionalProperties"] is False
+
+    def test_nested_model_constraints_stripped(self):
+        class Inner(BaseModel):
+            rating: float = Field(ge=1, le=5)
+
+        class Outer(BaseModel):
+            item: Inner
+
+        schema = make_strict_schema(Outer)
+        inner_props = schema["properties"]["item"]["properties"]["rating"]
+        assert "minimum" not in inner_props
+        assert "maximum" not in inner_props
+        assert "minimum value: 1" in inner_props["description"]
+
+    def test_list_of_nested_models_constraints_stripped(self):
+        class Item(BaseModel):
+            price: float = Field(ge=0)
+
+        class Cart(BaseModel):
+            items: List[Item] = Field(min_length=1)
+
+        schema = make_strict_schema(Cart)
+        items_prop = schema["properties"]["items"]
+        assert "minItems" not in items_prop
+        price_prop = items_prop["items"]["properties"]["price"]
+        assert "minimum" not in price_prop
+
+    def test_all_constraint_types_combined(self):
+        class M(BaseModel):
+            name: str = Field(
+                description="Product name",
+                min_length=1,
+                max_length=100,
+                pattern=r"^[A-Za-z]",
+            )
+            score: float = Field(ge=0.0, le=1.0)
+            count: int = Field(gt=0, lt=1000)
+            step: int = Field(multiple_of=5)
+            tags: List[str] = Field(min_length=1, max_length=20)
+
+        schema = make_strict_schema(M)
+        for key in ("minLength", "maxLength", "pattern"):
+            assert key not in schema["properties"]["name"]
+        for key in ("minimum", "maximum"):
+            assert key not in schema["properties"]["score"]
+        for key in ("exclusiveMinimum", "exclusiveMaximum"):
+            assert key not in schema["properties"]["count"]
+        assert "multipleOf" not in schema["properties"]["step"]
+        for key in ("minItems", "maxItems"):
+            assert key not in schema["properties"]["tags"]
+
+    def test_optional_field_constraints_stripped(self):
+        class M(BaseModel):
+            val: Optional[int] = Field(default=None, ge=0)
+
+        schema = make_strict_schema(M)
+        any_of = schema["properties"]["val"].get("anyOf")
+        if any_of:
+            for branch in any_of:
+                assert "minimum" not in branch
+        else:
+            assert "minimum" not in schema["properties"]["val"]
+
+    def test_schema_remains_valid_json_schema_structure(self):
+        class M(BaseModel):
+            name: str = Field(min_length=1, max_length=50)
+            score: float = Field(ge=0, le=1)
+
+        schema = make_strict_schema(M)
+        assert schema["type"] == "object"
+        assert "properties" in schema
+        assert "required" in schema
+        assert set(schema["required"]) == {"name", "score"}
+        assert schema["properties"]["name"]["type"] == "string"
+        assert schema["properties"]["score"]["type"] == "number"
