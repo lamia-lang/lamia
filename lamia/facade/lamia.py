@@ -223,7 +223,9 @@ class Lamia:
         if return_type is None:
             if not response.is_valid and isinstance(command, Command):
                 raise ValueError(response.error_message or "Command execution failed")
-            return response.typed_result or response.raw_text # for no return action both typed_result and raw_text will be None and None will be returned
+            if response.typed_result is not None:
+                return response.typed_result
+            return response.raw_text
         if not response.is_valid:
             raise ValueError(response.error_message or "Validation failed for requested return type")
         if response.typed_result is not None:
