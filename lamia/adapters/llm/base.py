@@ -2,9 +2,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Type
 import asyncio
+import copy
 import re
 import aiohttp
 from pydantic import BaseModel
+from pydantic.json_schema import GenerateJsonSchema
 from lamia import LLMModel
 from lamia.errors import (
     ExternalOperationTransientError,
@@ -83,7 +85,6 @@ def strip_for_anthropic(schema: dict) -> dict:
 
     ``pattern`` is intentionally kept — Anthropic accepts it.
     """
-    import copy
     stripped = copy.deepcopy(schema)
     _strip_rejected(stripped)
     return stripped
@@ -104,68 +105,59 @@ def _strip_rejected(node: Any) -> None:
                     _strip_rejected(item)
 
 
-def extract_constraint_hints(model: Type[BaseModel]) -> str:
-    """Build a compact JSON-schema fragment containing only constraint keywords.
+def has_value_constraints(model: Type[BaseModel]) -> bool:
+    """Return True when *model* declares any value constraint on a field.
 
-    Returns an empty string when no constraints are present.  The fragment
-    is appended to the prompt so the LLM knows about value bounds even when
-    providers silently ignore the constraint keywords in the schema or when
-    the keywords had to be stripped (Anthropic).
+    Value constraints are the bounds Pydantic emits for field arguments
+    such as ``ge``, ``max_length`` or ``pattern``, as opposed to the
+    structural keywords (``type``, ``required``, ``properties``).
+
+    The keyword set is a property of Pydantic's schema output and is
+    independent of what any single provider accepts.
+
+    Returns True whenever the schema cannot be inspected with certainty. An
+    unneeded hint costs a few prompt tokens; a missing one costs a retry.
     """
-    schema = model.model_json_schema()
+    constraint_keys = _pydantic_constraint_keywords()
+    if not constraint_keys:
+        return True
+
+    try:
+        schema = model.model_json_schema()
+    except Exception:
+        return True
+
     defs = schema.get("$defs", {})
-    trimmed = _keep_constraints(schema, defs)
-    if not trimmed:
-        return ""
-    import json
-    return (
-        "Value constraints for the JSON response (ensure all values satisfy these):\n"
-        + json.dumps(trimmed, separators=(",", ":"))
-    )
+    seen: set = set()
+    stack: list = [schema]
 
+    while stack:
+        node = stack.pop()
+        if not isinstance(node, dict):
+            continue
 
-def _keep_constraints(node: Any, defs: dict) -> dict | None:
-    """Return a minimal schema tree keeping only constraint-bearing nodes."""
-    if not isinstance(node, dict):
-        return None
+        ref = node.get("$ref")
+        if ref is not None:
+            ref_name = ref.rsplit("/", 1)[-1]
+            if ref_name not in defs:
+                return True
+            if ref_name not in seen:
+                seen.add(ref_name)
+                stack.append(defs[ref_name])
+            continue
 
-    if "$ref" in node:
-        ref_name = node["$ref"].rsplit("/", 1)[-1]
-        if ref_name in defs:
-            return _keep_constraints(defs[ref_name], defs)
-        return None
+        if constraint_keys & node.keys():
+            return True
 
-    result: dict = {}
-    constraint_keys = _ANTHROPIC_REJECTED | {"pattern"}
-    for key in constraint_keys:
-        if key in node:
-            result[key] = node[key]
+        for key, value in node.items():
+            if key == "$defs":
+                continue
+            if isinstance(value, dict):
+                stack.append(value)
+            elif isinstance(value, list):
+                stack.extend(value)
 
-    if "properties" in node:
-        props = {}
-        for prop_name, prop_schema in node["properties"].items():
-            trimmed = _keep_constraints(prop_schema, defs)
-            if trimmed:
-                props[prop_name] = trimmed
-        if props:
-            result["properties"] = props
-
-    if "items" in node and isinstance(node["items"], dict):
-        trimmed = _keep_constraints(node["items"], defs)
-        if trimmed:
-            result["items"] = trimmed
-
-    for combiner in ("anyOf", "oneOf"):
-        if combiner in node:
-            branches = []
-            for branch in node[combiner]:
-                trimmed = _keep_constraints(branch, defs)
-                if trimmed:
-                    branches.append(trimmed)
-            if branches:
-                result[combiner] = branches
-
-    return result or None
+    return False
 
 
 def make_strict_schema(model: Type[BaseModel]) -> dict:
@@ -205,6 +197,30 @@ def make_strict_schema(model: Type[BaseModel]) -> dict:
 
     return _patch(schema)
 
+
+def _pydantic_constraint_keywords() -> frozenset:
+    """Collect the JSON Schema keywords Pydantic emits for field constraints.
+
+    ``ValidationsMapping`` groups translate Pydantic field arguments (``ge``,
+    ``max_length``, ...) into JSON Schema keywords. The type-derived keywords
+    are added separately: they come from an annotation such as ``Set``,
+    ``datetime`` or ``Enum`` rather than from a field argument, so the mapping
+    has no entry for them. An empty result means the mapping could not be
+    read, and callers then assume constraints are present.
+    """
+    type_derived = {"uniqueItems", "format", "enum", "const"}
+    try:
+        groups = [
+            group for group in vars(GenerateJsonSchema.ValidationsMapping).values()
+            if isinstance(group, dict) and all(isinstance(v, str) for v in group.values())
+        ]
+    except AttributeError:
+        return frozenset()
+    if not groups:
+        return frozenset()
+    return frozenset(
+        {keyword for group in groups for keyword in group.values()} | type_derived
+    )
 
 @dataclass
 class LLMResponse:

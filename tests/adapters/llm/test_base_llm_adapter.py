@@ -1,17 +1,56 @@
 """Tests for base LLM adapter."""
 
-import json
 import pytest
 from abc import ABC
-from typing import List, Optional
-from unittest.mock import Mock
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from enum import Enum
+from pathlib import Path
+from typing import Annotated, Dict, FrozenSet, List, Literal, Optional, Set, Tuple
+from unittest.mock import Mock, patch
+from uuid import UUID
 
-from pydantic import BaseModel, Field
+import annotated_types as at
+from pydantic import (
+    AnyUrl,
+    AwareDatetime,
+    Base64Str,
+    BaseModel,
+    ByteSize,
+    Field,
+    FiniteFloat,
+    FutureDate,
+    IPvAnyAddress,
+    Json,
+    NaiveDatetime,
+    NegativeFloat,
+    NegativeInt,
+    NonNegativeFloat,
+    NonNegativeInt,
+    NonPositiveFloat,
+    NonPositiveInt,
+    PastDate,
+    PositiveFloat,
+    PositiveInt,
+    SecretStr,
+    StrictInt,
+    StrictStr,
+    StringConstraints,
+    conbytes,
+    condecimal,
+    confloat,
+    confrozenset,
+    conint,
+    conlist,
+    conset,
+    constr,
+)
 
 from lamia.adapters.llm.base import (
     BaseLLMAdapter,
     LLMResponse,
-    extract_constraint_hints,
+    _pydantic_constraint_keywords,
+    has_value_constraints,
     make_strict_schema,
     sanitize_api_error,
     strip_for_anthropic,
@@ -611,81 +650,393 @@ class TestStripForAnthropic:
         assert stripped["properties"]["name"] == schema["properties"]["name"]
 
 
-class TestExtractConstraintHints:
-    """Test extract_constraint_hints generates a compact constraint fragment."""
+class TestHasValueConstraints:
+    """Test has_value_constraints against every constraint form the docs describe."""
 
-    def test_returns_empty_when_no_constraints(self):
+    def test_false_when_no_constraints(self):
         class M(BaseModel):
             name: str = Field(description="A name")
             count: int
 
-        assert extract_constraint_hints(M) == ""
+        assert has_value_constraints(M) is False
 
-    def test_includes_numeric_constraints(self):
+    # ─── String constraints ──────────────────────────────────────────────
+
+    def test_detects_min_length(self):
         class M(BaseModel):
-            score: float = Field(ge=0.0, le=1.0)
+            name: str = Field(min_length=3)
 
-        hints = extract_constraint_hints(M)
-        parsed = json.loads(hints.split("\n", 1)[1])
-        assert parsed["properties"]["score"]["minimum"] == 0.0
-        assert parsed["properties"]["score"]["maximum"] == 1.0
+        assert has_value_constraints(M) is True
 
-    def test_includes_string_constraints(self):
+    def test_detects_max_length(self):
         class M(BaseModel):
-            name: str = Field(min_length=3, max_length=50)
+            name: str = Field(max_length=100)
 
-        hints = extract_constraint_hints(M)
-        parsed = json.loads(hints.split("\n", 1)[1])
-        assert parsed["properties"]["name"]["minLength"] == 3
-        assert parsed["properties"]["name"]["maxLength"] == 50
+        assert has_value_constraints(M) is True
 
-    def test_includes_pattern(self):
+    def test_detects_pattern(self):
         class M(BaseModel):
-            code: str = Field(pattern=r"^[A-Z]+$")
+            code: str = Field(pattern=r"^[A-Z]{3}")
 
-        hints = extract_constraint_hints(M)
-        parsed = json.loads(hints.split("\n", 1)[1])
-        assert parsed["properties"]["code"]["pattern"] == "^[A-Z]+$"
+        assert has_value_constraints(M) is True
 
-    def test_includes_list_constraints(self):
+    def test_detects_constr(self):
+        class M(BaseModel):
+            sku: constr(min_length=18, max_length=20)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_combined_string_constraints(self):
+        class M(BaseModel):
+            code: str = Field(min_length=3, pattern=r"^abc")
+
+        assert has_value_constraints(M) is True
+
+    # ─── Numeric constraints ─────────────────────────────────────────────
+
+    def test_detects_gt(self):
+        class M(BaseModel):
+            count: int = Field(gt=0)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_ge(self):
+        class M(BaseModel):
+            score: float = Field(ge=0.0)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_lt(self):
+        class M(BaseModel):
+            count: int = Field(lt=100)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_le(self):
+        class M(BaseModel):
+            percentage: float = Field(le=100)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_multiple_of(self):
+        class M(BaseModel):
+            step: int = Field(multiple_of=5)
+
+        assert has_value_constraints(M) is True
+
+    # ─── Collection constraints ──────────────────────────────────────────
+
+    def test_detects_list_constraints(self):
         class M(BaseModel):
             tags: List[str] = Field(min_length=1, max_length=5)
 
-        hints = extract_constraint_hints(M)
-        parsed = json.loads(hints.split("\n", 1)[1])
-        assert parsed["properties"]["tags"]["minItems"] == 1
-        assert parsed["properties"]["tags"]["maxItems"] == 5
+        assert has_value_constraints(M) is True
 
-    def test_handles_nested_models(self):
+    def test_detects_dict_size_constraints(self):
+        class M(BaseModel):
+            counts: Dict[str, int] = Field(min_length=1, max_length=4)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_unique_items(self):
+        class M(BaseModel):
+            ids: Set[int]
+
+        assert has_value_constraints(M) is True
+
+    # ─── Type-derived constraints ────────────────────────────────────────
+
+    def test_detects_enum_field(self):
+        class Priority(str, Enum):
+            LOW = "low"
+            HIGH = "high"
+
+        class M(BaseModel):
+            priority: Priority
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_literal_field(self):
+        class M(BaseModel):
+            mode: Literal["fast", "slow"]
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_datetime_format(self):
+        class M(BaseModel):
+            created_at: datetime
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_uuid_format(self):
+        class M(BaseModel):
+            identifier: UUID
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_decimal_digit_constraints(self):
+        class M(BaseModel):
+            amount: Decimal = Field(max_digits=5, decimal_places=2)
+
+        assert has_value_constraints(M) is True
+
+    # ─── Optional, nested and recursive models ───────────────────────────
+
+    def test_detects_constraint_on_optional_field(self):
+        class M(BaseModel):
+            score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+        assert has_value_constraints(M) is True
+
+    def test_false_for_unconstrained_optional_field(self):
+        class M(BaseModel):
+            name: str
+            phone: Optional[str] = Field(default=None, description="Phone")
+
+        assert has_value_constraints(M) is False
+
+    def test_detects_constraint_in_nested_model(self):
         class Inner(BaseModel):
             confidence: float = Field(ge=0.0, le=1.0)
 
         class Outer(BaseModel):
-            results: List[Inner] = Field(min_length=1)
+            results: List[Inner]
 
-        hints = extract_constraint_hints(Outer)
-        parsed = json.loads(hints.split("\n", 1)[1])
-        assert "minItems" in parsed["properties"]["results"]
-        inner_conf = parsed["properties"]["results"]["items"]["properties"]["confidence"]
-        assert inner_conf["minimum"] == 0.0
-        assert inner_conf["maximum"] == 1.0
+        assert has_value_constraints(Outer) is True
 
-    def test_omits_unconstrained_fields(self):
+    def test_false_for_unconstrained_nested_model(self):
+        class Inner(BaseModel):
+            label: str
+
+        class Outer(BaseModel):
+            results: List[Inner]
+            note: str
+
+        assert has_value_constraints(Outer) is False
+
+    def test_detects_constraint_in_self_referential_model(self):
+        class Node(BaseModel):
+            label: str = Field(max_length=20)
+            children: List["Node"] = []
+
+        Node.model_rebuild()
+        assert has_value_constraints(Node) is True
+
+    def test_handles_self_referential_model_without_constraints(self):
+        class Node(BaseModel):
+            label: str
+            children: List["Node"] = []
+
+        Node.model_rebuild()
+        assert has_value_constraints(Node) is False
+
+    # ─── Fail-open behaviour ─────────────────────────────────────────────
+
+    def test_assumes_constraints_when_keyword_mapping_unreadable(self):
         class M(BaseModel):
-            name: str = Field(description="No constraints")
-            score: float = Field(ge=0, le=1)
+            name: str
 
-        hints = extract_constraint_hints(M)
-        parsed = json.loads(hints.split("\n", 1)[1])
-        assert "name" not in parsed.get("properties", {})
-        assert "score" in parsed["properties"]
+        with patch(
+            "lamia.adapters.llm.base._pydantic_constraint_keywords",
+            return_value=frozenset(),
+        ):
+            assert has_value_constraints(M) is True
 
-    def test_starts_with_header_line(self):
+    def test_assumes_constraints_when_schema_generation_fails(self):
         class M(BaseModel):
-            x: int = Field(ge=0)
+            name: str
 
-        hints = extract_constraint_hints(M)
-        assert hints.startswith("Value constraints for the JSON response")
+        with patch.object(M, "model_json_schema", side_effect=RuntimeError("boom")):
+            assert has_value_constraints(M) is True
+
+    def test_assumes_constraints_when_ref_is_unresolvable(self):
+        class Inner(BaseModel):
+            label: str
+
+        class Outer(BaseModel):
+            inner: Inner
+
+        broken = Outer.model_json_schema()
+        broken.pop("$defs")
+        with patch.object(Outer, "model_json_schema", return_value=broken):
+            assert has_value_constraints(Outer) is True
+
+
+def _model_with(annotation, field=None):
+    """Build a single-field model so one annotation can be checked in isolation."""
+    namespace = {"__annotations__": {"value": annotation}}
+    if field is not None:
+        namespace["value"] = field
+    return type("Generated", (BaseModel,), namespace)
+
+
+def _schema_keywords(model):
+    """Collect every key appearing anywhere in the model's JSON schema."""
+    found = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            found.update(node.keys())
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(model.model_json_schema())
+    return found
+
+
+# One model per detectable keyword, so the suite fails if a keyword stops
+# being reachable or a new one is added without coverage.
+KEYWORD_MODELS = {
+    "minimum": _model_with(float, Field(ge=0.0)),
+    "maximum": _model_with(float, Field(le=1.0)),
+    "exclusiveMinimum": _model_with(int, Field(gt=0)),
+    "exclusiveMaximum": _model_with(int, Field(lt=100)),
+    "multipleOf": _model_with(int, Field(multiple_of=5)),
+    "minLength": _model_with(str, Field(min_length=3)),
+    "maxLength": _model_with(str, Field(max_length=50)),
+    "pattern": _model_with(str, Field(pattern=r"^[A-Z]+$")),
+    "minItems": _model_with(List[int], Field(min_length=1)),
+    "maxItems": _model_with(List[int], Field(max_length=5)),
+    "minProperties": _model_with(Dict[str, int], Field(min_length=1)),
+    "maxProperties": _model_with(Dict[str, int], Field(max_length=4)),
+    "uniqueItems": _model_with(Set[int]),
+    "format": _model_with(datetime),
+    "enum": _model_with(Literal["a", "b"]),
+    "const": _model_with(Literal["only"]),
+}
+
+
+class TestConstraintKeywordCoverage:
+    """Every keyword the detector looks for is reachable from a real model."""
+
+    def test_no_keyword_lacks_a_model(self):
+        assert set(KEYWORD_MODELS) == set(_pydantic_constraint_keywords())
+
+    @pytest.mark.parametrize("keyword", sorted(KEYWORD_MODELS))
+    def test_model_emits_its_keyword(self, keyword):
+        assert keyword in _schema_keywords(KEYWORD_MODELS[keyword])
+
+    @pytest.mark.parametrize("keyword", sorted(KEYWORD_MODELS))
+    def test_keyword_is_detected(self, keyword):
+        assert has_value_constraints(KEYWORD_MODELS[keyword]) is True
+
+
+class TestHasValueConstraintsAcrossPydanticTypes:
+    """Constrained-type aliases, annotated-types metadata and format-bearing types."""
+
+    @pytest.mark.parametrize("annotation", [
+        conint(gt=1),
+        confloat(ge=0.5),
+        constr(min_length=2),
+        conbytes(min_length=2),
+        conlist(int, min_length=1),
+        conset(int, min_length=1),
+        confrozenset(int, min_length=1),
+        condecimal(gt=Decimal(0)),
+    ], ids=["conint", "confloat", "constr", "conbytes",
+            "conlist", "conset", "confrozenset", "condecimal"])
+    def test_detects_constrained_type_aliases(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        Annotated[List[int], at.Len(1, 3)],
+        Annotated[int, at.Interval(gt=0, le=5)],
+        Annotated[int, at.MultipleOf(4)],
+        Annotated[str, at.MinLen(2)],
+        Annotated[str, at.MaxLen(9)],
+    ], ids=["Len", "Interval", "MultipleOf", "MinLen", "MaxLen"])
+    def test_detects_annotated_types_metadata(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        datetime, date, time, timedelta, UUID, AnyUrl, IPvAnyAddress, Path,
+    ], ids=["datetime", "date", "time", "timedelta",
+            "UUID", "AnyUrl", "IPvAnyAddress", "Path"])
+    def test_detects_format_bearing_types(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        FrozenSet[int], Set[str], Tuple[int, str],
+    ], ids=["FrozenSet", "Set", "Tuple"])
+    def test_detects_collection_shape_constraints(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    def test_detects_bytes_length_constraints(self):
+        assert has_value_constraints(_model_with(bytes, Field(min_length=1, max_length=4))) is True
+
+    def test_detects_decimal_digit_limits(self):
+        model = _model_with(Decimal, Field(max_digits=5, decimal_places=2))
+        assert has_value_constraints(model) is True
+
+    def test_detects_enum_subclass(self):
+        class Priority(str, Enum):
+            LOW = "low"
+            HIGH = "high"
+
+        assert has_value_constraints(_model_with(Priority)) is True
+
+    @pytest.mark.parametrize("annotation", [int, str, float, bool, Json], 
+                             ids=["int", "str", "float", "bool", "Json"])
+    def test_false_for_unconstrained_types(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is False
+
+    def test_string_coercion_settings_are_not_constraints(self):
+        """to_upper and strip_whitespace are coercions Pydantic applies itself."""
+        model = _model_with(Annotated[str, StringConstraints(to_upper=True, strip_whitespace=True)])
+        assert has_value_constraints(model) is False
+
+    @pytest.mark.parametrize("annotation,kwargs", [
+        (int, {"gt": 0}),
+        (int, {"ge": 0}),
+        (int, {"lt": 100}),
+        (int, {"le": 100}),
+        (int, {"multiple_of": 5}),
+        (str, {"min_length": 3}),
+        (str, {"max_length": 50}),
+        (str, {"pattern": r"^[A-Z]"}),
+        (Decimal, {"max_digits": 5, "decimal_places": 2}),
+    ], ids=["gt", "ge", "lt", "le", "multiple_of",
+            "min_length", "max_length", "pattern", "max_digits+decimal_places"])
+    def test_detects_every_schema_bearing_field_argument(self, annotation, kwargs):
+        assert has_value_constraints(_model_with(annotation, Field(**kwargs))) is True
+
+    @pytest.mark.parametrize("annotation", [
+        PositiveInt, NegativeInt, NonNegativeInt, NonPositiveInt,
+        PositiveFloat, NegativeFloat, NonNegativeFloat, NonPositiveFloat,
+    ], ids=["PositiveInt", "NegativeInt", "NonNegativeInt", "NonPositiveInt",
+            "PositiveFloat", "NegativeFloat", "NonNegativeFloat", "NonPositiveFloat"])
+    def test_detects_sign_constrained_aliases(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        SecretStr, Base64Str, ByteSize,
+    ], ids=["SecretStr", "Base64Str", "ByteSize"])
+    def test_detects_special_string_types(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        PastDate, FutureDate, AwareDatetime, NaiveDatetime,
+    ], ids=["PastDate", "FutureDate", "AwareDatetime", "NaiveDatetime"])
+    def test_detects_temporal_variants(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    def test_detects_constraint_injected_through_json_schema_extra(self):
+        model = _model_with(int, Field(json_schema_extra={"minimum": 5}))
+        assert has_value_constraints(model) is True
+
+    @pytest.mark.parametrize("annotation,field", [
+        (float, Field(allow_inf_nan=False)),
+        (FiniteFloat, None),
+        (StrictInt, None),
+        (StrictStr, None),
+        (Annotated[int, at.Predicate(lambda value: value > 0)], None),
+    ], ids=["allow_inf_nan", "FiniteFloat", "StrictInt", "StrictStr", "Predicate"])
+    def test_false_for_constraints_json_schema_cannot_express(self, annotation, field):
+        """These validate in Python but emit no JSON Schema keyword, so no hint can carry them."""
+        assert has_value_constraints(_model_with(annotation, field)) is False
 
 
 class TestMakeStrictSchemaUnchanged:

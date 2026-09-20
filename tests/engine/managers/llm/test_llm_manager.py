@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import os
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from lamia.engine.managers.llm.llm_manager import LLMManager
 from lamia.engine.config_provider import ConfigProvider
 from lamia.engine.managers.llm.providers import ProviderRegistry
@@ -1250,6 +1250,31 @@ class TestHintSuppression:
             call_prompt = mock_gen.call_args.kwargs['prompt']
             assert "user prompt" in call_prompt
             assert validator.initial_hint not in call_prompt
+
+    @pytest.mark.asyncio
+    async def test_hint_included_when_schema_declares_value_constraints(self):
+        """Hint kept under structured output when the model carries value constraints."""
+        from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
+
+        class Schema(BaseModel):
+            x: int = Field(ge=0, le=10)
+
+        validator = Mock(spec=JSONStructureValidator)
+        validator.model = Schema
+        validator.initial_hint = "You MUST return JSON matching this schema ..."
+
+        mock_adapter = Mock(spec=BaseLLMAdapter)
+        mock_adapter.supports_structured_output = True
+        self.manager._adapter_cache[self.mock_model1] = mock_adapter
+
+        mock_result = ValidationResult(
+            is_valid=True, raw_text="ok", validated_text="ok", execution_context=Mock()
+        )
+        with patch.object(self.manager, '_generate_and_validate', return_value=mock_result) as mock_gen:
+            await self.manager._execute_with_retries("user prompt", validator=validator)
+            call_prompt = mock_gen.call_args.kwargs['prompt']
+            assert validator.initial_hint in call_prompt
+            assert "user prompt" in call_prompt
 
     @pytest.mark.asyncio
     async def test_hint_included_when_adapter_does_not_support_structured_output(self):

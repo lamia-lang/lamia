@@ -2,7 +2,7 @@ from typing import List, Optional, Dict, Any, Set, Tuple, Type
 from pydantic import BaseModel
 
 from lamia import LLMModel
-from lamia.adapters.llm.base import BaseLLMAdapter, extract_constraint_hints
+from lamia.adapters.llm.base import BaseLLMAdapter, has_value_constraints
 from lamia.adapters.llm.lamia_cloud_llm_adapter import cloud_is_available, LamiaCloudLLMAdapter
 from ...config_provider import ConfigProvider
 from ...managers import Manager
@@ -264,12 +264,12 @@ class LLMManager(Manager):
                     # Providers accept the JSON structure schema but some
                     # silently ignore value-constraint keywords (minimum,
                     # maxLength, etc.) at decoding time, and Anthropic
-                    # rejects them outright.  Append constraint hints to
-                    # the prompt so the LLM still aims to satisfy them on
-                    # the first attempt, reducing costly validation retries.
-                    constraint_hint = extract_constraint_hints(response_model)
-                    if constraint_hint:
-                        current_prompt = f"{prompt}\n\n{constraint_hint}"
+                    # rejects them outright.  Append initial_hints, which do
+                    # contain constraint hints, to the prompt so the LLM still
+                    # aims to satisfy them on the first attempt.
+                    if has_value_constraints(response_model):
+                        initial_hints = validator.initial_hint
+                        current_prompt = f"{initial_hints}\n\n{prompt}"
                     else:
                         current_prompt = prompt
                 else:
