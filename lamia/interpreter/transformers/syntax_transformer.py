@@ -515,8 +515,10 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         """
         tmp_var = '__lamia_content__'
         action = 'APPEND' if file_return_type.append else 'WRITE'
-        path = file_return_type.path
         encoding = file_return_type.encoding
+        resolved_path_ast = self._path_ast(
+            file_return_type.path, file_return_type.path_node,
+        )
 
         str_call = ast.Call(
             func=ast.Name(id='str', ctx=ast.Load()),
@@ -554,7 +556,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                         ctx=ast.Load(),
                     ),
                 ),
-                ast.keyword(arg='path', value=ast.Constant(value=path)),
+                ast.keyword(arg='path', value=resolved_path_ast),
                 ast.keyword(
                     arg='content',
                     value=ast.Name(id=tmp_var, ctx=ast.Load()),
@@ -785,16 +787,17 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
         # Check for -> File(...) return annotation
         if getattr(node, 'returns', None) is not None and self._is_file_call(node.returns):
-            inner_rt_node, path, append, encoding = self._extract_file_info_from_ast(node.returns)
+            inner_rt_node, path_node, append, encoding = self._extract_file_info_from_ast(node.returns)
             # Build keywords for the main command call
             main_kw: List[ast.keyword] = []
             if inner_rt_node is not None:
                 main_kw.append(ast.keyword(arg='return_type', value=inner_rt_node))
+            path_str = path_node.value if isinstance(path_node, ast.Constant) else ""
             body = self._build_file_write_body(
                 [web_command_ast], main_kw,
                 has_inner_type=inner_rt_node is not None,
                 inner_rt_node=inner_rt_node,
-                path=path, append=append, encoding=encoding,
+                path=path_str, path_node=path_node, append=append, encoding=encoding,
                 is_async=is_async,
             )
             if is_async:
@@ -1135,6 +1138,18 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
     # ── File write helpers (-> File(...) syntax) ──────────────────────────
 
+    @staticmethod
+    def _path_ast(path: str, path_node: Optional[ast.expr] = None) -> ast.expr:
+        """Return an AST node for a file path.
+
+        If path_node is provided (non-literal expression like a variable or
+        BinOp), return it directly.  Otherwise wrap the static string in
+        ast.Constant.
+        """
+        if path_node is not None:
+            return path_node
+        return ast.Constant(value=path)
+
     def _is_file_call(self, node) -> bool:
         """Check if AST node is a File(...) call."""
         return (isinstance(node, ast.Call)
@@ -1142,11 +1157,12 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                 and node.func.id == 'File')
 
     def _extract_file_info_from_ast(self, file_node) -> tuple:
-        """Extract inner type node, path, append flag, and encoding from File(...) AST.
+        """Extract inner type node, path AST node, append flag, and encoding from File(...) AST.
 
         Returns:
-            (inner_rt_node, path, append, encoding) where inner_rt_node is None
-            for untyped writes.
+            (inner_rt_node, path_node, append, encoding) where path_node is
+            the original AST expression for the file path (may be a Constant,
+            Name, BinOp, or any expression).
         """
         args = file_node.args
         kwargs = {kw.arg: kw.value for kw in file_node.keywords}
@@ -1160,8 +1176,6 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         else:
             return None, None, False, "utf-8"
 
-        path = path_node.value if isinstance(path_node, ast.Constant) else None
-
         append = False
         if 'append' in kwargs and isinstance(kwargs['append'], ast.Constant):
             append = bool(kwargs['append'].value)
@@ -1169,7 +1183,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         if 'encoding' in kwargs and isinstance(kwargs['encoding'], ast.Constant):
             encoding = str(kwargs['encoding'].value)
 
-        return inner_rt_node, path, append, encoding
+        return inner_rt_node, path_node, append, encoding
 
     def _build_file_write_function(
         self, node, args: list, keywords: list, file_return_type: FileWriteReturnType, is_async: bool,
@@ -1195,6 +1209,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             has_inner_type=file_return_type.inner_return_type is not None,
             inner_rt_node=file_inner_rt_node,
             path=file_return_type.path,
+            path_node=file_return_type.path_node,
             append=file_return_type.append,
             encoding=file_return_type.encoding,
             is_async=is_async,
@@ -1234,6 +1249,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         append: bool,
         encoding: str,
         is_async: bool,
+        path_node: Optional[ast.expr] = None,
     ) -> List[ast.stmt]:
         """Build the multi-step body for a file write function.
 
@@ -1264,7 +1280,9 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
         # Step 0 – for append, read existing file to provide LLM context
         if append:
-            stmts.extend(self._build_file_context_read(ctx_var, path, encoding))
+            stmts.extend(self._build_file_context_read(
+                ctx_var, path, encoding, path_node=path_node,
+            ))
             keywords = list(keywords) + [
                 ast.keyword(
                     arg='_append_context',
@@ -1298,6 +1316,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
         # Step 3 – build FileCommand AST
         action_name = 'APPEND' if append else 'WRITE'
+        resolved_path_ast = self._path_ast(path, path_node)
         file_command_ast = ast.Call(
             func=ast.Name(id='FileCommand', ctx=ast.Load()),
             args=[],
@@ -1310,7 +1329,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                         ctx=ast.Load(),
                     ),
                 ),
-                ast.keyword(arg='path', value=ast.Constant(value=path)),
+                ast.keyword(arg='path', value=resolved_path_ast),
                 ast.keyword(arg='content', value=content_expr),
                 ast.keyword(arg='encoding', value=ast.Constant(value=encoding)),
             ],
@@ -1352,7 +1371,10 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         stmts.extend([assign_stmt, write_stmt, return_stmt])
         return stmts
 
-    def _build_file_context_read(self, ctx_var: str, path: str, encoding: str) -> List[ast.stmt]:
+    def _build_file_context_read(
+        self, ctx_var: str, path: str, encoding: str,
+        path_node: Optional[ast.expr] = None,
+    ) -> List[ast.stmt]:
         """Build AST for reading existing file content into ctx_var (for append context).
 
         Generates:
@@ -1384,9 +1406,10 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
             lineno=1, col_offset=0,
         )
 
+        resolved_path_ast = self._path_ast(path, path_node)
         open_call = ast.Call(
             func=ast.Name(id='open', ctx=ast.Load()),
-            args=[ast.Constant(value=path), ast.Constant(value='r')],
+            args=[resolved_path_ast, ast.Constant(value='r')],
             keywords=[ast.keyword(arg='encoding', value=ast.Constant(value=encoding))],
         )
         with_stmt = ast.With(
@@ -1417,7 +1440,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         self,
         command_ast,
         inner_rt_node,
-        path: str,
+        path_node: ast.expr,
         append: bool,
         encoding: str,
     ) -> List[ast.stmt]:
@@ -1425,6 +1448,9 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
         Used by visit_Expr for web.method() -> File(...) expressions.
         Returns a list of statement nodes to splice in place of the original Expr.
+
+        ``path_node`` is the raw AST expression for the target file path
+        (may be a Constant, Name, BinOp, or any expression).
         """
         tmp_var = '__lamia_file_result__'
         ctx_var = '__lamia_append_ctx__'
@@ -1446,7 +1472,10 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
 
         # For append: read existing file to provide LLM context
         if append:
-            stmts.extend(self._build_file_context_read(ctx_var, path, encoding))
+            path_str = path_node.value if isinstance(path_node, ast.Constant) else ""
+            stmts.extend(self._build_file_context_read(
+                ctx_var, path_str, encoding, path_node=path_node,
+            ))
             keywords.append(ast.keyword(
                 arg='_append_context',
                 value=ast.Name(id=ctx_var, ctx=ast.Load()),
@@ -1489,7 +1518,7 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
                         ctx=ast.Load(),
                     ),
                 ),
-                ast.keyword(arg='path', value=ast.Constant(value=path)),
+                ast.keyword(arg='path', value=path_node),
                 ast.keyword(arg='content', value=content_expr),
                 ast.keyword(arg='encoding', value=ast.Constant(value=encoding)),
             ],

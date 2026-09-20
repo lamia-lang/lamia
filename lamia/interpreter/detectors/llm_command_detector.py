@@ -30,6 +30,7 @@ class ParametricReturnType:
 class FileWriteReturnType:
     """File write target from -> File(...) syntax."""
     path: str
+    path_node: Optional[ast.expr] = None
     inner_return_type: Optional[Union[SimpleReturnType, ParametricReturnType]] = None
     append: bool = False
     encoding: str = "utf-8"
@@ -246,22 +247,35 @@ class LLMCommandDetector(ast.NodeVisitor):
             File(Type[Inner], "path")             -> parametric typed write
             File(Type, "path", append=True)       -> typed append
             File("path", encoding="latin-1")      -> untyped write with encoding
+
+        The path argument can be a string literal, a variable reference,
+        or an expression (e.g. OUTPUT_DIR + "file.csv").  When it is not
+        a compile-time constant, ``path`` is set to "" and ``path_node``
+        holds the original AST node so the transformer can emit it as a
+        runtime expression.
         """
         args = call_node.args
         kwargs = {kw.arg: kw.value for kw in call_node.keywords}
 
         inner_return_type: Optional[Union[SimpleReturnType, ParametricReturnType]] = None
         path = ""
+        path_node: Optional[ast.expr] = None
 
         if len(args) == 1:
             # File("path") - untyped write
             raw_path = self._ast_node_to_value(args[0])
-            path = str(raw_path) if raw_path is not None else ""
+            if raw_path is not None:
+                path = str(raw_path)
+            else:
+                path_node = args[0]
         elif len(args) >= 2:
             # File(Type, "path") - typed write
             inner_return_type = self._parse_type_node(args[0])
             raw_path = self._ast_node_to_value(args[1])
-            path = str(raw_path) if raw_path is not None else ""
+            if raw_path is not None:
+                path = str(raw_path)
+            else:
+                path_node = args[1]
 
         append = False
         if 'append' in kwargs:
@@ -273,6 +287,7 @@ class LLMCommandDetector(ast.NodeVisitor):
 
         return FileWriteReturnType(
             path=path,
+            path_node=path_node,
             inner_return_type=inner_return_type,
             append=append,
             encoding=encoding,
