@@ -677,6 +677,56 @@ class TestLamiaLifecycle:
 
 
 
+class TestRunAsyncFalsyTypedResult:
+    """run_async must return falsy typed_result values ([], False, 0, '') without
+    falling through to raw_text."""
+
+    def _make_lamia(self, typed_result, raw_text="fallback"):
+        engine = MagicMock()
+        engine.execute = AsyncMock(
+            return_value=MockValidationResult(
+                is_valid=True,
+                raw_text=raw_text,
+                typed_result=typed_result,
+            )
+        )
+        engine.config_provider = MagicMock()
+        engine.hook_runner = MagicMock()
+
+        with patch('lamia.facade.lamia.LamiaEngine', return_value=engine):
+            return Lamia()
+
+    @pytest.mark.asyncio
+    async def test_empty_list_returned_not_none(self):
+        lamia = self._make_lamia(typed_result=[], raw_text=None)
+        result = await lamia.run_async("file://glob:*.xyz")
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_false_returned_not_raw_text(self):
+        lamia = self._make_lamia(typed_result=False)
+        result = await lamia.run_async("file://exists:/no/such/file")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_zero_returned_not_raw_text(self):
+        lamia = self._make_lamia(typed_result=0)
+        result = await lamia.run_async("some command")
+        assert result == 0
+
+    @pytest.mark.asyncio
+    async def test_empty_string_returned_not_raw_text(self):
+        lamia = self._make_lamia(typed_result="")
+        result = await lamia.run_async("some command")
+        assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_none_typed_result_falls_through_to_raw_text(self):
+        lamia = self._make_lamia(typed_result=None, raw_text="fallback")
+        result = await lamia.run_async("some command")
+        assert result == "fallback"
+
+
 class TestNormalizeModels:
 
     def test_none_returns_none(self):
