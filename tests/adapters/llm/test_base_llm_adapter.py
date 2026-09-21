@@ -2,8 +2,59 @@
 
 import pytest
 from abc import ABC
-from unittest.mock import Mock
-from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse, sanitize_api_error
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from enum import Enum
+from pathlib import Path
+from typing import Annotated, Dict, FrozenSet, List, Literal, Optional, Set, Tuple
+from unittest.mock import Mock, patch
+from uuid import UUID
+
+import annotated_types as at
+from pydantic import (
+    AnyUrl,
+    AwareDatetime,
+    Base64Str,
+    BaseModel,
+    ByteSize,
+    Field,
+    FiniteFloat,
+    FutureDate,
+    IPvAnyAddress,
+    Json,
+    NaiveDatetime,
+    NegativeFloat,
+    NegativeInt,
+    NonNegativeFloat,
+    NonNegativeInt,
+    NonPositiveFloat,
+    NonPositiveInt,
+    PastDate,
+    PositiveFloat,
+    PositiveInt,
+    SecretStr,
+    StrictInt,
+    StrictStr,
+    StringConstraints,
+    conbytes,
+    condecimal,
+    confloat,
+    confrozenset,
+    conint,
+    conlist,
+    conset,
+    constr,
+)
+
+from lamia.adapters.llm.base import (
+    BaseLLMAdapter,
+    LLMResponse,
+    _pydantic_constraint_keywords,
+    has_value_constraints,
+    make_strict_schema,
+    sanitize_api_error,
+    strip_for_anthropic,
+)
 from lamia.errors import LLMProviderError, LLMErrorType
 from lamia import LLMModel
 
@@ -505,3 +556,515 @@ class TestBaseLLMAdapterVariants:
         assert response.usage["input_tokens"] == 2  # "hello world" split
         assert response.usage["output_tokens"] == 3  # "HELLO WORLD" split + 1
         assert response.model == "complex-model"
+
+
+class TestStripForAnthropic:
+    """Test strip_for_anthropic removes only Anthropic-rejected keywords."""
+
+    def test_strips_numeric_constraints(self):
+        class M(BaseModel):
+            score: float = Field(ge=0.0, le=1.0)
+            count: int = Field(gt=0, lt=100)
+
+        schema = make_strict_schema(M)
+        stripped = strip_for_anthropic(schema)
+
+        assert "minimum" not in stripped["properties"]["score"]
+        assert "maximum" not in stripped["properties"]["score"]
+        assert "exclusiveMinimum" not in stripped["properties"]["count"]
+        assert "exclusiveMaximum" not in stripped["properties"]["count"]
+
+    def test_strips_string_constraints(self):
+        class M(BaseModel):
+            name: str = Field(min_length=3, max_length=50)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert "minLength" not in stripped["properties"]["name"]
+        assert "maxLength" not in stripped["properties"]["name"]
+
+    def test_preserves_pattern(self):
+        class M(BaseModel):
+            code: str = Field(pattern=r"^[A-Z]{3}$")
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert stripped["properties"]["code"]["pattern"] == "^[A-Z]{3}$"
+
+    def test_strips_multiple_of(self):
+        class M(BaseModel):
+            step: int = Field(multiple_of=5)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert "multipleOf" not in stripped["properties"]["step"]
+
+    def test_strips_list_constraints(self):
+        class M(BaseModel):
+            tags: List[str] = Field(min_length=1, max_length=10)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert "minItems" not in stripped["properties"]["tags"]
+        assert "maxItems" not in stripped["properties"]["tags"]
+
+    def test_recurses_nested_models(self):
+        class Inner(BaseModel):
+            rating: float = Field(ge=1, le=5)
+
+        class Outer(BaseModel):
+            item: Inner
+
+        stripped = strip_for_anthropic(make_strict_schema(Outer))
+        inner = stripped["properties"]["item"]["properties"]["rating"]
+        assert "minimum" not in inner
+        assert "maximum" not in inner
+
+    def test_does_not_modify_original(self):
+        class M(BaseModel):
+            val: int = Field(ge=0)
+
+        schema = make_strict_schema(M)
+        strip_for_anthropic(schema)
+        assert "minimum" in schema["properties"]["val"]
+
+    def test_preserves_non_constraint_keys(self):
+        class M(BaseModel):
+            name: str = Field(description="A name", min_length=1)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        props = stripped["properties"]["name"]
+        assert props["description"] == "A name"
+        assert props["type"] == "string"
+        assert "minLength" not in props
+
+    def test_preserves_additional_properties_false(self):
+        class M(BaseModel):
+            x: int = Field(ge=0)
+
+        stripped = strip_for_anthropic(make_strict_schema(M))
+        assert stripped["additionalProperties"] is False
+
+    def test_no_change_when_no_constraints(self):
+        class M(BaseModel):
+            name: str = Field(description="A name")
+
+        schema = make_strict_schema(M)
+        stripped = strip_for_anthropic(schema)
+        assert stripped["properties"]["name"] == schema["properties"]["name"]
+
+
+class TestHasValueConstraints:
+    """Test has_value_constraints against every constraint form the docs describe."""
+
+    def test_false_when_no_constraints(self):
+        class M(BaseModel):
+            name: str = Field(description="A name")
+            count: int
+
+        assert has_value_constraints(M) is False
+
+    # ─── String constraints ──────────────────────────────────────────────
+
+    def test_detects_min_length(self):
+        class M(BaseModel):
+            name: str = Field(min_length=3)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_max_length(self):
+        class M(BaseModel):
+            name: str = Field(max_length=100)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_pattern(self):
+        class M(BaseModel):
+            code: str = Field(pattern=r"^[A-Z]{3}")
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_constr(self):
+        class M(BaseModel):
+            sku: constr(min_length=18, max_length=20)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_combined_string_constraints(self):
+        class M(BaseModel):
+            code: str = Field(min_length=3, pattern=r"^abc")
+
+        assert has_value_constraints(M) is True
+
+    # ─── Numeric constraints ─────────────────────────────────────────────
+
+    def test_detects_gt(self):
+        class M(BaseModel):
+            count: int = Field(gt=0)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_ge(self):
+        class M(BaseModel):
+            score: float = Field(ge=0.0)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_lt(self):
+        class M(BaseModel):
+            count: int = Field(lt=100)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_le(self):
+        class M(BaseModel):
+            percentage: float = Field(le=100)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_multiple_of(self):
+        class M(BaseModel):
+            step: int = Field(multiple_of=5)
+
+        assert has_value_constraints(M) is True
+
+    # ─── Collection constraints ──────────────────────────────────────────
+
+    def test_detects_list_constraints(self):
+        class M(BaseModel):
+            tags: List[str] = Field(min_length=1, max_length=5)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_dict_size_constraints(self):
+        class M(BaseModel):
+            counts: Dict[str, int] = Field(min_length=1, max_length=4)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_unique_items(self):
+        class M(BaseModel):
+            ids: Set[int]
+
+        assert has_value_constraints(M) is True
+
+    # ─── Type-derived constraints ────────────────────────────────────────
+
+    def test_detects_enum_field(self):
+        class Priority(str, Enum):
+            LOW = "low"
+            HIGH = "high"
+
+        class M(BaseModel):
+            priority: Priority
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_literal_field(self):
+        class M(BaseModel):
+            mode: Literal["fast", "slow"]
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_datetime_format(self):
+        class M(BaseModel):
+            created_at: datetime
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_uuid_format(self):
+        class M(BaseModel):
+            identifier: UUID
+
+        assert has_value_constraints(M) is True
+
+    # ─── Optional, nested and recursive models ───────────────────────────
+
+    def test_detects_decimal_digit_constraints(self):
+        class M(BaseModel):
+            amount: Decimal = Field(max_digits=5, decimal_places=2)
+
+        assert has_value_constraints(M) is True
+
+    def test_detects_decimal_digit_constraints_in_nested_model(self):
+        class Inner(BaseModel):
+            amount: Decimal = Field(max_digits=3, decimal_places=1)
+
+        class Outer(BaseModel):
+            entries: List[Inner]
+
+        assert has_value_constraints(Outer) is True
+
+    def test_detects_constraint_on_optional_field(self):
+        class M(BaseModel):
+            score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+        assert has_value_constraints(M) is True
+
+    def test_false_for_unconstrained_optional_field(self):
+        class M(BaseModel):
+            name: str
+            phone: Optional[str] = Field(default=None, description="Phone")
+
+        assert has_value_constraints(M) is False
+
+    def test_detects_constraint_in_nested_model(self):
+        class Inner(BaseModel):
+            confidence: float = Field(ge=0.0, le=1.0)
+
+        class Outer(BaseModel):
+            results: List[Inner]
+
+        assert has_value_constraints(Outer) is True
+
+    def test_false_for_unconstrained_nested_model(self):
+        class Inner(BaseModel):
+            label: str
+
+        class Outer(BaseModel):
+            results: List[Inner]
+            note: str
+
+        assert has_value_constraints(Outer) is False
+
+    def test_detects_constraint_in_self_referential_model(self):
+        class Node(BaseModel):
+            label: str = Field(max_length=20)
+            children: List["Node"] = []
+
+        Node.model_rebuild()
+        assert has_value_constraints(Node) is True
+
+    def test_handles_self_referential_model_without_constraints(self):
+        class Node(BaseModel):
+            label: str
+            children: List["Node"] = []
+
+        Node.model_rebuild()
+        assert has_value_constraints(Node) is False
+
+    # ─── Fail-open behaviour ─────────────────────────────────────────────
+
+    def test_assumes_constraints_when_keyword_mapping_unreadable(self):
+        class M(BaseModel):
+            name: str
+
+        with patch(
+            "lamia.adapters.llm.base._pydantic_constraint_keywords",
+            return_value=frozenset(),
+        ):
+            assert has_value_constraints(M) is True
+
+    def test_assumes_constraints_when_schema_generation_fails(self):
+        class M(BaseModel):
+            name: str
+
+        with patch.object(M, "model_json_schema", side_effect=RuntimeError("boom")):
+            assert has_value_constraints(M) is True
+
+    def test_assumes_constraints_when_ref_is_unresolvable(self):
+        class Inner(BaseModel):
+            label: str
+
+        class Outer(BaseModel):
+            inner: Inner
+
+        broken = Outer.model_json_schema()
+        broken.pop("$defs")
+        with patch.object(Outer, "model_json_schema", return_value=broken):
+            assert has_value_constraints(Outer) is True
+
+
+def _model_with(annotation, field=None):
+    """Build a single-field model so one annotation can be checked in isolation."""
+    namespace = {"__annotations__": {"value": annotation}}
+    if field is not None:
+        namespace["value"] = field
+    return type("Generated", (BaseModel,), namespace)
+
+
+def _schema_keywords(model):
+    """Collect every key appearing anywhere in the model's JSON schema."""
+    found = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            found.update(node.keys())
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(model.model_json_schema())
+    return found
+
+
+# One model per detectable keyword, so the suite fails if a keyword stops
+# being reachable or a new one is added without coverage.
+KEYWORD_MODELS = {
+    "minimum": _model_with(float, Field(ge=0.0)),
+    "maximum": _model_with(float, Field(le=1.0)),
+    "exclusiveMinimum": _model_with(int, Field(gt=0)),
+    "exclusiveMaximum": _model_with(int, Field(lt=100)),
+    "multipleOf": _model_with(int, Field(multiple_of=5)),
+    "minLength": _model_with(str, Field(min_length=3)),
+    "maxLength": _model_with(str, Field(max_length=50)),
+    "pattern": _model_with(str, Field(pattern=r"^[A-Z]+$")),
+    "minItems": _model_with(List[int], Field(min_length=1)),
+    "maxItems": _model_with(List[int], Field(max_length=5)),
+    "minProperties": _model_with(Dict[str, int], Field(min_length=1)),
+    "maxProperties": _model_with(Dict[str, int], Field(max_length=4)),
+    "uniqueItems": _model_with(Set[int]),
+    "format": _model_with(datetime),
+    "enum": _model_with(Literal["a", "b"]),
+    "const": _model_with(Literal["only"]),
+}
+
+
+class TestConstraintKeywordCoverage:
+    """Every keyword the detector looks for is reachable from a real model."""
+
+    def test_no_keyword_lacks_a_model(self):
+        assert set(KEYWORD_MODELS) == set(_pydantic_constraint_keywords())
+
+    @pytest.mark.parametrize("keyword", sorted(KEYWORD_MODELS))
+    def test_model_emits_its_keyword(self, keyword):
+        assert keyword in _schema_keywords(KEYWORD_MODELS[keyword])
+
+    @pytest.mark.parametrize("keyword", sorted(KEYWORD_MODELS))
+    def test_keyword_is_detected(self, keyword):
+        assert has_value_constraints(KEYWORD_MODELS[keyword]) is True
+
+
+class TestHasValueConstraintsAcrossPydanticTypes:
+    """Constrained-type aliases, annotated-types metadata and format-bearing types."""
+
+    @pytest.mark.parametrize("annotation", [
+        conint(gt=1),
+        confloat(ge=0.5),
+        constr(min_length=2),
+        conbytes(min_length=2),
+        conlist(int, min_length=1),
+        conset(int, min_length=1),
+        confrozenset(int, min_length=1),
+        condecimal(gt=Decimal(0)),
+    ], ids=["conint", "confloat", "constr", "conbytes",
+            "conlist", "conset", "confrozenset", "condecimal"])
+    def test_detects_constrained_type_aliases(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        Annotated[List[int], at.Len(1, 3)],
+        Annotated[int, at.Interval(gt=0, le=5)],
+        Annotated[int, at.MultipleOf(4)],
+        Annotated[str, at.MinLen(2)],
+        Annotated[str, at.MaxLen(9)],
+    ], ids=["Len", "Interval", "MultipleOf", "MinLen", "MaxLen"])
+    def test_detects_annotated_types_metadata(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        datetime, date, time, timedelta, UUID, AnyUrl, IPvAnyAddress, Path,
+    ], ids=["datetime", "date", "time", "timedelta",
+            "UUID", "AnyUrl", "IPvAnyAddress", "Path"])
+    def test_detects_format_bearing_types(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        FrozenSet[int], Set[str], Tuple[int, str],
+    ], ids=["FrozenSet", "Set", "Tuple"])
+    def test_detects_collection_shape_constraints(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    def test_detects_bytes_length_constraints(self):
+        assert has_value_constraints(_model_with(bytes, Field(min_length=1, max_length=4))) is True
+
+    def test_detects_decimal_digit_limits(self):
+        assert has_value_constraints(_model_with(Decimal, Field(max_digits=5, decimal_places=2))) is True
+
+    def test_detects_enum_subclass(self):
+        class Priority(str, Enum):
+            LOW = "low"
+            HIGH = "high"
+
+        assert has_value_constraints(_model_with(Priority)) is True
+
+    @pytest.mark.parametrize("annotation", [int, str, float, bool, Json], 
+                             ids=["int", "str", "float", "bool", "Json"])
+    def test_false_for_unconstrained_types(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is False
+
+    def test_detects_string_constraints_annotation(self):
+        model = _model_with(Annotated[str, StringConstraints(to_upper=True, strip_whitespace=True)])
+        assert has_value_constraints(model) is True
+
+    @pytest.mark.parametrize("annotation,kwargs", [
+        (int, {"gt": 0}),
+        (int, {"ge": 0}),
+        (int, {"lt": 100}),
+        (int, {"le": 100}),
+        (int, {"multiple_of": 5}),
+        (str, {"min_length": 3}),
+        (str, {"max_length": 50}),
+        (str, {"pattern": r"^[A-Z]"}),
+        (Decimal, {"max_digits": 5, "decimal_places": 2}),
+    ], ids=["gt", "ge", "lt", "le", "multiple_of",
+            "min_length", "max_length", "pattern", "max_digits+decimal_places"])
+    def test_detects_every_field_constraint_argument(self, annotation, kwargs):
+        assert has_value_constraints(_model_with(annotation, Field(**kwargs))) is True
+
+    @pytest.mark.parametrize("annotation", [
+        PositiveInt, NegativeInt, NonNegativeInt, NonPositiveInt,
+        PositiveFloat, NegativeFloat, NonNegativeFloat, NonPositiveFloat,
+    ], ids=["PositiveInt", "NegativeInt", "NonNegativeInt", "NonPositiveInt",
+            "PositiveFloat", "NegativeFloat", "NonNegativeFloat", "NonPositiveFloat"])
+    def test_detects_sign_constrained_aliases(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        SecretStr, Base64Str, ByteSize,
+    ], ids=["SecretStr", "Base64Str", "ByteSize"])
+    def test_detects_special_string_types(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    @pytest.mark.parametrize("annotation", [
+        PastDate, FutureDate, AwareDatetime, NaiveDatetime,
+    ], ids=["PastDate", "FutureDate", "AwareDatetime", "NaiveDatetime"])
+    def test_detects_temporal_variants(self, annotation):
+        assert has_value_constraints(_model_with(annotation)) is True
+
+    def test_detects_constraint_injected_through_json_schema_extra(self):
+        model = _model_with(int, Field(json_schema_extra={"minimum": 5}))
+        assert has_value_constraints(model) is True
+
+    @pytest.mark.parametrize("annotation,field", [
+        (float, Field(allow_inf_nan=False)),
+        (FiniteFloat, None),
+        (StrictInt, None),
+        (StrictStr, None),
+        (Annotated[int, at.Predicate(lambda value: value > 0)], None),
+    ], ids=["allow_inf_nan", "FiniteFloat", "StrictInt", "StrictStr", "Predicate"])
+    def test_detects_constraints_absent_from_the_schema(self, annotation, field):
+        """Pydantic enforces these without emitting a JSON Schema keyword for them."""
+        assert has_value_constraints(_model_with(annotation, field)) is True
+
+
+class TestMakeStrictSchemaUnchanged:
+    """Confirm make_strict_schema still includes all constraint keywords."""
+
+    def test_includes_all_constraints(self):
+        class M(BaseModel):
+            name: str = Field(min_length=3, max_length=50, pattern=r"^[A-Z]")
+            score: float = Field(ge=0.0, le=1.0)
+            count: int = Field(gt=0, lt=100)
+            step: int = Field(multiple_of=5)
+            tags: List[str] = Field(min_length=1, max_length=10)
+
+        schema = make_strict_schema(M)
+        assert "minLength" in schema["properties"]["name"]
+        assert "maxLength" in schema["properties"]["name"]
+        assert "pattern" in schema["properties"]["name"]
+        assert "minimum" in schema["properties"]["score"]
+        assert "maximum" in schema["properties"]["score"]
+        assert "exclusiveMinimum" in schema["properties"]["count"]
+        assert "exclusiveMaximum" in schema["properties"]["count"]
+        assert "multipleOf" in schema["properties"]["step"]
+        assert "minItems" in schema["properties"]["tags"]
+        assert "maxItems" in schema["properties"]["tags"]

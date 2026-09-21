@@ -4,7 +4,7 @@ import logging
 import os
 import aiohttp
 from lamia import LLMModel
-from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, sanitize_api_error, raise_for_status, raise_for_connection_error
+from .base import BaseLLMAdapter, LLMResponse, make_strict_schema, strip_for_anthropic, sanitize_api_error, raise_for_status, raise_for_connection_error
 from .anthropic_adapter import AnthropicAdapter
 from .openai_adapter import OpenAIAdapter
 from .local.ollama_adapter import OllamaAdapter
@@ -91,7 +91,7 @@ class LamiaAdapter(BaseLLMAdapter):
                 payload["output_config"] = {
                     "format": {
                         "type": "json_schema",
-                        "schema": make_strict_schema(response_model),
+                        "schema": strip_for_anthropic(make_strict_schema(response_model)),
                     }
                 }
         else:

@@ -2,7 +2,7 @@ from typing import List, Optional, Dict, Any, Set, Tuple, Type
 from pydantic import BaseModel
 
 from lamia import LLMModel
-from lamia.adapters.llm.base import BaseLLMAdapter
+from lamia.adapters.llm.base import BaseLLMAdapter, has_value_constraints
 from lamia.adapters.llm.lamia_cloud_llm_adapter import cloud_is_available, LamiaCloudLLMAdapter
 from ...config_provider import ConfigProvider
 from ...managers import Manager
@@ -261,7 +261,17 @@ class LLMManager(Manager):
             if validator is not None:
                 response_model = self._extract_response_model(validator)
                 if response_model is not None and adapter.supports_structured_output:
-                    current_prompt = prompt
+                    # Providers accept the JSON structure schema but some
+                    # silently ignore value-constraint keywords (minimum,
+                    # maxLength, etc.) at decoding time, and Anthropic
+                    # rejects them outright.  Append initial_hints, which do
+                    # contain constraint hints, to the prompt so the LLM still
+                    # aims to satisfy them on the first attempt.
+                    if has_value_constraints(response_model):
+                        initial_hints = validator.initial_hint
+                        current_prompt = f"{initial_hints}\n\n{prompt}"
+                    else:
+                        current_prompt = prompt
                 else:
                     initial_hints = validator.initial_hint
                     current_prompt = f"{initial_hints}\n\n{prompt}"

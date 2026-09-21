@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Optional, Type, get_args
 import asyncio
+import copy
 import re
 import aiohttp
 from pydantic import BaseModel
+from pydantic.json_schema import GenerateJsonSchema
 from lamia import LLMModel
 from lamia.errors import (
     ExternalOperationTransientError,
@@ -62,6 +64,127 @@ def raise_for_sdk_error(error: Exception, prefix: str) -> None:
         raise ExternalOperationTransientError(msg)
 
     raise ExternalOperationTransientError(msg)
+
+
+_ANTHROPIC_REJECTED = frozenset({
+    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
+    "multipleOf",
+    "minLength", "maxLength",
+    "minItems", "maxItems",
+    "uniqueItems",
+})
+
+
+def strip_for_anthropic(schema: dict) -> dict:
+    """Return a deep copy of *schema* with keywords Anthropic rejects removed.
+
+    Anthropic's structured-output endpoint returns 400 for constraint
+    keywords like ``minimum``, ``maxLength``, etc.  Other providers
+    (OpenAI, Ollama) accept or silently ignore them, so this function
+    is called only on the Anthropic code-path.
+
+    ``pattern`` is intentionally kept — Anthropic accepts it.
+    """
+    result = copy.deepcopy(schema)
+    stack: list = [result]
+
+    while stack:
+        node = stack.pop()
+        if not isinstance(node, dict):
+            continue
+
+        for key in _ANTHROPIC_REJECTED & node.keys():
+            del node[key]
+
+        for value in node.values():
+            if isinstance(value, dict):
+                stack.append(value)
+            elif isinstance(value, list):
+                stack.extend(value)
+
+    return result
+
+
+def has_value_constraints(model: Type[BaseModel]) -> bool:
+    """Return True when *model* declares any value constraint on a field.
+
+    Value constraints are the bounds Pydantic emits for field arguments
+    such as ``ge``, ``max_length`` or ``pattern``, as opposed to the
+    structural keywords (``type``, ``required``, ``properties``).
+
+    The keyword set is a property of Pydantic's schema output and is
+    independent of what any single provider accepts.
+
+    Both the generated schema and the field metadata are inspected, because
+    Pydantic keeps some constraints off the schema entirely.
+
+    Returns True whenever the model cannot be inspected with certainty. An
+    unneeded hint costs a few prompt tokens; a missing one costs a retry.
+    """
+    constraint_keys = _pydantic_constraint_keywords()
+    if not constraint_keys:
+        return True
+
+    try:
+        schema = model.model_json_schema()
+    except Exception:
+        return True
+
+    defs = schema.get("$defs", {})
+    seen: set = set()
+    stack: list = [schema]
+
+    while stack:
+        node = stack.pop()
+        if not isinstance(node, dict):
+            continue
+
+        ref = node.get("$ref")
+        if ref is not None:
+            ref_name = ref.rsplit("/", 1)[-1]
+            if ref_name not in defs:
+                return True
+            if ref_name not in seen:
+                seen.add(ref_name)
+                stack.append(defs[ref_name])
+            continue
+
+        if constraint_keys & node.keys():
+            return True
+
+        for key, value in node.items():
+            if key == "$defs":
+                continue
+            if isinstance(value, dict):
+                stack.append(value)
+            elif isinstance(value, list):
+                stack.extend(value)
+
+    # Pydantic enforces some constraints without exporting a keyword for them,
+    # and which ones reach the schema varies by version, so the field metadata
+    # is consulted as well.
+    seen_models: set = set()
+    models: list = [model]
+
+    while models:
+        current = models.pop()
+        if current in seen_models:
+            continue
+        seen_models.add(current)
+
+        for field in current.model_fields.values():
+            if field.metadata:
+                return True
+
+            annotations: list = [field.annotation]
+            while annotations:
+                annotation = annotations.pop()
+                if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                    models.append(annotation)
+                else:
+                    annotations.extend(get_args(annotation))
+
+    return False
 
 
 def make_strict_schema(model: Type[BaseModel]) -> dict:
@@ -242,3 +365,28 @@ class BaseLLMAdapter(ABC):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
+
+
+def _pydantic_constraint_keywords() -> frozenset:
+    """Collect the JSON Schema keywords Pydantic emits for field constraints.
+
+    ``ValidationsMapping`` groups translate Pydantic field arguments (``ge``,
+    ``max_length``, ...) into JSON Schema keywords. The type-derived keywords
+    are added separately: they come from an annotation such as ``Set``,
+    ``datetime`` or ``Enum`` rather than from a field argument, so the mapping
+    has no entry for them. An empty result means the mapping could not be
+    read, and callers then assume constraints are present.
+    """
+    type_derived = {"uniqueItems", "format", "enum", "const"}
+    try:
+        groups = [
+            group for group in vars(GenerateJsonSchema.ValidationsMapping).values()
+            if isinstance(group, dict) and all(isinstance(v, str) for v in group.values())
+        ]
+    except AttributeError:
+        return frozenset()
+    if not groups:
+        return frozenset()
+    return frozenset(
+        {keyword for group in groups for keyword in group.values()} | type_derived
+    )
