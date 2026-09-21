@@ -1033,6 +1033,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Email received">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1040,6 +1057,89 @@
     <span class="md-ellipsis">
       
         File created / modified / deleted
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#email-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Email Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Email Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configyaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        config.yaml
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lamiaenv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ~/.lamia/.env
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gmail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gmail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outlook-microsoft-365" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outlook / Microsoft 365
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#yahoo-mail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Yahoo Mail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#any-imap-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Any IMAP Server
       
     </span>
   </a>
@@ -1687,6 +1787,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Email received">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1694,6 +1811,89 @@
     <span class="md-ellipsis">
       
         File created / modified / deleted
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#email-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Email Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Email Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configyaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        config.yaml
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lamiaenv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ~/.lamia/.env
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gmail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gmail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outlook-microsoft-365" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outlook / Microsoft 365
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#yahoo-mail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Yahoo Mail
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#any-imap-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Any IMAP Server
       
     </span>
   </a>
@@ -1980,6 +2180,38 @@ which folder to watch.</p>
 </span></code></pre></div>
 <p>Fields you can request: <code>sender</code>, <code>subject</code>, <code>body</code>, <code>html_body</code>, <code>message_id</code>,
 <code>thread_id</code>, <code>timestamp</code>, <code>attachments</code>, <code>labels</code>.</p>
+<h4 id="filters">Filters<a class="headerlink" href="#filters" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Filter</th>
+<th>IMAP equivalent</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>to</code></td>
+<td><code>TO "..."</code></td>
+<td><code>to="pricing@company.com"</code></td>
+</tr>
+<tr>
+<td><code>from_domain</code></td>
+<td><code>FROM "@..."</code></td>
+<td><code>from_domain="bigcorp.com"</code></td>
+</tr>
+<tr>
+<td><code>subject_contains</code></td>
+<td><code>SUBJECT "..."</code></td>
+<td><code>subject_contains="invoice"</code></td>
+</tr>
+<tr>
+<td><code>label</code></td>
+<td>IMAP folder to poll</td>
+<td><code>label="Invoices"</code></td>
+</tr>
+</tbody>
+</table>
 <h3 id="file-created-modified-deleted">File created / modified / deleted<a class="headerlink" href="#file-created-modified-deleted" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">content_type</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"reports/incoming"</span><span class="p">)</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_modified</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"shared/data"</span><span class="p">)</span>
@@ -1987,6 +2219,71 @@ which folder to watch.</p>
 </span></code></pre></div>
 <p>Fields: <code>name</code>, <code>size</code>, <code>content_type</code>, <code>timestamp</code>, <code>metadata</code>.</p>
 <p>The <code>path</code> parameter specifies the folder or location to monitor.</p>
+<h2 id="email-configuration">Email Configuration<a class="headerlink" href="#email-configuration" title="Permanent link">&para;</a></h2>
+<p>Email triggers connect via IMAP. Add the connection settings to your project's <code>config.yaml</code> and store the password in <code>~/.lamia/.env</code>.</p>
+<h3 id="configyaml">config.yaml<a class="headerlink" href="#configyaml" title="Permanent link">&para;</a></h3>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">triggers</span><span class="p">:</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">email</span><span class="p">:</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">imap.gmail.com</span><span class="w">        </span><span class="c1"># IMAP server hostname</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">993</span><span class="w">                   </span><span class="c1"># IMAP SSL port (default: 993)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">you@gmail.com</span><span class="w">     </span><span class="c1"># Email address</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="nt">password_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">IMAP_PASSWORD</span><span class="w"> </span><span class="c1"># Name of the env var holding the password</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="nt">poll_interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span><span class="w">           </span><span class="c1"># Seconds between mailbox checks (default: 30)</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">INBOX</span><span class="w">                </span><span class="c1"># IMAP folder to monitor (default: INBOX)</span>
+</span></code></pre></div>
+<h3 id="lamiaenv">~/.lamia/.env<a class="headerlink" href="#lamiaenv" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>IMAP_PASSWORD=abcd efgh ijkl mnop
+</span></code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>The <code>password_env</code> field holds the <strong>name</strong> of the environment variable, not the password itself. The actual password goes in <code>~/.lamia/.env</code> and is never stored in project files.</p>
+</div>
+<h3 id="gmail">Gmail<a class="headerlink" href="#gmail" title="Permanent link">&para;</a></h3>
+<p>Works with both free Gmail accounts and Google Workspace accounts.</p>
+<ol>
+<li>Enable <strong>2-Step Verification</strong> at <a href="https://myaccount.google.com/security">myaccount.google.com/security</a></li>
+<li>Create an <strong>App Password</strong> at <a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a><ul>
+<li>Select "Mail" and "Other (Lamia)"</li>
+<li>Google generates a 16-character password</li>
+</ul>
+</li>
+<li>Add the password to <code>~/.lamia/.env</code>:
+   <div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>IMAP_PASSWORD=xxxx xxxx xxxx xxxx
+</span></code></pre></div></li>
+<li>Configure <code>config.yaml</code>:
+   <div class="language-yaml highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">triggers</span><span class="p">:</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">email</span><span class="p">:</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">imap.gmail.com</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">you@gmail.com</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="nt">password_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">IMAP_PASSWORD</span>
+</span></code></pre></div></li>
+</ol>
+<p>Google Workspace accounts work identically — the Workspace domain does not need to be tied to any GCP project or cloud infrastructure.</p>
+<h3 id="outlook-microsoft-365">Outlook / Microsoft 365<a class="headerlink" href="#outlook-microsoft-365" title="Permanent link">&para;</a></h3>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">triggers</span><span class="p">:</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">email</span><span class="p">:</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">outlook.office365.com</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">you@company.com</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="nt">password_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">IMAP_PASSWORD</span>
+</span></code></pre></div>
+<p>Microsoft 365 may require an admin to enable IMAP access. Create an App Password at <a href="https://account.live.com/proofs/AppPassword">account.live.com/proofs/AppPassword</a>.</p>
+<h3 id="yahoo-mail">Yahoo Mail<a class="headerlink" href="#yahoo-mail" title="Permanent link">&para;</a></h3>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">triggers</span><span class="p">:</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">email</span><span class="p">:</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">imap.mail.yahoo.com</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">you@yahoo.com</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="nt">password_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">IMAP_PASSWORD</span>
+</span></code></pre></div>
+<p>Generate an App Password at <a href="https://login.yahoo.com/account/security/app-passwords">login.yahoo.com/account/security/app-passwords</a>.</p>
+<h3 id="any-imap-server">Any IMAP Server<a class="headerlink" href="#any-imap-server" title="Permanent link">&para;</a></h3>
+<p>Any email provider that supports IMAP works:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nt">triggers</span><span class="p">:</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">email</span><span class="p">:</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mail.yourcompany.com</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">993</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="nt">username</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">user@yourcompany.com</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">    </span><span class="nt">password_env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">IMAP_PASSWORD</span>
+</span></code></pre></div>
 <h2 id="deploying">Deploying<a class="headerlink" href="#deploying" title="Permanent link">&para;</a></h2>
 <p>When you deploy a script that contains <code>trigger.*</code> calls, Lamia automatically
 sets up the event infrastructure for you.</p>
@@ -1996,7 +2293,7 @@ sets up the event infrastructure for you.</p>
 <p>Best for: notifications that must be handled immediately (order confirmations,
 alerts, time-sensitive replies).</p>
 <p>To deploy a script that contains <code>trigger.*</code>s in reactive mode use:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>lamia<span class="w"> </span>pricing_reply.lm<span class="w"> </span>--remote
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>lamia<span class="w"> </span>pricing_reply.lm<span class="w"> </span>--remote
 </span></code></pre></div>
 <h3 id="scheduled-mode-similar-to-how-an-employee-would-work">Scheduled mode (similar to how an employee would work)<a class="headerlink" href="#scheduled-mode-similar-to-how-an-employee-would-work" title="Permanent link">&para;</a></h3>
 <p>Events accumulate. At the scheduled time, the script wakes up, processes every
@@ -2005,7 +2302,7 @@ the next scheduled time.</p>
 <p>Best for: tasks where you want to appear human
 (answering emails in the morning, processing daily uploads).</p>
 <p>To deploy a script that contains <code>trigger.*</code>s in scheduled mode use:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>pricing_reply.lm<span class="w"> </span>--remote<span class="w"> </span>--cron<span class="w"> </span><span class="s2">"33 9 * * *"</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>lamia<span class="w"> </span>schedule<span class="w"> </span>add<span class="w"> </span>pricing_reply.lm<span class="w"> </span>--remote<span class="w"> </span>--cron<span class="w"> </span><span class="s2">"33 9 * * *"</span>
 </span></code></pre></div>
 <p>This will deploy the script to the cloud and set up a cron job to run the script at 9:33 AM every day.</p>
 <h2 id="multi-step-scripts">Multi-Step Scripts<a class="headerlink" href="#multi-step-scripts" title="Permanent link">&para;</a></h2>
@@ -2016,37 +2313,37 @@ pauses the script until that event arrives (up to 72 hours).</p>
 <p>Below is a complete script that handles pricing inquiries. Regular requests
 get an automated response. Enterprise requests need a human to prepare custom
 pricing, so the script waits for that file to appear.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">LeadType</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">ENTERPRISE</span> <span class="o">=</span> <span class="s2">"enterprise"</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">STANDARD</span> <span class="o">=</span> <span class="s2">"standard"</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">LeadClassification</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">lead_type</span><span class="p">:</span> <span class="n">LeadType</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Whether this is an enterprise or standard lead"</span><span class="p">)</span>
-</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">company_slug</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Short lowercase identifier for the company, e.g. 'bigcorp'"</span><span class="p">)</span>
-</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>
-</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>
-</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span> <span class="n">to</span><span class="o">=</span><span class="s2">"pricing@ourcompany.com"</span><span class="p">)</span>
-</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>
-</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="n">classification</span> <span class="o">=</span> <span class="n">classify_lead</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LeadClassification</span>
-</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>
-</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="k">if</span> <span class="n">classification</span><span class="o">.</span><span class="n">lead_type</span> <span class="o">==</span> <span class="n">LeadType</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">:</span>
-</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>    <span class="n">pricing_page</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">"https://ourcompany.com/pricing"</span><span class="p">)</span>
-</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>    <span class="n">compose_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">pricing_page</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">"drafts/reply.txt"</span><span class="p">)</span>
-</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="k">else</span><span class="p">:</span>
-</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>    <span class="n">notify_sales_team</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">classification</span><span class="o">.</span><span class="n">company_slug</span><span class="p">)</span>
-</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a>
-</span><span id="__span-6-25"><a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a>    <span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"sales/custom-pricing"</span><span class="p">)</span>
-</span><span id="__span-6-26"><a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a>
-</span><span id="__span-6-27"><a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">classification</span><span class="o">.</span><span class="n">company_slug</span><span class="p">):</span>
-</span><span id="__span-6-28"><a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a>        <span class="n">trigger</span><span class="o">.</span><span class="n">reject</span><span class="p">()</span>
-</span><span id="__span-6-29"><a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-6-30"><a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a>        <span class="n">pricing_content</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="sa">f</span><span class="s2">"sales/custom-pricing/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-</span><span id="__span-6-31"><a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a>        <span class="n">compose_custom_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">pricing_content</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">"drafts/reply.txt"</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">LeadType</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    <span class="n">ENTERPRISE</span> <span class="o">=</span> <span class="s2">"enterprise"</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>    <span class="n">STANDARD</span> <span class="o">=</span> <span class="s2">"standard"</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">LeadClassification</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>    <span class="n">lead_type</span><span class="p">:</span> <span class="n">LeadType</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Whether this is an enterprise or standard lead"</span><span class="p">)</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>    <span class="n">company_slug</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Short lowercase identifier for the company, e.g. 'bigcorp'"</span><span class="p">)</span>
+</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>
+</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a>
+</span><span id="__span-13-15"><a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span> <span class="n">to</span><span class="o">=</span><span class="s2">"pricing@ourcompany.com"</span><span class="p">)</span>
+</span><span id="__span-13-16"><a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a>
+</span><span id="__span-13-17"><a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a><span class="n">classification</span> <span class="o">=</span> <span class="n">classify_lead</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LeadClassification</span>
+</span><span id="__span-13-18"><a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a>
+</span><span id="__span-13-19"><a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a><span class="k">if</span> <span class="n">classification</span><span class="o">.</span><span class="n">lead_type</span> <span class="o">==</span> <span class="n">LeadType</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">:</span>
+</span><span id="__span-13-20"><a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a>    <span class="n">pricing_page</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">get_text</span><span class="p">(</span><span class="s2">"https://ourcompany.com/pricing"</span><span class="p">)</span>
+</span><span id="__span-13-21"><a id="__codelineno-13-21" name="__codelineno-13-21" href="#__codelineno-13-21"></a>    <span class="n">compose_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">pricing_page</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">"drafts/reply.txt"</span><span class="p">)</span>
+</span><span id="__span-13-22"><a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a><span class="k">else</span><span class="p">:</span>
+</span><span id="__span-13-23"><a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a>    <span class="n">notify_sales_team</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">classification</span><span class="o">.</span><span class="n">company_slug</span><span class="p">)</span>
+</span><span id="__span-13-24"><a id="__codelineno-13-24" name="__codelineno-13-24" href="#__codelineno-13-24"></a>
+</span><span id="__span-13-25"><a id="__codelineno-13-25" name="__codelineno-13-25" href="#__codelineno-13-25"></a>    <span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"sales/custom-pricing"</span><span class="p">)</span>
+</span><span id="__span-13-26"><a id="__codelineno-13-26" name="__codelineno-13-26" href="#__codelineno-13-26"></a>
+</span><span id="__span-13-27"><a id="__codelineno-13-27" name="__codelineno-13-27" href="#__codelineno-13-27"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">classification</span><span class="o">.</span><span class="n">company_slug</span><span class="p">):</span>
+</span><span id="__span-13-28"><a id="__codelineno-13-28" name="__codelineno-13-28" href="#__codelineno-13-28"></a>        <span class="n">trigger</span><span class="o">.</span><span class="n">reject</span><span class="p">()</span>
+</span><span id="__span-13-29"><a id="__codelineno-13-29" name="__codelineno-13-29" href="#__codelineno-13-29"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-13-30"><a id="__codelineno-13-30" name="__codelineno-13-30" href="#__codelineno-13-30"></a>        <span class="n">pricing_content</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="sa">f</span><span class="s2">"sales/custom-pricing/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</span><span id="__span-13-31"><a id="__codelineno-13-31" name="__codelineno-13-31" href="#__codelineno-13-31"></a>        <span class="n">compose_custom_reply</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">pricing_content</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="s2">"drafts/reply.txt"</span><span class="p">)</span>
 </span></code></pre></div>
 <p>How this works at runtime:</p>
 <ol>
@@ -2070,11 +2367,11 @@ pricing, so the script waits for that file to appear.</p>
 <p>Any keyword argument with a string value acts as an infrastructure-level
 filter. The script never starts for events that don't match. You can combine
 multiple filters on a single trigger:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>                       <span class="n">to</span><span class="o">=</span><span class="s2">"pricing@ourcompany.com"</span><span class="p">,</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>                       <span class="n">from_domain</span><span class="o">=</span><span class="s2">"enterprise.com"</span><span class="p">)</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"sales/invoices"</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">email_received</span><span class="p">(</span><span class="n">sender</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>                       <span class="n">to</span><span class="o">=</span><span class="s2">"pricing@ourcompany.com"</span><span class="p">,</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>                       <span class="n">from_domain</span><span class="o">=</span><span class="s2">"enterprise.com"</span><span class="p">)</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"sales/invoices"</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Filters are the most efficient approach — they prevent the job from launching
 entirely, saving both time and cost.</p>
@@ -2082,10 +2379,10 @@ entirely, saving both time and cost.</p>
 <p>When the filter can't be known at deploy time (e.g. it depends on a value
 computed earlier in the script), use <code>trigger.reject()</code> to skip the event
 and keep waiting for a different one:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"sales/custom-pricing"</span><span class="p">)</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">expected_prefix</span><span class="p">):</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">trigger</span><span class="o">.</span><span class="n">reject</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">trigger</span><span class="o">.</span><span class="n">file_created</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">"sales/custom-pricing"</span><span class="p">)</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">expected_prefix</span><span class="p">):</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="n">trigger</span><span class="o">.</span><span class="n">reject</span><span class="p">()</span>
 </span></code></pre></div>
 <p><code>trigger.reject()</code> applies to the most recent trigger. It acknowledges the
 event (so it won't come back to this execution) and the script continues
@@ -2099,10 +2396,10 @@ event is retried automatically (up to 5 attempts). After all retries are
 exhausted, the event is saved as a <strong>failed event</strong> and can be inspected
 via <code>lamia trigger list --verbose</code>.</p>
 <p>To clear failed events for a trigger:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>drain<span class="w"> </span>a3f2c8b1d4e5
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>drain<span class="w"> </span>a3f2c8b1d4e5
 </span></code></pre></div>
 <p>To stop and fully remove a trigger:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>clear<span class="w"> </span>a3f2c8b1d4e5
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>clear<span class="w"> </span>a3f2c8b1d4e5
 </span></code></pre></div>
 <h2 id="how-isolation-works">How Isolation Works<a class="headerlink" href="#how-isolation-works" title="Permanent link">&para;</a></h2>
 <p>Each script execution that reaches a waiting point creates its own private
@@ -2113,26 +2410,26 @@ event listener. This means:</p>
 </ul>
 <h2 id="listing-triggers">Listing Triggers<a class="headerlink" href="#listing-triggers" title="Permanent link">&para;</a></h2>
 <p>To see what triggers are configured:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list
 </span></code></pre></div>
 <p>Example output:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>  [a3f2c8b1d4e5] pricing_reply.lm (local)
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    event: email_received
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    mode: reactive
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    last run: 2026-07-09  status: ok
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    failed events: 2
+<div class="language-text highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>  [a3f2c8b1d4e5] pricing_reply.lm (local)
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>    event: email_received
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>    mode: reactive
+</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>    last run: 2026-07-09  status: ok
+</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>    failed events: 2
 </span></code></pre></div>
 <p>The id in brackets is a random 12-character hex string assigned once
 when the trigger is first created.</p>
 <p>To see details of failed events (what data they contained):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list<span class="w"> </span>--verbose
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>list<span class="w"> </span>--verbose
 </span></code></pre></div>
 <p>This shows the actual event payload and timestamp for each failure, so you
 can understand what went wrong and take action.</p>
 <h2 id="viewing-logs">Viewing Logs<a class="headerlink" href="#viewing-logs" title="Permanent link">&para;</a></h2>
 <p>For cloud triggers, output never reaches your terminal. Take the id shown
 in brackets by <code>lamia trigger list</code> and read the most recent run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>logs<span class="w"> </span>a3f2c8b1d4e5
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>logs<span class="w"> </span>a3f2c8b1d4e5
 </span></code></pre></div>
 <p>Local triggers print output to the terminal where they were started.
 Multi-stage triggers print each stage in order.</p>
@@ -2141,7 +2438,7 @@ Multi-stage triggers print each stage in order.</p>
 machine and executes the script as a local process. No cloud setup is
 required.</p>
 <p>To deploy triggers to the cloud instead, use <code>--remote</code>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>lamia<span class="w"> </span>pricing_reply.lm<span class="w"> </span>--remote
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>lamia<span class="w"> </span>pricing_reply.lm<span class="w"> </span>--remote
 </span></code></pre></div>
 <p>Cloud triggers require:</p>
 <ul>
@@ -2152,7 +2449,7 @@ required.</p>
 <h2 id="resource-lifecycle">Resource Lifecycle<a class="headerlink" href="#resource-lifecycle" title="Permanent link">&para;</a></h2>
 <p>If a script file is renamed, moved, or deleted, any trigger pointing to it
 shows <code>SOURCE_MISSING</code> in <code>lamia trigger list</code>. To clean up these entries:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>clear<span class="w"> </span>--orphaned
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>lamia<span class="w"> </span>trigger<span class="w"> </span>clear<span class="w"> </span>--orphaned
 </span></code></pre></div>
 <p>Unused cloud resources (containers, images) are automatically removed after
 30 days of inactivity. Active schedules and triggers are never affected.</p>
