@@ -27,6 +27,8 @@ from lamia.interpreter.inline_function_validation import (
 from lamia.lint.lm_linter import (
     _check_web_action_patterns,
     _check_session_patterns,
+    _check_redundant_auto_imports,
+    _check_hu_wrapper_defs,
 )
 from lamia.lint.base import Severity
 
@@ -117,6 +119,12 @@ def _analyze(source: str, file_path: Optional[str] = None) -> InspectResult:
     ))
     diagnostics.extend(_lint_violations_to_diagnostics(
         _check_session_patterns(source)
+    ))
+    diagnostics.extend(_lint_violations_to_diagnostics(
+        _check_redundant_auto_imports(source)
+    ))
+    diagnostics.extend(_lint_violations_to_diagnostics(
+        _check_hu_wrapper_defs(source)
     ))
 
     return InspectResult(len(deduped) > 0, deduped, diagnostics)
@@ -480,6 +488,10 @@ _SKIP_NAMES = frozenset([
     "run_with_file_tools", "run_with_file_tools_sync",
     # Lamia validation types
     "JSON", "YAML", "XML", "HTML", "CSV", "Markdown", "TEXT", "TXT",
+    # Markdown element types (auto-imported)
+    "Heading1", "Heading2", "Heading3", "Heading4", "Heading5", "Heading6",
+    "Paragraph", "Blockquote", "OrderedList", "UnorderedList", "ListItem",
+    "CodeBlock", "FencedCode", "IndentedCode", "Table", "HorizontalRule",
     # Python stdlib commonly used in .lm files
     "asyncio",
 ])

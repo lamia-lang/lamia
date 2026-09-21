@@ -17,6 +17,8 @@ Rule index (code format: LM{severity}{NNN}, sorted by severity):
   LMW008  W  trailing-whitespace       trailing whitespace on lines
   LMW018  W  single-file-in-files-ctx  files() with a single file path is an anti-pattern
   LMW019  W  prefer-atomic-web-action  prefer web.action(sel) over get_element + .action()
+  LMW021  W  redundant-auto-import     explicit import of an auto-injected name
+  LMW022  W  hu-wrapper-def            def wrapping a .hu file — call .hu directly
   ── Convention ──
   LMC009  C  variable-naming           variables should use snake_case
   LMC010  C  filename-naming           .lm filename should be snake_case
@@ -221,6 +223,26 @@ SESSION_NO_TARGET_URL = LintRule(
     ),
 )
 
+REDUNDANT_AUTO_IMPORT = LintRule(
+    code="LMW021",
+    severity=Severity.Warning,
+    name="redundant-auto-import",
+    description=(
+        "Import of '%s' is unnecessary — Lamia auto-injects it at runtime. "
+        "Remove the import statement."
+    ),
+)
+
+HU_WRAPPER_DEF = LintRule(
+    code="LMW022",
+    severity=Severity.Warning,
+    name="hu-wrapper-def",
+    description=(
+        "Function '%s' wraps a .hu file — .hu files are auto-discovered "
+        "as callable functions. Call the .hu directly: %s(...) -> Type[Model]"
+    ),
+)
+
 _LONG_SCRIPT_THRESHOLD = 5000
 
 _GENERIC_LM_NAMES = {
@@ -236,6 +258,7 @@ ALL_RULES = [
     EMPTY_FILE, TRAILING_WHITESPACE,
     SINGLE_FILE_IN_FILES_CONTEXT, PREFER_ATOMIC_WEB_ACTION,
     SESSION_NO_TARGET_URL,
+    REDUNDANT_AUTO_IMPORT, HU_WRAPPER_DEF,
     VARIABLE_NAMING, FILENAME_NAMING, LEADING_BLANK_LINES, GENERIC_FILENAME,
     OUTPUT_FORMAT_HINT, INLINE_PYDANTIC_MODEL, LONG_SCRIPT,
 ]
@@ -433,6 +456,13 @@ def _build_lamia_auto_imports() -> set[str]:
     names.update({
         "BaseModel", "Field", "List", "Dict", "Optional", "Any",
         "InputType", "TXT",
+    })
+
+    # Markdown element types the runtime always injects
+    names.update({
+        "Heading1", "Heading2", "Heading3", "Heading4", "Heading5", "Heading6",
+        "Paragraph", "Blockquote", "OrderedList", "UnorderedList", "ListItem",
+        "CodeBlock", "FencedCode", "IndentedCode", "Table", "HorizontalRule",
     })
 
     return names
@@ -725,6 +755,60 @@ def _check_session_patterns(content: str) -> list[LintViolation]:
     return violations
 
 
+def _check_redundant_auto_imports(content: str) -> list[LintViolation]:
+    """Flag explicit imports of names that Lamia auto-injects at runtime."""
+    violations: list[LintViolation] = []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return violations
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported_name = alias.asname or alias.name
+                if imported_name in _LAMIA_AUTO_IMPORTS:
+                    violations.append(LintViolation(
+                        rule=REDUNDANT_AUTO_IMPORT,
+                        line=node.lineno,
+                        message=REDUNDANT_AUTO_IMPORT.description % imported_name,
+                        snippet=f"from {node.module} import {alias.name}",
+                    ))
+    return violations
+
+# Beacause LLMs keep doing exactly this, not sure when this rule will not be needed anymore
+def _check_hu_wrapper_defs(content: str) -> list[LintViolation]:
+    """Flag ``def f(...): \"file.hu\"`` wrappers — .hu files are callable directly."""
+    violations: list[LintViolation] = []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return violations
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if len(node.body) != 1:
+            continue
+        stmt = node.body[0]
+        if not isinstance(stmt, ast.Expr):
+            continue
+        if not isinstance(stmt.value, ast.Constant):
+            continue
+        body_str = stmt.value.value
+        if not isinstance(body_str, str):
+            continue
+        if body_str.strip().endswith(".hu"):
+            hu_stem = body_str.strip().rsplit("/", 1)[-1].replace(".hu", "")
+            violations.append(LintViolation(
+                rule=HU_WRAPPER_DEF,
+                line=node.lineno,
+                message=HU_WRAPPER_DEF.description % (node.name, hu_stem),
+                snippet=f'def {node.name}(...): "{body_str.strip()}"',
+            ))
+    return violations
+
+
 class LmLinter(BaseLinter):
     """Linter for .lm (Lamia script) files."""
 
@@ -860,6 +944,12 @@ class LmLinter(BaseLinter):
 
         # ── Session patterns ──────────────────────────────────────────────
         violations.extend(_check_session_patterns(content))
+
+        # ── Redundant auto-imports ────────────────────────────────────────
+        violations.extend(_check_redundant_auto_imports(content))
+
+        # ── .hu wrapper def anti-pattern ──────────────────────────────────
+        violations.extend(_check_hu_wrapper_defs(content))
 
         # ── Cross-file checks (require cwd) ─────────────────────────────
         if cwd:

@@ -99,6 +99,8 @@ Severities:
 | LMW008 | trailing-whitespace | Lines have trailing whitespace. |
 | LMW018 | single-file-in-files-ctx | `files()` with a single file path is an anti-pattern. `files()` is for directory-based discovery; pass the file path directly as a kwarg to the `.hu` function instead. |
 | LMW019 | prefer-atomic-web-action | Prefer `web.click("selector")` over `el = web.get_element("selector")` followed by `el.click()` when the variable is only used once. Atomic calls are more readable and less error-prone. |
+| LMW021 | redundant-auto-import | Explicit import of a name that Lamia auto-injects at runtime (`BaseModel`, `Field`, `JSON`, `Heading1`, etc.). Remove the import statement. |
+| LMW022 | hu-wrapper-def | `def` that wraps a `.hu` file (body is a `.hu` filename string). `.hu` files are auto-discovered as callable functions — call them directly with `-> Type[Model]`. |
 | LMW024 | session-no-target-url | `session("name")` without a target URL. Adding a target URL enables reliable session-skip detection: `session("name", "https://...")`. |
 
 #### Convention

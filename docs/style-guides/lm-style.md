@@ -79,16 +79,21 @@ def analyze() -> JSON[Analysis]:
 
 ## Calling .hu functions
 
-`.hu` functions are called like regular Python functions.
-All arguments must be keyword arguments.
+`.hu` files are auto-discovered as callable functions — the filename (without `.hu`) becomes the function name. Call them directly; do not wrap them in a `def`:
 
 ```python
-# Good
+# Good — call the .hu file directly
 result = summarize(aspect="key findings", max_words=200) -> HTML
 
-# Bad -- positional arguments
+# Bad — wrapping a .hu file in a def (flagged by LMW022)
+def summarize_text(aspect, max_words) -> HTML:
+    "summarize.hu"
+
+# Bad — positional arguments (flagged by LMW006)
 result = summarize("key findings", 200) -> HTML
 ```
+
+All arguments must be keyword arguments.
 
 ### Return type on the call site
 
@@ -201,6 +206,13 @@ def with_fallback(models=["openai:gpt-4", "anthropic:sonnet-4"]):
 
 ## Imports
 
-Imports are not needed in `.lm` files. All Lamia types and interfaces are available without any import statements. But if you mix it with Python code, you will import Python dependencies as usual.
+Lamia auto-injects the following into `.lm` execution scope — do not import them explicitly:
 
-Avoid import pydantic models as well.
+- **Lamia**: All .hu files as functions in the project and all functions in the .lm files
+- **Lamia** All Lamia types
+- **Pydantic**: All Pydantic types it uses
+- **Typing**: `List`, `Dict`, `Optional`, `Any`
+
+Only import Python standard library modules (`import json`, `import re`, etc.) and third-party packages. The linter flags redundant imports with `LMW021`.
+
+Pydantic models defined in `.py` files within the project are also auto-discovered — no import needed.

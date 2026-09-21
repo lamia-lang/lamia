@@ -736,3 +736,76 @@ class TestLmLinterExistingRulesUnaffected:
         linter = LmLinter()
         result = linter.lint('result = agent(prompt=p) -> JSON[MyModel]')
         assert result.clean
+
+
+# ── LMW021 redundant-auto-import ────────────────────────────────────────────
+
+class TestLMW021RedundantAutoImport:
+
+    def test_pydantic_import_flagged(self):
+        code = 'from pydantic import BaseModel, Field\nx = 1'
+        violations = _violations_for(code, "LMW021")
+        names = {v.message for v in violations}
+        assert any("BaseModel" in m for m in names)
+        assert any("Field" in m for m in names)
+
+    def test_lamia_type_import_flagged(self):
+        code = 'from lamia.types import JSON, HTML\nx = 1'
+        violations = _violations_for(code, "LMW021")
+        assert len(violations) == 2
+
+    def test_markdown_type_import_flagged(self):
+        code = (
+            'from lamia.validation.validators.file_validators'
+            '.file_structure.markdown_structure_validator '
+            'import Heading1, Paragraph\nx = 1'
+        )
+        violations = _violations_for(code, "LMW021")
+        assert len(violations) == 2
+
+    def test_stdlib_import_not_flagged(self):
+        code = 'import json\nimport re\nx = 1'
+        violations = _violations_for(code, "LMW021")
+        assert violations == []
+
+    def test_third_party_import_not_flagged(self):
+        code = 'from datetime import datetime\nx = 1'
+        violations = _violations_for(code, "LMW021")
+        assert violations == []
+
+
+# ── LMW022 hu-wrapper-def ────────────────────────────────────────────────────
+
+class TestLMW022HuWrapperDef:
+
+    def test_hu_wrapper_flagged(self):
+        code = 'def clean_contact(raw_row) -> JSON[CleanContact]:\n    "clean.hu"\n'
+        violations = _violations_for(code, "LMW022")
+        assert len(violations) == 1
+        assert "clean" in violations[0].message
+
+    def test_hu_wrapper_with_path_flagged(self):
+        code = 'def summarize(text) -> JSON[Summary]:\n    "templates/summarize.hu"\n'
+        violations = _violations_for(code, "LMW022")
+        assert len(violations) == 1
+        assert "summarize" in violations[0].message
+
+    def test_normal_function_not_flagged(self):
+        code = 'def helper(x):\n    return x + 1\n'
+        violations = _violations_for(code, "LMW022")
+        assert violations == []
+
+    def test_multiline_body_not_flagged(self):
+        code = 'def helper(x):\n    y = x + 1\n    return y\n'
+        violations = _violations_for(code, "LMW022")
+        assert violations == []
+
+    def test_string_body_not_hu_not_flagged(self):
+        code = 'def prompt(topic) -> TEXT:\n    "Write about {topic}"\n'
+        violations = _violations_for(code, "LMW022")
+        assert violations == []
+
+    def test_string_body_with_hu_text_not_flagged(self):
+        code = 'def prompt(topic) -> TEXT:\n    "Based on ../another_project/summarize.hu file content, create a new hu file for this project"\n'
+        violations = _violations_for(code, "LMW022")
+        assert violations == []
