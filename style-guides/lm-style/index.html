@@ -1848,14 +1848,18 @@ Lamia supports: <code>JSON</code>, <code>HTML</code>, <code>YAML</code>, <code>X
 </span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="s2">"Analyze the data"</span>
 </span></code></pre></div>
 <h2 id="calling-hu-functions">Calling .hu functions<a class="headerlink" href="#calling-hu-functions" title="Permanent link">&para;</a></h2>
-<p><code>.hu</code> functions are called like regular Python functions.
-All arguments must be keyword arguments.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Good</span>
+<p><code>.hu</code> files are auto-discovered as callable functions — the filename (without <code>.hu</code>) becomes the function name. Call them directly; do not wrap them in a <code>def</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Good — call the .hu file directly</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">result</span> <span class="o">=</span> <span class="n">summarize</span><span class="p">(</span><span class="n">aspect</span><span class="o">=</span><span class="s2">"key findings"</span><span class="p">,</span> <span class="n">max_words</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Bad -- positional arguments</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">result</span> <span class="o">=</span> <span class="n">summarize</span><span class="p">(</span><span class="s2">"key findings"</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Bad — wrapping a .hu file in a def (flagged by LMW022)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">summarize_text</span><span class="p">(</span><span class="n">aspect</span><span class="p">,</span> <span class="n">max_words</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span><span class="p">:</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="s2">"summarize.hu"</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># Bad — positional arguments (flagged by LMW006)</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">result</span> <span class="o">=</span> <span class="n">summarize</span><span class="p">(</span><span class="s2">"key findings"</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HTML</span>
 </span></code></pre></div>
+<p>All arguments must be keyword arguments.</p>
 <h3 id="return-type-on-the-call-site">Return type on the call site<a class="headerlink" href="#return-type-on-the-call-site" title="Permanent link">&para;</a></h3>
 <p>The <code>-&gt; Type</code> on <code>.hu</code> calls is where you specify what format
 you expect back. The <code>.hu</code> file itself stays format-agnostic:</p>
@@ -1927,8 +1931,15 @@ when you want to write directly to disk: do </p>
 </span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="s2">"&lt;some complicated task&gt;"</span>
 </span></code></pre></div>
 <h2 id="imports">Imports<a class="headerlink" href="#imports" title="Permanent link">&para;</a></h2>
-<p>Imports are not needed in <code>.lm</code> files. All Lamia types and interfaces are available without any import statements. But if you mix it with Python code, you will import Python dependencies as usual.</p>
-<p>Avoid import pydantic models as well.</p>
+<p>Lamia auto-injects the following into <code>.lm</code> execution scope — do not import them explicitly:</p>
+<ul>
+<li><strong>Lamia</strong>: All .hu files as functions in the project and all functions in the .lm files</li>
+<li><strong>Lamia</strong> All Lamia types</li>
+<li><strong>Pydantic</strong>: All Pydantic types it uses</li>
+<li><strong>Typing</strong>: <code>List</code>, <code>Dict</code>, <code>Optional</code>, <code>Any</code></li>
+</ul>
+<p>Only import Python standard library modules (<code>import json</code>, <code>import re</code>, etc.) and third-party packages. The linter flags redundant imports with <code>LMW021</code>.</p>
+<p>Pydantic models defined in <code>.py</code> files within the project are also auto-discovered — no import needed.</p>
 
 
 

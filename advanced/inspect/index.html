@@ -2069,6 +2069,16 @@
 <td>Prefer <code>web.click("selector")</code> over <code>el = web.get_element("selector")</code> followed by <code>el.click()</code> when the variable is only used once. Atomic calls are more readable and less error-prone.</td>
 </tr>
 <tr>
+<td>LMW021</td>
+<td>redundant-auto-import</td>
+<td>Explicit import of a name that Lamia auto-injects at runtime (<code>BaseModel</code>, <code>Field</code>, <code>JSON</code>, <code>Heading1</code>, etc.). Remove the import statement.</td>
+</tr>
+<tr>
+<td>LMW022</td>
+<td>hu-wrapper-def</td>
+<td><code>def</code> that wraps a <code>.hu</code> file (body is a <code>.hu</code> filename string). <code>.hu</code> files are auto-discovered as callable functions — call them directly with <code>-&gt; Type[Model]</code>.</td>
+</tr>
+<tr>
 <td>LMW024</td>
 <td>session-no-target-url</td>
 <td><code>session("name")</code> without a target URL. Adding a target URL enables reliable session-skip detection: <code>session("name", "https://...")</code>.</td>
