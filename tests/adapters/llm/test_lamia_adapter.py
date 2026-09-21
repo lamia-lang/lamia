@@ -1,5 +1,6 @@
 """Comprehensive tests for Lamia LLM adapter."""
 
+import os
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 import aiohttp
@@ -40,7 +41,7 @@ class TestLamiaAdapterInitialization:
         adapter = LamiaAdapter(api_key="test-key")
         
         assert adapter.api_key == "test-key"
-        assert adapter.api_url == "http://209.151.237.90:3389"
+        assert adapter.api_url == os.getenv("LAMIA_API_URL", "http://localhost:3389")
         assert adapter.session is None
     
     def test_initialization_with_custom_url(self):
