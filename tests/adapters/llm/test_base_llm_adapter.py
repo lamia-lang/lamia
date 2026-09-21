@@ -774,13 +774,22 @@ class TestHasValueConstraints:
 
         assert has_value_constraints(M) is True
 
+    # ─── Optional, nested and recursive models ───────────────────────────
+
     def test_detects_decimal_digit_constraints(self):
         class M(BaseModel):
             amount: Decimal = Field(max_digits=5, decimal_places=2)
 
         assert has_value_constraints(M) is True
 
-    # ─── Optional, nested and recursive models ───────────────────────────
+    def test_detects_decimal_digit_constraints_in_nested_model(self):
+        class Inner(BaseModel):
+            amount: Decimal = Field(max_digits=3, decimal_places=1)
+
+        class Outer(BaseModel):
+            entries: List[Inner]
+
+        assert has_value_constraints(Outer) is True
 
     def test_detects_constraint_on_optional_field(self):
         class M(BaseModel):
@@ -968,8 +977,7 @@ class TestHasValueConstraintsAcrossPydanticTypes:
         assert has_value_constraints(_model_with(bytes, Field(min_length=1, max_length=4))) is True
 
     def test_detects_decimal_digit_limits(self):
-        model = _model_with(Decimal, Field(max_digits=5, decimal_places=2))
-        assert has_value_constraints(model) is True
+        assert has_value_constraints(_model_with(Decimal, Field(max_digits=5, decimal_places=2))) is True
 
     def test_detects_enum_subclass(self):
         class Priority(str, Enum):
@@ -983,10 +991,9 @@ class TestHasValueConstraintsAcrossPydanticTypes:
     def test_false_for_unconstrained_types(self, annotation):
         assert has_value_constraints(_model_with(annotation)) is False
 
-    def test_string_coercion_settings_are_not_constraints(self):
-        """to_upper and strip_whitespace are coercions Pydantic applies itself."""
+    def test_detects_string_constraints_annotation(self):
         model = _model_with(Annotated[str, StringConstraints(to_upper=True, strip_whitespace=True)])
-        assert has_value_constraints(model) is False
+        assert has_value_constraints(model) is True
 
     @pytest.mark.parametrize("annotation,kwargs", [
         (int, {"gt": 0}),
@@ -1000,7 +1007,7 @@ class TestHasValueConstraintsAcrossPydanticTypes:
         (Decimal, {"max_digits": 5, "decimal_places": 2}),
     ], ids=["gt", "ge", "lt", "le", "multiple_of",
             "min_length", "max_length", "pattern", "max_digits+decimal_places"])
-    def test_detects_every_schema_bearing_field_argument(self, annotation, kwargs):
+    def test_detects_every_field_constraint_argument(self, annotation, kwargs):
         assert has_value_constraints(_model_with(annotation, Field(**kwargs))) is True
 
     @pytest.mark.parametrize("annotation", [
@@ -1034,9 +1041,9 @@ class TestHasValueConstraintsAcrossPydanticTypes:
         (StrictStr, None),
         (Annotated[int, at.Predicate(lambda value: value > 0)], None),
     ], ids=["allow_inf_nan", "FiniteFloat", "StrictInt", "StrictStr", "Predicate"])
-    def test_false_for_constraints_json_schema_cannot_express(self, annotation, field):
-        """These validate in Python but emit no JSON Schema keyword, so no hint can carry them."""
-        assert has_value_constraints(_model_with(annotation, field)) is False
+    def test_detects_constraints_absent_from_the_schema(self, annotation, field):
+        """Pydantic enforces these without emitting a JSON Schema keyword for them."""
+        assert has_value_constraints(_model_with(annotation, field)) is True
 
 
 class TestMakeStrictSchemaUnchanged:
