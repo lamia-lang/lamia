@@ -37,6 +37,15 @@ trigger.email_received(sender, subject, body)
 Fields you can request: `sender`, `subject`, `body`, `html_body`, `message_id`,
 `thread_id`, `timestamp`, `attachments`, `labels`.
 
+#### Filters
+
+| Filter | IMAP equivalent | Example |
+|--------|----------------|---------|
+| `to` | `TO "..."` | `to="pricing@company.com"` |
+| `from_domain` | `FROM "@..."` | `from_domain="bigcorp.com"` |
+| `subject_contains` | `SUBJECT "..."` | `subject_contains="invoice"` |
+| `label` | IMAP folder to poll | `label="Invoices"` |
+
 ### File created / modified / deleted
 
 ```python
@@ -48,6 +57,92 @@ trigger.file_deleted(name, path="archive/temp")
 Fields: `name`, `size`, `content_type`, `timestamp`, `metadata`.
 
 The `path` parameter specifies the folder or location to monitor.
+
+## Email Configuration
+
+Email triggers connect via IMAP. Add the connection settings to your project's `config.yaml` and store the password in `~/.lamia/.env`.
+
+### config.yaml
+
+```yaml
+triggers:
+  email:
+    host: imap.gmail.com        # IMAP server hostname
+    port: 993                   # IMAP SSL port (default: 993)
+    username: you@gmail.com     # Email address
+    password_env: IMAP_PASSWORD # Name of the env var holding the password
+    poll_interval: 30           # Seconds between mailbox checks (default: 30)
+    label: INBOX                # IMAP folder to monitor (default: INBOX)
+```
+
+### ~/.lamia/.env
+
+```
+IMAP_PASSWORD=abcd efgh ijkl mnop
+```
+
+!!! tip
+    The `password_env` field holds the **name** of the environment variable, not the password itself. The actual password goes in `~/.lamia/.env` and is never stored in project files.
+
+### Gmail
+
+Works with both free Gmail accounts and Google Workspace accounts.
+
+1. Enable **2-Step Verification** at [myaccount.google.com/security](https://myaccount.google.com/security)
+2. Create an **App Password** at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+    - Select "Mail" and "Other (Lamia)"
+    - Google generates a 16-character password
+3. Add the password to `~/.lamia/.env`:
+   ```
+   IMAP_PASSWORD=xxxx xxxx xxxx xxxx
+   ```
+4. Configure `config.yaml`:
+   ```yaml
+   triggers:
+     email:
+       host: imap.gmail.com
+       username: you@gmail.com
+       password_env: IMAP_PASSWORD
+   ```
+
+Google Workspace accounts work identically — the Workspace domain does not need to be tied to any GCP project or cloud infrastructure.
+
+### Outlook / Microsoft 365
+
+```yaml
+triggers:
+  email:
+    host: outlook.office365.com
+    username: you@company.com
+    password_env: IMAP_PASSWORD
+```
+
+Microsoft 365 may require an admin to enable IMAP access. Create an App Password at [account.live.com/proofs/AppPassword](https://account.live.com/proofs/AppPassword).
+
+### Yahoo Mail
+
+```yaml
+triggers:
+  email:
+    host: imap.mail.yahoo.com
+    username: you@yahoo.com
+    password_env: IMAP_PASSWORD
+```
+
+Generate an App Password at [login.yahoo.com/account/security/app-passwords](https://login.yahoo.com/account/security/app-passwords).
+
+### Any IMAP Server
+
+Any email provider that supports IMAP works:
+
+```yaml
+triggers:
+  email:
+    host: mail.yourcompany.com
+    port: 993
+    username: user@yourcompany.com
+    password_env: IMAP_PASSWORD
+```
 
 ## Deploying
 

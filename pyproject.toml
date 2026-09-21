@@ -41,6 +41,7 @@ dependencies = [
     "lxml>=4.9.0",
     "cssselect>=1.4.0",
     "selenium>=4.10.0",
+    "watchdog>=3.0.0",
     # File extraction for {@filename} references
     "PyPDF2>=3.0.0",
 ]
