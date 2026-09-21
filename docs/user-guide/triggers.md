@@ -86,7 +86,7 @@ IMAP_PASSWORD=abcd efgh ijkl mnop
 
 ### Gmail
 
-Works with both free Gmail accounts and Google Workspace accounts. No admin permissions, GCP project, or OAuth setup required.
+Works with both free Gmail accounts and Google Workspace accounts.
 
 1. Enable **2-Step Verification** at [myaccount.google.com/security](https://myaccount.google.com/security)
 2. Create an **App Password** at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)

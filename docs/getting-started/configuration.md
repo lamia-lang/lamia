@@ -97,23 +97,6 @@ engine:
   parallel_execution: true  # Enable parallel step execution
 ```
 
-### Trigger Configuration
-
-Email triggers connect via IMAP. Store the actual password in `~/.lamia/.env`, not in `config.yaml`.
-
-```yaml
-triggers:
-  email:
-    host: imap.gmail.com        # IMAP server
-    port: 993                   # default
-    username: you@gmail.com
-    password_env: IMAP_PASSWORD # env var name (not the password)
-    poll_interval: 30           # seconds between checks
-    label: INBOX                # IMAP folder to monitor
-```
-
-See [Triggers — Email Configuration](../user-guide/triggers.md#email-configuration) for provider-specific setup (Gmail, Outlook, Yahoo).
-
 ## Configuration Best Practices
 
 1. **Use Environment Variables**: Keep sensitive data in environment variables
