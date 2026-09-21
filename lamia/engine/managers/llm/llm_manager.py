@@ -135,7 +135,7 @@ class LLMManager(Manager):
         if env_var_names:
             env_vars_str = " or ".join(env_var_names)
             raise MissingAPIKeysError([(provider_name, env_vars_str)])
-
+        
         # Provider doesn't need an API key (e.g., local models)
         return None, False
 
@@ -202,7 +202,7 @@ class LLMManager(Manager):
                 adapter_class = self.provider_registry.get_adapter_class(provider_name)
 
             if adapter_class.is_remote():
-                adapter = adapter_class(api_key=api_key or "")
+                adapter = adapter_class(api_key=api_key)
             else:
                 adapter = adapter_class()
 
