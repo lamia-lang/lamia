@@ -78,6 +78,8 @@ class TestOpenRouterAdapterGenerate:
         headers = call_args[1]["headers"]
         assert headers["Authorization"] == "Bearer sk-or-test"
 
+        await adapter.close()
+
     @pytest.mark.asyncio
     async def test_generate_free_without_key(self):
         model = LLMModel("openrouter:cohere/north-mini-code:free")
@@ -103,6 +105,8 @@ class TestOpenRouterAdapterGenerate:
         assert call_args[0][0] == "https://proxy.test/v1/chat/completions"
         headers = call_args[1]["headers"]
         assert "Authorization" not in headers
+
+        await adapter.close()
 
     @pytest.mark.asyncio
     async def test_generate_non_free_without_key_is_forwarded(self):
@@ -130,6 +134,8 @@ class TestOpenRouterAdapterGenerate:
         assert call_args[0][0] == "https://proxy.test/v1/chat/completions"
         assert "Authorization" not in call_args[1]["headers"]
 
+        await adapter.close()
+
     @pytest.mark.asyncio
     async def test_generate_byok_allows_paid_models(self):
         """BYOK allows any model, not just :free."""
@@ -156,6 +162,8 @@ class TestOpenRouterAdapterGenerate:
         payload = call_args[1]["json"]
         assert payload["model"] == "meta-llama/llama-3.3-70b-instruct"
 
+        await adapter.close()
+
     @pytest.mark.asyncio
     async def test_generate_rate_limit_429(self):
         model = LLMModel("openrouter:cohere/north-mini-code:free")
@@ -175,6 +183,8 @@ class TestOpenRouterAdapterGenerate:
         with pytest.raises(ExternalOperationRateLimitError):
             await adapter.generate("Hi", model)
 
+        await adapter.close()
+
     @pytest.mark.asyncio
     async def test_generate_connection_error(self):
         model = LLMModel("openrouter:cohere/north-mini-code:free")
@@ -188,6 +198,7 @@ class TestOpenRouterAdapterGenerate:
         with pytest.raises(ExternalOperationTransientError):
             await adapter.generate("Hi", model)
 
+        await adapter.close()
 
 class TestOpenRouterAdapterLifecycle:
     """Test adapter lifecycle methods."""
