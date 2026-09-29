@@ -239,3 +239,51 @@ async def test_markdown_structure_validator_element_types(strict, element_type, 
     assert isinstance(result.typed_result.content, element_type)
     assert result.typed_result.content.text == result_text
 
+
+# ── Tests for str-as-Paragraph ──────────────────────────────────────────
+
+
+class StrParagraphModel(BaseModel):
+    title: Heading1
+    intro: str
+    subtitle: Heading2
+    body: str
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strict", [True, False])
+async def test_str_fields_accepted_as_paragraph(strict):
+    """str fields should be treated as Paragraph — no ValueError on construction."""
+    validator = MarkdownStructureValidator(model=StrParagraphModel, strict=strict)
+    md = "# Title\n\nIntro text here.\n\n## Sub\n\nBody text here.\n"
+    result = await validator.validate(md)
+    assert result.is_valid
+    assert result.validated_text["title"] == "Title"
+    assert result.validated_text["intro"] == "Intro text here."
+    assert result.validated_text["subtitle"] == "Sub"
+    assert result.validated_text["body"] == "Body text here."
+
+
+class AllStrModel(BaseModel):
+    first: str
+    second: str
+
+
+@pytest.mark.asyncio
+async def test_all_str_fields_map_to_paragraphs():
+    """A model with only str fields should match sequential paragraphs."""
+    validator = MarkdownStructureValidator(model=AllStrModel, strict=False)
+    md = "First paragraph.\n\nSecond paragraph.\n"
+    result = await validator.validate(md)
+    assert result.is_valid
+    assert result.validated_text["first"] == "First paragraph."
+    assert result.validated_text["second"] == "Second paragraph."
+
+
+def test_str_field_rejected_types_still_error():
+    """int, float, list etc. should still be rejected."""
+    class BadModel(BaseModel):
+        count: int
+    with pytest.raises(ValueError, match="Invalid fields found"):
+        MarkdownStructureValidator(model=BadModel)
+

@@ -263,14 +263,16 @@ Common HTML selector patterns:
 
 ### Markdown
 
-Use selectors for document elements like headings and code blocks:
+Markdown models use dedicated element types, with selectors pointing at the document element each field is parsed from. Bare `str` fields are treated as `Paragraph`. All Markdown types (`Heading1`–`Heading6`, `Paragraph`, `UnorderedList`, etc.) are auto-imported — no explicit import needed.
 
 ```python
 class ArticleSummary(BaseModel):
-    title: str = Field(description="Main heading", json_schema_extra={"selector": "h1"})
-    intro: str = Field(description="First paragraph", json_schema_extra={"selector": "p[0]"})
-    snippet: str = Field(description="First code block", json_schema_extra={"selector": "code[0]"})
+    title: Heading1 = Field(description="Main heading", json_schema_extra={"selector": "h1"})
+    intro: Paragraph = Field(description="First paragraph", json_schema_extra={"selector": "p[0]"})
+    snippet: CodeBlock = Field(description="First code block", json_schema_extra={"selector": "code[0]"})
 ```
+
+Available Markdown types: `Heading1`–`Heading6`, `Paragraph`, `Blockquote`, `OrderedList`, `UnorderedList`, `ListItem`, `CodeBlock`, `FencedCode`, `IndentedCode`, `Table`, `HorizontalRule`.
 
 For a deeper selector reference (fallback chains, AI-assisted selectors, best practices), see the [Selector Usage Guide](../validation/selector-usage-guide.md).
 

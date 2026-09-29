@@ -23,6 +23,29 @@ IMPORTS = (ast.Import, ast.ImportFrom)
 TERMINATORS = (ast.Return, ast.Raise, ast.Continue, ast.Break)
 
 
+def _safe_walk(node):
+    """Iterative AST walk that avoids CPython recursion edge-cases."""
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        yield current
+        try:
+            children = list(ast.iter_child_nodes(current))
+        except SystemError as exc:
+            # Some Python builds intermittently raise:
+            # "AST constructor recursion depth mismatch".
+            if "recursion depth mismatch" not in str(exc):
+                raise
+            children = []
+            for field_name in getattr(current, "_fields", ()):
+                value = getattr(current, field_name, None)
+                if isinstance(value, ast.AST):
+                    children.append(value)
+                elif isinstance(value, list):
+                    children.extend(v for v in value if isinstance(v, ast.AST))
+        stack.extend(reversed(children))
+
+
 def _bound_names(node):
     """Names an import statement binds into the enclosing scope."""
     for alias in node.names:
@@ -62,7 +85,7 @@ def _index_blocks(func):
 def _statement_of(node, location):
     """Innermost statement containing node, or None."""
     for stmt in location:
-        if node is not stmt and node in ast.walk(stmt):
+        if node is not stmt and node in _safe_walk(stmt):
             return stmt
     return None
 
@@ -70,7 +93,7 @@ def _statement_of(node, location):
 def _shadowing_in_function(func):
     """Yield (name, lineno) for branch imports usable before they run."""
     location = _index_blocks(func)
-    nested = {n for stmt in location if isinstance(stmt, FUNCTIONS) for n in ast.walk(stmt)}
+    nested = {n for stmt in location if isinstance(stmt, FUNCTIONS) for n in _safe_walk(stmt)}
 
     imports_by_name = {}
     for stmt, (block, owner) in location.items():
@@ -83,7 +106,7 @@ def _shadowing_in_function(func):
         guaranteed_after = None
 
         for stmt, block, owner in sites:
-            safe.update(n for s in block for n in ast.walk(s))
+            safe.update(n for s in block for n in _safe_walk(s))
             top_level = block is func.body
             settled_try = isinstance(owner, ast.Try) and all(
                 _terminates(h.body) for h in owner.handlers
@@ -93,7 +116,7 @@ def _shadowing_in_function(func):
                 guaranteed_after = min(guaranteed_after or end, end)
 
         uses = [
-            n for n in ast.walk(func)
+            n for n in _safe_walk(func)
             if isinstance(n, ast.Name)
             and n.id == name
             and isinstance(n.ctx, ast.Load)
@@ -114,12 +137,17 @@ def _python_files():
 
 @pytest.mark.parametrize("path", _python_files(), ids=lambda p: p.name)
 def test_no_conditional_import_shadowing(path):
-    tree = ast.parse(path.read_text(), filename=str(path))
+    try:
+        tree = ast.parse(path.read_text(), filename=str(path))
+    except SystemError as exc:
+        if "recursion depth mismatch" not in str(exc):
+            raise
+        pytest.skip(f"CPython AST parser recursion edge-case for {path.name}: {exc}")
 
     offenders = sorted({
         f"{path.name}: '{name}' imported in a branch at line {imported}, "
         f"but used at line {used} in {func.name}()"
-        for func in ast.walk(tree)
+        for func in _safe_walk(tree)
         if isinstance(func, FUNCTIONS)
         for name, imported, used in _shadowing_in_function(func)
     })

@@ -67,10 +67,13 @@ John Doe,12345,Engineering
 ```
 
 #### **Markdown Structure Validator**
+
+Markdown models use dedicated element types, with selectors pointing at the source element. Bare `str` fields map to `Paragraph`. All Markdown types are auto-imported.
+
 ```python
 class Article(BaseModel):
-    title: str = Field(json_schema_extra={'selector': 'h1'})
-    summary: str = Field(json_schema_extra={'selector': 'blockquote'})
+    title: Heading1 = Field(json_schema_extra={'selector': 'h1'})
+    summary: Blockquote = Field(json_schema_extra={'selector': 'blockquote'})
 ```
 
 ---
@@ -127,6 +130,14 @@ class User(BaseModel):
 ### **Markdown Selectors**
 - **Element types**: `h1`, `h2`, `blockquote`, `code`
 - **Position-based**: `h1[0]`, `p[2]`
+
+### **Markdown Types**
+
+- **Headings**: `Heading1`–`Heading6`
+- **Paragraphs**: `Paragraph` (or bare `str`)
+- **Lists**: `OrderedList`, `UnorderedList`
+- **Code**: `CodeBlock`, `FencedCode`
+- **Other**: `Blockquote`, `HorizontalRule`, `Table`
 
 ---
 

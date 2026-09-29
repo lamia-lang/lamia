@@ -113,22 +113,23 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         super().__init__(model=resolved_model, strict=strict, generate_hints=generate_hints)
 
     def _validate_model_uses_markdown_types(self, model):
-        """Ensure model only uses predefined markdown types, not regular types like str, int, etc."""
+        """Ensure model fields use Markdown types or str (which maps to Paragraph)."""
         invalid_fields = []
-        
+
         for field, field_info in model.model_fields.items():
             field_type = field_info.annotation
-            # Check if it's a known markdown type
+            if field_type is str:
+                continue
             if field_type not in MARKDOWN_TYPE_MAPPING:
                 invalid_fields.append(f"'{field}': {field_type.__name__}")
-        
+
         if invalid_fields:
             available_types = ", ".join([cls.__name__ for cls in MARKDOWN_TYPE_MAPPING.keys()])
             raise ValueError(
-                f"Markdown validation only supports predefined markdown types. "
+                f"Markdown validation only supports predefined markdown types or str. "
                 f"Invalid fields found: {', '.join(invalid_fields)}. "
                 f"Available markdown types: {available_types}. "
-                f"Use Heading1-6 for headings, Paragraph for text, etc."
+                f"Bare str fields are treated as Paragraph."
             )
 
     # Class methods
@@ -331,6 +332,8 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         return ''.join(texts)
 
     def _ast_type_for_field(self, typ):
+        if typ is str:
+            return MARKDOWN_TYPE_MAPPING[Paragraph]
         return MARKDOWN_TYPE_MAPPING.get(typ, (None, None))
 
     def _extract_text(self, node):
@@ -595,9 +598,9 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             HorizontalRule: "--- (horizontal rule with three dashes)",
         }
         
-        # Handle generic types like str, int, etc.
+        # str maps to Paragraph in Markdown models
         if field_type == str:
-            return "string value"
+            return "Regular paragraph text (plain text without special formatting)"
         elif field_type == int:
             return "integer value"
         elif field_type == float:

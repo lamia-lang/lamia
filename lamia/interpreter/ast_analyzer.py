@@ -211,6 +211,19 @@ def create_execution_globals(used_namespaces: Set[str], used_types: Set[str], la
     execution_globals['Optional'] = Optional
     execution_globals['Dict'] = Dict
     execution_globals['Any'] = Any
+
+    # Markdown element types so .lm scripts can use them without imports
+    from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import (
+        Heading1, Heading2, Heading3, Heading4, Heading5, Heading6,
+        Paragraph, Blockquote, OrderedList, UnorderedList, ListItem,
+        CodeBlock, FencedCode, IndentedCode, Table, HorizontalRule,
+    )
+    for _md_type in (
+        Heading1, Heading2, Heading3, Heading4, Heading5, Heading6,
+        Paragraph, Blockquote, OrderedList, UnorderedList, ListItem,
+        CodeBlock, FencedCode, IndentedCode, Table, HorizontalRule,
+    ):
+        execution_globals[_md_type.__name__] = _md_type
     
     if 'session' in used_namespaces:
         # Get web_manager from lamia instance for session validation
