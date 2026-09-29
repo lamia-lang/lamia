@@ -78,6 +78,7 @@ nav:
     - Lamia Cloud: advanced/lamia-cloud.md
   - Reference:
     - Selector Usage Guide: validation/selector-usage-guide.md
+  - "Lamia Studio IDE \u2197": https://lamia-lang.github.io/lamia-ide/
 
 markdown_extensions:
   - pymdownx.highlight:
