@@ -70,11 +70,11 @@ ai_response = lamia.run(
 )
 ```
 
-### Custom LLM Adapters
+### Using Lamia with a Claude Pro or Max Subscription
 
 Lamia supports OpenAI, Anthropic, and Ollama out of the box. You can add other providers by creating a Python adapter that extends `BaseLLMAdapter` and placing it in the `extensions/adapters/` directory of your project.
 
-See the [Custom LLM Adapters](https://lamia-lang.github.io/lamia/user-guide/custom-llm-adapters/) guide for the adapter API, and the [Lamia Studio — Custom Models](https://lamia-lang.github.io/lamia-ide/chat/custom-models/) page for a ready-to-use example.
+A good example is running Lamia on your Claude Pro or Max subscription instead of pay-per-token API billing: see the [ready-to-use Claude subscription adapter](https://lamia-lang.github.io/lamia/user-guide/custom-llm-adapters/#claude-subscription). The [Custom LLM Adapters](https://lamia-lang.github.io/lamia/user-guide/custom-llm-adapters/) guide covers the full adapter API.
 
 ## Module Documentation
 
