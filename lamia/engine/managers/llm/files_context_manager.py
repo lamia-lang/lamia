@@ -3,13 +3,14 @@
 import os
 import logging
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import Callable, List, Tuple, Optional, Dict
 from difflib import SequenceMatcher, get_close_matches
 import re
 
 import PyPDF2
 
 from lamia.errors import AmbiguousFileError, FileReferenceError
+from lamia.engine.managers.llm.prompt_formatter import display_path, format_files
 
 logger = logging.getLogger(__name__)
 
@@ -212,13 +213,6 @@ class FilesContext:
         self.indexed_files: List[str] = []
         self._entered = False
     
-    @property
-    def has_only_explicit_files(self) -> bool:
-        """True when every path names a file, so there is no directory to explore."""
-        return bool(self.paths) and all(
-            Path(os.path.expanduser(p)).resolve().is_file() for p in self.paths
-        )
-
     def __enter__(self):
         """Load files on context enter."""
         self.indexed_files = self._index_files(self.paths)
@@ -345,65 +339,19 @@ class FilesContext:
         """Read file content with appropriate extraction."""
         return read_file_content(filepath)
     
-    def append_indexed_files(self, prompt: str) -> str:
-        """Append the content of every indexed file to *prompt*.
-
-        Files the prompt already references with ``{@filename}`` are skipped;
-        :meth:`inject_file_references` puts their content in place instead.
-        """
-        already_referenced = set()
-        for ref in _FILE_REF_RE.findall(prompt):
-            try:
-                already_referenced.add(self.resolve_file_reference(ref.strip()))
-            except (FileReferenceError, AmbiguousFileError):
-                continue
-
-        sections = []
-        for filepath in self.indexed_files:
-            if filepath in already_referenced:
-                continue
-            try:
-                content = self.read_file_content(filepath)
-            except Exception as e:
-                logger.error(f"Error reading '{filepath}' for files context: {e}")
-                continue
-            sections.append(f"\n\n--- {os.path.basename(filepath)} ---\n{content}\n")
-        return prompt + "".join(sections)
-
     def inject_file_references(self, prompt: str) -> str:
-        """Replace {@filename} references with actual file content.
-        
+        """Move the content of files referenced with ``{@filename}`` into a ``<files>`` block ahead of *prompt*.
+
+        Each reference is replaced with a pointer to its file.
+
         Args:
             prompt: The prompt string potentially containing {@filename} references
-        
+
         Returns:
-            Prompt with file references replaced by content
+            Prompt preceded by the referenced files' content
         """
-        def replace_file_ref(match):
-            filename = match.group(1).strip()
-            if not filename:
-                raise FileReferenceError(
-                    "(empty)",
-                    [],
-                    "A file reference cannot be empty. Provide a filename or path.",
-                )
-            
-            try:
-                filepath = self.resolve_file_reference(filename)
-                content = self.read_file_content(filepath)
-                
-                return f"\n\n--- {os.path.basename(filepath)} ---\n{content}\n"
-            
-            except (FileReferenceError, AmbiguousFileError) as e:
-                # Re-raise these so user can fix the reference
-                raise
-            except Exception as e:
-                logger.error(f"Error processing file reference '{filename}': {e}")
-                return f"\n[Error loading file: {filename} - {e}]\n"
-        
-        # Find all {@filename} references
-        pattern = r'\{@([^}]+)\}'
-        return re.sub(pattern, replace_file_ref, prompt)
+        prompt, files = _hoist_file_references(prompt, self.resolve_file_reference, self.read_file_content)
+        return format_files(files) + prompt
 
 
 # Global context stack for nested contexts
@@ -547,24 +495,51 @@ def _resolve_standalone_reference(query: str, source_path: str) -> str:
 
 
 def resolve_standalone_file_references(prompt: str, source_path: str) -> str:
-    """Replace {@...} references using path-based resolution.
+    """Move files referenced with ``{@...}`` into a ``<files>`` block ahead of *prompt*, using path-based resolution.
 
     Called as a fallback when no ``FilesContext`` is active.
     """
-    if not _FILE_REF_RE.search(prompt):
-        return prompt
+    prompt, files = _hoist_file_references(
+        prompt,
+        lambda query: _resolve_standalone_reference(query, source_path),
+        read_file_content,
+    )
+    return format_files(files) + prompt
+
+
+def _hoist_file_references(
+    prompt: str,
+    resolve: Callable[[str], Optional[str]],
+    read: Callable[[str], str],
+) -> Tuple[str, List[Tuple[str, str]]]:
+    """Replace each ``{@...}`` reference with a pointer to its file.
+
+    Returns the rewritten prompt and the referenced files as
+    ``(filepath, content)`` pairs, each file once. A reference whose
+    *resolve* returns ``None`` is left unchanged.
+    """
+    files: List[Tuple[str, str]] = []
+    loaded = set()
 
     def replace_ref(match: re.Match) -> str:
         query = match.group(1).strip()
-        try:
-            filepath = _resolve_standalone_reference(query, source_path)
-            content = read_file_content(filepath)
-            return f"\n\n--- {os.path.basename(filepath)} ---\n{content}\n"
-        except (FileReferenceError, AmbiguousFileError):
-            raise
-        except Exception as e:
-            logger.error(f"Error processing standalone file reference '{query}': {e}")
-            return f"\n[Error loading file: {query} - {e}]\n"
+        if not query:
+            raise FileReferenceError(
+                "(empty)",
+                [],
+                "A file reference cannot be empty. Provide a filename or path.",
+            )
+        filepath = resolve(query)
+        if filepath is None:
+            return match.group(0)
+        if filepath not in loaded:
+            try:
+                content = read(filepath)
+            except Exception as e:
+                logger.error(f"Error processing file reference '{query}': {e}")
+                return f"[Error loading file: {query} - {e}]"
+            files.append((filepath, content))
+            loaded.add(filepath)
+        return f"[see file {display_path(filepath)}]"
 
-    return _FILE_REF_RE.sub(replace_ref, prompt)
-
+    return _FILE_REF_RE.sub(replace_ref, prompt), files

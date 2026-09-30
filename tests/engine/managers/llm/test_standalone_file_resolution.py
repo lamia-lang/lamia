@@ -150,7 +150,8 @@ class TestReadFileContent:
             result = resolve_standalone_file_references("{@resume.pdf}", source)
 
         assert "Jane Smith" in result
-        assert "--- resume.pdf ---" in result
+        assert result.startswith("<files>\n<file path=")
+        assert 'resume.pdf">' in result
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +216,8 @@ class TestResolveStandaloneFileReferences:
         result = resolve_standalone_file_references(prompt, source)
         assert "{@data.json}" not in result
         assert '"local"' in result
-        assert "--- data.json ---" in result
+        assert 'data.json">' in result
+        assert result.index("</files>") < result.index("Use this config: [see file ")
 
     def test_replaces_relative_path(self, project_tree):
         source = str(project_tree / "prompts" / "greet.hu")

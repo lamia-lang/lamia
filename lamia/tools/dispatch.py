@@ -91,7 +91,8 @@ def _resolve_in_roots(
     """Resolve a tool path argument against *roots*.
 
     A relative path is tried against each root in turn and resolves to the
-    first that exists, falling back to the first root.  With
+    first that exists, falling back to the first root.  A root that is a file
+    matches its own name.  With
     *restrict_to_roots*, anything landing outside every root raises
     ``PermissionError`` instead.
     """
@@ -111,26 +112,14 @@ def _resolve_in_roots(
         return check(candidate.resolve())
 
     for root in roots:
+        if root.is_file():
+            if candidate == Path(root.name):
+                return root
+            continue
         resolved = (root / candidate).resolve()
         if resolved.exists() and (not restrict_to_roots or contained(resolved)):
             return resolved
     return check((roots[0] / candidate).resolve())
-
-
-def _display_path(resolved: Path, roots: tuple[Path, ...], restrict_to_roots: bool) -> str:
-    """Render a path for tool output.
-
-    Enforced roots are a sandbox, so paths are shown relative to them rather
-    than exposing where the context sits on disk.
-    """
-    if not restrict_to_roots:
-        return str(resolved)
-    for root in roots:
-        if resolved == root:
-            return resolved.name
-        if root in resolved.parents:
-            return str(resolved.relative_to(root))
-    return resolved.name
 
 
 def execute_tool(
@@ -255,20 +244,22 @@ def _read_file(
 
     if resolved.exists() and resolved.is_dir():
         return (
-            f"Error: path is a directory, not a file: {_display_path(resolved, roots, restrict_to_roots)}\n\n"
+            f"Error: path is a directory, not a file: {resolved}\n\n"
             "Use list_files to inspect directory contents."
         )
     if not resolved.is_file():
         candidates = []
         for root in roots:
+            if root.is_file():
+                continue
             for match in root.rglob(resolved.name):
                 if match.is_file() and not any(p in _SKIP_DIRS for p in match.parts):
-                    candidates.append(_display_path(match, roots, restrict_to_roots))
+                    candidates.append(str(match))
                     if len(candidates) >= 5:
                         break
             if len(candidates) >= 5:
                 break
-        msg = f"Error: file not found: {_display_path(resolved, roots, restrict_to_roots)}"
+        msg = f"Error: file not found: {resolved}"
         if candidates:
             msg += "\n\nDid you mean:\n" + "\n".join(f"  - {c}" for c in candidates)
         msg += "\n\nUse list_files to explore the directory structure."
@@ -306,13 +297,18 @@ _SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv", ".tox", ".
 
 
 def _list_files(directory: str, roots: tuple[Path, ...], restrict_to_roots: bool = False) -> str:
+    if directory in ("", ".") and (len(roots) > 1 or roots[0].is_file()):
+        return "\n\n".join(str(root) if root.is_file() else _list_directory(root) for root in roots)
     try:
         resolved = _resolve_in_roots(directory, roots, restrict_to_roots)
     except PermissionError as exc:
         return f"Error: {exc}"
     if not resolved.is_dir():
-        return f"Directory not found: {_display_path(resolved, roots, restrict_to_roots)}"
+        return f"Directory not found: {resolved}"
+    return _list_directory(resolved)
 
+
+def _list_directory(directory: Path) -> str:
     MAX_DEPTH = 4
     lines: list = []
 
@@ -332,12 +328,12 @@ def _list_files(directory: str, roots: tuple[Path, ...], restrict_to_roots: bool
             else:
                 lines.append(f"{prefix}{entry.name}")
 
-    _walk(resolved, "  ", 0)
+    _walk(directory, "  ", 0)
 
     if not lines:
-        return f"Empty directory: {_display_path(resolved, roots, restrict_to_roots)}"
+        return f"Empty directory: {directory}"
 
-    return f"{_display_path(resolved, roots, restrict_to_roots)}/\n" + "\n".join(lines)
+    return f"{directory}/\n" + "\n".join(lines)
 
 
 _hu_linter = HuLinter()
@@ -924,6 +920,7 @@ def _glob(
         return "Error: pattern is required"
 
     search_dirs: list[Path] = []
+    file_roots: list[Path] = []
     if directory and directory != ".":
         try:
             search_dirs.append(_resolve_in_roots(directory, roots, restrict_to_roots))
@@ -931,13 +928,18 @@ def _glob(
             return f"Error: {exc}"
     else:
         search_dirs.extend(roots)
+        file_roots = [root for root in roots if root.is_file()]
     search_dirs = [d for d in search_dirs if d.is_dir()]
-    if not search_dirs:
+    if not search_dirs and not file_roots:
         return f"Directory not found: {directory}"
 
     MAX_RESULTS = 200
     matches: list[tuple[float, str]] = []
     seen_paths: set[Path] = set()
+    for root in file_roots:
+        if any(fnmatch.fnmatch(root.name, sub.strip().split("/")[-1]) for sub in pattern.split("|")):
+            seen_paths.add(root)
+            matches.append((root.stat().st_mtime, str(root)))
     for search_dir in search_dirs:
         seen: set[str] = set()
         for sub in pattern.split("|"):
@@ -956,7 +958,7 @@ def _glob(
             except OSError:
                 mtime = 0
             if restrict_to_roots:
-                match_path = _display_path(abs_path, roots, restrict_to_roots)
+                match_path = str(abs_path)
             else:
                 match_path = os.path.relpath(str(abs_path), str(roots[0]))
             matches.append((mtime, match_path))

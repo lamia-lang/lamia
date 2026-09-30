@@ -38,6 +38,8 @@ from lamia.actions.trigger import TriggerRejectError, TRIGGER_REJECT_EXIT_CODE
 from lamia.scheduling.registry import record_run, record_run_start, load_job
 from lamia.tools.loop import run_tool_loop, AssistantMessage, ToolCallMessage, ToolResultMessage
 from lamia.tools.definitions import ToolName
+from lamia.engine.managers.llm.files_context_manager import read_file_content
+from lamia.engine.managers.llm.prompt_formatter import format_files
 
 HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
@@ -295,6 +297,14 @@ async def json_mode(lamia: Lamia) -> None:
             continue
 
         system_prefix = request.get("system", "")
+        file_paths = request.get("files", [])
+        attached_files = []
+        for fp in file_paths:
+            try:
+                attached_files.append((fp, read_file_content(fp)))
+            except Exception as read_err:
+                logger.warning("Could not read attached file %s: %s", fp, read_err)
+        files_block = format_files(attached_files)
 
         raw_messages = request.get("messages", [])
         if raw_messages:
@@ -302,25 +312,11 @@ async def json_mode(lamia: Lamia) -> None:
             prompt = (
                 f"{system_prefix}\n\n"
                 f"<conversation_history>\n{history_block}\n</conversation_history>\n\n"
+                f"{files_block}"
                 f"User: {user_text}"
             )
         else:
-            prompt = system_prefix + "\n\n" + user_text
-        file_paths = request.get("files", [])
-
-        # NOTE: reads files locally — if Lamia moves to a remote server,
-        # file contents should be sent in the request JSON instead of paths.
-        if file_paths:
-            file_sections = []
-            for fp in file_paths:
-                try:
-                    with open(fp, "r", encoding="utf-8") as fh:
-                        content = fh.read()
-                    file_sections.append(f"<file path=\"{fp}\">\n{content}\n</file>")
-                except Exception as read_err:
-                    logger.warning("Could not read attached file %s: %s", fp, read_err)
-            if file_sections:
-                prompt = prompt + "\n\n<attached_files>\n" + "\n".join(file_sections) + "\n</attached_files>"
+            prompt = system_prefix + "\n\n" + files_block + user_text
 
         try:
             reset_file_writes()
