@@ -27,6 +27,10 @@ Files are resolved by **exact suffix matching** against indexed paths. No fuzzy 
 
 If the same filename exists in multiple directories, you'll be asked to disambiguate with a longer path.
 
+### Referenced vs Available Files
+
+A file you reference with `{@filename}` is always given to the AI in full. Every other path in `files(...)` is only made available: the AI sees the list of paths and opens a file only when the task needs it. Reference a file with `{@filename}` when the AI must use it.
+
 ### Automatic File Extraction
 
 - **PDF files**: Text extracted using PyPDF2
@@ -200,17 +204,6 @@ with files("~/Documents/"):
         """
         Extract name, email, and skills from {@resume.pdf}
         """
-```
-
-**Output format**:
-```
---- resume.pdf ---
---- Page 1 ---
-John Doe
-Senior Python Developer
-...
---- Page 2 ---
-...
 ```
 
 ### DOCX Files
@@ -450,15 +443,6 @@ with files("~/Documents/"):
 - Be more specific: `{@config.yaml}` instead of `{@config}`
 - Use path: `{@linkedin/config.yaml}`
 
-### "PyPDF2 not installed"
-
-**Cause**: PDF extraction requires PyPDF2
-
-**Solution**:
-```bash
-pip install PyPDF2
-```
-
 ### Slow indexing
 
 **Cause**: Indexing too many files
@@ -485,28 +469,6 @@ Create a files context manager.
 with files("~/Documents/", "./config/"):
     # Use files here
 ```
-
-### `FilesContext.resolve_file_reference(query: str) -> str`
-
-Resolve a file reference to absolute path.
-
-**Parameters**:
-- `query`: Filename or pattern
-
-**Returns**: Absolute path to resolved file
-
-**Raises**:
-- `FileReferenceError`: File not found
-- `AmbiguousFileError`: Multiple matches
-
-### `FilesContext.inject_file_references(prompt: str) -> str`
-
-Replace `{@filename}` references with file content.
-
-**Parameters**:
-- `prompt`: Prompt string with `{@}` references
-
-**Returns**: Prompt with injected file contents
 
 ---
 
