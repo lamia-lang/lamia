@@ -125,12 +125,35 @@ class TestLamiaAdapterAsyncInitialize:
 
 
 class TestLamiaAdapterPayloadBuilding:
-    """Test LamiaAdapter request payload building."""
-    
-    def test_build_request_payload_openai(self):
-        """Test building request payload for OpenAI."""
-        adapter = LamiaAdapter(api_key="test-key")
-        
+    """Test the request payload LamiaAdapter sends to the Lamia API."""
+
+    OPENAI_RESPONSE = {"choices": [{"message": {"content": "ok"}}], "usage": {}}
+    ANTHROPIC_RESPONSE = {"content": [{"type": "text", "text": "ok"}], "usage": {"input_tokens": 1, "output_tokens": 1}}
+
+    @staticmethod
+    async def _sent_payload(model, provider, response_data, prompt="Hello"):
+        http_response = AsyncMock()
+        http_response.status = 200
+        http_response.json = AsyncMock(return_value=response_data)
+
+        class MockPostContext:
+            async def __aenter__(self):
+                return http_response
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+
+        model.get_provider_name.return_value = provider
+        model.name = f"{provider}:{model.get_model_name_without_provider.return_value}"
+        adapter = LamiaAdapter(api_key="test-key", api_url="http://localhost:8080")
+        adapter.session = Mock()
+        adapter.session.post = Mock(return_value=MockPostContext())
+        await adapter.generate(prompt, model)
+        return adapter.session.post.call_args.kwargs["json"]
+
+    @pytest.mark.asyncio
+    async def test_build_request_payload_openai(self):
+        """Test the payload sent for an OpenAI model."""
         mock_model = Mock(spec=LLMModel)
         mock_model.get_model_name_without_provider.return_value = "gpt-3.5-turbo"
         mock_model.temperature = 0.7
@@ -139,10 +162,10 @@ class TestLamiaAdapterPayloadBuilding:
         mock_model.frequency_penalty = 0.1
         mock_model.presence_penalty = 0.2
         mock_model.seed = 42
-        
-        payload = adapter._build_request_payload("Hello", mock_model, "openai")
-        
-        expected = {
+
+        payload = await self._sent_payload(mock_model, "openai", self.OPENAI_RESPONSE)
+
+        assert payload == {
             "model": "gpt-3.5-turbo",
             "messages": [{"role": "user", "content": "Hello"}],
             "temperature": 0.7,
@@ -152,41 +175,35 @@ class TestLamiaAdapterPayloadBuilding:
             "presence_penalty": 0.2,
             "seed": 42
         }
-        
-        assert payload == expected
-    
-    def test_build_request_payload_anthropic(self):
-        """Test building request payload for Anthropic."""
-        adapter = LamiaAdapter(api_key="test-key")
-        
+
+    @pytest.mark.asyncio
+    async def test_build_request_payload_anthropic(self):
+        """Test the payload sent for an Anthropic model."""
         mock_model = Mock(spec=LLMModel)
         mock_model.get_model_name_without_provider.return_value = "claude-3-sonnet"
         mock_model.temperature = 0.5
         mock_model.max_tokens = 2000
         mock_model.top_p = 0.8
-        
-        payload = adapter._build_request_payload("Hello", mock_model, "anthropic")
-        
-        expected = {
+
+        payload = await self._sent_payload(mock_model, "anthropic", self.ANTHROPIC_RESPONSE)
+
+        assert payload == {
             "model": "claude-3-sonnet",
             "messages": [{"role": "user", "content": "Hello"}],
             "max_tokens": 2000,
             "temperature": 0.5,
         }
-        
-        assert payload == expected
 
-    def test_build_request_payload_anthropic_top_p_only(self):
-        """Test Anthropic payload sends top_p when temperature is unset."""
-        adapter = LamiaAdapter(api_key="test-key")
-
+    @pytest.mark.asyncio
+    async def test_build_request_payload_anthropic_top_p_only(self):
+        """Test the Anthropic payload sends top_p when temperature is unset."""
         mock_model = Mock(spec=LLMModel)
         mock_model.get_model_name_without_provider.return_value = "claude-3-sonnet"
         mock_model.temperature = None
         mock_model.max_tokens = 2000
         mock_model.top_p = 0.8
 
-        payload = adapter._build_request_payload("Hello", mock_model, "anthropic")
+        payload = await self._sent_payload(mock_model, "anthropic", self.ANTHROPIC_RESPONSE)
 
         assert payload == {
             "model": "claude-3-sonnet",
@@ -194,11 +211,10 @@ class TestLamiaAdapterPayloadBuilding:
             "max_tokens": 2000,
             "top_p": 0.8,
         }
-    
-    def test_build_request_payload_with_defaults(self):
-        """Test building request payload with default values."""
-        adapter = LamiaAdapter(api_key="test-key")
-        
+
+    @pytest.mark.asyncio
+    async def test_build_request_payload_with_defaults(self):
+        """Test the payload falls back to default temperature and max_tokens."""
         mock_model = Mock(spec=LLMModel)
         mock_model.get_model_name_without_provider.return_value = "gpt-3.5-turbo"
         mock_model.temperature = None
@@ -207,9 +223,9 @@ class TestLamiaAdapterPayloadBuilding:
         mock_model.frequency_penalty = None
         mock_model.presence_penalty = None
         mock_model.seed = None
-        
-        payload = adapter._build_request_payload("Test", mock_model, "openai")
-        
+
+        payload = await self._sent_payload(mock_model, "openai", self.OPENAI_RESPONSE, prompt="Test")
+
         assert payload["temperature"] == 0.7  # default
         assert payload["max_tokens"] == 1000  # default
 

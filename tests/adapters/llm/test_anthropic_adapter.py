@@ -568,33 +568,56 @@ class TestAnthropicAdapterIntegration:
     
     @pytest.mark.asyncio
     async def test_adapter_routing_logic(self):
-        """Test that adapter correctly routes between SDK and HTTP."""
-        # Test with SDK available
+        """Test that requests go through the SDK client when available and the HTTP session otherwise."""
+        mock_model = Mock(spec=LLMModel)
+        mock_model.name = "anthropic/claude-3-haiku"
+        mock_model.temperature = 0.5
+        mock_model.max_tokens = 500
+        mock_model.top_p = None
+        mock_model.get_model_name_without_provider.return_value = "claude-3-haiku"
+
         with patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', True):
-            with patch('lamia.adapters.llm.anthropic_adapter.AsyncAnthropic'):
-                adapter = AnthropicAdapter(api_key="test-key")
-                assert adapter._use_sdk is True
-                
-                with patch.object(adapter, '_generate_with_sdk') as mock_sdk:
-                    mock_sdk.return_value = LLMResponse("test", {}, {}, "model")
-                    mock_model = Mock()
-                    
-                    await adapter.generate("test", mock_model)
-                    mock_sdk.assert_called_once_with("test", mock_model)
-        
-        # Test with SDK not available
+            with patch('lamia.adapters.llm.anthropic_adapter.AsyncAnthropic') as mock_anthropic:
+                mock_client = AsyncMock()
+                mock_anthropic.return_value = mock_client
+                sdk_response = Mock()
+                sdk_response.content = [Mock(text="sdk response")]
+                sdk_response.usage.input_tokens = 1
+                sdk_response.usage.output_tokens = 1
+                mock_client.messages.create = AsyncMock(return_value=sdk_response)
+
+                response = await AnthropicAdapter(api_key="test-key").generate("test", mock_model)
+
+                sent = mock_client.messages.create.call_args.kwargs
+                assert sent["messages"] == [{"role": "user", "content": "test"}]
+                assert response.text == "sdk response"
+
         with patch('lamia.adapters.llm.anthropic_adapter.ANTHROPIC_AVAILABLE', False):
-            with patch('aiohttp.ClientSession'):
-                adapter = AnthropicAdapter(api_key="test-key")
-                assert adapter._use_sdk is False
-                
-                with patch.object(adapter, '_generate_with_http') as mock_http:
-                    mock_http.return_value = LLMResponse("test", {}, {}, "model")
-                    mock_model = Mock()
-                    
-                    await adapter.generate("test", mock_model)
-                    mock_http.assert_called_once_with("test", mock_model)
-    
+            with patch('aiohttp.ClientSession') as mock_session_class:
+                mock_session = Mock()
+                mock_session_class.return_value = mock_session
+                http_response = AsyncMock()
+                http_response.status = 200
+                http_response.json = AsyncMock(return_value={
+                    "content": [{"text": "http response"}],
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                })
+
+                class MockPostContext:
+                    async def __aenter__(self):
+                        return http_response
+
+                    async def __aexit__(self, exc_type, exc_val, exc_tb):
+                        return None
+
+                mock_session.post.return_value = MockPostContext()
+
+                response = await AnthropicAdapter(api_key="test-key").generate("test", mock_model)
+
+                sent = mock_session.post.call_args.kwargs["json"]
+                assert sent["messages"] == [{"role": "user", "content": "test"}]
+                assert response.text == "http response"
+
     @pytest.mark.asyncio
     async def test_adapter_as_context_manager(self):
         """Test using adapter as async context manager."""
