@@ -1575,6 +1575,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#markdown-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Markdown Types
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1899,6 +1910,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#markdown-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Markdown Types
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2092,9 +2114,10 @@
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>John Doe,12345,Engineering
 </span></code></pre></div></p>
 <h4 id="markdown-structure-validator"><strong>Markdown Structure Validator</strong><a class="headerlink" href="#markdown-structure-validator" title="Permanent link">&para;</a></h4>
+<p>Markdown models use dedicated element types, with selectors pointing at the source element. Bare <code>str</code> fields map to <code>Paragraph</code>. All Markdown types are auto-imported.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Article</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">json_schema_extra</span><span class="o">=</span><span class="p">{</span><span class="s1">'selector'</span><span class="p">:</span> <span class="s1">'h1'</span><span class="p">})</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">summary</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">json_schema_extra</span><span class="o">=</span><span class="p">{</span><span class="s1">'selector'</span><span class="p">:</span> <span class="s1">'blockquote'</span><span class="p">})</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">title</span><span class="p">:</span> <span class="n">Heading1</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">json_schema_extra</span><span class="o">=</span><span class="p">{</span><span class="s1">'selector'</span><span class="p">:</span> <span class="s1">'h1'</span><span class="p">})</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">summary</span><span class="p">:</span> <span class="n">Blockquote</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">json_schema_extra</span><span class="o">=</span><span class="p">{</span><span class="s1">'selector'</span><span class="p">:</span> <span class="s1">'blockquote'</span><span class="p">})</span>
 </span></code></pre></div>
 <hr />
 <h2 id="not-recommended-direct-mapping-validators">❌ <strong>NOT RECOMMENDED - Direct Mapping Validators</strong><a class="headerlink" href="#not-recommended-direct-mapping-validators" title="Permanent link">&para;</a></h2>
@@ -2143,6 +2166,14 @@
 <ul>
 <li><strong>Element types</strong>: <code>h1</code>, <code>h2</code>, <code>blockquote</code>, <code>code</code></li>
 <li><strong>Position-based</strong>: <code>h1[0]</code>, <code>p[2]</code></li>
+</ul>
+<h3 id="markdown-types"><strong>Markdown Types</strong><a class="headerlink" href="#markdown-types" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Headings</strong>: <code>Heading1</code>–<code>Heading6</code></li>
+<li><strong>Paragraphs</strong>: <code>Paragraph</code> (or bare <code>str</code>)</li>
+<li><strong>Lists</strong>: <code>OrderedList</code>, <code>UnorderedList</code></li>
+<li><strong>Code</strong>: <code>CodeBlock</code>, <code>FencedCode</code></li>
+<li><strong>Other</strong>: <code>Blockquote</code>, <code>HorizontalRule</code>, <code>Table</code></li>
 </ul>
 <hr />
 <h2 id="ai-powered-selectors">🤖 <strong>AI-Powered Selectors</strong><a class="headerlink" href="#ai-powered-selectors" title="Permanent link">&para;</a></h2>

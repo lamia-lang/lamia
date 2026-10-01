@@ -1400,6 +1400,10 @@ Files are resolved by **exact suffix matching** against indexed paths. No fuzzy 
 
 If the same filename exists in multiple directories, you'll be asked to disambiguate with a longer path.
 
+### Referenced vs Available Files
+
+A file you reference with `{@filename}` is always given to the AI in full. Every other path in `files(...)` is only made available: the AI sees the list of paths and opens a file only when the task needs it. Reference a file with `{@filename}` when the AI must use it.
+
 ### Automatic File Extraction
 
 - **PDF files**: Text extracted using PyPDF2
@@ -1573,17 +1577,6 @@ with files("~/Documents/"):
         """
         Extract name, email, and skills from {@resume.pdf}
         """
-```
-
-**Output format**:
-```
---- resume.pdf ---
---- Page 1 ---
-John Doe
-Senior Python Developer
-...
---- Page 2 ---
-...
 ```
 
 ### DOCX Files
@@ -1823,15 +1816,6 @@ with files("~/Documents/"):
 - Be more specific: `{@config.yaml}` instead of `{@config}`
 - Use path: `{@linkedin/config.yaml}`
 
-### "PyPDF2 not installed"
-
-**Cause**: PDF extraction requires PyPDF2
-
-**Solution**:
-```bash
-pip install PyPDF2
-```
-
 ### Slow indexing
 
 **Cause**: Indexing too many files
@@ -1858,28 +1842,6 @@ Create a files context manager.
 with files("~/Documents/", "./config/"):
     # Use files here
 ```
-
-### `FilesContext.resolve_file_reference(query: str) -> str`
-
-Resolve a file reference to absolute path.
-
-**Parameters**:
-- `query`: Filename or pattern
-
-**Returns**: Absolute path to resolved file
-
-**Raises**:
-- `FileReferenceError`: File not found
-- `AmbiguousFileError`: Multiple matches
-
-### `FilesContext.inject_file_references(prompt: str) -> str`
-
-Replace `{@filename}` references with file content.
-
-**Parameters**:
-- `prompt`: Prompt string with `{@}` references
-
-**Returns**: Prompt with injected file contents
 
 ---
 
@@ -3572,14 +3534,16 @@ Common HTML selector patterns:
 
 ### Markdown
 
-Use selectors for document elements like headings and code blocks:
+Markdown models use dedicated element types, with selectors pointing at the document element each field is parsed from. Bare `str` fields are treated as `Paragraph`. All Markdown types (`Heading1`–`Heading6`, `Paragraph`, `UnorderedList`, etc.) are auto-imported — no explicit import needed.
 
 ```python
 class ArticleSummary(BaseModel):
-    title: str = Field(description="Main heading", json_schema_extra={"selector": "h1"})
-    intro: str = Field(description="First paragraph", json_schema_extra={"selector": "p[0]"})
-    snippet: str = Field(description="First code block", json_schema_extra={"selector": "code[0]"})
+    title: Heading1 = Field(description="Main heading", json_schema_extra={"selector": "h1"})
+    intro: Paragraph = Field(description="First paragraph", json_schema_extra={"selector": "p[0]"})
+    snippet: CodeBlock = Field(description="First code block", json_schema_extra={"selector": "code[0]"})
 ```
+
+Available Markdown types: `Heading1`–`Heading6`, `Paragraph`, `Blockquote`, `OrderedList`, `UnorderedList`, `ListItem`, `CodeBlock`, `FencedCode`, `IndentedCode`, `Table`, `HorizontalRule`.
 
 For a deeper selector reference (fallback chains, AI-assisted selectors, best practices), see the [Selector Usage Guide](../validation/selector-usage-guide.md).
 
@@ -5550,10 +5514,13 @@ John Doe,12345,Engineering
 ```
 
 #### **Markdown Structure Validator**
+
+Markdown models use dedicated element types, with selectors pointing at the source element. Bare `str` fields map to `Paragraph`. All Markdown types are auto-imported.
+
 ```python
 class Article(BaseModel):
-    title: str = Field(json_schema_extra={'selector': 'h1'})
-    summary: str = Field(json_schema_extra={'selector': 'blockquote'})
+    title: Heading1 = Field(json_schema_extra={'selector': 'h1'})
+    summary: Blockquote = Field(json_schema_extra={'selector': 'blockquote'})
 ```
 
 ---
@@ -5610,6 +5577,14 @@ class User(BaseModel):
 ### **Markdown Selectors**
 - **Element types**: `h1`, `h2`, `blockquote`, `code`
 - **Position-based**: `h1[0]`, `p[2]`
+
+### **Markdown Types**
+
+- **Headings**: `Heading1`–`Heading6`
+- **Paragraphs**: `Paragraph` (or bare `str`)
+- **Lists**: `OrderedList`, `UnorderedList`
+- **Code**: `CodeBlock`, `FencedCode`
+- **Other**: `Blockquote`, `HorizontalRule`, `Table`
 
 ---
 
