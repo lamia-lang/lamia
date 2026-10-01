@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Type, get_args
+from typing import Any, Dict, List, Optional, Type, get_args
 import asyncio
 import copy
 import re
@@ -303,6 +303,21 @@ class BaseLLMAdapter(ABC):
             model=model.name,
         )
 
+    async def generate_messages(
+        self,
+        messages: List[Dict[str, str]],
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
+        """Generate the next assistant reply to a user/assistant conversation.
+
+        *messages* are ``{"role": "user" | "assistant", "content": str}`` dicts,
+        starting with a user message.  The default joins them into one prompt,
+        marking assistant turns with ``Assistant:``, for :meth:`generate`;
+        adapters whose API accepts role-tagged messages override it.
+        """
+        return await self.generate(self._join_messages(messages), model, response_model)
+
     @property
     def supports_structured_output(self) -> bool:
         """Whether this adapter passes response_model to the provider's API."""
@@ -318,6 +333,16 @@ class BaseLLMAdapter(ABC):
         return False
 
     # ─── Private helpers ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _join_messages(messages: List[Dict[str, str]]) -> str:
+        parts = []
+        for message in messages:
+            if message["role"] == "assistant":
+                parts.append(f"Assistant: {message['content']}")
+            else:
+                parts.append(message["content"])
+        return "\n\n".join(parts)
 
     async def _get_or_create_session(self) -> "aiohttp.ClientSession":
         """Return existing HTTP session or create one lazily."""

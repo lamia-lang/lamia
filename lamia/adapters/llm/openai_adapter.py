@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, Type
+from typing import Optional, Dict, Any, List, Type
 import asyncio
 import aiohttp
 import logging
@@ -116,7 +116,31 @@ class OpenAIAdapter(BaseLLMAdapter):
         model: LLMModel,
         response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
-        """Generate a response using OpenAI's API."""
+        """Generate a response to a single prompt using OpenAI's API."""
+        return await self._create_completion([{"role": "user", "content": prompt}], model, response_model)
+
+    async def generate_messages(
+        self,
+        messages: List[Dict[str, str]],
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
+        """Generate the next assistant reply to a user/assistant conversation using OpenAI's API."""
+        return await self._create_completion(messages, model, response_model)
+
+    async def close(self) -> None:
+        """Cleanup any resources used by the adapter."""
+        if self._use_sdk and self.client:
+            await self.client.close()
+        elif self.session:
+            await self.session.close()
+
+    async def _create_completion(
+        self,
+        messages: List[Dict[str, str]],
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]],
+    ) -> LLMResponse:
         response_format = None
         if response_model is not None:
             response_format = {
@@ -131,7 +155,7 @@ class OpenAIAdapter(BaseLLMAdapter):
         if self._use_sdk:
             request_kwargs: Dict[str, Any] = {
                 "model": model.get_model_name_without_provider(),
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": list(messages),
                 "temperature": model.temperature,
                 "max_tokens": model.max_tokens,
                 "top_p": model.top_p,
@@ -162,7 +186,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                 await self.async_initialize()
             payload = {
                 "model": model.get_model_name_without_provider(),
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": list(messages),
                 "temperature": model.temperature,
                 "max_tokens": model.max_tokens,
                 "top_p": model.top_p,
@@ -202,10 +226,3 @@ class OpenAIAdapter(BaseLLMAdapter):
         except Exception:
             pass
         self.session = None
-
-    async def close(self) -> None:
-        """Cleanup any resources used by the adapter."""
-        if self._use_sdk and self.client:
-            await self.client.close()
-        elif self.session:
-            await self.session.close()

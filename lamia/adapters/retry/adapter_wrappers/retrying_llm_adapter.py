@@ -1,6 +1,6 @@
 """Retry wrapper for LLM adapters."""
 
-from typing import Optional, Type
+from typing import Dict, List, Optional, Type
 from pydantic import BaseModel
 
 from ...llm.base import BaseLLMAdapter
@@ -82,6 +82,20 @@ class RetryingLLMAdapter(BaseLLMAdapter):
         return await self._retry_handler.execute(
             self._adapter.generate,
             prompt,
+            model=model,
+            response_model=response_model,
+        )
+
+    async def generate_messages(
+        self,
+        messages: List[Dict[str, str]],
+        model: Optional[LLMModel] = None,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
+        """Execute a user/assistant conversation with retry handling."""
+        return await self._retry_handler.execute(
+            self._adapter.generate_messages,
+            messages,
             model=model,
             response_model=response_model,
         )

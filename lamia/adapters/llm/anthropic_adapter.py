@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, Type
+from typing import Optional, Dict, Any, List, Type
 import asyncio
 import aiohttp
 import logging
@@ -100,17 +100,6 @@ class AnthropicAdapter(BaseLLMAdapter):
                 }
             )
             
-    async def _close_session(self) -> None:
-        """Close the stale session so the next retry lazily creates a fresh one."""
-        if self._use_sdk:
-            return
-        try:
-            if self.session and not self.session.closed:
-                await self.session.close()
-        except Exception:
-            pass
-        self.session = None
-
     async def close(self):
         if self._use_sdk and self.client:
             await self.client.close()
@@ -124,25 +113,43 @@ class AnthropicAdapter(BaseLLMAdapter):
         response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
         """Generate a response using Anthropic's API."""
+        messages = [{"role": "user", "content": prompt}]
         if self._use_sdk:
-            if response_model is not None:
-                return await self._generate_with_sdk(prompt, model, response_model=response_model)
-            return await self._generate_with_sdk(prompt, model)
-        else:
-            if response_model is not None:
-                return await self._generate_with_http(prompt, model, response_model=response_model)
-            return await self._generate_with_http(prompt, model)
+            return await self._generate_with_sdk(messages, model, response_model=response_model)
+        return await self._generate_with_http(messages, model, response_model=response_model)
+
+    async def generate_messages(
+        self,
+        messages: List[Dict[str, str]],
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
+        """Generate the next assistant reply to a user/assistant conversation using Anthropic's API."""
+        if self._use_sdk:
+            return await self._generate_with_sdk(messages, model, response_model=response_model)
+        return await self._generate_with_http(messages, model, response_model=response_model)
             
+    async def _close_session(self) -> None:
+        """Close the stale session so the next retry lazily creates a fresh one."""
+        if self._use_sdk:
+            return
+        try:
+            if self.session and not self.session.closed:
+                await self.session.close()
+        except Exception:
+            pass
+        self.session = None
+
     async def _generate_with_sdk(
         self,
-        prompt: str,
+        messages: List[Dict[str, str]],
         model: LLMModel,
         response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
         """Generate response using the Anthropic SDK."""
         request_kwargs: Dict[str, Any] = {
             "model": model.get_model_name_without_provider(),
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": list(messages),
             "max_tokens": model.max_tokens or 1000,
         }
         # Some Anthropic models reject requests that include both temperature and top_p.
@@ -178,7 +185,7 @@ class AnthropicAdapter(BaseLLMAdapter):
             
     async def _generate_with_http(
         self,
-        prompt: str,
+        messages: List[Dict[str, str]],
         model: LLMModel,
         response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
@@ -193,7 +200,7 @@ class AnthropicAdapter(BaseLLMAdapter):
             )
         payload = {
             "model": model.get_model_name_without_provider(),
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": list(messages),
             "max_tokens": model.max_tokens or 1000,
         }
         # Some Anthropic models reject requests that include both temperature and top_p.

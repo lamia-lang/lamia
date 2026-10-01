@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import os
-from typing import Optional, Type
+from typing import Dict, List, Optional, Type
 
 import aiohttp
 from pydantic import BaseModel
@@ -85,6 +85,27 @@ class OpenRouterAdapter(BaseLLMAdapter):
         model: LLMModel,
         response_model: Optional[Type[BaseModel]] = None,
     ) -> LLMResponse:
+        """Generate a response to a single prompt using OpenRouter."""
+        return await self._create_completion([{"role": "user", "content": prompt}], model, response_model)
+
+    async def generate_messages(
+        self,
+        messages: List[Dict[str, str]],
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
+        """Generate the next assistant reply to a user/assistant conversation using OpenRouter."""
+        return await self._create_completion(messages, model, response_model)
+
+    async def close(self) -> None:
+        await self._close_session()
+
+    async def _create_completion(
+        self,
+        messages: List[Dict[str, str]],
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]],
+    ) -> LLMResponse:
         if self.session is None:
             await self.async_initialize()
         assert self.session is not None
@@ -93,7 +114,7 @@ class OpenRouterAdapter(BaseLLMAdapter):
 
         payload: dict = {
             "model": model_name,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": list(messages),
         }
         if model.temperature is not None:
             payload["temperature"] = model.temperature
@@ -139,6 +160,3 @@ class OpenRouterAdapter(BaseLLMAdapter):
         except Exception:
             pass
         self.session = None
-
-    async def close(self) -> None:
-        await self._close_session()

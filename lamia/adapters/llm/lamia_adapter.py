@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, Set, Type
+from typing import Optional, Dict, Any, List, Set, Type
 import asyncio
 import logging
 import os
@@ -54,6 +54,70 @@ class LamiaAdapter(BaseLLMAdapter):
                 }
             )
 
+    async def generate(
+        self,
+        prompt: str,
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
+        """Generate a response to a single prompt using Lamia's API."""
+        return await self._send_request([{"role": "user", "content": prompt}], model, response_model)
+
+    async def generate_messages(
+        self,
+        messages: List[Dict[str, str]],
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
+        """Generate the next assistant reply to a user/assistant conversation using Lamia's API."""
+        return await self._send_request(messages, model, response_model)
+
+    @classmethod
+    async def models(cls, api_key: str = "") -> list[dict]:
+        """Aggregate models from all base adapters (anthropic, openai, ollama).
+
+        For remote providers the call is only made when a corresponding API
+        key is available (passed explicitly or found in the environment).
+        Ollama is always attempted since it needs no key.  Failures on
+        individual providers are logged and silently skipped so one
+        unreachable provider does not block the rest.
+        """
+        base_adapters: list[type[BaseLLMAdapter]] = [
+            AnthropicAdapter,
+            OpenAIAdapter,
+            OllamaAdapter,
+        ]
+
+        async def _fetch(adapter_cls: type[BaseLLMAdapter]) -> list[dict]:
+            provider = adapter_cls.name()
+            key = api_key
+            if not key and adapter_cls.is_remote():
+                for env_var in adapter_cls.env_var_names():
+                    key = os.environ.get(env_var, "")
+                    if key:
+                        break
+            if adapter_cls.is_remote() and not key:
+                return []
+            try:
+                models = await adapter_cls.models(api_key=key)
+                for m in models:
+                    m["provider"] = provider
+                return models
+            except Exception as exc:
+                logger.debug("models failed for %s: %s", provider, exc)
+                return []
+
+        results = await asyncio.gather(*[_fetch(a) for a in base_adapters])
+        combined: list[dict] = []
+        for batch in results:
+            combined.extend(batch)
+        return combined
+
+    async def close(self) -> None:
+        """Cleanup HTTP session."""
+        if self.session:
+            await self.session.close() 
+
     def _get_endpoint_for_provider(self, provider: str) -> str:
         """Get the appropriate endpoint for the provider."""
         if provider == "anthropic":
@@ -65,7 +129,7 @@ class LamiaAdapter(BaseLLMAdapter):
 
     def _build_request_payload(
         self,
-        prompt: str,
+        messages: List[Dict[str, str]],
         model: LLMModel,
         provider: str,
         response_model: Optional[Type[BaseModel]] = None,
@@ -74,7 +138,7 @@ class LamiaAdapter(BaseLLMAdapter):
         
         base_payload = {
             "model": model.get_model_name_without_provider(),
-            "messages": [{"role": "user", "content": prompt}]
+            "messages": list(messages)
         }
         
         if provider == "anthropic":
@@ -168,13 +232,12 @@ class LamiaAdapter(BaseLLMAdapter):
                 return block.get("text", "")
         raise RuntimeError("Invalid Anthropic response format: no text block found")
 
-    async def generate(
+    async def _send_request(
         self,
-        prompt: str,
+        messages: List[Dict[str, str]],
         model: LLMModel,
-        response_model: Optional[Type[BaseModel]] = None,
+        response_model: Optional[Type[BaseModel]],
     ) -> LLMResponse:
-        """Generate a response using Lamia's API."""
         if not self.session:
             raise RuntimeError("Adapter not initialized. Call async_initialize() first.")
         
@@ -185,7 +248,7 @@ class LamiaAdapter(BaseLLMAdapter):
         
         # Build request payload according to provider's format
         payload = self._build_request_payload(
-            prompt,
+            messages,
             model,
             provider_name,
             response_model=response_model,
@@ -202,49 +265,3 @@ class LamiaAdapter(BaseLLMAdapter):
 
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ConnectionError) as e:
             raise_for_connection_error(e, "Failed to communicate with Lamia API")
-
-    @classmethod
-    async def models(cls, api_key: str = "") -> list[dict]:
-        """Aggregate models from all base adapters (anthropic, openai, ollama).
-
-        For remote providers the call is only made when a corresponding API
-        key is available (passed explicitly or found in the environment).
-        Ollama is always attempted since it needs no key.  Failures on
-        individual providers are logged and silently skipped so one
-        unreachable provider does not block the rest.
-        """
-        base_adapters: list[type[BaseLLMAdapter]] = [
-            AnthropicAdapter,
-            OpenAIAdapter,
-            OllamaAdapter,
-        ]
-
-        async def _fetch(adapter_cls: type[BaseLLMAdapter]) -> list[dict]:
-            provider = adapter_cls.name()
-            key = api_key
-            if not key and adapter_cls.is_remote():
-                for env_var in adapter_cls.env_var_names():
-                    key = os.environ.get(env_var, "")
-                    if key:
-                        break
-            if adapter_cls.is_remote() and not key:
-                return []
-            try:
-                models = await adapter_cls.models(api_key=key)
-                for m in models:
-                    m["provider"] = provider
-                return models
-            except Exception as exc:
-                logger.debug("models failed for %s: %s", provider, exc)
-                return []
-
-        results = await asyncio.gather(*[_fetch(a) for a in base_adapters])
-        combined: list[dict] = []
-        for batch in results:
-            combined.extend(batch)
-        return combined
-
-    async def close(self) -> None:
-        """Cleanup HTTP session."""
-        if self.session:
-            await self.session.close() 
