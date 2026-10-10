@@ -1,8 +1,16 @@
 import pytest
-from pydantic import BaseModel
+from enum import Enum
+from pydantic import BaseModel, Field
 from lamia.validation.validators.file_validators.file_structure.csv_structure_validator import CSVStructureValidator
 from lamia.validation.base import ValidationResult
 from collections import OrderedDict
+
+
+class Priority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 # The tests that are common to all file structure validators should go to multi_file_format folder
 # Tests exclusive to CSV format should go here
@@ -177,6 +185,53 @@ def test_csv_order_validation_in_extract_payload():
         "col2,col1,name,age\ntest,1,John,25",  # Ordered fields completely reversed
         "name,age,col2,col1\nJohn,25,test,1",  # Ordered fields at end but reversed
     ]
+
+
+def test_csv_structure_validator_accepts_str_enum():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+        assignee: str
+
+    validator = CSVStructureValidator(model=TicketModel)
+    assert validator.model == TicketModel
+
+
+def test_csv_structure_validator_accepts_int_enum():
+    class Severity(int, Enum):
+        LOW = 1
+        MEDIUM = 2
+        HIGH = 3
+
+    class AlertModel(BaseModel):
+        message: str
+        severity: Severity
+
+    validator = CSVStructureValidator(model=AlertModel)
+    assert validator.model == AlertModel
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_rejects_invalid_value():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,priority\nBug fix,urgent")
+    assert not result.is_valid
+    assert "Invalid enum value" in result.error_message
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_accepts_valid_value():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,priority\nBug fix,high")
+    assert result.is_valid
 
 
 def test_csv_duplicate_header_error_message_not_file_scoped_sync():
