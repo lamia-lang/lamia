@@ -179,6 +179,33 @@ def test_csv_order_validation_in_extract_payload():
     ]
 
 
+@pytest.mark.asyncio
+async def test_csv_validates_all_rows_not_just_first():
+    """Row-level validation must catch errors in any row, not only row 1."""
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    csv_with_bad_row3 = "title,value\nAlpha,1\nBeta,2\nGamma,not_a_number"
+    result = await validator.validate(csv_with_bad_row3)
+    assert not result.is_valid
+    assert "Row 3" in result.error_message
+
+
+@pytest.mark.asyncio
+async def test_csv_validates_required_fields_in_all_rows():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    csv_with_empty_row2 = "title,value\nAlpha,1\n,2\nDelta,4"
+    result = await validator.validate(csv_with_empty_row2)
+    assert not result.is_valid
+    assert "Row 2" in result.error_message
+
+
+@pytest.mark.asyncio
+async def test_csv_all_rows_valid_passes():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    valid_csv = "title,value\nAlpha,1\nBeta,2\nGamma,3"
+    result = await validator.validate(valid_csv)
+    assert result.is_valid
+
+
 def test_csv_duplicate_header_error_message_not_file_scoped_sync():
     import asyncio
 

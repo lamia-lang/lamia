@@ -501,33 +501,34 @@ class CSVStructureValidator(DocumentStructureValidator):
             errors.append("CSV has no data rows.")
             is_valid = False
         else:
-            row = rows[0]
-            for field, expected_type, is_model_field in all_fields_to_validate:
-                value = row.get(field)
-                # Handle empty cells: None or empty string should be treated as None for optional fields
-                if value is None or (isinstance(value, str) and value.strip() == ""):
-                    if is_model_field and not self._is_field_optional(field):
-                        if value is None:
-                            errors.append(f"Row 1 is missing required field '{field}'")
-                        else:
-                            errors.append(f"Row 1, field '{field}' cannot be empty (required field)")
+            for row_idx, row in enumerate(rows, start=1):
+                for field, expected_type, is_model_field in all_fields_to_validate:
+                    value = row.get(field)
+                    if value is None or (isinstance(value, str) and value.strip() == ""):
+                        if is_model_field and not self._is_field_optional(field):
+                            if value is None:
+                                errors.append(f"Row {row_idx} is missing required field '{field}'")
+                            else:
+                                errors.append(f"Row {row_idx}, field '{field}' cannot be empty (required field)")
+                            is_valid = False
+                        elif not is_model_field:
+                            errors.append(f"Row {row_idx} is missing required field '{field}' from __ordered_fields__")
+                            is_valid = False
+                        if row_idx == 1:
+                            values[field] = None
+                        continue
+
+                    match_result = self.type_matcher.validate_and_convert(value, expected_type)
+                    if not match_result.is_valid:
+                        errors.append(f"Row {row_idx}, field '{field}': {match_result.error}")
                         is_valid = False
-                    elif not is_model_field:  # ordered fields are always required
-                        errors.append(f"Row 1 is missing required field '{field}' from __ordered_fields__")
-                        is_valid = False
-                    values[field] = None
-                    continue
-                    
-                match_result = self.type_matcher.validate_and_convert(value, expected_type)
-                if not match_result.is_valid:
-                    errors.append(f"Row 1, field '{field}': {match_result.error}")
-                    is_valid = False
-                    values[field] = None
-                else:
-                    values[field] = match_result.value
-                    # Collect type conversion info loss only in permissive mode
-                    if match_result.info_loss:
-                        info_loss[field] = match_result.info_loss
+                        if row_idx == 1:
+                            values[field] = None
+                    else:
+                        if row_idx == 1:
+                            values[field] = match_result.value
+                            if match_result.info_loss:
+                                info_loss[field] = match_result.info_loss
                         
         model_instance = None
         if is_valid:
