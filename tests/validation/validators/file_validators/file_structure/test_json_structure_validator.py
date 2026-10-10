@@ -62,3 +62,46 @@ async def test_json_enum_validation_rejects_invalid_value():
     json_text = '{"title": "Fix bug", "priority": "urgent"}'
     result = await validator.validate(json_text)
     assert not result.is_valid
+
+
+class Confidence(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class NestedDetails(BaseModel):
+    priority: Priority = Field(description="Task priority")
+    confidence: Confidence = Field(description="Confidence level")
+
+
+class NestedModel(BaseModel):
+    name: str
+    details: NestedDetails
+
+
+@pytest.mark.asyncio
+async def test_json_nested_enum_hint_structure():
+    validator = JSONStructureValidator(model=NestedModel, strict=True, generate_hints=True)
+    hint = validator.initial_hint
+    assert "\"priority\": one of ['high', 'medium', 'low']" in hint
+    assert "\"confidence\": one of ['high', 'medium', 'low']" in hint
+    assert '"details": {' in hint
+
+
+@pytest.mark.asyncio
+async def test_json_nested_enum_validation_accepts_valid():
+    validator = JSONStructureValidator(model=NestedModel, strict=True, generate_hints=True)
+    json_text = '{"name": "Task A", "details": {"priority": "high", "confidence": "medium"}}'
+    result = await validator.validate(json_text)
+    assert result.is_valid
+    assert result.typed_result.details.priority == Priority.HIGH
+    assert result.typed_result.details.confidence == Confidence.MEDIUM
+
+
+@pytest.mark.asyncio
+async def test_json_nested_enum_validation_rejects_invalid():
+    validator = JSONStructureValidator(model=NestedModel, strict=True, generate_hints=True)
+    json_text = '{"name": "Task A", "details": {"priority": "critical", "confidence": "medium"}}'
+    result = await validator.validate(json_text)
+    assert not result.is_valid
