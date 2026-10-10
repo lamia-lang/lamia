@@ -229,8 +229,34 @@ async def test_csv_enum_validation_accepts_valid_value():
 
     validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
     hint = validator.initial_hint
-    assert "['low', 'medium', 'high']" in hint
+    assert "title: str" in hint
+    assert "priority: one of ['low', 'medium', 'high']" in hint
     assert "Priority" not in hint
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_rejects_invalid_value():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,priority\nBug fix,urgent")
+    assert not result.is_valid
+    assert result.error_message == "Row 1, field 'priority': Invalid enum value 'urgent' for Priority. Valid values are: ['low', 'medium', 'high']"
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_accepts_valid_value():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,priority\nBug fix,high")
+    assert result.is_valid
+    assert result.typed_result.title == "Bug fix"
+    assert result.typed_result.priority == Priority.HIGH
 
 
 def test_csv_duplicate_header_error_message_not_file_scoped_sync():
