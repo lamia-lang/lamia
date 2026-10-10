@@ -5,14 +5,13 @@ from lamia.validation.validators.file_validators.file_structure.csv_structure_va
 from lamia.validation.base import ValidationResult
 from collections import OrderedDict
 
+# The tests that are common to all file structure validators should go to multi_file_format folder
+# Tests exclusive to CSV format should go here
 
 class Priority(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
-
-# The tests that are common to all file structure validators should go to multi_file_format folder
-# Tests exclusive to CSV format should go here
 
 class SimpleModel(BaseModel):
     title: str
@@ -186,7 +185,44 @@ def test_csv_order_validation_in_extract_payload():
     ]
 
 
-def test_csv_initial_hint_includes_enum_values():
+def test_csv_structure_validator_accepts_str_enum():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+        assignee: str
+
+    validator = CSVStructureValidator(model=TicketModel)
+    assert validator.model == TicketModel
+
+
+def test_csv_structure_validator_accepts_int_enum():
+    class Severity(int, Enum):
+        LOW = 1
+        MEDIUM = 2
+        HIGH = 3
+
+    class AlertModel(BaseModel):
+        message: str
+        severity: Severity
+
+    validator = CSVStructureValidator(model=AlertModel)
+    assert validator.model == AlertModel
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_rejects_invalid_value():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,priority\nBug fix,urgent")
+    assert not result.is_valid
+    assert "Invalid enum value" in result.error_message
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_accepts_valid_value():
     class TicketModel(BaseModel):
         title: str
         priority: Priority
