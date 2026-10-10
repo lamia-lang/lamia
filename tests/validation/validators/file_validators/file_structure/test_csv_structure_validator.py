@@ -1,5 +1,6 @@
 import pytest
-from pydantic import BaseModel
+from enum import Enum
+from pydantic import BaseModel, Field
 from lamia.validation.validators.file_validators.file_structure.csv_structure_validator import CSVStructureValidator
 from lamia.validation.base import ValidationResult
 from collections import OrderedDict
@@ -107,6 +108,49 @@ def test_csv_structure_validator_rejects_non_primitive_model():
     assert "'nested': dict" in error_message
     assert "'items': list" in error_message
     assert "'another_model': SimpleModel" in error_message
+
+class Priority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+def test_csv_structure_validator_accepts_str_enum():
+    """Enum fields that subclass str should be accepted as CSV-compatible types."""
+    class TicketModel(BaseModel):
+        title: str = Field(description="Issue title")
+        priority: Priority = Field(description="Issue priority level")
+        assignee: str = Field(description="Person assigned")
+
+    validator = CSVStructureValidator(model=TicketModel)
+    assert validator.model == TicketModel
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_rejects_invalid_value():
+    """Enum fields should reject values not in the enum members."""
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,priority\nBug fix,urgent")
+    assert not result.is_valid
+    assert "Invalid enum value" in result.error_message
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_accepts_valid_value():
+    """Enum fields should accept values matching enum members."""
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,priority\nBug fix,high")
+    assert result.is_valid
+
 
 class CSVModelWithOrderedFields(BaseModel):
     name: str
