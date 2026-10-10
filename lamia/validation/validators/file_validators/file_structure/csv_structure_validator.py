@@ -77,8 +77,8 @@ class CSVStructureValidator(DocumentStructureValidator):
         
         def is_supported_type(field_type):
             """Check if a type is supported for CSV validation"""
-            # Direct primitive types
-            if field_type in (str, int, float, bool):
+            # Primitive types and their subclasses (including str/int Enums)
+            if isinstance(field_type, type) and issubclass(field_type, (str, int, float, bool)):
                 return True
             
             # Any type
