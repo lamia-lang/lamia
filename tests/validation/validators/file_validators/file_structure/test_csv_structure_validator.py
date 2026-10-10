@@ -185,6 +185,54 @@ def test_csv_order_validation_in_extract_payload():
     ]
 
 
+@pytest.mark.asyncio
+async def test_csv_validates_single_bad_row_reports_exact_row():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,value\nAlpha,1\nBeta,2\nGamma,not_a_number")
+    assert not result.is_valid
+    assert result.error_message == "Row 3, field 'value': Cannot strictly convert 'not_a_number' to int"
+    
+
+@pytest.mark.asyncio
+async def test_csv_validates_multiple_bad_rows_reports_each():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,value\nA,x\nB,2\nC,z")
+    assert not result.is_valid
+    assert result.error_message == (
+        "Row 1, field 'value': Cannot strictly convert 'x' to int; "
+        "Row 3, field 'value': Cannot strictly convert 'z' to int"
+    )
+
+
+@pytest.mark.asyncio
+async def test_csv_validates_every_row_bad_reports_all():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,value\nA,x\nB,y\nC,z")
+    assert not result.is_valid
+    assert result.error_message == (
+        "Row 1, field 'value': Cannot strictly convert 'x' to int; "
+        "Row 2, field 'value': Cannot strictly convert 'y' to int; "
+        "Row 3, field 'value': Cannot strictly convert 'z' to int"
+    )
+
+
+@pytest.mark.asyncio
+async def test_csv_validates_required_fields_in_later_rows():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,value\nAlpha,1\n,2\nDelta,4")
+    assert not result.is_valid
+    assert result.error_message == "Row 2, field 'title' cannot be empty (required field)"
+
+
+@pytest.mark.asyncio
+async def test_csv_all_rows_valid_passes():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,value\nAlpha,1\nBeta,2\nGamma,3")
+    assert result.is_valid
+    assert result.typed_result.title == "Alpha"
+    assert result.typed_result.value == 1
+
+
 def test_csv_structure_validator_accepts_str_enum():
     class TicketModel(BaseModel):
         title: str
