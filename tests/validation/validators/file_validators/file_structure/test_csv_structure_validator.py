@@ -180,30 +180,48 @@ def test_csv_order_validation_in_extract_payload():
 
 
 @pytest.mark.asyncio
-async def test_csv_validates_all_rows_not_just_first():
-    """Row-level validation must catch errors in any row, not only row 1."""
+async def test_csv_validates_single_bad_row_reports_exact_row():
     validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
-    csv_with_bad_row3 = "title,value\nAlpha,1\nBeta,2\nGamma,not_a_number"
-    result = await validator.validate(csv_with_bad_row3)
+    result = await validator.validate("title,value\nAlpha,1\nBeta,2\nGamma,not_a_number")
     assert not result.is_valid
+    assert result.error_message == "Row 3, field 'value': Cannot strictly convert 'not_a_number' to int"
+
+
+@pytest.mark.asyncio
+async def test_csv_validates_multiple_bad_rows_reports_all():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,value\nAlpha,bad\nBeta,2\nGamma,nope")
+    assert not result.is_valid
+    assert "Row 1" in result.error_message
+    assert "Row 3" in result.error_message
+    assert "Row 2" not in result.error_message
+
+
+@pytest.mark.asyncio
+async def test_csv_validates_every_row_bad_reports_all():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,value\nA,x\nB,y\nC,z")
+    assert not result.is_valid
+    assert "Row 1" in result.error_message
+    assert "Row 2" in result.error_message
     assert "Row 3" in result.error_message
 
 
 @pytest.mark.asyncio
-async def test_csv_validates_required_fields_in_all_rows():
+async def test_csv_validates_required_fields_in_later_rows():
     validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
-    csv_with_empty_row2 = "title,value\nAlpha,1\n,2\nDelta,4"
-    result = await validator.validate(csv_with_empty_row2)
+    result = await validator.validate("title,value\nAlpha,1\n,2\nDelta,4")
     assert not result.is_valid
-    assert "Row 2" in result.error_message
+    assert result.error_message == "Row 2, field 'title' cannot be empty (required field)"
 
 
 @pytest.mark.asyncio
 async def test_csv_all_rows_valid_passes():
     validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
-    valid_csv = "title,value\nAlpha,1\nBeta,2\nGamma,3"
-    result = await validator.validate(valid_csv)
+    result = await validator.validate("title,value\nAlpha,1\nBeta,2\nGamma,3")
     assert result.is_valid
+    assert result.typed_result.title == "Alpha"
+    assert result.typed_result.value == 1
 
 
 def test_csv_duplicate_header_error_message_not_file_scoped_sync():
