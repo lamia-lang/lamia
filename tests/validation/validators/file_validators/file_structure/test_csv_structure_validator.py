@@ -1,5 +1,5 @@
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from lamia.validation.validators.file_validators.file_structure.csv_structure_validator import CSVStructureValidator
 from lamia.validation.base import ValidationResult
 from collections import OrderedDict
@@ -190,3 +190,18 @@ def test_csv_duplicate_header_error_message_not_file_scoped_sync():
     result = asyncio.run(validator.validate(csv))
     assert result.is_valid is False
     assert result.error_message == "Duplicate header found: dup_header"
+
+
+EMAIL_PATTERN = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+
+
+class ContactWithRegex(BaseModel):
+    name: str
+    email: str = Field(pattern=EMAIL_PATTERN, description="Valid email")
+
+
+@pytest.mark.asyncio
+async def test_csv_initial_hint_includes_regex_pattern():
+    validator = CSVStructureValidator(model=ContactWithRegex, strict=True, generate_hints=True)
+    hint = validator.initial_hint
+    assert EMAIL_PATTERN in hint

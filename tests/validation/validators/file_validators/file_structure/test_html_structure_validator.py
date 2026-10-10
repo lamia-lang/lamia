@@ -313,3 +313,19 @@ async def test_html_enum_validation_rejects_invalid_value():
     html = "<html><title>Fix bug</title><priority>urgent</priority></html>"
     result = await validator.validate(html)
     assert not result.is_valid
+
+
+EMAIL_PATTERN = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+
+
+class ContactWithRegex(BaseModel):
+    name: str
+    email: str = Field(pattern=EMAIL_PATTERN, description="Valid email")
+
+
+@pytest.mark.asyncio
+async def test_html_initial_hint_includes_regex_pattern():
+    validator = HTMLStructureValidator(model=ContactWithRegex, strict=True, generate_hints=True)
+    hint = validator.initial_hint
+    assert "pattern" in hint
+    assert "[a-zA-Z0-9._%+-]+" in hint

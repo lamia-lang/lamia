@@ -192,3 +192,19 @@ async def test_yaml_enum_validation_rejects_invalid_value():
     yaml_text = "title: Fix bug\npriority: urgent"
     result = await validator.validate(yaml_text)
     assert not result.is_valid
+
+
+EMAIL_PATTERN = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+
+
+class ContactWithRegex(BaseModel):
+    name: str
+    email: str = Field(pattern=EMAIL_PATTERN, description="Valid email")
+
+
+@pytest.mark.asyncio
+async def test_yaml_initial_hint_includes_regex_pattern():
+    validator = YAMLStructureValidator(model=ContactWithRegex, strict=True, generate_hints=True)
+    hint = validator.initial_hint
+    assert "pattern" in hint
+    assert "[a-zA-Z0-9._%+-]+" in hint
