@@ -1,6 +1,7 @@
 import csv
 import io
 from collections import Counter, OrderedDict
+from enum import Enum
 from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
 from .document_structure_validator import DocumentStructureValidator, BaseValidationError
@@ -77,8 +78,8 @@ class CSVStructureValidator(DocumentStructureValidator):
         
         def is_supported_type(field_type):
             """Check if a type is supported for CSV validation"""
-            # Direct primitive types
-            if field_type in (str, int, float, bool):
+            # Primitive types and their subclasses (including str/int Enums)
+            if isinstance(field_type, type) and issubclass(field_type, (str, int, float, bool)):
                 return True
             
             # Any type
@@ -161,7 +162,11 @@ class CSVStructureValidator(DocumentStructureValidator):
             
             for field, field_type in self._get_model_field_items():
                 primitive_fields.append(field)
-                structure_lines.append(f'{field}: {field_type.__name__}')
+                if isinstance(field_type, type) and issubclass(field_type, Enum):
+                    valid_values = [member.value for member in field_type]
+                    structure_lines.append(f'{field}: one of {valid_values}')
+                else:
+                    structure_lines.append(f'{field}: {field_type.__name__}')
             
             expected_header = ','.join(primitive_fields)
             hint = (
@@ -597,7 +602,12 @@ class CSVStructureValidator(DocumentStructureValidator):
         lines = []
         prefix = '  ' * indent
         for field, field_info in model.model_fields.items():
-            lines.append(f'{prefix}{field}: {field_info.annotation.__name__}')
+            ft = field_info.annotation
+            if isinstance(ft, type) and issubclass(ft, Enum):
+                valid_values = [member.value for member in ft]
+                lines.append(f'{prefix}{field}: one of {valid_values}')
+            else:
+                lines.append(f'{prefix}{field}: {ft.__name__}')
         return lines
 
 
