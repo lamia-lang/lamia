@@ -5,15 +5,13 @@ from lamia.validation.validators.file_validators.file_structure.csv_structure_va
 from lamia.validation.base import ValidationResult
 from collections import OrderedDict
 
+# The tests that are common to all file structure validators should go to multi_file_format folder
+# Tests exclusive to CSV format should go here
 
 class Priority(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
-    CRITICAL = "critical"
-
-# The tests that are common to all file structure validators should go to multi_file_format folder
-# Tests exclusive to CSV format should go here
 
 class SimpleModel(BaseModel):
     title: str
@@ -230,8 +228,35 @@ async def test_csv_enum_validation_accepts_valid_value():
         priority: Priority
 
     validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    hint = validator.initial_hint
+    assert "title: str" in hint
+    assert "priority: one of ['low', 'medium', 'high']" in hint
+    assert "Priority" not in hint
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_rejects_invalid_value():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,priority\nBug fix,urgent")
+    assert not result.is_valid
+    assert result.error_message == "Row 1, field 'priority': Invalid enum value 'urgent' for Priority. Valid values are: ['low', 'medium', 'high']"
+
+
+@pytest.mark.asyncio
+async def test_csv_enum_validation_accepts_valid_value():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
     result = await validator.validate("title,priority\nBug fix,high")
     assert result.is_valid
+    assert result.typed_result.title == "Bug fix"
+    assert result.typed_result.priority == Priority.HIGH
 
 
 def test_csv_duplicate_header_error_message_not_file_scoped_sync():
