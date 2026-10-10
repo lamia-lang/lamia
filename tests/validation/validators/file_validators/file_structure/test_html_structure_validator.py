@@ -1,4 +1,5 @@
 import pytest
+from enum import Enum
 from pydantic import BaseModel, Field
 from lamia.validation.validators.file_validators import HTMLStructureValidator
 from typing import Any, List, Dict, Type, Tuple, Optional
@@ -277,3 +278,38 @@ async def test_raw_text_clean_for_file_write():
     assert result.is_valid is True
     assert result.raw_text.startswith("<html>")
     assert result.raw_text.endswith("</html>")
+
+
+class Priority(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class TaskModel(BaseModel):
+    title: str
+    priority: Priority = Field(description="Task priority")
+
+
+@pytest.mark.asyncio
+async def test_html_initial_hint_includes_enum_values():
+    validator = HTMLStructureValidator(model=TaskModel, strict=True, generate_hints=True)
+    hint = validator.initial_hint
+    assert "<priority>one of ['high', 'medium', 'low']</priority>" in hint
+
+
+@pytest.mark.asyncio
+async def test_html_enum_validation_accepts_valid_value():
+    validator = HTMLStructureValidator(model=TaskModel, strict=False, generate_hints=True)
+    html = "<html><title>Fix bug</title><priority>high</priority></html>"
+    result = await validator.validate(html)
+    assert result.is_valid
+    assert result.typed_result.priority == Priority.HIGH
+
+
+@pytest.mark.asyncio
+async def test_html_enum_validation_rejects_invalid_value():
+    validator = HTMLStructureValidator(model=TaskModel, strict=False, generate_hints=True)
+    html = "<html><title>Fix bug</title><priority>urgent</priority></html>"
+    result = await validator.validate(html)
+    assert not result.is_valid

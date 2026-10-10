@@ -1,4 +1,5 @@
 import yaml
+from enum import Enum
 
 from pydantic import BaseModel, create_model
 import re
@@ -217,6 +218,9 @@ class YAMLStructureValidator(DocumentStructureValidator):
             if hasattr(submodel, "model_fields"):
                 lines.append(f'{prefix}{field}:')
                 lines.extend(self._describe_structure(submodel, indent + 1))
+            elif isinstance(submodel, type) and issubclass(submodel, Enum):
+                values = [e.value for e in submodel]
+                lines.append(f'{prefix}{field}: one of {values}')
             else:
                 lines.append(f'{prefix}{field}: ...')
             

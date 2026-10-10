@@ -1,6 +1,7 @@
 import json
 import re
 from collections import OrderedDict
+from enum import Enum
 from typing import Optional, Type, Any
 
 from pydantic import BaseModel, create_model
@@ -154,6 +155,9 @@ class JSONStructureValidator(DocumentStructureValidator):
                 lines.append(f'{prefix}"{field}": {{')
                 lines.extend(self._describe_structure(submodel, indent + 1, strict_mode))
                 lines.append(f'{prefix}}}{comma}')
+            elif isinstance(submodel, type) and issubclass(submodel, Enum):
+                values = [e.value for e in submodel]
+                lines.append(f'{prefix}"{field}": one of {values}{comma}')
             else:
                 lines.append(f'{prefix}"{field}": ...{comma}')
         

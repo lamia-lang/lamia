@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from enum import Enum
 from pydantic import BaseModel, create_model
 import re
 from typing import Any
@@ -154,7 +155,10 @@ class XMLStructureValidator(DocumentStructureValidator):
 
     def _get_type_hint(self, annotation):
         """Get a user-friendly type hint for the annotation."""
-        if annotation == str:
+        if isinstance(annotation, type) and issubclass(annotation, Enum):
+            values = [e.value for e in annotation]
+            return f"one of {values}"
+        elif annotation == str:
             return "string value"
         elif annotation == int:
             return "integer value"
@@ -163,4 +167,4 @@ class XMLStructureValidator(DocumentStructureValidator):
         elif annotation == bool:
             return "boolean value"
         else:
-            return "value" 
+            return "value"

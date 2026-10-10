@@ -1,4 +1,5 @@
 import pytest
+from enum import Enum
 from pydantic import BaseModel, Field, RootModel
 from lamia.validation.validators.file_validators import YAMLStructureValidator
 from typing import List, Dict, Optional, Any, Union, Tuple
@@ -156,3 +157,38 @@ async def test_yaml_structure_validator_deep_nesting(strict):
     validator = YAMLStructureValidator(model=YamlModel, strict=strict)
     result = await validator.validate(yaml)
     assert result.is_valid is True
+
+
+class Priority(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class TaskModel(BaseModel):
+    title: str
+    priority: Priority = Field(description="Task priority")
+
+
+@pytest.mark.asyncio
+async def test_yaml_initial_hint_includes_enum_values():
+    validator = YAMLStructureValidator(model=TaskModel, strict=True, generate_hints=True)
+    hint = validator.initial_hint
+    assert "priority: one of ['high', 'medium', 'low']" in hint
+
+
+@pytest.mark.asyncio
+async def test_yaml_enum_validation_accepts_valid_value():
+    validator = YAMLStructureValidator(model=TaskModel, strict=False, generate_hints=True)
+    yaml_text = "title: Fix bug\npriority: high"
+    result = await validator.validate(yaml_text)
+    assert result.is_valid
+    assert result.typed_result.priority == Priority.HIGH
+
+
+@pytest.mark.asyncio
+async def test_yaml_enum_validation_rejects_invalid_value():
+    validator = YAMLStructureValidator(model=TaskModel, strict=False, generate_hints=True)
+    yaml_text = "title: Fix bug\npriority: urgent"
+    result = await validator.validate(yaml_text)
+    assert not result.is_valid
