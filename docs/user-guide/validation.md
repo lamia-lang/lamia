@@ -40,6 +40,23 @@ result = lamia.run("Generate a user profile", JSON[UserProfile])
 
 Available structure validators: `JSON[Model]`, `YAML[Model]`, `XML[Model]`, `HTML[Model]`, `Markdown[Model]`, `CSV[Model]`
 
+### CSV Validation
+
+CSV validation requires comma-separated values with a header row. The first line is always interpreted as column names that map to Pydantic model fields.
+
+```python
+class Contact(BaseModel):
+    full_name: str
+    email: str
+
+# The CSV must have a header row matching field names
+data = "contacts.csv" -> CSV[Contact]
+```
+
+- **Delimiter**: Only comma (`,`) is supported. Semicolon-separated and tab-separated files are not supported.
+- **Header row**: Always required. The first line must contain column names matching the model field names. There is no headerless CSV mode.
+- **Commas in values**: Cell values containing commas must be enclosed in double quotes (standard CSV quoting).
+
 ## Strict vs Permissive Mode
 
 Each validator supports a `strict` flag (default: `true`):

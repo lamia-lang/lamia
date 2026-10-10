@@ -214,13 +214,9 @@ class CSVStructureValidator(DocumentStructureValidator):
 
         for i, line in enumerate(lines):
             header_line = line.strip()
-            # Determine separator
-            if ',' in header_line:
-                separator = ','
-            elif ';' in header_line:
-                separator = ';'
-            else:
+            if ',' not in header_line:
                 continue
+            separator = ','
             header_fields = [h.strip() for h in header_line.split(separator)]
 
             if self.strict:
@@ -324,7 +320,7 @@ class CSVStructureValidator(DocumentStructureValidator):
             f.seek(0)
             
             # Try to sniff dialect - this will fail if it's not CSV-like
-            dialect = csv.Sniffer().sniff(sample, delimiters=[',', ';'])
+            dialect = csv.Sniffer().sniff(sample, delimiters=[','])
             
             # Try to create a reader - this will fail for completely malformed CSV
             reader = csv.reader(f, dialect=dialect)
@@ -347,7 +343,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         f = io.StringIO(payload)
         sample = f.read(1024)  # Read a sample to detect the delimiter
         f.seek(0)  # Reset file pointer to the beginning
-        dialect = csv.Sniffer().sniff(sample, delimiters=[',', ';'])
+        dialect = csv.Sniffer().sniff(sample, delimiters=[','])
         reader = csv.DictReader(f, dialect=dialect)
         rows = list(reader)
 
