@@ -1,8 +1,15 @@
 import pytest
-from pydantic import BaseModel
+from enum import Enum
+from pydantic import BaseModel, Field
 from lamia.validation.validators.file_validators.file_structure.csv_structure_validator import CSVStructureValidator
 from lamia.validation.base import ValidationResult
 from collections import OrderedDict
+
+
+class Priority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 # The tests that are common to all file structure validators should go to multi_file_format folder
 # Tests exclusive to CSV format should go here
@@ -177,6 +184,17 @@ def test_csv_order_validation_in_extract_payload():
         "col2,col1,name,age\ntest,1,John,25",  # Ordered fields completely reversed
         "name,age,col2,col1\nJohn,25,test,1",  # Ordered fields at end but reversed
     ]
+
+
+def test_csv_initial_hint_includes_enum_values():
+    class TicketModel(BaseModel):
+        title: str
+        priority: Priority
+
+    validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
+    hint = validator.initial_hint
+    assert "['low', 'medium', 'high']" in hint
+    assert "Priority" not in hint
 
 
 def test_csv_duplicate_header_error_message_not_file_scoped_sync():
