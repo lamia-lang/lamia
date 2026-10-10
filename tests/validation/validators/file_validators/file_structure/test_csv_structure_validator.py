@@ -30,14 +30,20 @@ async def test_csv_structure_validator_type_validity_colons(strict):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])
-async def test_csv_structure_validator_type_validity_semicolons(strict):
-    validator = CSVStructureValidator(model=SimpleModel, strict=strict)
-    valid_csv = 'title;value\nTest;123\nFoo;456\n'
-    invalid_csv = 'title;value\nTest;abc\nFoo;456\n'
-    result = await validator.validate(valid_csv)
-    assert result.is_valid is True, f"Expected valid semicolon-separated CSV to pass in {'strict' if strict else 'permissive'} mode, got: {result}"
-    result = await validator.validate(invalid_csv)
-    assert result.is_valid is False, f"Expected invalid semicolon-separated CSV to fail in {'strict' if strict else 'permissive'} mode, got: {result}"
+async def test_csv_structure_validator_rejects_semicolon_separated(strict):
+    validator = CSVStructureValidator(model=SimpleModel, strict=strict, generate_hints=True)
+    semicolon_csv = 'title;value\nTest;123\nFoo;456\n'
+    result = await validator.validate(semicolon_csv)
+    assert result.is_valid is False
+
+@pytest.mark.asyncio
+async def test_csv_semicolons_inside_cell_values():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    csv_with_semicolons = 'title,value\n"status;changes;review",123\n'
+    result = await validator.validate(csv_with_semicolons)
+    assert result.is_valid is True
+    assert result.typed_result.title == "status;changes;review"
+    assert result.typed_result.value == 123
 
 # Dup headers are currently not supported by CSVStructureValidator
 @pytest.mark.asyncio
@@ -46,7 +52,7 @@ async def test_csv_structure_validator_many_fields_with_same_name(strict):
     class DupHeaderModel(BaseModel):
       dup_header: str
 
-    csv = "dup_header;dup_header;\ncell1;cell2;\ncell3;cell4;"
+    csv = "dup_header,dup_header\ncell1,cell2\ncell3,cell4"
 
     validator = CSVStructureValidator(model=DupHeaderModel, strict=False)
     result = await validator.validate(csv)
@@ -185,7 +191,7 @@ def test_csv_duplicate_header_error_message_not_file_scoped_sync():
     class DupHeaderModel(BaseModel):
         dup_header: str
 
-    csv = "dup_header;dup_header;\ncell1;cell2;\ncell3;cell4;"
+    csv = "dup_header,dup_header\ncell1,cell2\ncell3,cell4"
     validator = CSVStructureValidator(model=DupHeaderModel, strict=False)
     result = asyncio.run(validator.validate(csv))
     assert result.is_valid is False
