@@ -194,13 +194,26 @@ async def test_csv_validates_single_bad_row_reports_exact_row():
     
 
 @pytest.mark.asyncio
+async def test_csv_validates_multiple_bad_rows_reports_each():
+    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
+    result = await validator.validate("title,value\nA,x\nB,2\nC,z")
+    assert not result.is_valid
+    assert result.error_message == (
+        "Row 1, field 'value': Cannot strictly convert 'x' to int; "
+        "Row 3, field 'value': Cannot strictly convert 'z' to int"
+    )
+
+
+@pytest.mark.asyncio
 async def test_csv_validates_every_row_bad_reports_all():
     validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
     result = await validator.validate("title,value\nA,x\nB,y\nC,z")
     assert not result.is_valid
-    assert "Row 1" in result.error_message
-    assert "Row 2" in result.error_message
-    assert "Row 3" in result.error_message
+    assert result.error_message == (
+        "Row 1, field 'value': Cannot strictly convert 'x' to int; "
+        "Row 2, field 'value': Cannot strictly convert 'y' to int; "
+        "Row 3, field 'value': Cannot strictly convert 'z' to int"
+    )
 
 
 @pytest.mark.asyncio
