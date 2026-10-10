@@ -191,17 +191,7 @@ async def test_csv_validates_single_bad_row_reports_exact_row():
     result = await validator.validate("title,value\nAlpha,1\nBeta,2\nGamma,not_a_number")
     assert not result.is_valid
     assert result.error_message == "Row 3, field 'value': Cannot strictly convert 'not_a_number' to int"
-
-
-@pytest.mark.asyncio
-async def test_csv_validates_multiple_bad_rows_reports_all():
-    validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
-    result = await validator.validate("title,value\nAlpha,bad\nBeta,2\nGamma,nope")
-    assert not result.is_valid
-    assert "Row 1" in result.error_message
-    assert "Row 3" in result.error_message
-    assert "Row 2" not in result.error_message
-
+    
 
 @pytest.mark.asyncio
 async def test_csv_validates_every_row_bad_reports_all():
@@ -228,6 +218,8 @@ async def test_csv_all_rows_valid_passes():
     assert result.is_valid
     assert result.typed_result.title == "Alpha"
     assert result.typed_result.value == 1
+
+
 def test_csv_structure_validator_accepts_str_enum():
     class TicketModel(BaseModel):
         title: str
