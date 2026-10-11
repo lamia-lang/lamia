@@ -276,7 +276,7 @@ async def test_csv_enum_validation_rejects_invalid_value():
 
 
 @pytest.mark.asyncio
-async def test_csv_enum_validation_accepts_valid_value():
+async def test_csv_hint_includes_pydantic_schema_with_enum_and_regex():
     class TicketModel(BaseModel):
         title: str
         priority: Priority
@@ -284,8 +284,21 @@ async def test_csv_enum_validation_accepts_valid_value():
     validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
     hint = validator.initial_hint
     assert "title: str" in hint
-    assert "priority: one of ['low', 'medium', 'high']" in hint
-    assert "Priority" not in hint
+    assert "$defs" in hint
+    assert '"low"' in hint
+    assert '"medium"' in hint
+    assert '"high"' in hint
+
+
+def test_csv_hint_includes_regex_pattern_in_schema():
+    class ContactModel(BaseModel):
+        name: str
+        email: str = Field(pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
+    validator = CSVStructureValidator(model=ContactModel, generate_hints=True)
+    hint = validator.initial_hint
+    assert "pattern" in hint
+    assert "[a-zA-Z0-9._%+-]+" in hint
 
 
 @pytest.mark.asyncio
