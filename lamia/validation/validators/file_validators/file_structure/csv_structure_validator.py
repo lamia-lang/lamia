@@ -10,7 +10,7 @@ from .utils import import_model_from_path
 from typing import Any, Optional, Type
 import re
 from typing import Callable
-from ....utils.pydantic_utils import get_ordered_dict_fields
+from ....utils.pydantic_utils import get_ordered_dict_fields, get_pydantic_json_schema
 
 class DuplicateHeaderError(BaseValidationError):
     """Exception for duplicate headers in structured data."""
@@ -155,38 +155,35 @@ class CSVStructureValidator(DocumentStructureValidator):
     def initial_hint(self) -> str:
         hint = ""
         
-        # Only provide model-specific hints when generate_hints is True
         if self.model is not None and self.generate_hints:
             primitive_fields = []
             structure_lines = []
             
             for field, field_type in self._get_model_field_items():
                 primitive_fields.append(field)
-                if isinstance(field_type, type) and issubclass(field_type, Enum):
-                    valid_values = [member.value for member in field_type]
-                    structure_lines.append(f'{field}: one of {valid_values}')
-                else:
-                    structure_lines.append(f'{field}: {field_type.__name__}')
+                structure_lines.append(f'{field}: {field_type.__name__}')
             
             expected_header = ','.join(primitive_fields)
+            
+            schema = get_pydantic_json_schema(self.model)
+            
             hint = (
                     "Please ensure the CSV matches the required structure exactly.\n"
                     f"Expected header row: {expected_header}\n"
                     "Expected columns and types:\n"
-                    + '\n'.join(structure_lines) + "\n"
+                    + '\n'.join(structure_lines) + "\n\n"
+                    + f"Expected target pydantic type in JSON format:\n"
+                    + schema + "\n"
                 )
             
-            # Add clean ordering information
             ordering_hint = self._generate_field_ordering_hint(self.model)
             if ordering_hint:
-                # For CSV, convert the generic ordering hint to CSV-specific language
                 csv_ordering_hint = ordering_hint.replace("ORDERING:", "COLUMN ORDERING:")
                 csv_ordering_hint = csv_ordering_hint.replace("key order within these fields must be preserved", "CSV columns must appear in exactly this order")
                 hint += f"\n{csv_ordering_hint}\n"
             
             hint += "\n"
         
-        # Always provide basic CSV format instructions
         hint += "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows."
         hint += " Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes."
 

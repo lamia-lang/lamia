@@ -1,5 +1,6 @@
 import pytest
-from pydantic import BaseModel
+from enum import Enum
+from pydantic import BaseModel, Field
 from collections import OrderedDict
 from lamia.validation.validators.file_validators import MarkdownStructureValidator
 from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import (
@@ -286,4 +287,16 @@ def test_str_field_rejected_types_still_error():
         count: int
     with pytest.raises(ValueError, match="Invalid fields found"):
         MarkdownStructureValidator(model=BadModel)
+
+
+def test_markdown_hint_includes_pydantic_schema():
+    class DocModel(BaseModel):
+        title: Heading1
+        body: Paragraph
+
+    validator = MarkdownStructureValidator(model=DocModel)
+    hint = validator.initial_hint
+    assert "pydantic type in JSON format" in hint
+    assert "title" in hint
+    assert "body" in hint
 

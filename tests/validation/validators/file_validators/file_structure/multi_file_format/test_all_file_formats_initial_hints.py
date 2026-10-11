@@ -345,6 +345,9 @@ myint: int
 myfloat: float
 mybool: bool
 
+Expected target pydantic type in JSON format:
+{"properties":{"mystr":{"title":"Mystr","type":"string"},"myint":{"title":"Myint","type":"integer"},"myfloat":{"title":"Myfloat","type":"number"},"mybool":{"title":"Mybool","type":"boolean"}},"required":["mystr","myint","myfloat","mybool"],"title":"CSVModel","type":"object"}
+
 Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
 ''',
         "permissive": '''
@@ -356,6 +359,9 @@ myint: int
 myfloat: float
 mybool: bool
 
+Expected target pydantic type in JSON format:
+{"properties":{"mystr":{"title":"Mystr","type":"string"},"myint":{"title":"Myint","type":"integer"},"myfloat":{"title":"Myfloat","type":"number"},"mybool":{"title":"Mybool","type":"boolean"}},"required":["mystr","myint","myfloat","mybool"],"title":"CSVModel","type":"object"}
+
 Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
 '''
     }, 
@@ -366,6 +372,9 @@ Ensure the Markdown matches the required structure exactly.
 Expected structure:
 title: # Level 1 heading (starts with single #)
 content: Regular paragraph text (plain text without special formatting)
+
+Expected target pydantic type in JSON format:
+{"properties":{"title":{"title":"Title","type":"string"},"content":{"title":"Content","type":"string"}},"required":["title","content"],"title":"MarkdownModel","type":"object"}
 ''',
         "permissive": '''
 Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).
@@ -374,6 +383,9 @@ The fields can be nested within other Markdown structures.
 Required fields that must be present:
 title: # Level 1 heading (starts with single #)
 content: Regular paragraph text (plain text without special formatting)
+
+Expected target pydantic type in JSON format:
+{"properties":{"title":{"title":"Title","type":"string"},"content":{"title":"Content","type":"string"}},"required":["title","content"],"title":"MarkdownModel","type":"object"}
 '''
     },
     "txt_structure": {

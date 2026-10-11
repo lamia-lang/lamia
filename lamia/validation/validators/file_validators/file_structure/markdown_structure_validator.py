@@ -8,6 +8,7 @@ from .utils import import_model_from_path
 import re
 from collections import OrderedDict
 from typing import Optional, Type
+from ....utils.pydantic_utils import get_pydantic_json_schema
 
 # Marker classes for semantic mapping
 class MarkdownStr(str):
@@ -153,12 +154,15 @@ class MarkdownStructureValidator(DocumentStructureValidator):
     def initial_hint(self) -> str:
         if self.model is not None:
             structure_lines = self._describe_structure(self.model)
+            schema = get_pydantic_json_schema(self.model)
             if self.strict:
                 base_hint = (
                     "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).\n"
                     "Ensure the Markdown matches the required structure exactly.\n"
                     "Expected structure:\n"
-                    + '\n'.join(structure_lines)
+                    + '\n'.join(structure_lines) + "\n\n"
+                    + "Expected target pydantic type in JSON format:\n"
+                    + schema
                 )
             else:
                 base_hint = (
@@ -166,10 +170,11 @@ class MarkdownStructureValidator(DocumentStructureValidator):
                     "Ensure the Markdown contains the required fields with the correct types.\n"
                     "The fields can be nested within other Markdown structures.\n"
                     "Required fields that must be present:\n"
-                    + '\n'.join(structure_lines)
+                    + '\n'.join(structure_lines) + "\n\n"
+                    + "Expected target pydantic type in JSON format:\n"
+                    + schema
                 )
             
-            # Add clean ordering information
             ordering_hint = self._generate_field_ordering_hint(self.model)
             if ordering_hint:
                 return base_hint + "\n\n" + ordering_hint
