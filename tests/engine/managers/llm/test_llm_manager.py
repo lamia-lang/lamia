@@ -378,14 +378,10 @@ class TestLLMManagerExecution:
         with patch.object(self.manager, '_execute_with_retries') as mock_execute:
             mock_execute.return_value = mock_result
             
-            with patch.object(self.manager, '_inject_file_references') as mock_inject:
-                mock_inject.return_value = "Hello world"
-                
-                result = await self.manager.execute(command)
-                
-                assert result == mock_result
-                mock_inject.assert_called_once_with("Hello world")
-                mock_execute.assert_called_once_with(prompt="Hello world", validator=None)
+            result = await self.manager.execute(command)
+            
+            assert result == mock_result
+            mock_execute.assert_called_once_with(prompt="Hello world", validator=None, history=[])
     
     @pytest.mark.asyncio
     async def test_execute_with_validator(self):
@@ -403,35 +399,10 @@ class TestLLMManagerExecution:
         with patch.object(self.manager, '_execute_with_retries') as mock_execute:
             mock_execute.return_value = mock_result
             
-            with patch.object(self.manager, '_inject_file_references') as mock_inject:
-                mock_inject.return_value = "Hello world"
-                
-                result = await self.manager.execute(command, validator=validator)
-                
-                assert result == mock_result
-                mock_execute.assert_called_once_with(prompt="Hello world", validator=validator)
-    
-    def test_inject_file_references_with_context(self):
-        """Test file reference injection with active context."""
-        mock_context = Mock()
-        mock_context.inject_file_references.return_value = "Hello world with files"
-        
-        with patch('lamia.engine.managers.llm.llm_manager.get_active_files_context') as mock_get_context:
-            mock_get_context.return_value = mock_context
+            result = await self.manager.execute(command, validator=validator)
             
-            result = self.manager._inject_file_references("Hello world")
-            
-            assert result == "Hello world with files"
-            mock_context.inject_file_references.assert_called_once_with("Hello world")
-    
-    def test_inject_file_references_without_context(self):
-        """Test file reference injection without active context."""
-        with patch('lamia.engine.managers.llm.llm_manager.get_active_files_context') as mock_get_context:
-            mock_get_context.return_value = None
-            
-            result = self.manager._inject_file_references("Hello world")
-            
-            assert result == "Hello world"
+            assert result == mock_result
+            mock_execute.assert_called_once_with(prompt="Hello world", validator=validator, history=[])
 
 
 class TestLLMManagerExecutionWithRetries:
@@ -640,6 +611,7 @@ class TestLLMManagerGenerateAndValidate:
         mock_response.usage = {"tokens": 100}
         mock_response.model = "gpt-4"
         mock_adapter.generate.return_value = mock_response
+        mock_adapter.generate_messages.return_value = mock_response
         
         mock_validator = Mock(spec=BaseValidator)
         
@@ -670,8 +642,14 @@ class TestLLMManagerGenerateAndValidate:
         )
         
         assert result == success_result
-        assert mock_adapter.generate.call_count == 3
+        assert mock_adapter.generate.call_count == 1
+        assert mock_adapter.generate_messages.call_count == 2
         assert mock_validator.validate.call_count == 3
+
+        messages = mock_adapter.generate_messages.call_args_list[1][0][0]
+        assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant", "user"]
+        assert messages[0]["content"] == "Hello"
+        assert messages[1]["content"] == "Generated response"
     
     @pytest.mark.asyncio
     async def test_generate_and_validate_max_attempts_exhausted(self):
@@ -685,6 +663,7 @@ class TestLLMManagerGenerateAndValidate:
         mock_response.usage = {"tokens": 100}
         mock_response.model = "gpt-4"
         mock_adapter.generate.return_value = mock_response
+        mock_adapter.generate_messages.return_value = mock_response
         
         mock_validator = Mock(spec=BaseValidator)
         failed_result = ValidationResult(
@@ -706,7 +685,8 @@ class TestLLMManagerGenerateAndValidate:
         )
         
         assert result is None  # All attempts exhausted
-        assert mock_adapter.generate.call_count == 2
+        assert mock_adapter.generate.call_count == 1
+        assert mock_adapter.generate_messages.call_count == 1
     
     @pytest.mark.asyncio
     async def test_generate_and_validate_context_memory_retry_logic(self):
@@ -721,6 +701,7 @@ class TestLLMManagerGenerateAndValidate:
         mock_response.usage = {"tokens": 100}
         mock_response.model = "gpt-4"
         mock_adapter.generate.return_value = mock_response
+        mock_adapter.generate_messages.return_value = mock_response
         
         mock_validator = Mock(spec=BaseValidator)
         failed_result = ValidationResult(
@@ -751,14 +732,14 @@ class TestLLMManagerGenerateAndValidate:
         assert result == success_result
         
         # Check retry prompts - with context memory, should only send retry message
-        call_args_list = mock_adapter.generate.call_args_list
-        assert len(call_args_list) == 2
+        assert mock_adapter.generate.call_count == 1
+        assert mock_adapter.generate_messages.call_count == 1
         
         # First call with original prompt
-        assert call_args_list[0][0][0] == "Original prompt"
+        assert mock_adapter.generate.call_args[0][0] == "Original prompt"
         
-        # Second call should be retry message only (not including original prompt)
-        retry_prompt = call_args_list[1][0][0]
+        # Second call ends with the retry message only (not including original prompt)
+        retry_prompt = mock_adapter.generate_messages.call_args[0][0][-1]["content"]
         assert "Validation failed" in retry_prompt
         assert "Try again" in retry_prompt
         assert "Original prompt" not in retry_prompt  # Should NOT include original with context memory

@@ -7,8 +7,8 @@ the supplied keyword arguments and returns the resulting prompt string.
 
 The caller in the .lm file handles the ``-> Type`` annotation via the
 existing hybrid syntax transformer, so HuCallable only needs to produce
-the final prompt text.  ``{@file}`` references are left in the string
-and resolved later by the engine's FilesContextManager at execution time.
+the final prompt text.  ``{@file}`` references are resolved relative to
+the ``.hu`` file, or through the active ``files()`` context.
 
 ``{@variable}`` references (where *variable* is a valid identifier) are
 optional: if the caller passed a kwarg with that name, its value replaces
@@ -20,10 +20,12 @@ import logging
 import re
 
 from lamia.engine.managers.llm.files_context_manager import (
-    get_active_files_context,
-    resolve_standalone_file_references,
+    inline_file_references_if_available,
+    pop_source_file,
+    push_source_file,
 )
 from lamia.interpreter.human.parser import HuFunction
+from lamia.template_syntax import FILE_REFERENCE_VARIABLE_RE
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +51,15 @@ class HuCallable:
 
     def __call__(self, *, _return_type=None, **kwargs: object):
         prompt = self._build_prompt(**kwargs)
-        if self._lamia is not None:
+        if self._fn.source_path:
+            push_source_file(self._fn.source_path)
+        try:
+            if self._lamia is None:
+                return inline_file_references_if_available(prompt).text
             return self._lamia.run(prompt, return_type=_return_type)
-        return prompt
+        finally:
+            if self._fn.source_path:
+                pop_source_file()
 
     def _build_prompt(self, **kwargs: object) -> str:
         missing = self._fn.params - set(kwargs)
@@ -97,12 +105,6 @@ class HuCallable:
             if ref in kwargs:
                 return '{@' + str(kwargs[ref]) + '}'
             return m.group(0)
-        result = re.sub(r'\{@(\w+)\}', _resolve_var_ref, result)
-
-        # When no FilesContext is active, resolve {@...} relative to this
-        # .hu file now -- by the time LLMManager sees the string the
-        # source path would be lost.
-        if not get_active_files_context() and self._fn.source_path:
-            result = resolve_standalone_file_references(result, self._fn.source_path)
+        result = FILE_REFERENCE_VARIABLE_RE.sub(_resolve_var_ref, result)
 
         return result

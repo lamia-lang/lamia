@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from lamia.actions.http import HttpActions
+from lamia.engine.managers.llm.files_context_manager import is_binary_file
 from lamia.interpreter.commands import WebCommand, WebActionType
 from lamia.interpreter.human.parser import parse_hu_file
 from lamia.lint.find_usage import UsageReference, find_usage
@@ -264,6 +265,9 @@ def _read_file(
             msg += "\n\nDid you mean:\n" + "\n".join(f"  - {c}" for c in candidates)
         msg += "\n\nUse list_files to explore the directory structure."
         return msg
+
+    if is_binary_file(str(resolved)):
+        return f"Error: {resolved} is a binary file; its content is not readable as text"
 
     effective_chunk = min(chunk_size, MAX_READ_CHUNK_CHARS) if chunk_size > 0 else MAX_READ_CHUNK_CHARS
     offset = max(offset, 0)

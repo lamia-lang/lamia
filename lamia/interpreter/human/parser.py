@@ -17,13 +17,11 @@ Supported placeholder syntax::
                             name is treated as a literal filename
 """
 
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict
 
-_PARAM_RE = re.compile(r'\{(\w+)(?::([^}]*))?\}')
-_FILE_CONTEXT_RE = re.compile(r'\{@([^}]+)\}')
+from lamia.template_syntax import FILE_REFERENCE_RE, PARAM_RE
 
 
 @dataclass(frozen=True)
@@ -51,7 +49,7 @@ def parse_hu_file(file_path: str) -> HuFunction:
 
     params: set[str] = set()
     defaults: dict[str, str] = {}
-    for m in _PARAM_RE.finditer(template):
+    for m in PARAM_RE.finditer(template):
         pname = m.group(1)
         default_val = m.group(2)
         if pname.startswith("@"):
@@ -60,7 +58,7 @@ def parse_hu_file(file_path: str) -> HuFunction:
         if default_val is not None and pname not in defaults:
             defaults[pname] = "" if default_val == "None" else default_val
 
-    file_contexts = frozenset(_FILE_CONTEXT_RE.findall(template))
+    file_contexts = frozenset(FILE_REFERENCE_RE.findall(template))
 
     for ref in file_contexts:
         if ref.isidentifier() and ref not in params:

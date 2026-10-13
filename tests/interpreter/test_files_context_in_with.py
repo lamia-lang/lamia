@@ -452,12 +452,8 @@ class TestModelsParameterInFilesContext:
     """Ensure functions with models= default defined inside with files() work correctly."""
 
     def _llm_call_contains(self, transformed: str, substring: str) -> bool:
-        """Check if substring appears in the generated LLM call line.
-
-        Inside a ``with files()`` block the call goes through the file-tools
-        runner instead of straight to the facade.
-        """
-        call_markers = ("lamia.run(", "lamia.run_async(", "run_with_file_tools")
+        """Check if substring appears in the generated LLM call line."""
+        call_markers = ("lamia.run(", "lamia.run_async(")
         for line in transformed.splitlines():
             if any(marker in line for marker in call_markers) and substring in line:
                 return True

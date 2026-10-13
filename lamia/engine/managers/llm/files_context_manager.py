@@ -2,19 +2,37 @@
 
 import os
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Tuple, Optional, Dict
+from typing import Callable, List, Tuple, Optional, Dict, Sequence
 from difflib import SequenceMatcher, get_close_matches
 import re
 
-import PyPDF2
 
 from lamia.errors import AmbiguousFileError, FileReferenceError
+from lamia.template_syntax import FILE_REFERENCE_RE
 from lamia.engine.managers.llm.prompt_formatter import display_path, format_files
 
 logger = logging.getLogger(__name__)
 
-_FILE_REF_RE = re.compile(r'\{@([^}]+)\}')
+# 50,000 characters (about 12,500 tokens) fits most source and text files whole.
+INLINED_FILE_CHAR_LIMIT = 50_000
+_POPULAR_BINARY_EXTENSIONS = frozenset({
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".tiff",
+    ".zip", ".gz", ".tgz", ".tar", ".bz2", ".xz", ".7z", ".rar",
+    ".exe", ".dll", ".so", ".dylib", ".bin", ".class", ".jar", ".pyc",
+    ".mp3", ".wav", ".mp4", ".mov", ".avi", ".woff", ".woff2", ".ttf", ".otf",
+    ".sqlite", ".db",
+})
+
+
+@dataclass
+class PromptWithInlinedFiles:
+    """A prompt preceded by the content of the files it references."""
+    text: str
+    files: List[str] = field(default_factory=list)
+    cut_files: List[str] = field(default_factory=list)
 
 
 def _compute_minimal_unique_paths(paths: List[str]) -> Dict[str, str]:
@@ -334,24 +352,6 @@ class FilesContext:
             suffix = " ..." if len(roots) > 5 else ""
             return f"Searched {len(self.indexed_files)} files in: {', '.join(preview)}{suffix}"
         return f"Searched {len(self.indexed_files)} files in: {', '.join(self.paths)}"
-    
-    def read_file_content(self, filepath: str) -> str:
-        """Read file content with appropriate extraction."""
-        return read_file_content(filepath)
-    
-    def inject_file_references(self, prompt: str) -> str:
-        """Move the content of files referenced with ``{@filename}`` into a ``<files>`` block ahead of *prompt*.
-
-        Each reference is replaced with a pointer to its file.
-
-        Args:
-            prompt: The prompt string potentially containing {@filename} references
-
-        Returns:
-            Prompt preceded by the referenced files' content
-        """
-        prompt, files = _hoist_file_references(prompt, self.resolve_file_reference, self.read_file_content)
-        return format_files(files) + prompt
 
 
 # Global context stack for nested contexts
@@ -426,46 +426,20 @@ def files(*paths: str) -> FilesContext:
 # Module-level file content reader (shared by FilesContext and standalone)
 # ---------------------------------------------------------------------------
 
-def read_file_content(filepath: str) -> str:
-    """Read file content with appropriate extraction for PDF/DOCX."""
-    ext = os.path.splitext(filepath)[1].lower()
-
-    if ext == '.pdf':
-        return _extract_pdf_text(filepath)
-    elif ext in ['.docx', '.doc']:
-        return _extract_docx_text(filepath)
-    else:
-        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-            return f.read()
+def _read_file_content(filepath: str) -> str:
+    """Read a text file, or describe a binary file whose content is not readable as text."""
+    if is_binary_file(filepath):
+        return f"[binary file: {os.path.abspath(filepath)}, content not readable as text]"
+    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+        return f.read()
 
 
-def _extract_pdf_text(filepath: str) -> str:
+def is_binary_file(filepath: str) -> bool:
+    """True for a known binary extension, or a zero byte in the first 8,000 bytes (the rule git uses)."""
+    if os.path.splitext(filepath)[1].lower() in _POPULAR_BINARY_EXTENSIONS:
+        return True
     with open(filepath, 'rb') as f:
-        reader = PyPDF2.PdfReader(f)
-        text_parts = []
-
-        for page_num, page in enumerate(reader.pages):
-            text = page.extract_text()
-            if text.strip():
-                text_parts.append(f"--- Page {page_num + 1} ---\n{text}")
-
-        if text_parts:
-            return "\n\n".join(text_parts)
-        return f"[PDF file: {os.path.basename(filepath)} - text extraction returned empty]"
-
-
-def _extract_docx_text(filepath: str) -> str:
-    try:
-        import docx
-    except ImportError:
-        return f"[DOCX file: {os.path.basename(filepath)} - python-docx not installed. Install with: pip install python-docx]"
-
-    document = docx.Document(filepath)
-    paragraphs = [p.text for p in document.paragraphs if p.text.strip()]
-
-    if paragraphs:
-        return "\n\n".join(paragraphs)
-    return f"[DOCX file: {os.path.basename(filepath)} - no text content]"
+        return b'\0' in f.read(8000)
 
 
 # ---------------------------------------------------------------------------
@@ -494,31 +468,43 @@ def _resolve_standalone_reference(query: str, source_path: str) -> str:
     raise FileReferenceError(query, [])
 
 
-def resolve_standalone_file_references(prompt: str, source_path: str) -> str:
-    """Move files referenced with ``{@...}`` into a ``<files>`` block ahead of *prompt*, using path-based resolution.
+def inline_file_references_if_available(prompt: str) -> PromptWithInlinedFiles:
+    """Replace each ``{@...}`` reference in *prompt* with a pointer to its file and put the files' content in a ``<files>`` block ahead of the prompt.
 
-    Called as a fallback when no ``FilesContext`` is active.
+    Uses the active ``files()`` context, or resolves paths relative to the running script when no context is active. Without either, the prompt is returned unchanged. Very long file content is cut, with a note saying so.
     """
-    prompt, files = _hoist_file_references(
-        prompt,
-        lambda query: _resolve_standalone_reference(query, source_path),
-        read_file_content,
-    )
-    return format_files(files) + prompt
+    context = get_active_files_context()
+    if context:
+        return _inline_file_references(prompt, context.resolve_file_reference)
+    source_file = get_current_source_file()
+    if source_file:
+        return _inline_file_references(prompt, lambda query: _resolve_standalone_reference(query, source_file))
+    return PromptWithInlinedFiles(prompt)
 
 
-def _hoist_file_references(
+def inline_files(paths: Sequence[str]) -> str:
+    """Return the ``<files>`` block for *paths*, each file once; an unreadable file is shown as an error note."""
+    files: List[Tuple[str, str]] = []
+    for filepath in dict.fromkeys(paths):
+        try:
+            content, _ = _load_file(filepath)
+        except Exception as e:
+            logger.error(f"Error loading file '{filepath}': {e}")
+            content = f"[Error loading file: {filepath} - {e}]"
+        files.append((filepath, content))
+    return format_files(files)
+
+
+def _inline_file_references(
     prompt: str,
-    resolve: Callable[[str], Optional[str]],
-    read: Callable[[str], str],
-) -> Tuple[str, List[Tuple[str, str]]]:
-    """Replace each ``{@...}`` reference with a pointer to its file.
+    find_file_path: Callable[[str], Optional[str]],
+) -> PromptWithInlinedFiles:
+    """Inline ``{@...}`` references using *find_file_path* to map each reference to a file path.
 
-    Returns the rewritten prompt and the referenced files as
-    ``(filepath, content)`` pairs, each file once. A reference whose
-    *resolve* returns ``None`` is left unchanged.
+    Each file is included once. A reference whose *find_file_path* returns ``None`` is left unchanged.
     """
     files: List[Tuple[str, str]] = []
+    cut_files: List[str] = []
     loaded = set()
 
     def replace_ref(match: re.Match) -> str:
@@ -529,17 +515,32 @@ def _hoist_file_references(
                 [],
                 "A file reference cannot be empty. Provide a filename or path.",
             )
-        filepath = resolve(query)
+        filepath = find_file_path(query)
         if filepath is None:
             return match.group(0)
         if filepath not in loaded:
             try:
-                content = read(filepath)
+                content, was_cut = _load_file(filepath)
             except Exception as e:
                 logger.error(f"Error processing file reference '{query}': {e}")
                 return f"[Error loading file: {query} - {e}]"
+            if was_cut:
+                cut_files.append(filepath)
             files.append((filepath, content))
             loaded.add(filepath)
         return f"[see file {display_path(filepath)}]"
 
-    return _FILE_REF_RE.sub(replace_ref, prompt), files
+    prompt = FILE_REFERENCE_RE.sub(replace_ref, prompt)
+    return PromptWithInlinedFiles(format_files(files) + prompt, [path for path, _ in files], cut_files)
+
+
+def _load_file(filepath: str) -> Tuple[str, bool]:
+    """Return *filepath*'s content, cut at ``INLINED_FILE_CHAR_LIMIT`` with a note, and whether it was cut."""
+    content = _read_file_content(filepath)
+    if len(content) <= INLINED_FILE_CHAR_LIMIT:
+        return content, False
+    return (
+        f"{content[:INLINED_FILE_CHAR_LIMIT]}\n"
+        f"[truncated: showing the first {INLINED_FILE_CHAR_LIMIT:,} of {len(content):,} characters; "
+        f"use available tools to read more if needed]"
+    ), True

@@ -439,7 +439,6 @@ def _build_lamia_auto_imports() -> set[str]:
     # Context managers / builtins
     names.update({
         "session", "files", "File", "capture_files_context",
-        "run_with_file_tools", "run_with_file_tools_sync",
     })
 
     # Validation types from lamia.types (JSON, HTML, YAML, …)

@@ -2,14 +2,17 @@
 
 import os
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from lamia.engine.managers.llm.files_context_manager import (
     push_source_file,
     pop_source_file,
     get_current_source_file,
-    resolve_standalone_file_references,
-    read_file_content,
+    inline_file_references_if_available,
+    files,
+    INLINED_FILE_CHAR_LIMIT,
+    _read_file_content,
+    inline_files,
     _has_path_components,
     _resolve_standalone_reference,
     FilesContext,
@@ -105,53 +108,18 @@ class TestFindProjectRoot:
 
 
 # ---------------------------------------------------------------------------
-# read_file_content (module-level)
+# _read_file_content (module-level)
 # ---------------------------------------------------------------------------
 
 class TestReadFileContent:
 
     def test_plain_text(self, project_tree):
-        content = read_file_content(str(project_tree / "data.json"))
+        content = _read_file_content(str(project_tree / "data.json"))
         assert '"key"' in content
 
     def test_nonexistent_raises(self):
         with pytest.raises(FileNotFoundError):
-            read_file_content("/does/not/exist.txt")
-
-    def test_pdf_extracted_via_pypdf2(self, tmp_path):
-        pdf_file = tmp_path / "resume.pdf"
-        pdf_file.write_bytes(b"%PDF-fake")
-
-        mock_page = MagicMock()
-        mock_page.extract_text.return_value = "John Doe\nAI Engineer"
-        mock_reader = MagicMock()
-        mock_reader.pages = [mock_page]
-
-        with patch("lamia.engine.managers.llm.files_context_manager.PyPDF2") as mock_pypdf2:
-            mock_pypdf2.PdfReader.return_value = mock_reader
-            content = read_file_content(str(pdf_file))
-
-        assert "John Doe" in content
-        assert "Page 1" in content
-
-    def test_pdf_standalone_resolution(self, project_tree):
-        """A .pdf reference in the source dir is resolved and extracted."""
-        pdf_file = project_tree / "prompts" / "resume.pdf"
-        pdf_file.write_bytes(b"%PDF-fake")
-
-        mock_page = MagicMock()
-        mock_page.extract_text.return_value = "Jane Smith"
-        mock_reader = MagicMock()
-        mock_reader.pages = [mock_page]
-
-        source = str(project_tree / "prompts" / "greet.hu")
-        with patch("lamia.engine.managers.llm.files_context_manager.PyPDF2") as mock_pypdf2:
-            mock_pypdf2.PdfReader.return_value = mock_reader
-            result = resolve_standalone_file_references("{@resume.pdf}", source)
-
-        assert "Jane Smith" in result
-        assert result.startswith("<files>\n<file path=")
-        assert 'resume.pdf">' in result
+            _read_file_content("/does/not/exist.txt")
 
 
 # ---------------------------------------------------------------------------
@@ -204,16 +172,24 @@ class TestResolveStandaloneReference:
 
 
 # ---------------------------------------------------------------------------
-# resolve_standalone_file_references (full prompt)
+# inline_file_references_if_available relative to a script
 # ---------------------------------------------------------------------------
 
-class TestResolveStandaloneFileReferences:
+def _inline_from(prompt, source):
+    push_source_file(source)
+    try:
+        return inline_file_references_if_available(prompt).text
+    finally:
+        pop_source_file()
+
+
+class TestInlineRelativeToScript:
 
     def test_replaces_bare_filename_from_same_dir(self, project_tree):
         (project_tree / "prompts" / "data.json").write_text('{"local": true}')
         source = str(project_tree / "prompts" / "greet.hu")
         prompt = "Use this config: {@data.json}"
-        result = resolve_standalone_file_references(prompt, source)
+        result = _inline_from(prompt, source)
         assert "{@data.json}" not in result
         assert '"local"' in result
         assert 'data.json">' in result
@@ -222,19 +198,19 @@ class TestResolveStandaloneFileReferences:
     def test_replaces_relative_path(self, project_tree):
         source = str(project_tree / "prompts" / "greet.hu")
         prompt = "Read {@../data.json}"
-        result = resolve_standalone_file_references(prompt, source)
+        result = _inline_from(prompt, source)
         assert '"key"' in result
 
     def test_no_refs_returns_unchanged(self, project_tree):
         source = str(project_tree / "prompts" / "greet.hu")
         prompt = "Just a normal prompt"
-        assert resolve_standalone_file_references(prompt, source) == prompt
+        assert _inline_from(prompt, source) == prompt
 
     def test_multiple_refs(self, project_tree):
         (project_tree / "prompts" / "data.json").write_text('{"local": true}')
         source = str(project_tree / "prompts" / "greet.hu")
         prompt = "A: {@data.json} B: {@helper.txt}"
-        result = resolve_standalone_file_references(prompt, source)
+        result = _inline_from(prompt, source)
         assert '"local"' in result
         assert "helper content" in result
 
@@ -242,7 +218,7 @@ class TestResolveStandaloneFileReferences:
         source = str(project_tree / "prompts" / "greet.hu")
         prompt = "Load {@totally_missing.bin}"
         with pytest.raises(FileReferenceError):
-            resolve_standalone_file_references(prompt, source)
+            _inline_from(prompt, source)
 
     def test_ambiguous_raises(self, project_tree):
         """Two files with very similar names should raise AmbiguousFileError."""
@@ -251,20 +227,24 @@ class TestResolveStandaloneFileReferences:
         source = str(project_tree / "prompts" / "greet.hu")
         prompt = "Diff {@report}"
         with pytest.raises((AmbiguousFileError, FileReferenceError)):
-            resolve_standalone_file_references(prompt, source)
+            _inline_from(prompt, source)
 
 
 # ---------------------------------------------------------------------------
-# FilesContext takes priority over standalone
+# HuCallable resolution order
 # ---------------------------------------------------------------------------
 
 class TestPriorityOrder:
 
     def test_files_context_takes_priority(self, project_tree):
-        """When FilesContext is active, HuCallable leaves {@...} intact."""
+        """When FilesContext is active, HuCallable resolves {@...} through it."""
         from lamia.interpreter.human.parser import HuFunction
         from lamia.interpreter.human.executor import HuCallable
 
+        (project_tree / "prompts" / "data.json").write_text('{"from": "script"}')
+        context_dir = project_tree / "context"
+        context_dir.mkdir()
+        (context_dir / "data.json").write_text('{"from": "context"}')
         fn = HuFunction(
             name="test",
             template="Check {@data.json}",
@@ -273,10 +253,10 @@ class TestPriorityOrder:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock_ctx:
-            mock_ctx.return_value = MagicMock()
+        with files(str(context_dir)):
             result = c()
-            assert "{@data.json}" in result
+        assert '"context"' in result
+        assert '"script"' not in result
 
     def test_standalone_resolves_when_no_context(self, project_tree):
         """Without FilesContext, HuCallable resolves {@...} via standalone."""
@@ -292,7 +272,7 @@ class TestPriorityOrder:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock_ctx:
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context") as mock_ctx:
             mock_ctx.return_value = None
             result = c()
             assert "{@data.json}" not in result
@@ -642,8 +622,8 @@ class TestHuVariableFileReferences:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
-            mock.return_value = MagicMock()
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context") as mock:
+            mock.return_value.resolve_file_reference.return_value = None
             result = c(doc_path="report.pdf")
             assert "{@report.pdf}" in result
             assert "{@doc_path}" not in result
@@ -661,8 +641,8 @@ class TestHuVariableFileReferences:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
-            mock.return_value = MagicMock()
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context") as mock:
+            mock.return_value.resolve_file_reference.return_value = None
             result = c()
             assert "{@article.txt}" in result
 
@@ -679,8 +659,8 @@ class TestHuVariableFileReferences:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
-            mock.return_value = MagicMock()
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context") as mock:
+            mock.return_value.resolve_file_reference.return_value = None
             result = c()
             assert "{@resume.pdf}" in result
 
@@ -697,8 +677,8 @@ class TestHuVariableFileReferences:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
-            mock.return_value = MagicMock()
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context") as mock:
+            mock.return_value.resolve_file_reference.return_value = None
             result = c(question="What are my skills?")
             assert "What are my skills?" in result
             assert "{@resume.pdf}" in result
@@ -724,7 +704,7 @@ class TestStandaloneVariablePathResolution:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context") as mock:
             mock.return_value = None
             result = c(doc_path=str(f))
             assert "The quick brown fox" in result
@@ -748,7 +728,7 @@ class TestStandaloneVariablePathResolution:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context") as mock:
             mock.return_value = None
             result = c(doc_path="./data/report.txt")
             assert "Q3 earnings" in result
@@ -770,7 +750,7 @@ class TestStandaloneVariablePathResolution:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context") as mock:
             mock.return_value = None
             result = c(doc_path="notes.txt")
             assert "Local notes" in result
@@ -792,7 +772,111 @@ class TestStandaloneVariablePathResolution:
         )
         c = HuCallable(fn)
 
-        with patch("lamia.interpreter.human.executor.get_active_files_context") as mock:
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context") as mock:
             mock.return_value = None
             with pytest.raises(FileReferenceError):
                 c(doc_path="notes.txt")
+
+
+# ---------------------------------------------------------------------------
+# inline_file_references_if_available
+# ---------------------------------------------------------------------------
+
+class TestInlineFileReferencesIfAvailable:
+
+    def test_uses_active_files_context(self, tmp_path):
+        notes = tmp_path / "notes.txt"
+        notes.write_text("remember this")
+        with files(str(tmp_path)):
+            result = inline_file_references_if_available("Read {@notes.txt}")
+        assert "remember this" in result.text
+        assert result.files == [str(notes)]
+        assert result.cut_files == []
+
+    def test_resolves_relative_to_running_script(self, project_tree):
+        push_source_file(str(project_tree / "data.json"))
+        try:
+            result = inline_file_references_if_available("Read {@data.json}")
+        finally:
+            pop_source_file()
+        assert '"key"' in result.text
+
+    def test_returns_prompt_unchanged_without_context_or_script(self):
+        with patch("lamia.engine.managers.llm.files_context_manager.get_active_files_context", return_value=None), \
+                patch("lamia.engine.managers.llm.files_context_manager.get_current_source_file", return_value=None):
+            result = inline_file_references_if_available("Hello {@x.txt}")
+        assert result.text == "Hello {@x.txt}"
+        assert result.files == []
+
+    def test_long_file_is_cut_with_a_note(self, tmp_path):
+        big = tmp_path / "big.csv"
+        big.write_text("a" * INLINED_FILE_CHAR_LIMIT + "TAIL")
+        push_source_file(str(tmp_path / "script.lm"))
+        try:
+            result = inline_file_references_if_available("Summarize {@big.csv}")
+        finally:
+            pop_source_file()
+        assert "TAIL" not in result.text
+        assert (
+            f"[truncated: showing the first {INLINED_FILE_CHAR_LIMIT:,} of {INLINED_FILE_CHAR_LIMIT + 4:,} characters; "
+            "use available tools to read more if needed]"
+        ) in result.text
+        assert result.cut_files == [str(big)]
+
+    def test_file_at_the_limit_is_not_cut(self, tmp_path):
+        exact = tmp_path / "exact.txt"
+        exact.write_text("a" * INLINED_FILE_CHAR_LIMIT)
+        push_source_file(str(tmp_path / "script.lm"))
+        try:
+            result = inline_file_references_if_available("Summarize {@exact.txt}")
+        finally:
+            pop_source_file()
+        assert "truncated" not in result.text
+        assert result.cut_files == []
+
+
+class TestBinaryFiles:
+
+    def test_binary_extension_is_described_without_reading(self, tmp_path):
+        report = tmp_path / "report.pdf"
+        report.write_text("%PDF-1.7 text-looking header")
+        assert _read_file_content(str(report)) == f"[binary file: {report}, content not readable as text]"
+
+    def test_binary_file_is_described_instead_of_read(self, tmp_path):
+        image = tmp_path / "chart.png"
+        image.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+        assert _read_file_content(str(image)) == f"[binary file: {image}, content not readable as text]"
+
+    def test_non_ascii_text_file_is_read(self, tmp_path):
+        notes = tmp_path / "notes.txt"
+        notes.write_text("Grüße — 你好", encoding="utf-8")
+        assert _read_file_content(str(notes)) == "Grüße — 你好"
+
+
+class TestInlineFiles:
+
+    def test_reads_each_file_into_a_files_block(self, tmp_path):
+        notes = tmp_path / "notes.txt"
+        notes.write_text("remember this")
+        block = inline_files([str(notes)])
+        assert block.startswith("<files>")
+        assert "remember this" in block
+
+    def test_no_paths_gives_empty_block(self):
+        assert inline_files([]) == ""
+
+    def test_duplicate_path_is_included_once(self, tmp_path):
+        notes = tmp_path / "notes.txt"
+        notes.write_text("remember this")
+        assert inline_files([str(notes), str(notes)]).count("remember this") == 1
+
+    def test_long_file_is_cut_with_a_note(self, tmp_path):
+        big = tmp_path / "big.csv"
+        big.write_text("a" * INLINED_FILE_CHAR_LIMIT + "TAIL")
+        block = inline_files([str(big)])
+        assert "TAIL" not in block
+        assert f"[truncated: showing the first {INLINED_FILE_CHAR_LIMIT:,} of {INLINED_FILE_CHAR_LIMIT + 4:,} characters; " in block
+
+    def test_unreadable_file_is_shown_as_an_error_note(self, tmp_path):
+        missing = str(tmp_path / "missing.txt")
+        assert f"[Error loading file: {missing} - " in inline_files([missing])

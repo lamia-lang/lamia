@@ -1073,29 +1073,16 @@ class HybridSyntaxTransformer(ast.NodeTransformer):
         return ast.keyword(arg='return_type', value=return_type_node)
     
     def _build_llm_call(self, args, keywords, is_async: bool) -> ast.expr:
-        """Build the LLM call for a generated function body.
-
-        Inside a ``with files()`` block the call is routed through the
-        file-tools runner, which lets the model explore the context before
-        answering.  Everywhere else it goes straight to the facade.
-        """
-        if self._current_files_ctx_var:
-            runner = 'run_with_file_tools' if is_async else 'run_with_file_tools_sync'
-            call = ast.Call(
-                func=ast.Name(id=runner, ctx=ast.Load()),
-                args=[ast.Name(id=self.lamia_var_name, ctx=ast.Load())] + list(args),
-                keywords=list(keywords),
-            )
-        else:
-            call = ast.Call(
-                func=ast.Attribute(
-                    value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
-                    attr='run_async' if is_async else 'run',
-                    ctx=ast.Load(),
-                ),
-                args=list(args),
-                keywords=list(keywords),
-            )
+        """Build the facade call for a generated function body."""
+        call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=self.lamia_var_name, ctx=ast.Load()),
+                attr='run_async' if is_async else 'run',
+                ctx=ast.Load(),
+            ),
+            args=list(args),
+            keywords=list(keywords),
+        )
         return ast.Await(value=call) if is_async else call
 
     def _build_async_lamia_function(self, node, args, keywords) -> ast.AsyncFunctionDef:

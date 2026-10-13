@@ -48,6 +48,7 @@ from typing import Optional
 
 from lamia.lint.base import BaseLinter, LintRule, LintViolation, LintResult, Severity
 from lamia.lint.find_usage import find_usage
+from lamia.template_syntax import PARAM_RE
 
 _GROWTH_RATIO = 2.0
 
@@ -371,7 +372,6 @@ LONG_PROMPT = LintRule(
 _TOO_MANY_PARAMS_THRESHOLD = 10
 _VERBOSE_PARAM_THRESHOLD = 30
 _LONG_PROMPT_THRESHOLD = 3000
-_PARAM_COUNT_RE = re.compile(r'\{(\w+)(?::[^}]*)?\}')
 _SNAKE_CASE_RE = re.compile(r'^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$')
 _FILENAME_SNAKE_RE = re.compile(r'^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$')
 
@@ -484,7 +484,7 @@ class HuLinter(BaseLinter):
 
         # ── Param analysis ──────────────────────────────────────────────
         unique_params = set(
-            m.group(1) for m in _PARAM_COUNT_RE.finditer(content)
+            m.group(1) for m in PARAM_RE.finditer(content)
             if not m.group(1).startswith("@")
         )
 

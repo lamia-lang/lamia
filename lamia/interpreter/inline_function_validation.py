@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import re
 from typing import Set
 
-_INLINE_DEF_PARAM_RE = re.compile(r"\{(\w+)(?::[^}]*)?\}")
-_INLINE_DEF_FILEREF_RE = re.compile(r"\{@(\w+)\}")
+from lamia.template_syntax import FILE_REFERENCE_VARIABLE_RE, PARAM_RE
 
 
 @dataclass(frozen=True)
@@ -19,9 +17,9 @@ class InlineFunctionIssues:
 def extract_template_placeholders(template: str) -> Set[str]:
     """Extract {param} and {@file_ref} names from template text."""
     refs: Set[str] = set()
-    for match in _INLINE_DEF_PARAM_RE.finditer(template):
+    for match in PARAM_RE.finditer(template):
         refs.add(match.group(1))
-    for match in _INLINE_DEF_FILEREF_RE.finditer(template):
+    for match in FILE_REFERENCE_VARIABLE_RE.finditer(template):
         refs.add(match.group(1))
     return refs
 

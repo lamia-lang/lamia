@@ -1,7 +1,7 @@
 """Command objects for structured communication between parser, engine, and managers."""
 
 from abc import ABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Union, List
 from enum import Enum
 from .command_types import CommandType
@@ -52,9 +52,16 @@ class Command(ABC):
 
 @dataclass
 class LLMCommand(Command):
-    """Command for LLM operations."""
+    """Command for LLM operations.
+
+    *prompt* is sent as is; ``{@...}`` file references are inlined by the
+    facade before it builds the command.  *history* holds the earlier
+    ``{"role": "user" | "assistant", "content": str}`` turns of the
+    conversation that *prompt* continues; it is empty for a single prompt.
+    """
     prompt: str
     target_encoding: Optional[str] = None
+    history: List[Dict[str, str]] = field(default_factory=list)
 
     def __post_init__(self):
         super().__init__(CommandType.LLM)

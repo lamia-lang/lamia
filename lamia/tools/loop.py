@@ -13,8 +13,9 @@ import logging
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Deque, Mapping, Optional, Sequence, TYPE_CHECKING
+from typing import Callable, Deque, Dict, List, Mapping, Optional, Sequence, TYPE_CHECKING
 
+from lamia.interpreter.commands import LLMCommand
 from lamia.tools.definitions import (
     tool_progress_label,
 )
@@ -65,13 +66,14 @@ class ToolLoopResult:
     Attributes:
         result: Result of the final LLM call, with token counts from every
             round accumulated into its tracking context.
-        prompt: The prompt as the loop left it — the original prompt plus
-            every assistant turn and tool result.  Send this, not the
-            original prompt, to ask a follow-up question about the same
-            material.
+        prompt: The last user message the loop sent.
+        history: The user/assistant turns before *prompt*.  Send both as an
+            :class:`LLMCommand`, not the original prompt, to ask a follow-up
+            question about the same material.
     """
     result: "LamiaResult"
     prompt: str
+    history: List[Dict[str, str]]
 
 
 def _process_response(text: str) -> tuple[list[str | dict], bool, str]:
@@ -90,7 +92,6 @@ def _process_response(text: str) -> tuple[list[str | dict], bool, str]:
     return response_blocks, is_malformed, clean_text
 
 
-# TODO: Instead of text-based loop processing use structured user-assistant loops
 async def run_tool_loop(
     lamia: "Lamia",
     prompt: str,
@@ -104,10 +105,10 @@ async def run_tool_loop(
 ) -> ToolLoopResult:
     """Run a text-based tool loop.
 
-    Each round sends the prompt to *lamia*, parses the response for tool-call
-    JSON, runs the requested tools, appends the results to the prompt, and
-    sends it again — until the model answers without calling a tool or
-    *max_rounds* is reached.
+    Each round sends the conversation to *lamia*, parses the response for
+    tool-call JSON, runs the requested tools, and continues the conversation
+    with a user message holding the results — until the model answers without
+    calling a tool or *max_rounds* is reached.
 
     Args:
         lamia: Facade instance the rounds are run through.
@@ -130,10 +131,11 @@ async def run_tool_loop(
             happens, for callers that report progress.
 
     Returns:
-        A :class:`ToolLoopResult` holding the final result and the prompt the
-        loop accumulated.
+        A :class:`ToolLoopResult` holding the final result and the
+        conversation the loop built.
     """
     prompt = get_tools_system_prompt(allowed_tools) + "\n\n" + prompt
+    conversation: List[Dict[str, str]] = []
 
     totals: dict = {}
     model_name = None
@@ -142,7 +144,7 @@ async def run_tool_loop(
 
     for _round in range(max_rounds + 1):
         is_last = _round >= max_rounds
-        result = await lamia.run_async(prompt, _full_result=True)
+        result = await lamia.run_async(LLMCommand(prompt, history=list(conversation)), _full_result=True)
 
         ctx = result.tracking_context
         if ctx and ctx.data_provider_name:
@@ -155,7 +157,8 @@ async def run_tool_loop(
         if not any(isinstance(block, dict) for block in response_blocks): # 0 tool calls
             if is_malformed and not is_last:
                 logger.debug("Malformed tool call detected, sending correction")
-                prompt = _build_correction_prompt(prompt, text)
+                conversation += [{"role": "user", "content": prompt}, {"role": "assistant", "content": text}]
+                prompt = TOOL_FORMAT_CORRECTION
                 continue
             result.result_text = clean_text
             break
@@ -175,10 +178,11 @@ async def run_tool_loop(
             result.result_text = clean_text
             break
 
-        prompt = _build_continuation_prompt(prompt, text, entries)
+        conversation += [{"role": "user", "content": prompt}, {"role": "assistant", "content": text}]
+        prompt = _build_tool_results_message(entries)
 
     _stamp_totals(result, totals, model_name)
-    return ToolLoopResult(result=result, prompt=prompt)
+    return ToolLoopResult(result=result, prompt=prompt, history=conversation)
 
 
 # ── Tool calls ──────────────────────────────────────────────────────────────
@@ -276,30 +280,13 @@ def _stamp_totals(
 
 # ── Prompt building ─────────────────────────────────────────────────────────
 
-def _build_continuation_prompt(
-    current_prompt: str,
-    assistant_text: str,
-    tool_result_entries: list[dict],
-) -> str:
-    """Build next-round prompt by appending assistant text and tool results."""
+def _build_tool_results_message(tool_result_entries: list[dict]) -> str:
+    """Build the user message that hands tool results back to the model."""
     tool_results_json = json.dumps(
         {"tool_results": tool_result_entries},
         ensure_ascii=False,
     )
     return (
-        f"{current_prompt}\n\n"
-        f"Assistant: {assistant_text}\n\n"
         f"Tool results JSON:\n{tool_results_json}\n\n"
         f"Continue your response to the user based on these tool results."
-    )
-
-
-def _build_correction_prompt(
-    current_prompt: str,
-    assistant_text: str,
-) -> str:
-    """Build a correction prompt when the model used the wrong tool-call format."""
-    return (
-        f"{current_prompt}\n\nAssistant: {assistant_text}\n\n"
-        f"System: {TOOL_FORMAT_CORRECTION}"
     )

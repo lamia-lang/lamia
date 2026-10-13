@@ -1,8 +1,9 @@
 """Tests for the .hu file executor (HuCallable)."""
 
 import pytest
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import Mock
 
+from lamia.engine.managers.llm.files_context_manager import files
 from lamia.interpreter.human.parser import HuFunction
 from lamia.interpreter.human.executor import HuCallable
 
@@ -62,14 +63,14 @@ class TestHuCallable:
         c = HuCallable(fn)
         assert c(name="Bob", extra="ignored") == "Hi Bob"
 
-    @patch("lamia.interpreter.human.executor.get_active_files_context")
-    def test_file_context_left_intact_when_files_context_active(self, mock_ctx):
-        """When a FilesContext is active, {@...} is left for LLMManager to resolve."""
-        mock_ctx.return_value = MagicMock()
+    def test_file_reference_inlined_from_active_files_context(self, tmp_path):
+        (tmp_path / "main.py").write_text("print('hi')")
         fn = _make_fn(template="Check {@main.py} for {issue}", params=frozenset({"issue"}))
         c = HuCallable(fn)
-        result = c(issue="bugs")
-        assert "{@main.py}" in result
+        with files(str(tmp_path)):
+            result = c(issue="bugs")
+        assert "{@main.py}" not in result
+        assert "print('hi')" in result
         assert "bugs" in result
 
     def test_literal_braces(self):

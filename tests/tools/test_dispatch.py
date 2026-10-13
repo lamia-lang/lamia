@@ -240,3 +240,15 @@ class TestToolIntegration:
         result = _patch_file("team/worker.hu", "{a}", "{a} {b} {c}", project_dir)
         assert "Patched:" in result
         assert "USAGE WARNING" in result
+
+
+class TestReadFileBinary:
+
+    def test_binary_file_is_refused(self, tmp_path):
+        image = tmp_path / "chart.png"
+        image.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+
+        result, success = execute_tool("read_file", {"path": "chart.png"}, [tmp_path], restrict_to_allowed_dirs=True)
+
+        assert result == f"Error: {image.resolve()} is a binary file; its content is not readable as text"
+        assert success is False

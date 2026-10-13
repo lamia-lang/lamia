@@ -38,8 +38,7 @@ from lamia.actions.trigger import TriggerRejectError, TRIGGER_REJECT_EXIT_CODE
 from lamia.scheduling.registry import record_run, record_run_start, load_job
 from lamia.tools.loop import run_tool_loop, AssistantMessage, ToolCallMessage, ToolResultMessage
 from lamia.tools.definitions import ToolName
-from lamia.engine.managers.llm.files_context_manager import read_file_content
-from lamia.engine.managers.llm.prompt_formatter import format_files
+from lamia.engine.managers.llm.files_context_manager import inline_files
 
 HYBRID_EXTENSIONS = {'.lm'}
 HUMAN_EXTENSIONS = {'.hu'}
@@ -297,14 +296,7 @@ async def json_mode(lamia: Lamia) -> None:
             continue
 
         system_prefix = request.get("system", "")
-        file_paths = request.get("files", [])
-        attached_files = []
-        for fp in file_paths:
-            try:
-                attached_files.append((fp, read_file_content(fp)))
-            except Exception as read_err:
-                logger.warning("Could not read attached file %s: %s", fp, read_err)
-        files_block = format_files(attached_files)
+        files_block = inline_files(request.get("files", []))
 
         raw_messages = request.get("messages", [])
         if raw_messages:

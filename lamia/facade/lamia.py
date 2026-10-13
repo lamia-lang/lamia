@@ -19,8 +19,11 @@ from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.types import BaseType, ExternalOperationRetryConfig
 from lamia.type_converter import create_validator
-from lamia.interpreter.commands import Command
-from lamia.engine.managers.llm.files_context_manager import get_current_source_file
+from lamia.interpreter.commands import Command, LLMCommand
+from lamia.engine.managers.llm.files_context_manager import get_active_files_context, get_current_source_file, inline_file_references_if_available
+from lamia.tools.definitions import FILE_CONTEXT_TOOL_MAX_ROUNDS, FILE_CONTEXT_TOOL_NAMES
+from lamia.tools.file_context import build_file_context_tools_prompt, existing_context_paths
+from lamia.tools.loop import run_tool_loop
 from lamia.validation.base import TrackingContext
 
 from .result_types import LamiaResult
@@ -193,6 +196,19 @@ class Lamia:
             if python_result is not None:
                 return python_result
 
+            if isinstance(parsed_command, LLMCommand):
+                parsed_command.prompt, tool_paths = self._file_tool_paths(parsed_command.prompt)
+                if tool_paths:
+                    return await self._run_with_file_tools(
+                        parsed_command.prompt,
+                        tool_paths,
+                        return_type,
+                        models=models,
+                        _full_result=_full_result,
+                        _target_encoding=_target_encoding,
+                        _function_name=_function_name,
+                    )
+
         if _target_encoding:
             parsed_command.target_encoding = _target_encoding
 
@@ -330,3 +346,65 @@ class Lamia:
             EventLoopManager.shutdown()
         except Exception as e:
             logger.warning(f"Error during Lamia cleanup: {e}")
+
+    @staticmethod
+    def _file_tool_paths(prompt: str) -> Tuple[str, List[Path]]:
+        """Inline *prompt*'s ``{@...}`` references; return it with the paths the model must read through tools.
+
+        No paths are returned when the inlined prompt already holds everything
+        the model may read: outside a ``files()`` context that means no file
+        was cut, inside one that every context path is a file referenced in
+        full.
+        """
+        context = get_active_files_context()
+        if context is None and "{@" not in prompt:
+            return prompt, []
+        inlined = inline_file_references_if_available(prompt)
+        if context is None:
+            return inlined.text, [Path(path) for path in inlined.cut_files]
+        paths = existing_context_paths(context.paths) if context.indexed_files else []
+        referenced = {Path(path).resolve() for path in inlined.files}
+        if not inlined.cut_files and all(path.is_file() and path in referenced for path in paths):
+            return inlined.text, []
+        return inlined.text, paths
+
+    async def _run_with_file_tools(
+        self,
+        prompt: str,
+        paths: List[Path],
+        return_type: Optional[Type[BaseType]],
+        *,
+        models: Optional[List[ModelWithRetries]],
+        _full_result: bool,
+        _target_encoding: Optional[str],
+        _function_name: Optional[str],
+    ) -> Union[Any, LamiaResult]:
+        """Answer *prompt* through a tool loop that can read *paths*.
+
+        The tool rounds run untyped; a requested *return_type* is applied by
+        a final call over the conversation the loop built.
+        """
+        normalized_models = _normalize_models(models)
+        if normalized_models is not None:
+            self._engine.config_provider.override_model_chain_with(normalized_models)
+        try:
+            loop_result = await run_tool_loop(
+                self,
+                build_file_context_tools_prompt(paths) + prompt,
+                allowed_tools=FILE_CONTEXT_TOOL_NAMES,
+                allowed_dirs=paths,
+                restrict_to_allowed_dirs=True,
+                max_rounds=FILE_CONTEXT_TOOL_MAX_ROUNDS,
+            )
+            if return_type is None:
+                return loop_result.result if _full_result else loop_result.result.result_text
+            return await self.run_async(
+                LLMCommand(loop_result.prompt, history=loop_result.history),
+                return_type,
+                _full_result=_full_result,
+                _target_encoding=_target_encoding,
+                _function_name=_function_name,
+            )
+        finally:
+            if normalized_models is not None:
+                self._engine.config_provider.reset_model_chain()

@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any, Set, Tuple, Type
+from typing import List, Optional, Dict, Any, Sequence, Set, Tuple, Type
 from pydantic import BaseModel
 
 from lamia import LLMModel
@@ -12,7 +12,6 @@ from lamia.adapters.retry.factory import RetriableAdapterFactory
 from lamia.errors import MissingAPIKeysError, ExternalOperationError
 from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import LLMCommand
-from .files_context_manager import get_active_files_context, get_current_source_file, resolve_standalone_file_references
 from lamia.validation.validators.file_validators.file_structure.json_structure_validator import JSONStructureValidator
 from lamia.validation.validators.object_validator import ObjectValidator
 from lamia.hooks import POST_LLM
@@ -72,27 +71,11 @@ class LLMManager(Manager):
         Returns:
             ValidationResult containing the generated text and metadata
         """
-        # Extract prompt from LLMCommand
-        prompt = command.prompt
-        
-        # Inject file references if in a files context
-        prompt = self._inject_file_references(prompt)
-
-        # Use the existing validation logic
         return await self._execute_with_retries(
-            prompt=prompt,
-            validator=validator
+            prompt=command.prompt,
+            validator=validator,
+            history=command.history,
         )
-
-    def _inject_file_references(self, prompt: str) -> str:
-        """Inject file references from active files context or standalone resolution."""
-        context = get_active_files_context()
-        if context:
-            return context.inject_file_references(prompt)
-        source_file = get_current_source_file()
-        if source_file:
-            return resolve_standalone_file_references(prompt, source_file)
-        return prompt
     
     def _get_needed_providers(self) -> Set[str]:
         """Get the set of providers that are actually needed based on config."""
@@ -220,12 +203,14 @@ class LLMManager(Manager):
         self,
         prompt: str,
         validator: Optional[BaseValidator] = None,
+        history: Sequence[Dict[str, str]] = (),
     ) -> ValidationResult:
         """Execute the prompt with retry and fallback logic.
         
         Args:
             prompt: The prompt to send
             validator: Optional validator to check the response
+            history: Earlier conversation turns *prompt* continues
             
         Returns:
             ValidationResult from a successful attempt
@@ -245,7 +230,8 @@ class LLMManager(Manager):
             )
 
         failed_models = []
-        
+        failed_attempts: List[Tuple[str, ValidationResult]] = []
+
         for model_and_retries in model_chain:
             model = model_and_retries.model
 
@@ -289,6 +275,8 @@ class LLMManager(Manager):
                 prompt=current_prompt,
                 validator=validator,
                 max_attempts=model_and_retries.retries,
+                history=history,
+                failed_attempts=failed_attempts,
             )
             
             if result is not None:
@@ -343,31 +331,50 @@ class LLMManager(Manager):
         model: LLMModel,
         prompt: str,
         validator: Optional[BaseValidator] = None,
-        max_attempts: int = 1,  
+        max_attempts: int = 1,
+        history: Sequence[Dict[str, str]] = (),
+        failed_attempts: Optional[List[Tuple[str, ValidationResult]]] = None,
     ) -> Optional[ValidationResult]:
         """
         Try to generate and validate a response with retries for this model.
-        
+
+        Args:
+            prompt: The prompt rendered for this model.
+            failed_attempts: ``(response, validation_result)`` of earlier failed attempts, shared across the model chain and appended to on each validation failure. Each call renders them for this model as user/assistant turns after *history* and *prompt*.
+
         Returns:
             ValidationResult if successful, None if all retries exhausted
             
         Raises:
             Other exceptions: Programming errors bubble up immediately
         """
+        if failed_attempts is None:
+            failed_attempts = []
         attempts = 0
-        current_prompt = prompt
         while attempts < max_attempts:
             attempts += 1
+
+            turns = [{"role": "user", "content": prompt}]
+            for response_text, failed_result in failed_attempts:
+                turns.append({"role": "assistant", "content": response_text})
+                turns.append({"role": "user", "content": self._build_retry_prompt(failed_result)})
             
             logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
-            logger.debug(f"Current prompt: {current_prompt}")
+            logger.debug(f"Current prompt: {turns[-1]['content']}")
             response_model = self._extract_response_model(validator)
             try:
-                response = await adapter.generate(
-                    current_prompt,
-                    model=model,
-                    response_model=response_model,
-                )
+                if history or failed_attempts:
+                    response = await adapter.generate_messages(
+                        [*history, *turns],
+                        model=model,
+                        response_model=response_model,
+                    )
+                else:
+                    response = await adapter.generate(
+                        prompt,
+                        model=model,
+                        response_model=response_model,
+                    )
             except ExternalOperationError as e:
                 logger.warning(
                     f"Model '{model.name}' API call failed: {e}. "
@@ -416,16 +423,7 @@ class LLMManager(Manager):
             )
             logger.debug(f"[Lamia][FailedResponse][Attempt {attempts}] {response.text[:500]}")
 
-            # Construct retry prompt based on context memory
-            # TODO: Maybe we need to send whole chat history, for telling about all errors that the model made?
-            if adapter.has_context_memory:
-                # Only send the validation issue and hint
-                retry_message = f"The previous response had an issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again."
-                current_prompt = retry_message
-            else:
-                # Resend the original prompt plus the validation issue and hint
-                retry_message = f"Previous response failed validation. Issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again.\n\nOriginal prompt:\n{prompt}"
-                current_prompt = retry_message
+            failed_attempts.append((response.text, validation_result))
 
         # All retries exhausted for this model
         return None
@@ -435,5 +433,10 @@ class LLMManager(Manager):
         for adapter in self._adapter_cache.values():
             await adapter.close()
         self._adapter_cache.clear()
+
+    @staticmethod
+    def _build_retry_prompt(validation_result: ValidationResult) -> str:
+        """Return the user message asking the model to fix a failed response."""
+        return f"Previous response failed validation. Issue: {validation_result.error_message}. Hint: {validation_result.hint}. Please try again."
 
 
