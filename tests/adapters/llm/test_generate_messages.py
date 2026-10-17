@@ -9,6 +9,7 @@ from lamia.adapters.llm.anthropic_adapter import AnthropicAdapter
 from lamia.adapters.llm.base import BaseLLMAdapter, LLMResponse
 from lamia.adapters.llm.lamia_adapter import LamiaAdapter
 from lamia.adapters.llm.openai_adapter import OpenAIAdapter
+from lamia.adapters.llm.openai_compatible_adapter import OpenAICompatibleAdapter
 from lamia.adapters.llm.openrouter_adapter import OpenRouterAdapter
 from lamia.adapters.retry.adapter_wrappers.retrying_llm_adapter import RetryingLLMAdapter
 
@@ -24,7 +25,7 @@ JOINED_CONVERSATION = (
 )
 
 
-class ZeroConfigAdapter(BaseLLMAdapter):
+class ZeroConfigAdapter(OpenAICompatibleAdapter):
     API_URL = "https://api.example.com/v1/chat/completions"
 
     @classmethod
@@ -35,13 +36,21 @@ class ZeroConfigAdapter(BaseLLMAdapter):
     def is_remote(cls) -> bool:
         return True
 
-    async def close(self) -> None:
-        pass
 
-
-class CustomGenerateAdapter(ZeroConfigAdapter):
+class CustomGenerateAdapter(BaseLLMAdapter):
     def __init__(self):
         self.prompts = []
+
+    @classmethod
+    def name(cls) -> str:
+        return "custom"
+
+    @classmethod
+    def is_remote(cls) -> bool:
+        return True
+
+    async def close(self) -> None:
+        pass
 
     async def generate(self, prompt, model, response_model=None):
         self.prompts.append(prompt)
@@ -52,15 +61,15 @@ def _chat_completion(text: str) -> dict:
     return {"choices": [{"message": {"content": text}}], "usage": {}}
 
 
-async def test_default_generate_messages_sends_joined_prompt():
+async def test_openai_compatible_adapter_sends_native_messages():
     adapter = ZeroConfigAdapter()
-    adapter._get_or_create_session = AsyncMock()
     adapter._post_json = AsyncMock(return_value=_chat_completion("done"))
 
     response = await adapter.generate_messages(CONVERSATION, LLMModel(name="zero-config:m"))
 
-    payload = adapter._post_json.call_args.args[2]
-    assert payload["messages"] == [{"role": "user", "content": JOINED_CONVERSATION}]
+    url, payload = adapter._post_json.call_args.args
+    assert url == ZeroConfigAdapter.API_URL
+    assert payload["messages"] == CONVERSATION
     assert response.text == "done"
 
 
@@ -136,9 +145,13 @@ def _lamia_adapter():
     return _session_adapter(LamiaAdapter(api_key="key"), {"choices": [{"message": {"content": "ok"}}], "usage": {}})
 
 
+def _zero_config_adapter():
+    return _session_adapter(ZeroConfigAdapter(), {"choices": [{"message": {"content": "ok"}}], "usage": {}})
+
+
 @pytest.mark.parametrize(
     "make_adapter",
-    [_openai_adapter, _anthropic_adapter, _openrouter_adapter, _lamia_adapter],
+    [_openai_adapter, _anthropic_adapter, _openrouter_adapter, _lamia_adapter, _zero_config_adapter],
 )
 async def test_chat_adapters_send_prompt_and_conversation_as_messages(make_adapter):
     adapter, sent_messages = make_adapter()

@@ -80,7 +80,21 @@ class ProviderRegistry:
                         spec.loader.exec_module(module)
                         
                         for name, obj in inspect.getmembers(module, inspect.isclass):
-                            if (issubclass(obj, BaseLLMAdapter) and 
+                            if obj.__module__ != module.__name__:
+                                continue
+                            if (issubclass(obj, BaseLLMAdapter) and
+                                    inspect.isabstract(obj)):
+                                if ("generate" in obj.__abstractmethods__ and
+                                        hasattr(obj, "API_URL")):
+                                    raise RuntimeError(
+                                        f"Adapter '{obj.__name__}' in {file_path} sets API_URL "
+                                        f"but does not implement generate().\n"
+                                        f"Derive it from OpenAICompatibleAdapter "
+                                        f"(lamia.adapters.llm.openai_compatible_adapter) instead "
+                                        f"of BaseLLMAdapter."
+                                    )
+                                continue
+                            if (issubclass(obj, BaseLLMAdapter) and
                                 obj != BaseLLMAdapter and
                                 hasattr(obj, 'name')):
                                 try:

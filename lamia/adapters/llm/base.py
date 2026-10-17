@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Type, get_args
-import asyncio
 import copy
 import re
-import aiohttp
 from pydantic import BaseModel
 from pydantic.json_schema import GenerateJsonSchema
 from lamia import LLMModel
@@ -237,7 +235,7 @@ class LLMResponse:
 class BaseLLMAdapter(ABC):
     """Base interface for all LLM adapters."""
 
-    # ─── Abstract identity methods ───────────────────────────────────────
+    # ─── Abstract methods ────────────────────────────────────────────────
 
     @classmethod
     @abstractmethod
@@ -256,6 +254,20 @@ class BaseLLMAdapter(ABC):
         """Cleanup any resources used by the adapter."""
         pass
 
+    @abstractmethod
+    async def generate(
+        self,
+        prompt: str,
+        model: LLMModel,
+        response_model: Optional[Type[BaseModel]] = None,
+    ) -> LLMResponse:
+        """Generate a response to a single prompt.
+
+        APIs that follow the OpenAI chat completions convention can derive
+        from ``OpenAICompatibleAdapter`` instead of implementing this.
+        """
+        pass
+
     # ─── Public overridable methods ──────────────────────────────────────
 
     @classmethod
@@ -264,44 +276,7 @@ class BaseLLMAdapter(ABC):
         return [f"{cls.name().upper()}_API_KEY"]
 
     async def async_initialize(self) -> None:
-        """Initialize async resources.
-
-        Default creates an HTTP session for adapters using the default
-        generate() path.  Override for custom startup behavior.
-        """
-        if not hasattr(self, "API_URL"):
-            return
-        session = getattr(self, "session", None)
-        if session is None:
-            self.session = aiohttp.ClientSession(headers=self._request_headers())
-
-    async def generate(
-        self,
-        prompt: str,
-        model: LLMModel,
-        response_model: Optional[Type[BaseModel]] = None,
-    ) -> LLMResponse:
-        """Generate a response from the LLM.
-
-        Default implementation for OpenAI-compatible HTTP APIs.  Posts a
-        chat completions request to API_URL and returns the parsed response.
-        Error classification (429/4xx/5xx) is handled automatically.
-
-        Override this method entirely for non-OpenAI APIs or SDK adapters.
-        """
-        session = await self._get_or_create_session()
-        url = self._resolve_api_url()
-        payload = {
-            "model": model.get_model_name_without_provider(),
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        data = await self._post_json(session, url, payload)
-        return LLMResponse(
-            text=data["choices"][0]["message"]["content"],
-            raw_response=data,
-            usage=data.get("usage", {}),
-            model=model.name,
-        )
+        """Initialize async resources. Override for custom startup behavior."""
 
     async def generate_messages(
         self,
@@ -343,44 +318,6 @@ class BaseLLMAdapter(ABC):
             else:
                 parts.append(message["content"])
         return "\n\n".join(parts)
-
-    async def _get_or_create_session(self) -> "aiohttp.ClientSession":
-        """Return existing HTTP session or create one lazily."""
-        session = getattr(self, "session", None)
-        if session is None:
-            session = aiohttp.ClientSession(headers=self._request_headers())
-            self.session = session
-        return session
-
-    def _resolve_api_url(self) -> str:
-        """Resolve API endpoint URL."""
-        url = getattr(self, "API_URL", None)
-        if not isinstance(url, str) or not url.strip():
-            raise RuntimeError(
-                f"{self.__class__.__name__} must define non-empty API_URL "
-                "or override generate()."
-            )
-        return url
-
-    def _request_headers(self) -> dict:
-        """Default HTTP headers. Adds Bearer auth when api_key is set."""
-        headers = {"Content-Type": "application/json"}
-        api_key = getattr(self, "api_key", None)
-        if isinstance(api_key, str) and api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-        return headers
-
-    async def _post_json(self, session: "aiohttp.ClientSession", url: str, payload: dict) -> dict:
-        """POST JSON and classify HTTP errors into ExternalOperationError."""
-        prefix = f"{self.name()} API error"
-        try:
-            async with session.post(url, json=payload) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise_for_status(response.status, error_text, prefix)
-                return await response.json()
-        except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ConnectionError) as e:
-            raise_for_connection_error(e, f"Failed to communicate with {self.name()} API")
 
     # ─── Context manager protocol ───────────────────────────────────────
 

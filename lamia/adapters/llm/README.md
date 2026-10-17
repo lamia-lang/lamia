@@ -7,25 +7,32 @@ Adapters provide a unified interface for both remote (API-based) and local
 
 ```
 BaseLLMAdapter (base.py)
-├── generate()              — default: OpenAI chat completions POST to API_URL
-├── _post_json()            — internal: HTTP + error classification
-├── _get_or_create_session()— internal: lazy session with Bearer auth
-├── _resolve_api_url()      — internal: reads API_URL attribute
-├── _request_headers()      — internal: Content-Type + Bearer from self.api_key
+├── generate()              — abstract
+├── generate_messages()     — default: joins turns into one prompt for generate()
 └── close()                 — abstract
+
+OpenAICompatibleAdapter (openai_compatible_adapter.py)
+├── generate()              — delegates to generate_messages() with one user turn
+├── generate_messages()     — POSTs native role-tagged messages to API_URL
+├── close()                 — closes the HTTP session
+├── _build_payload()        — request body: model, messages, sampling fields set on the model
+├── _parse_response()       — chat completions body → LLMResponse
+├── _request_headers()      — Content-Type + Bearer from self.api_key
+└── _post_json()            — HTTP + error classification
 ```
 
-Built-in adapters (OpenAI, Anthropic) override `generate()` entirely because
-they use SDKs or non-standard response formats.
+`OpenRouterAdapter` derives from `OpenAICompatibleAdapter`. `OpenAIAdapter`, `AnthropicAdapter`, `LamiaAdapter` and the local adapters derive from `BaseLLMAdapter` and implement their own requests.
 
 ---
 
 ## Implementing a New Adapter
 
-### Path 1: OpenAI-compatible API (no generate override)
+### Path 1: OpenAI-compatible API (derive from OpenAICompatibleAdapter)
 
 ```python
-class MyAdapter(BaseLLMAdapter):
+from lamia.adapters.llm.openai_compatible_adapter import OpenAICompatibleAdapter
+
+class MyAdapter(OpenAICompatibleAdapter):
     API_URL = "https://api.example.com/v1/chat/completions"
 
     def __init__(self, api_key: str):
@@ -43,12 +50,9 @@ class MyAdapter(BaseLLMAdapter):
     @classmethod
     def is_remote(cls) -> bool:
         return True
-
-    async def close(self) -> None:
-        if self.session:
-            await self.session.close()
-            self.session = None
 ```
+
+Override `_build_payload()`, `_parse_response()`, `_request_headers()` or `REQUEST_TIMEOUT_SECONDS` to customize. A `BaseLLMAdapter` subclass that sets `API_URL` without implementing `generate()` fails to load with an error pointing to `OpenAICompatibleAdapter`.
 
 ### Path 2: Custom HTTP (override generate)
 
@@ -91,20 +95,20 @@ class MyAdapter(BaseLLMAdapter):
 
 | Function | When to use |
 |---|---|
-| (automatic) | Default `generate()` — handled by `_post_json` |
+| (automatic) | `OpenAICompatibleAdapter` subclasses — handled by `_post_json` |
 | `raise_for_status(status, text, prefix)` | Custom HTTP with status code |
 | `raise_for_connection_error(exc, prefix)` | Network/transport failures |
 | `raise_for_sdk_error(exc, prefix)` | SDK exceptions with status attributes |
 
-All are public module-level functions in `base.py`.
+The three functions are public module-level functions in `base.py`.
 
 ---
 
 ## Contract Checking
 
-`contract_checker.py` validates custom adapters at load time. Checks method
-existence, signatures, and return types. If the adapter overrides `generate()`
-without `API_URL`, logs an advisory about error handling.
+`contract_checker.py` validates custom adapters at load time. Checks method existence, signatures, and return types. If the adapter overrides `generate()` without `API_URL`, logs an advisory about error handling.
+
+User adapter discovery registers only concrete adapter classes defined in the scanned file; imported and abstract classes are skipped.
 
 ---
 
@@ -113,4 +117,4 @@ without `API_URL`, logs an advisory about error handling.
 - Use `LLMResponse` dataclass for all outputs.
 - Read API keys from environment variables (never hardcode).
 - For local adapters, provide clear error messages if the engine is not running.
-- See OpenAI/Anthropic adapters for real-world examples of the custom-generate path.
+- See OpenAI/Anthropic adapters for real-world examples of the custom-generate path, and `OpenRouterAdapter` for an `OpenAICompatibleAdapter` subclass.
