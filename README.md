@@ -60,19 +60,17 @@ Lamia can be used as a Python library as well.
 ```python
 from lamia import Lamia
 
-lamia = Lamia()
-
-ai_response = lamia.run(
-    "Create a login form",
-    "openai:gpt4o",
-    "anthropic:claude",
-    return_type=HTML[LoginForm]
+lamia = Lamia(
+    ("anthropic:claude-haiku-5-5", 2),  # up to 2 attempts
+    "anthropic:claude-sonnet-5-5",      # stronger fallback, 1 attempt
 )
+
+ai_response = lamia.run("Create a login form", HTML[LoginForm])
 ```
 
 ### Using Lamia with a Claude Pro or Max Subscription
 
-Lamia supports OpenAI, Anthropic, and Ollama out of the box. You can add other providers by creating a Python adapter that extends `BaseLLMAdapter` and placing it in the `extensions/adapters/` directory of your project.
+Lamia supports OpenAI, Anthropic, and Ollama out of the box. You can add other providers by creating a Python adapter that extends `OpenAICompatibleAdapter` (for OpenAI-compatible APIs) or `BaseLLMAdapter` and placing it in the `extensions/adapters/` directory of your project.
 
 A good example is running Lamia on your Claude Pro or Max subscription instead of pay-per-token API billing: see the [ready-to-use Claude subscription adapter](https://lamia-lang.github.io/lamia/user-guide/custom-llm-adapters/#claude-subscription). The [Custom LLM Adapters](https://lamia-lang.github.io/lamia/user-guide/custom-llm-adapters/) guide covers the full adapter API.
 
