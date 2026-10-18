@@ -77,6 +77,7 @@ class TestRoundTrip:
     @pytest.mark.parametrize(
         "value,return_type",
         [
+            (ROWS, CSV[Row, True]),
             (DOC, JSON[Doc, True]),
             (DOC, YAML[Doc, True]),
             (DOC, XML[Doc, True]),

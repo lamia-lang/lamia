@@ -48,8 +48,8 @@ async def test_csv_semicolons_inside_cell_values():
     csv_with_semicolons = 'title,value\n"status;changes;review",123\n'
     result = await validator.validate(csv_with_semicolons)
     assert result.is_valid is True
-    assert result.typed_result.title == "status;changes;review"
-    assert result.typed_result.value == 123
+    assert result.typed_result[0].title == "status;changes;review"
+    assert result.typed_result[0].value == 123
 
 # Dup headers are currently not supported by CSVStructureValidator
 @pytest.mark.asyncio
@@ -235,8 +235,11 @@ async def test_csv_all_rows_valid_passes():
     validator = CSVStructureValidator(model=SimpleModel, strict=True, generate_hints=True)
     result = await validator.validate("title,value\nAlpha,1\nBeta,2\nGamma,3")
     assert result.is_valid
-    assert result.typed_result.title == "Alpha"
-    assert result.typed_result.value == 1
+    assert result.typed_result == [
+        SimpleModel(title="Alpha", value=1),
+        SimpleModel(title="Beta", value=2),
+        SimpleModel(title="Gamma", value=3),
+    ]
 
 
 def test_csv_structure_validator_accepts_str_enum():
@@ -322,8 +325,8 @@ async def test_csv_enum_validation_accepts_valid_value():
     validator = CSVStructureValidator(model=TicketModel, strict=True, generate_hints=True)
     result = await validator.validate("title,priority\nBug fix,high")
     assert result.is_valid
-    assert result.typed_result.title == "Bug fix"
-    assert result.typed_result.priority == Priority.HIGH
+    assert result.typed_result[0].title == "Bug fix"
+    assert result.typed_result[0].priority == Priority.HIGH
 
 
 def test_csv_duplicate_header_error_message_not_file_scoped_sync():

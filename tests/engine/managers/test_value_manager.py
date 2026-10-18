@@ -33,7 +33,7 @@ class TestValueManager:
 
         assert result.is_valid
         assert result.raw_text.splitlines() == ["name,qty", "a,1"]
-        assert result.typed_result == Row(name="a", qty=1)
+        assert result.typed_result == [Row(name="a", qty=1)]
         assert result.execution_context.command_type == CommandType.VALUE
 
     @pytest.mark.asyncio

@@ -39,10 +39,11 @@ async def test_file_structure_validator_primitives_should_be_valid_strings(stric
 
     validator = validator_class(model=ModelWithPrimitiveTypesAsStrings, strict=strict)  
     result = await validator.validate(file_content)
-    assert result.typed_result.title == "Test"
-    assert result.typed_result.myboolen.lower() == "true"
-    assert result.typed_result.myint == "123"
-    assert result.typed_result.myfloat == "123.45"
+    typed = result.typed_result[0] if validator_class is CSVStructureValidator else result.typed_result
+    assert typed.title == "Test"
+    assert typed.myboolen.lower() == "true"
+    assert typed.myint == "123"
+    assert typed.myfloat == "123.45"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("strict", [True, False])

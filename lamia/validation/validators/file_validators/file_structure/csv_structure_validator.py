@@ -440,7 +440,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         header, rows = tree
         model_fields = self._get_model_fields()
         errors = []
-        values = {}
+        row_values = []
         is_valid = True
         info_loss = {}
         
@@ -500,6 +500,8 @@ class CSVStructureValidator(DocumentStructureValidator):
             is_valid = False
         else:
             for row_idx, row in enumerate(rows, start=1):
+                values = {}
+                row_values.append(values)
                 for field, expected_type, is_model_field in all_fields_to_validate:
                     value = row.get(field)
                     if value is None or (isinstance(value, str) and value.strip() == ""):
@@ -512,39 +514,23 @@ class CSVStructureValidator(DocumentStructureValidator):
                         elif not is_model_field:
                             errors.append(f"Row {row_idx} is missing required field '{field}' from __ordered_fields__")
                             is_valid = False
-                        if row_idx == 1:
-                            values[field] = None
+                        values[field] = None
                         continue
 
                     match_result = self.type_matcher.validate_and_convert(value, expected_type)
                     if not match_result.is_valid:
                         errors.append(f"Row {row_idx}, field '{field}': {match_result.error}")
                         is_valid = False
-                        if row_idx == 1:
-                            values[field] = None
+                        values[field] = None
                     else:
-                        if row_idx == 1:
-                            values[field] = match_result.value
-                            if match_result.info_loss:
-                                info_loss[field] = match_result.info_loss
+                        values[field] = match_result.value
+                        if match_result.info_loss:
+                            info_loss.setdefault(field, match_result.info_loss)
                         
-        model_instance = None
+        model_instances = None
         if is_valid:
             try:
-                if isinstance(model, (dict, OrderedDict)):
-                    # For OrderedDict, return the OrderedDict with validated values
-                    model_instance = OrderedDict((field, values[field]) for field in model_fields)
-                else:
-                    # For Pydantic models, only pass fields that exist in the static model
-                    model_kwargs = {k: v for k, v in values.items() if k in model.model_fields}
-                    model_instance = model(**model_kwargs)
-                    
-                    # Add ordered fields as dynamic attributes
-                    if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
-                        for field_name in model.__ordered_fields__.keys():
-                            if field_name in values and not hasattr(model_instance, field_name):
-                                # Use __dict__ to bypass Pydantic's field validation
-                                model_instance.__dict__[field_name] = values[field_name]
+                model_instances = [self._build_row_instance(model, model_fields, values) for values in row_values]
             except Exception as e:
                 errors.append(f"Model fill error: {e}")
                 is_valid = False
@@ -553,7 +539,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         return ValidationResult(
             is_valid=is_valid,
             validated_text=self.get_subtree_string(tree),
-            typed_result=model_instance,
+            typed_result=model_instances,
             error_message=error_message,
             info_loss=info_loss if info_loss else None
         )
@@ -603,5 +589,15 @@ class CSVStructureValidator(DocumentStructureValidator):
                 lines.append(f'{prefix}{field}: {ft.__name__}')
         return lines
 
-
-
+    def _build_row_instance(self, model, model_fields, values):
+        if isinstance(model, (dict, OrderedDict)):
+            return OrderedDict((field, values[field]) for field in model_fields)
+        # For Pydantic models, only pass fields that exist in the static model
+        instance = model(**{k: v for k, v in values.items() if k in model.model_fields})
+        # Add ordered fields as dynamic attributes
+        if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
+            for field_name in model.__ordered_fields__.keys():
+                if field_name in values and not hasattr(instance, field_name):
+                    # Use __dict__ to bypass Pydantic's field validation
+                    instance.__dict__[field_name] = values[field_name]
+        return instance
