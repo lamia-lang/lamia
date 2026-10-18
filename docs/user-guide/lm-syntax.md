@@ -19,7 +19,7 @@ def generate_story():
 def read_config() -> JSON:
     "./config.json"
 
-# Web request — URLs trigger HTTP requests
+# Web request — URLs are opened in the browser
 def fetch_data() -> JSON:
     "https://api.example.com/data"
 ```
@@ -57,7 +57,7 @@ def plain_text() -> TEXT:
     "Write a summary"   # No validation, just extraction
 ```
 
-Available types: `HTML`, `JSON`, `YAML`, `XML`, `Markdown`, `CSV`, `TEXT`
+Available types: `HTML`, `JSON`, `YAML`, `XML`, `Markdown`, `CSV`, `TEXT`. For more detailed examples, see [Validation](validation.md).
 
 ## Simplified Syntax
 
