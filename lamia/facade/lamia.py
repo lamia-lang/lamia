@@ -17,9 +17,9 @@ from lamia.env_loader import load_env_files
 from lamia.engine.engine import LamiaEngine
 from lamia import LLMModel
 from lamia._internal_types.model_retry import ModelWithRetries
-from lamia.types import BaseType, ExternalOperationRetryConfig
+from lamia.types import BaseType, ExternalOperationRetryConfig, SerializableValue
 from lamia.type_converter import create_validator
-from lamia.interpreter.commands import Command, LLMCommand
+from lamia.interpreter.commands import Command, LLMCommand, ValueCommand
 from lamia.engine.managers.llm.files_context_manager import get_active_files_context, get_current_source_file, inline_file_references_if_available
 from lamia.tools.definitions import FILE_CONTEXT_TOOL_MAX_ROUNDS, FILE_CONTEXT_TOOL_NAMES
 from lamia.tools.file_context import build_file_context_tools_prompt, existing_context_paths
@@ -148,7 +148,7 @@ class Lamia:
 
     async def run_async(
         self,
-        command: Union[str, Command], 
+        command: Union[str, Command, SerializableValue], 
         return_type: Optional[Type[BaseType]] = None,
         *,
         models: Optional[List[ModelWithRetries]] = None,
@@ -161,7 +161,7 @@ class Lamia:
         Generate a response, trying Python code first, then LLM.
         
         Args:
-            command: The command to execute (string or Command object)
+            command: A prompt string, a Command, or a value to serialize to *return_type*
             models: The models to use, if not provided, the default models will be used
             return_type: The expected return type for validation (optional)
             _append_context: Existing file content to prepend as context (used by File append)
@@ -187,6 +187,10 @@ class Lamia:
         # Handle Command objects vs strings differently
         if isinstance(command, Command):
             parsed_command = command
+        elif isinstance(command, SerializableValue):
+            parsed_command = ValueCommand(command, return_type)
+        elif not isinstance(command, str):
+            raise TypeError(f"Unsupported command type: {type(command).__name__}")
         else:
             local_path = _resolve_local_file(command)
             if local_path is not None:
@@ -284,7 +288,7 @@ class Lamia:
 
     def run(
         self,
-        command: Union[str, Command], 
+        command: Union[str, Command, SerializableValue], 
         return_type: Optional[Type[BaseType]] = None,
         *,
         models: Optional[List[ModelWithRetries]] = None,
@@ -297,7 +301,7 @@ class Lamia:
         Run a command synchronously.
         
         Args:
-            command: The command to execute
+            command: A prompt string, a Command, or a value to serialize to *return_type*
             models: The models to use, if not provided, the default models will be used
             return_type: The expected return type for validation (optional)
             _full_result: If True, return LamiaResult with both raw text and typed result

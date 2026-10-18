@@ -282,6 +282,20 @@ data = lamia.run("List users", return_type=JSON[UserModel])
 rows = lamia.run("Generate sales data", return_type=CSV[SalesRow])
 ```
 
+The same call turns your own data into a validated document, no LLM involved:
+
+```python
+# Plain Python
+buffer = io.StringIO()
+writer = csv.DictWriter(buffer, fieldnames=list(SalesRow.model_fields))
+writer.writeheader()
+writer.writerows(row.model_dump() for row in sales_rows)
+csv_text = buffer.getvalue()
+
+# Lamia
+csv_text = lamia.run(sales_rows, return_type=CSV[SalesRow], _full_result=True).result_text
+```
+
 Additional public types:
 
 ```python

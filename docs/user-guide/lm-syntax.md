@@ -89,6 +89,9 @@ But if we are not interested in catching the values and we want to save the exec
 "Create a login form" -> File(HTML, "login.html")
 
 "Write a summary" -> File(TEXT, "summary.txt")
+
+rows = [Row(name="apple", qty=3), Row(name="pear", qty=5)]
+rows -> File(CSV[Row], "rows.csv")
 ```
 
 ### Model Selection

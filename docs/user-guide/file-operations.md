@@ -218,7 +218,7 @@ Lamia has three ways to work with files, each for a different purpose:
 | Mechanism | Purpose | Example |
 |-----------|---------|---------|
 | `file.glob/exists/read/write/append` | Direct filesystem I/O | `file.write("out.txt", data)` |
-| `-> File(...)` | LLM-generated content saved to disk | `def report() -> File(HTML, "report.html")` |
+| `-> File(...)` | Any result saved to disk, validated against its type | `def report() -> File(HTML, "report.html")` |
 | `with files(...)` | Inject file content into LLM prompts | `{@resume.pdf}` |
 
 ### When to use `file.*`
@@ -235,11 +235,17 @@ file.write("./queue.txt", '\n'.join(lines) + '\n')
 
 ### When to use `-> File(...)`
 
-Use `-> File(Type, path)` when you want the LLM to **generate** content and save it directly to a file with optional type validation.
+Use `-> File(Type, path)` to save a result directly to a file, validated against `Type`.
 
 ```python
 def generate_report() -> File(HTML, "report.html"):
     "Create a quarterly sales report"
+```
+
+A Pydantic model, dict or list on the left side is converted to the target format and validated instead of being sent to the LLM:
+
+```python
+rows -> File(CSV[SalesRow], "sales.csv", append=True)
 ```
 
 ### When to use `with files(...)`

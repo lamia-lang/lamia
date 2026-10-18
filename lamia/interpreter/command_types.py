@@ -8,3 +8,4 @@ class CommandType(Enum):
     LLM = "llm"
     FILESYSTEM = "fs"
     WEB = "web"
+    VALUE = "value"
