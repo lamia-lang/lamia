@@ -351,7 +351,7 @@ class SingleColumnModel(BaseModel):
     "csv_text",
     [
         "name\nx\ny\n",
-        "Here are the rows:\n```csv\nname\nx\ny\n```",
+        "```csv\nname\nx\ny\n```",
     ],
 )
 @pytest.mark.asyncio
@@ -367,3 +367,76 @@ async def test_csv_single_column_model_rejects_prose():
     validator = CSVStructureValidator(model=SingleColumnModel, strict=False)
     result = await validator.validate("Just some prose.\nAnother line.")
     assert not result.is_valid
+
+
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.asyncio
+async def test_csv_tags_allow_single_column_without_model(strict):
+    validator = CSVStructureValidator(strict=strict, generate_hints=True)
+    result = await validator.validate("<csv>\nname\nx\ny\n</csv>")
+    assert result.is_valid, result.error_message
+    assert result.typed_result == (["name"], [{"name": "x"}, {"name": "y"}])
+    assert result.validated_text == "name\nx\ny"
+
+
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.asyncio
+async def test_csv_tags_text_outside_ignored(strict):
+    validator = CSVStructureValidator(model=SingleColumnModel, strict=strict, generate_hints=True)
+    result = await validator.validate("Here you go:\n<csv>\nname\nx\n</csv>\nHope it helps!")
+    assert result.is_valid, result.error_message
+    assert result.typed_result == [SingleColumnModel(name="x")]
+
+
+@pytest.mark.asyncio
+async def test_csv_tags_inside_markdown_fence():
+    validator = CSVStructureValidator(strict=True, generate_hints=True)
+    result = await validator.validate("```\n<csv>\nname\nx\n</csv>\n```")
+    assert result.is_valid, result.error_message
+    assert result.typed_result == (["name"], [{"name": "x"}])
+
+
+@pytest.mark.asyncio
+async def test_csv_tags_without_closing_tag():
+    validator = CSVStructureValidator(strict=False, generate_hints=True)
+    result = await validator.validate("<csv>\nname,qty\nx,1\n")
+    assert result.is_valid, result.error_message
+    assert result.typed_result == (["name", "qty"], [{"name": "x", "qty": "1"}])
+
+
+@pytest.mark.asyncio
+async def test_csv_empty_tags_rejected():
+    validator = CSVStructureValidator(strict=False, generate_hints=True)
+    result = await validator.validate("<csv></csv>")
+    assert not result.is_valid
+
+
+@pytest.mark.parametrize(
+    "csv_text",
+    [
+        "name;note\nx;a,b\ny;c,d\n",
+        "a,b,c\nd\ne,f\n",
+        "Just prose.\nMore, prose here.",
+    ],
+)
+@pytest.mark.asyncio
+async def test_csv_inconsistent_columns_rejected(csv_text):
+    validator = CSVStructureValidator(strict=False)
+    result = await validator.validate(csv_text)
+    assert not result.is_valid
+
+
+@pytest.mark.asyncio
+async def test_csv_single_column_with_quoted_comma():
+    validator = CSVStructureValidator(strict=True)
+    result = await validator.validate('name\n"a, b"\nc\n')
+    assert result.is_valid, result.error_message
+    assert result.typed_result == (["name"], [{"name": "a, b"}, {"name": "c"}])
+
+
+@pytest.mark.asyncio
+async def test_csv_single_column_with_model_text_before_fence_permissive():
+    validator = CSVStructureValidator(model=SingleColumnModel, strict=False)
+    result = await validator.validate("Here are the rows:\n```csv\nname\nx\ny\n```")
+    assert result.is_valid, result.error_message
+    assert result.typed_result == [SingleColumnModel(name="x"), SingleColumnModel(name="y")]

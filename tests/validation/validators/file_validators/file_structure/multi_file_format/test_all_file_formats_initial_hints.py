@@ -246,7 +246,7 @@ INITIAL_HINTS = {
     "json": "Please return only valid json, with no explanation or extra text.",
     "xml": "Please return only valid XML, with no explanation or extra text.",
     "yaml": "Please return only valid yaml, with no explanation or extra text.",
-    "csv": "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.",
+    "csv": "Put the CSV table between <csv> and </csv> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.",
     "markdown": "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```) and ensure it is well-formed.",
     "html_structure": { 
         'strict': '''
@@ -348,7 +348,7 @@ mybool: bool
 Expected target pydantic type in JSON format:
 {"properties":{"mystr":{"title":"Mystr","type":"string"},"myint":{"title":"Myint","type":"integer"},"myfloat":{"title":"Myfloat","type":"number"},"mybool":{"title":"Mybool","type":"boolean"}},"required":["mystr","myint","myfloat","mybool"],"title":"CSVModel","type":"object"}
 
-Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
+Put the CSV table between <csv> and </csv> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
 ''',
         "permissive": '''
 Please ensure the CSV matches the required structure exactly.
@@ -362,7 +362,7 @@ mybool: bool
 Expected target pydantic type in JSON format:
 {"properties":{"mystr":{"title":"Mystr","type":"string"},"myint":{"title":"Myint","type":"integer"},"myfloat":{"title":"Myfloat","type":"number"},"mybool":{"title":"Mybool","type":"boolean"}},"required":["mystr","myint","myfloat","mybool"],"title":"CSVModel","type":"object"}
 
-Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
+Put the CSV table between <csv> and </csv> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
 '''
     }, 
     "markdown_structure": {

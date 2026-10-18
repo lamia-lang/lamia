@@ -4,13 +4,16 @@ from collections import Counter, OrderedDict
 from enum import Enum
 from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator, BaseValidationError
+from .document_structure_validator import DocumentStructureValidator, BaseValidationError, InvalidPayloadError
 from ....base import ValidationResult       
 from .utils import import_model_from_path
 from typing import Any, Optional, Type
 import re
 from typing import Callable
 from ....utils.pydantic_utils import get_ordered_dict_fields, get_pydantic_json_schema
+
+# The closing tag is optional so a cut-off response still parses
+_CSV_TAG_RE = re.compile(r'<csv>(.*?)(?:</csv>|$)', re.DOTALL | re.IGNORECASE)
 
 class DuplicateHeaderError(BaseValidationError):
     """Exception for duplicate headers in structured data."""
@@ -184,7 +187,7 @@ class CSVStructureValidator(DocumentStructureValidator):
             
             hint += "\n"
         
-        hint += "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows."
+        hint += "Put the CSV table between <csv> and </csv> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows."
         hint += " Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes."
 
         return hint
@@ -291,9 +294,12 @@ class CSVStructureValidator(DocumentStructureValidator):
         lines = response.split('\n')
         csv_lines = []
         
-        for line in lines:
+        for index, line in enumerate(lines):
             line = line.strip()
             if ',' in line:
+                if not csv_lines and index > 0 and any(sep in lines[index - 1] for sep in (';', '\t')):
+                    # The line before the block is a header with another separator, not text around the CSV
+                    return None
                 csv_lines.append(line)
             elif csv_lines:  # Found CSV block, stop at first non-CSV line
                 break
@@ -313,16 +319,8 @@ class CSVStructureValidator(DocumentStructureValidator):
             if len(lines) < 2:
                 return False
                 
-            # Check if we can at least detect a CSV dialect
-            f = io.StringIO(csv_text)
-            sample = f.read(1024)
-            f.seek(0)
-            
-            # Try to sniff dialect - this will fail if it's not CSV-like
-            dialect = csv.Sniffer().sniff(sample, delimiters=[','])
-            
             # Try to create a reader - this will fail for completely malformed CSV
-            reader = csv.reader(f, dialect=dialect)
+            reader = csv.reader(io.StringIO(csv_text), **self._dialect_kwargs(csv_text))
             
             # Try to read at least one row to ensure basic parseability
             first_row = next(reader, None)
@@ -337,18 +335,24 @@ class CSVStructureValidator(DocumentStructureValidator):
         except Exception:
             return False
 
+    def parse(self, response: str) -> Any:
+        """Parse the content of ``<csv>`` tags when present, ignoring any text outside them; otherwise parse the whole response."""
+        match = _CSV_TAG_RE.search(self.strip_markdown_fences(response.strip()))
+        if match is None:
+            return super().parse(response)
+        content = match.group(1).strip()
+        if not content:
+            raise InvalidPayloadError(expected_file_format=self.file_type(), text=response)
+        return self.load_payload(content)
+
     def load_payload(self, payload: str) -> Any:
         # Returns a tuple: (header, list of row dicts)
-        f = io.StringIO(payload)
-        if self.model is not None:
-            # The model header identifies the CSV, so single-column files need no delimiter detection
-            reader = csv.DictReader(f, skipinitialspace=True)
-        else:
-            sample = f.read(1024)  # Read a sample to detect the delimiter
-            f.seek(0)  # Reset file pointer to the beginning
-            dialect = csv.Sniffer().sniff(sample, delimiters=[','])
-            reader = csv.DictReader(f, dialect=dialect)
+        reader = csv.DictReader(io.StringIO(payload), **self._dialect_kwargs(payload))
         rows = list(reader)
+        if self._is_single_column(payload):
+            for row_idx, row in enumerate(rows, start=1):
+                if None in row:
+                    raise ValueError(f"Row {row_idx} has more cells than the single-column header")
 
         # Check for duplicate headers
         if reader.fieldnames:
@@ -607,3 +611,13 @@ class CSVStructureValidator(DocumentStructureValidator):
                     # Use __dict__ to bypass Pydantic's field validation
                     instance.__dict__[field_name] = values[field_name]
         return instance
+
+    def _dialect_kwargs(self, text: str) -> dict:
+        """Return reader arguments: plain comma parsing for a single column, otherwise a sniffed comma dialect."""
+        if self._is_single_column(text):
+            return {"skipinitialspace": True}
+        return {"dialect": csv.Sniffer().sniff(text[:1024], delimiters=[','])}
+
+    def _is_single_column(self, text: str) -> bool:
+        header = text.lstrip().split('\n', 1)[0]
+        return self._count_separators_outside_quotes(header, ',') == 0

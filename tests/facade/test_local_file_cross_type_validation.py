@@ -6,6 +6,7 @@ the declared return type, and accept content that does.
 Known legitimate cross-type passes (not bugs):
 - JSON content → YAML type: YAML is a superset of JSON by specification.
 - Any content  → TEXT type: TEXT performs no format validation.
+- Multi-line content → CSV type: each line is a row of a one-column CSV.
 """
 
 import asyncio
@@ -53,6 +54,8 @@ KNOWN_VALID_CROSS = {
     ("json", "yaml"),      # YAML is a superset of JSON
     ("html", "xml"),       # well-formed HTML can be valid XML
     ("html", "markdown"),  # Markdown supports inline HTML blocks
+    ("yaml", "csv"),       # each line is a row of a one-column CSV
+    ("markdown", "csv"),   # each line is a row of a one-column CSV
 }
 
 
