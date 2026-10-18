@@ -89,6 +89,7 @@ data = "contacts.csv" -> CSV[Contact]
 
 - **Delimiter**: Only comma (`,`) is supported. Semicolon-separated and tab-separated files are not supported.
 - **Header row**: Always required, with column names matching the model field names. There is no headerless CSV mode. In strict mode it must be the first line; in permissive mode, lines before it are ignored.
+- **Single column**: Works with a model, such as `CSV[Tag]` for `class Tag(BaseModel): name: str`. Without a model, a CSV needs at least two columns, because any text reads as a one-column CSV: `Roses are red`<br>`Violets are blue` would pass as a header and a row.
 - **End of data**: Rows end at the first empty line or at a line with too few columns. With a single column, any text after the rows is read as rows, so separate it with an empty line.
 - **Commas in values**: Cell values containing commas must be enclosed in double quotes (standard CSV quoting).
 

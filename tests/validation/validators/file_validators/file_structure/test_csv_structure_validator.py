@@ -340,3 +340,30 @@ def test_csv_duplicate_header_error_message_not_file_scoped_sync():
     result = asyncio.run(validator.validate(csv))
     assert result.is_valid is False
     assert result.error_message == "Duplicate header found: dup_header"
+
+
+class SingleColumnModel(BaseModel):
+    name: str
+
+
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize(
+    "csv_text",
+    [
+        "name\nx\ny\n",
+        "Here are the rows:\n```csv\nname\nx\ny\n```",
+    ],
+)
+@pytest.mark.asyncio
+async def test_csv_single_column_with_model(strict, csv_text):
+    validator = CSVStructureValidator(model=SingleColumnModel, strict=strict)
+    result = await validator.validate(csv_text)
+    assert result.is_valid, result.error_message
+    assert result.typed_result == [SingleColumnModel(name="x"), SingleColumnModel(name="y")]
+
+
+@pytest.mark.asyncio
+async def test_csv_single_column_model_rejects_prose():
+    validator = CSVStructureValidator(model=SingleColumnModel, strict=False)
+    result = await validator.validate("Just some prose.\nAnother line.")
+    assert not result.is_valid

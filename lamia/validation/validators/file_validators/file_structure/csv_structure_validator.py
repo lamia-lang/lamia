@@ -193,6 +193,8 @@ class CSVStructureValidator(DocumentStructureValidator):
         markdown_match = re.search(r'```(?:csv)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
         if markdown_match:
             csv_candidate = markdown_match.group(1).strip()
+            if self.model is not None:
+                return self._extract_csv_with_model(csv_candidate)
             if self._is_valid_csv(csv_candidate):
                 return csv_candidate
             else:
@@ -211,7 +213,7 @@ class CSVStructureValidator(DocumentStructureValidator):
 
         for i, line in enumerate(lines):
             header_line = line.strip()
-            if ',' not in header_line:
+            if not header_line:
                 continue
             separator = ','
             header_fields = [h.strip() for h in header_line.split(separator)]
@@ -338,10 +340,14 @@ class CSVStructureValidator(DocumentStructureValidator):
     def load_payload(self, payload: str) -> Any:
         # Returns a tuple: (header, list of row dicts)
         f = io.StringIO(payload)
-        sample = f.read(1024)  # Read a sample to detect the delimiter
-        f.seek(0)  # Reset file pointer to the beginning
-        dialect = csv.Sniffer().sniff(sample, delimiters=[','])
-        reader = csv.DictReader(f, dialect=dialect)
+        if self.model is not None:
+            # The model header identifies the CSV, so single-column files need no delimiter detection
+            reader = csv.DictReader(f, skipinitialspace=True)
+        else:
+            sample = f.read(1024)  # Read a sample to detect the delimiter
+            f.seek(0)  # Reset file pointer to the beginning
+            dialect = csv.Sniffer().sniff(sample, delimiters=[','])
+            reader = csv.DictReader(f, dialect=dialect)
         rows = list(reader)
 
         # Check for duplicate headers
