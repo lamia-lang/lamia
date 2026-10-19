@@ -2240,7 +2240,7 @@
 </tr>
 <tr>
 <td><code>-&gt; File(...)</code></td>
-<td>LLM-generated content saved to disk</td>
+<td>Any result saved to disk, validated against its type</td>
 <td><code>def report() -&gt; File(HTML, "report.html")</code></td>
 </tr>
 <tr>
@@ -2259,21 +2259,24 @@
 </span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="n">file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"./queue.txt"</span><span class="p">,</span> <span class="s1">'</span><span class="se">\n</span><span class="s1">'</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="o">+</span> <span class="s1">'</span><span class="se">\n</span><span class="s1">'</span><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="when-to-use-file_1">When to use <code>-&gt; File(...)</code><a class="headerlink" href="#when-to-use-file_1" title="Permanent link">&para;</a></h3>
-<p>Use <code>-&gt; File(Type, path)</code> when you want the LLM to <strong>generate</strong> content and save it directly to a file with optional type validation.</p>
+<p>Use <code>-&gt; File(Type, path)</code> to save a result directly to a file, validated against <code>Type</code>.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">generate_report</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">HTML</span><span class="p">,</span> <span class="s2">"report.html"</span><span class="p">):</span>
 </span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="s2">"Create a quarterly sales report"</span>
 </span></code></pre></div>
+<p>A Pydantic model, dict or list on the left side is converted to the target format and validated instead of being sent to the LLM:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">rows</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">CSV</span><span class="p">[</span><span class="n">SalesRow</span><span class="p">],</span> <span class="s2">"sales.csv"</span><span class="p">,</span> <span class="n">append</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
 <h3 id="when-to-use-with-files">When to use <code>with files(...)</code><a class="headerlink" href="#when-to-use-with-files" title="Permanent link">&para;</a></h3>
 <p>Use <code>with files(...)</code> when you want to <strong>inject file content into LLM prompts</strong> via <code>{@filename}</code> syntax.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">"~/Documents/"</span><span class="p">):</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">summarize</span><span class="p">():</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>        <span class="s2">"Summarize {@report.pdf}"</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">with</span> <span class="n">files</span><span class="p">(</span><span class="s2">"~/Documents/"</span><span class="p">):</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">summarize</span><span class="p">():</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>        <span class="s2">"Summarize {@report.pdf}"</span>
 </span></code></pre></div>
 <p>For running scripts in the cloud with <code>--remote</code>, including how file writes are stored and persist between runs, see <a href="../../advanced/lamia-cloud/#file-sync-for-cloud-execution">lamia-cloud — File Sync for Cloud Execution</a>.</p>
 <h2 id="reading-files-with-type-conversion">Reading Files with Type Conversion<a class="headerlink" href="#reading-files-with-type-conversion" title="Permanent link">&para;</a></h2>
 <p>To read a file and parse it into a typed Python object, use the <code>-&gt; Type</code> syntax:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">data</span> <span class="o">=</span> <span class="s2">"./config.json"</span> <span class="o">-&gt;</span> <span class="n">JSON</span>       <span class="c1"># Returns a dict</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">config</span> <span class="o">=</span> <span class="s2">"./settings.yaml"</span> <span class="o">-&gt;</span> <span class="n">YAML</span>   <span class="c1"># Returns a dict</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">data</span> <span class="o">=</span> <span class="s2">"./config.json"</span> <span class="o">-&gt;</span> <span class="n">JSON</span>       <span class="c1"># Returns a dict</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">config</span> <span class="o">=</span> <span class="s2">"./settings.yaml"</span> <span class="o">-&gt;</span> <span class="n">YAML</span>   <span class="c1"># Returns a dict</span>
 </span></code></pre></div>
 <p>This is different from <code>file.read()</code> which always returns a raw string.</p>
 

@@ -853,6 +853,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#built-in-validators" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -903,6 +914,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#appending-to-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appending to Files
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#strict-vs-permissive-mode" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -922,9 +944,10 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
+    <nav class="md-nav" aria-label="File Structure Validation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#html-structure-validation-for-html-generation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -934,8 +957,8 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#html-structure-validation-for-html-parsing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -943,6 +966,11 @@
       
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1574,6 +1602,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#built-in-validators" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1624,6 +1663,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#appending-to-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appending to Files
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#strict-vs-permissive-mode" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1643,9 +1693,10 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
+    <nav class="md-nav" aria-label="File Structure Validation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#html-structure-validation-for-html-generation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1655,8 +1706,8 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#html-structure-validation-for-html-parsing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1664,6 +1715,11 @@
       
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1747,7 +1803,46 @@
 
 
 <h1 id="validation">Validation<a class="headerlink" href="#validation" title="Permanent link">&para;</a></h1>
-<p>Lamia validates LLM/Web/File responses automatically when you specify return types. Validators ensure outputs meet format and quality requirements before your code uses them.</p>
+<p>Lamia validates LLM, web, file and in-memory values automatically when you specify return types. Validators ensure outputs meet format and quality requirements before your code uses them.</p>
+<h2 id="sources">Sources<a class="headerlink" href="#sources" title="Permanent link">&para;</a></h2>
+<p>The left side of <code>-&gt;</code> decides where the content comes from. Validation is the same for every source; what differs is how the content is produced and what happens when it is invalid.</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Example</th>
+<th>How the content is produced</th>
+<th>Invalid content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LLM</td>
+<td><code>"Summarize the report" -&gt; JSON[Summary]</code></td>
+<td>The prompt is sent with format instructions for the type</td>
+<td>The model is asked again with the error, up to <code>max_retries</code>, then the next model in <code>model_chain</code></td>
+</tr>
+<tr>
+<td>File</td>
+<td><code>"./report.json" -&gt; JSON[Summary]</code></td>
+<td>The file is read as UTF-8; paths start with <code>./</code>, <code>../</code>, <code>/</code> or <code>~/</code></td>
+<td>Error, no retry</td>
+</tr>
+<tr>
+<td>Web</td>
+<td><code>"https://example.com" -&gt; HTML[Page]</code>, <code>web.get_text("#price") -&gt; TEXT</code></td>
+<td>The page is opened or the action runs; an action without output is checked against the page HTML</td>
+<td>Error, no retry</td>
+</tr>
+<tr>
+<td>In-memory</td>
+<td><code>summary -&gt; JSON[Summary]</code></td>
+<td>The value is converted to the type's format</td>
+<td>Error, no retry</td>
+</tr>
+</tbody>
+</table>
+<p>These retries fix invalid content. Temporary failures such as network errors are retried separately, for LLM calls and browser actions only.</p>
 <h2 id="built-in-validators">Built-in Validators<a class="headerlink" href="#built-in-validators" title="Permanent link">&para;</a></h2>
 <h3 id="file-format-validators">File Format Validators<a class="headerlink" href="#file-format-validators" title="Permanent link">&para;</a></h3>
 <table>
@@ -1755,32 +1850,44 @@
 <tr>
 <th>Type</th>
 <th>Description</th>
+<th>Returns</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>HTML</code></td>
 <td>Well-formed HTML</td>
+<td>HTML text</td>
 </tr>
 <tr>
 <td><code>JSON</code></td>
 <td>Valid JSON</td>
+<td><code>dict</code></td>
 </tr>
 <tr>
 <td><code>YAML</code></td>
 <td>Valid YAML</td>
+<td><code>dict</code></td>
 </tr>
 <tr>
 <td><code>XML</code></td>
 <td>Valid XML</td>
+<td>XML element</td>
 </tr>
 <tr>
 <td><code>Markdown</code></td>
 <td>Valid Markdown</td>
+<td>Markdown text</td>
 </tr>
 <tr>
 <td><code>CSV</code></td>
 <td>Valid CSV</td>
+<td><code>(header, rows)</code></td>
+</tr>
+<tr>
+<td><code>TEXT</code></td>
+<td>No validation</td>
+<td><code>str</code></td>
 </tr>
 </tbody>
 </table>
@@ -1798,27 +1905,76 @@
 <p>Lamia's validation can be used in python code as well with:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">lamia</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">"Generate a user profile"</span><span class="p">,</span> <span class="n">JSON</span><span class="p">[</span><span class="n">UserProfile</span><span class="p">])</span>
 </span></code></pre></div>
-<p>Available structure validators: <code>JSON[Model]</code>, <code>YAML[Model]</code>, <code>XML[Model]</code>, <code>HTML[Model]</code>, <code>Markdown[Model]</code>, <code>CSV[Model]</code></p>
+<p>Available structure validators: <code>JSON[Model]</code>, <code>YAML[Model]</code>, <code>XML[Model]</code>, <code>HTML[Model]</code>, <code>Markdown[Model]</code>, <code>CSV[Model]</code>. Each returns a <code>Model</code> instance; <code>CSV[Model]</code> returns a list with one instance per row.</p>
+<p>The same data in each format, for this model:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Note</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">body</span><span class="p">:</span> <span class="nb">str</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Valid content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JSON[Note]</code></td>
+<td><code>{"title": "Hello", "body": "World"}</code></td>
+</tr>
+<tr>
+<td><code>YAML[Note]</code></td>
+<td><code>title: Hello</code><br><code>body: World</code></td>
+</tr>
+<tr>
+<td><code>XML[Note]</code></td>
+<td><code>&lt;note&gt;&lt;title&gt;Hello&lt;/title&gt;&lt;body&gt;World&lt;/body&gt;&lt;/note&gt;</code></td>
+</tr>
+<tr>
+<td><code>HTML[Note]</code></td>
+<td><code>&lt;html&gt;&lt;title&gt;Hello&lt;/title&gt;&lt;body&gt;World&lt;/body&gt;&lt;/html&gt;</code></td>
+</tr>
+<tr>
+<td><code>CSV[Note]</code></td>
+<td><code>title,body</code><br><code>Hello,World</code></td>
+</tr>
+<tr>
+<td><code>Markdown[Article]</code></td>
+<td><code># Hello</code><br><br><code>World</code><br>Markdown models use Markdown field types: <code>title: Heading1</code>, <code>body: Paragraph</code></td>
+</tr>
+<tr>
+<td><code>TEXT</code></td>
+<td><code>Hello World</code> (any text)</td>
+</tr>
+</tbody>
+</table>
+<p>In-memory values are always written in these exact shapes, whatever the <code>strict</code> flag. When reading, permissive mode also accepts variations; see <a href="#strict-vs-permissive-mode">Strict vs Permissive Mode</a>.</p>
 <h3 id="csv-validation">CSV Validation<a class="headerlink" href="#csv-validation" title="Permanent link">&para;</a></h3>
 <p>CSV validation requires comma-separated values with a header row. The first line is always interpreted as column names that map to Pydantic model fields.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Contact</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">full_name</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">email</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># The CSV must have a header row matching field names</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">data</span> <span class="o">=</span> <span class="s2">"contacts.csv"</span> <span class="o">-&gt;</span> <span class="n">CSV</span><span class="p">[</span><span class="n">Contact</span><span class="p">]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Contact</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">full_name</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">email</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># The CSV must have a header row matching field names</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">data</span> <span class="o">=</span> <span class="s2">"contacts.csv"</span> <span class="o">-&gt;</span> <span class="n">CSV</span><span class="p">[</span><span class="n">Contact</span><span class="p">]</span>
 </span></code></pre></div>
 <ul>
 <li><strong>Delimiter</strong>: Only comma (<code>,</code>) is supported. Semicolon-separated and tab-separated files are not supported.</li>
-<li><strong>Header row</strong>: Always required. The first line must contain column names matching the model field names. There is no headerless CSV mode.</li>
+<li><strong>Header row</strong>: Always required, with column names matching the model field names. There is no headerless CSV mode. In strict mode it must be the first line; in permissive mode, lines before it are ignored.</li>
+<li><strong>Single column</strong>: Supported.</li>
+<li><strong>End of data</strong>: Rows end at the first empty line or at a line with too few columns. With a single column, any text after the rows is read as rows, so separate it with an empty line.</li>
 <li><strong>Commas in values</strong>: Cell values containing commas must be enclosed in double quotes (standard CSV quoting).</li>
 </ul>
+<h2 id="appending-to-files">Appending to Files<a class="headerlink" href="#appending-to-files" title="Permanent link">&para;</a></h2>
+<p>With <code>-&gt; File(Type, path, append=True)</code>, CSV skips the repeated header, Markdown and <code>TEXT</code> are appended, and <code>JSON</code>, <code>YAML</code>, <code>XML</code> and <code>HTML</code> replace the file.</p>
 <h2 id="strict-vs-permissive-mode">Strict vs Permissive Mode<a class="headerlink" href="#strict-vs-permissive-mode" title="Permanent link">&para;</a></h2>
-<p>Each validator supports a <code>strict</code> flag (default: <code>true</code>):</p>
+<p>Each validator supports a <code>strict</code> flag. Plain types (<code>JSON</code>) are strict; types with a model (<code>JSON[Model]</code>) are permissive unless you write <code>JSON[Model, True]</code>.</p>
 <ul>
-<li><strong><code>strict: true</code></strong>: Only accepts pure, valid output (no extra text around it)</li>
-<li><strong><code>strict: false</code></strong>: Accepts output that contains a valid block within a longer response</li>
+<li><strong>Strict</strong>: the content must be the document alone, with fields at the levels the model defines; values are converted only without losing data (<code>"1"</code> is accepted for an <code>int</code> field, <code>"2.5"</code> is rejected).</li>
+<li><strong>Permissive</strong>: text around the document is ignored, fields can be nested at any level (HTML, XML), and values are converted when possible (<code>"2.5"</code> becomes <code>2</code> for an <code>int</code> field).</li>
 </ul>
+<p>In both modes, extra fields and columns are allowed.</p>
 <p>When you want to be explicit about validation mode you can define file structure validators with <code>JSON[Model, True/False]</code>, <code>YAML[Model, True/False]</code>, <code>XML[Model, True/False]</code>, <code>HTML[Model, True/False]</code>, <code>Markdown[Model, True/False]</code>, <code>CSV[Model, True/False]</code></p>
 <p>Here is what strictness does for each case:</p>
 <table>
@@ -1859,58 +2015,56 @@
 </table>
 <h2 id="file-structure-validation">File Structure Validation<a class="headerlink" href="#file-structure-validation" title="Permanent link">&para;</a></h2>
 <p>We will consider examples with HTML files, but the same principles apply to other file types.</p>
-<h2 id="html-structure-validation-for-html-generation">HTML Structure Validation for HTML generation<a class="headerlink" href="#html-structure-validation-for-html-generation" title="Permanent link">&para;</a></h2>
+<h3 id="html-structure-validation-for-html-generation">HTML Structure Validation for HTML generation<a class="headerlink" href="#html-structure-validation-for-html-generation" title="Permanent link">&para;</a></h3>
 <p>The following Lamia code will generate an HTML file with the structure defined in the <code>HtmlStructure</code> model and save it to the <code>output.html</code> file.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Body</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">h1</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">p</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">p</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">HtmlStructure</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">body</span><span class="p">:</span> <span class="n">Body</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="s2">"Generate a blog post about the benefits of using AI"</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">HTML</span><span class="p">[</span><span class="n">HtmlStructure</span><span class="p">,</span> <span class="kc">True</span><span class="p">],</span> <span class="s2">"output.html"</span><span class="p">)</span> <span class="c1"># The True in HTML[HtmlStructure, True] flag means no additional nestings are allowed, the document should have the same nestings as defined in the model</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Body</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">h1</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">p</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">HtmlStructure</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">body</span><span class="p">:</span> <span class="n">Body</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="s2">"Generate a blog post about the benefits of using AI"</span> <span class="o">-&gt;</span> <span class="n">File</span><span class="p">(</span><span class="n">HTML</span><span class="p">[</span><span class="n">HtmlStructure</span><span class="p">,</span> <span class="kc">True</span><span class="p">],</span> <span class="s2">"output.html"</span><span class="p">)</span> <span class="c1"># The True in HTML[HtmlStructure, True] flag means no additional nestings are allowed, the document should have the same nestings as defined in the model</span>
 </span></code></pre></div>
 <p>When tried with Claude Sonnet 4, the output was </p>
-<div class="language-html highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">&lt;</span><span class="nt">html</span><span class="p">&gt;</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="p">&lt;</span><span class="nt">title</span><span class="p">&gt;</span>The Transformative Benefits of Using AI in Modern Life<span class="p">&lt;/</span><span class="nt">title</span><span class="p">&gt;</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="p">&lt;</span><span class="nt">body</span><span class="p">&gt;</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>  <span class="p">&lt;</span><span class="nt">h1</span><span class="p">&gt;</span>The Transformative Benefits of Using AI in Modern Life<span class="p">&lt;/</span><span class="nt">h1</span><span class="p">&gt;</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>  <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Artificial Intelligence has revolutionized how we work, learn, and solve problems in today's digital age. From automating repetitive tasks to providing intelligent insights from vast amounts of data, AI empowers individuals and organizations to achieve more with less effort. It enhances decision-making through predictive analytics, personalizes user experiences across platforms, and accelerates innovation in fields ranging from healthcare to education. By augmenting human capabilities rather than replacing them, AI serves as a powerful tool that frees us to focus on creative and strategic work while handling the mundane. As AI technology continues to evolve, its accessibility and applications expand, making it an indispensable asset for anyone looking to stay competitive and efficient in an increasingly complex world.<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">&lt;/</span><span class="nt">body</span><span class="p">&gt;</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">&lt;/</span><span class="nt">html</span><span class="p">&gt;</span>
+<div class="language-html highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">&lt;</span><span class="nt">html</span><span class="p">&gt;</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="p">&lt;</span><span class="nt">title</span><span class="p">&gt;</span>The Transformative Benefits of Using AI in Modern Life<span class="p">&lt;/</span><span class="nt">title</span><span class="p">&gt;</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="p">&lt;</span><span class="nt">body</span><span class="p">&gt;</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>  <span class="p">&lt;</span><span class="nt">h1</span><span class="p">&gt;</span>The Transformative Benefits of Using AI in Modern Life<span class="p">&lt;/</span><span class="nt">h1</span><span class="p">&gt;</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>  <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Artificial Intelligence has revolutionized how we work, learn, and solve problems in today's digital age. From automating repetitive tasks to providing intelligent insights from vast amounts of data, AI empowers individuals and organizations to achieve more with less effort. It enhances decision-making through predictive analytics, personalizes user experiences across platforms, and accelerates innovation in fields ranging from healthcare to education. By augmenting human capabilities rather than replacing them, AI serves as a powerful tool that frees us to focus on creative and strategic work while handling the mundane. As AI technology continues to evolve, its accessibility and applications expand, making it an indispensable asset for anyone looking to stay competitive and efficient in an increasingly complex world.<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">&lt;/</span><span class="nt">body</span><span class="p">&gt;</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">&lt;/</span><span class="nt">html</span><span class="p">&gt;</span>
 </span></code></pre></div>
 <p>This example script shows how you can use Lamia to generate HTML files with a desired structure all the time.</p>
-<h2 id="html-structure-validation-for-html-parsing">HTML Structure Validation for HTML parsing<a class="headerlink" href="#html-structure-validation-for-html-parsing" title="Permanent link">&para;</a></h2>
+<h3 id="html-structure-validation-for-html-parsing">HTML Structure Validation for HTML parsing<a class="headerlink" href="#html-structure-validation-for-html-parsing" title="Permanent link">&para;</a></h3>
 <p>You can use HTML structure validation to parse HTML files to Pydantic models and use the model as you wish in your code. If the HTML structure is not as expected, the validation will fail and the rest of the code will not be executed. Validation makes sure that you extract the right data. When validation stops working, that might be a sign that the HTML structure has changed and you need to update the model.</p>
 <p>Here is an example of simple web parsing with Lamia:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Body</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">h1</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">HtmlStructure</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">body</span><span class="p">:</span> <span class="n">Body</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">website_content</span> <span class="o">=</span> <span class="s2">"https://example.com"</span> <span class="o">-&gt;</span> <span class="n">HTML</span><span class="p">[</span><span class="n">HtmlStructure</span><span class="p">]</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="k">if</span> <span class="n">website_content</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">h1</span> <span class="o">==</span> <span class="n">website_content</span><span class="o">.</span><span class="n">title</span><span class="p">:</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">"Example.com website header is the same as the title: h1: </span><span class="si">{website_content.body.h1}</span><span class="s2">, title: </span><span class="si">{website_content.title}</span><span class="s2">"</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Body</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">h1</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">HtmlStructure</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">body</span><span class="p">:</span> <span class="n">Body</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="n">website_content</span> <span class="o">=</span> <span class="s2">"https://example.com"</span> <span class="o">-&gt;</span> <span class="n">HTML</span><span class="p">[</span><span class="n">HtmlStructure</span><span class="p">]</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="k">if</span> <span class="n">website_content</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">h1</span> <span class="o">==</span> <span class="n">website_content</span><span class="o">.</span><span class="n">title</span><span class="p">:</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Example.com website header is the same as the title: h1: </span><span class="si">{</span><span class="n">website_content</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">h1</span><span class="si">}</span><span class="s2">, title: </span><span class="si">{</span><span class="n">website_content</span><span class="o">.</span><span class="n">title</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </span></code></pre></div>
 <p>If you open the page source of the https://example.com, you will see, at the time of writing this, the HTML structure is like this:
-```html</p>
-<html>
-    <head>
-        <title>Example.com</title>
-    </head>
-    <body>
-      <div>
-        <h1>Example.com</h1>
-      </div>
-    </body>
-    ...
-</html>
-<p>```</p>
-<p>As you can see, as expected, the title is nested inside the <head> tag. Additionally, the <h1> tag is not nested inside the <body> tag. But the validation will succeed because the HTML structure is valid and we use <code>HTML[HtmlStructure]</code> in non-strict mode, which is why validation passes.</p>
+<div class="language-html highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">&lt;</span><span class="nt">html</span><span class="p">&gt;</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="p">&lt;</span><span class="nt">head</span><span class="p">&gt;</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>        <span class="p">&lt;</span><span class="nt">title</span><span class="p">&gt;</span>Example.com<span class="p">&lt;/</span><span class="nt">title</span><span class="p">&gt;</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="p">&lt;/</span><span class="nt">head</span><span class="p">&gt;</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="p">&lt;</span><span class="nt">body</span><span class="p">&gt;</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>      <span class="p">&lt;</span><span class="nt">div</span><span class="p">&gt;</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>        <span class="p">&lt;</span><span class="nt">h1</span><span class="p">&gt;</span>Example.com<span class="p">&lt;/</span><span class="nt">h1</span><span class="p">&gt;</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>      <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="p">&lt;/</span><span class="nt">body</span><span class="p">&gt;</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    ...
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="p">&lt;/</span><span class="nt">html</span><span class="p">&gt;</span>
+</span></code></pre></div></p>
+<p>As you can see, as expected, the title is nested inside the <head> tag. Additionally, the <h1> tag is not directly inside the <body> tag. But the validation will succeed because the HTML structure is valid and we use <code>HTML[HtmlStructure]</code> in non-strict mode, which is why validation passes.</p>
 <p>For parsing, usually the non-strict mode will be used. Otherwise, extensive Pydantic nested models might be needed to parse the HTML structure.</p>
 <p>This is a useful, but simple example. Of course, in many real-world scenarios you will want to validate or extract complex HTML structures and using nested types to define them might be exhausting. That is why Lamia provides multiple additional ways to validate and extract data from the HTML structure. For example, you can use selectors to extract data from the HTML structure.</p>
 <h2 id="selector-usage-with-validators">Selector Usage with Validators<a class="headerlink" href="#selector-usage-with-validators" title="Permanent link">&para;</a></h2>

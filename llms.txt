@@ -95,4 +95,3 @@ Custom adapters: Any provider via `BaseLLMAdapter` subclass in `extensions/adapt
 | `Markdown` | Valid Markdown | `-> Markdown` |
 | `HTML[Model]` | HTML structure matching Pydantic schema | `-> HTML[PageStructure]` |
 | `TEXT` | No validation, raw text | `-> TEXT` |
-| `File(Type, path)` | Validates then writes to disk | `-> File(JSON[Report], "report.json")` |
