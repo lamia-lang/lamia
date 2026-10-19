@@ -5,6 +5,7 @@ from ..config_provider import ConfigProvider
 from ..managers.llm.llm_manager import LLMManager
 from ..managers.fs_manager import FSManager
 from ..managers.web import WebManager
+from ..managers.value_manager import ValueManager
 
 class ManagerFactory:
     """Factory for creating domain managers based on request type."""
@@ -20,6 +21,7 @@ class ManagerFactory:
         self._manager_registry[CommandType.LLM] = LLMManager
         self._manager_registry[CommandType.FILESYSTEM] = FSManager
         self._manager_registry[CommandType.WEB] = WebManager
+        self._manager_registry[CommandType.VALUE] = ValueManager
     
     def get_manager(self, command_type: CommandType) -> Manager:
         """Get or create a manager for the specified command type.

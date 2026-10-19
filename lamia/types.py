@@ -1,6 +1,6 @@
 """Public API types for Lamia users."""
 
-from typing import TypeVar, Generic, Optional
+from typing import TypeVar, Generic, Optional, Union
 from datetime import timedelta
 from pydantic import BaseModel
 from dataclasses import dataclass
@@ -8,6 +8,9 @@ from enum import Enum
 
 T = TypeVar('T', bound=BaseModel)
 S = TypeVar('S', bound=bool)
+
+SerializableValue = Union[BaseModel, dict, list, tuple]
+"""Python values that can be converted to a return type's text format."""
 
 
 class InputType(str, Enum):

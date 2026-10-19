@@ -4,6 +4,7 @@ from abc import ABC
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Union, List
 from enum import Enum
+from lamia.types import SerializableValue
 from .command_types import CommandType
 
 
@@ -91,6 +92,17 @@ class WebCommand(Command):
             return f"{self.action.value}({self.selector})"
         else:
             return f"{self.action.value}"
+
+
+@dataclass
+class ValueCommand(Command):
+    """Command that serializes a Python *value* to the text format of *return_type*."""
+    value: SerializableValue
+    return_type: Optional[Any] = None
+    target_encoding: Optional[str] = None
+
+    def __post_init__(self):
+        super().__init__(CommandType.VALUE)
 
 
 @dataclass

@@ -106,16 +106,17 @@ async def test_flat_structure_order_validation_all_formats_valids(strict, valida
     result = await validator.validate(valid_payload)
     assert result.is_valid is True
     assert result.typed_result is not None
+    typed = result.typed_result[0] if validator_class is CSVStructureValidator else result.typed_result
 
     if validator_class == MarkdownStructureValidator:
-        assert result.typed_result.name == "John"
-        assert result.typed_result.contact == "Contact"
-        assert result.typed_result.bio == "Biography" 
+        assert typed.name == "John"
+        assert typed.contact == "Contact"
+        assert typed.bio == "Biography" 
     else:
-        assert result.typed_result.name == "John"
-        assert result.typed_result.age == 25
-        assert result.typed_result.field1 == 1
-        assert result.typed_result.field2 == "test"
+        assert typed.name == "John"
+        assert typed.age == 25
+        assert typed.field1 == 1
+        assert typed.field2 == "test"
 
 @pytest.mark.parametrize("strict", [True, False])
 @pytest.mark.parametrize("validator_class, payload_key, model", FLAT_VALIDATOR_CONFIGS)

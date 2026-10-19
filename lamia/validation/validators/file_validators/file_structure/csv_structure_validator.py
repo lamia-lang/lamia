@@ -4,13 +4,16 @@ from collections import Counter, OrderedDict
 from enum import Enum
 from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator, BaseValidationError
+from .document_structure_validator import DocumentStructureValidator, BaseValidationError, InvalidPayloadError
 from ....base import ValidationResult       
 from .utils import import_model_from_path
 from typing import Any, Optional, Type
 import re
 from typing import Callable
 from ....utils.pydantic_utils import get_ordered_dict_fields, get_pydantic_json_schema
+
+# The closing tag is optional so a cut-off response still parses
+_CSV_TAG_RE = re.compile(r'<csv>(.*?)(?:</csv>|$)', re.DOTALL | re.IGNORECASE)
 
 class DuplicateHeaderError(BaseValidationError):
     """Exception for duplicate headers in structured data."""
@@ -184,7 +187,7 @@ class CSVStructureValidator(DocumentStructureValidator):
             
             hint += "\n"
         
-        hint += "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows."
+        hint += "Put the CSV table between <csv> and </csv> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows."
         hint += " Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes."
 
         return hint
@@ -193,6 +196,8 @@ class CSVStructureValidator(DocumentStructureValidator):
         markdown_match = re.search(r'```(?:csv)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
         if markdown_match:
             csv_candidate = markdown_match.group(1).strip()
+            if self.model is not None:
+                return self._extract_csv_with_model(csv_candidate)
             if self._is_valid_csv(csv_candidate):
                 return csv_candidate
             else:
@@ -211,7 +216,7 @@ class CSVStructureValidator(DocumentStructureValidator):
 
         for i, line in enumerate(lines):
             header_line = line.strip()
-            if ',' not in header_line:
+            if not header_line:
                 continue
             separator = ','
             header_fields = [h.strip() for h in header_line.split(separator)]
@@ -289,9 +294,12 @@ class CSVStructureValidator(DocumentStructureValidator):
         lines = response.split('\n')
         csv_lines = []
         
-        for line in lines:
+        for index, line in enumerate(lines):
             line = line.strip()
             if ',' in line:
+                if not csv_lines and index > 0 and any(sep in lines[index - 1] for sep in (';', '\t')):
+                    # The line before the block is a header with another separator, not text around the CSV
+                    return None
                 csv_lines.append(line)
             elif csv_lines:  # Found CSV block, stop at first non-CSV line
                 break
@@ -311,16 +319,8 @@ class CSVStructureValidator(DocumentStructureValidator):
             if len(lines) < 2:
                 return False
                 
-            # Check if we can at least detect a CSV dialect
-            f = io.StringIO(csv_text)
-            sample = f.read(1024)
-            f.seek(0)
-            
-            # Try to sniff dialect - this will fail if it's not CSV-like
-            dialect = csv.Sniffer().sniff(sample, delimiters=[','])
-            
             # Try to create a reader - this will fail for completely malformed CSV
-            reader = csv.reader(f, dialect=dialect)
+            reader = csv.reader(io.StringIO(csv_text), **self._dialect_kwargs(csv_text))
             
             # Try to read at least one row to ensure basic parseability
             first_row = next(reader, None)
@@ -335,14 +335,24 @@ class CSVStructureValidator(DocumentStructureValidator):
         except Exception:
             return False
 
+    def parse(self, response: str) -> Any:
+        """Parse the content of ``<csv>`` tags when present, ignoring any text outside them; otherwise parse the whole response."""
+        match = _CSV_TAG_RE.search(self.strip_markdown_fences(response.strip()))
+        if match is None:
+            return super().parse(response)
+        content = match.group(1).strip()
+        if not content:
+            raise InvalidPayloadError(expected_file_format=self.file_type(), text=response)
+        return self.load_payload(content)
+
     def load_payload(self, payload: str) -> Any:
         # Returns a tuple: (header, list of row dicts)
-        f = io.StringIO(payload)
-        sample = f.read(1024)  # Read a sample to detect the delimiter
-        f.seek(0)  # Reset file pointer to the beginning
-        dialect = csv.Sniffer().sniff(sample, delimiters=[','])
-        reader = csv.DictReader(f, dialect=dialect)
+        reader = csv.DictReader(io.StringIO(payload), **self._dialect_kwargs(payload))
         rows = list(reader)
+        if self._is_single_column(payload):
+            for row_idx, row in enumerate(rows, start=1):
+                if None in row:
+                    raise ValueError(f"Row {row_idx} has more cells than the single-column header")
 
         # Check for duplicate headers
         if reader.fieldnames:
@@ -440,7 +450,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         header, rows = tree
         model_fields = self._get_model_fields()
         errors = []
-        values = {}
+        row_values = []
         is_valid = True
         info_loss = {}
         
@@ -500,6 +510,8 @@ class CSVStructureValidator(DocumentStructureValidator):
             is_valid = False
         else:
             for row_idx, row in enumerate(rows, start=1):
+                values = {}
+                row_values.append(values)
                 for field, expected_type, is_model_field in all_fields_to_validate:
                     value = row.get(field)
                     if value is None or (isinstance(value, str) and value.strip() == ""):
@@ -512,39 +524,23 @@ class CSVStructureValidator(DocumentStructureValidator):
                         elif not is_model_field:
                             errors.append(f"Row {row_idx} is missing required field '{field}' from __ordered_fields__")
                             is_valid = False
-                        if row_idx == 1:
-                            values[field] = None
+                        values[field] = None
                         continue
 
                     match_result = self.type_matcher.validate_and_convert(value, expected_type)
                     if not match_result.is_valid:
                         errors.append(f"Row {row_idx}, field '{field}': {match_result.error}")
                         is_valid = False
-                        if row_idx == 1:
-                            values[field] = None
+                        values[field] = None
                     else:
-                        if row_idx == 1:
-                            values[field] = match_result.value
-                            if match_result.info_loss:
-                                info_loss[field] = match_result.info_loss
+                        values[field] = match_result.value
+                        if match_result.info_loss:
+                            info_loss.setdefault(field, match_result.info_loss)
                         
-        model_instance = None
+        model_instances = None
         if is_valid:
             try:
-                if isinstance(model, (dict, OrderedDict)):
-                    # For OrderedDict, return the OrderedDict with validated values
-                    model_instance = OrderedDict((field, values[field]) for field in model_fields)
-                else:
-                    # For Pydantic models, only pass fields that exist in the static model
-                    model_kwargs = {k: v for k, v in values.items() if k in model.model_fields}
-                    model_instance = model(**model_kwargs)
-                    
-                    # Add ordered fields as dynamic attributes
-                    if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
-                        for field_name in model.__ordered_fields__.keys():
-                            if field_name in values and not hasattr(model_instance, field_name):
-                                # Use __dict__ to bypass Pydantic's field validation
-                                model_instance.__dict__[field_name] = values[field_name]
+                model_instances = [self._build_row_instance(model, model_fields, values) for values in row_values]
             except Exception as e:
                 errors.append(f"Model fill error: {e}")
                 is_valid = False
@@ -553,7 +549,7 @@ class CSVStructureValidator(DocumentStructureValidator):
         return ValidationResult(
             is_valid=is_valid,
             validated_text=self.get_subtree_string(tree),
-            typed_result=model_instance,
+            typed_result=model_instances,
             error_message=error_message,
             info_loss=info_loss if info_loss else None
         )
@@ -603,5 +599,25 @@ class CSVStructureValidator(DocumentStructureValidator):
                 lines.append(f'{prefix}{field}: {ft.__name__}')
         return lines
 
+    def _build_row_instance(self, model, model_fields, values):
+        if isinstance(model, (dict, OrderedDict)):
+            return OrderedDict((field, values[field]) for field in model_fields)
+        # For Pydantic models, only pass fields that exist in the static model
+        instance = model(**{k: v for k, v in values.items() if k in model.model_fields})
+        # Add ordered fields as dynamic attributes
+        if hasattr(model, '__ordered_fields__') and isinstance(model.__ordered_fields__, OrderedDict):
+            for field_name in model.__ordered_fields__.keys():
+                if field_name in values and not hasattr(instance, field_name):
+                    # Use __dict__ to bypass Pydantic's field validation
+                    instance.__dict__[field_name] = values[field_name]
+        return instance
 
+    def _dialect_kwargs(self, text: str) -> dict:
+        """Return reader arguments: plain comma parsing for a single column, otherwise a sniffed comma dialect."""
+        if self._is_single_column(text):
+            return {"skipinitialspace": True}
+        return {"dialect": csv.Sniffer().sniff(text[:1024], delimiters=[','])}
 
+    def _is_single_column(self, text: str) -> bool:
+        header = text.lstrip().split('\n', 1)[0]
+        return self._count_separators_outside_quotes(header, ',') == 0
