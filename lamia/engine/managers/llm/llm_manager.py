@@ -231,6 +231,8 @@ class LLMManager(Manager):
 
         failed_models = []
         failed_attempts: List[Tuple[str, ValidationResult]] = []
+        total_attempts = sum(m.retries for m in model_chain)
+        first_attempt = 1
 
         for model_and_retries in model_chain:
             model = model_and_retries.model
@@ -267,6 +269,7 @@ class LLMManager(Manager):
             # Change from INFO to DEBUG for routine operations
             logger.debug(f"Trying model '{model.name}' with {model_and_retries.retries} max attempts")
             
+            failures_before_model = len(failed_attempts)
             # This will either succeed (return ValidationResult), 
             # exhaust retries (return None), or bubble up exceptions naturally
             result = await self._generate_and_validate(
@@ -277,18 +280,26 @@ class LLMManager(Manager):
                 max_attempts=model_and_retries.retries,
                 history=history,
                 failed_attempts=failed_attempts,
+                first_attempt=first_attempt,
+                total_attempts=total_attempts,
             )
             
             if result is not None:
+                if failed_attempts or failed_models:
+                    attempt = first_attempt + len(failed_attempts) - failures_before_model
+                    logger.info(
+                        f"Attempt {attempt}/{total_attempts} recovered with model '{model.name}'"
+                    )
                 return result
+            first_attempt += model_and_retries.retries
             
             # This model exhausted retries, try next one
-            logger.warning(f"Model {model.name} exhausted all retries, trying next fallback")
+            logger.info(f"Model {model.name} exhausted all retries, trying next fallback")
             failed_models.append(model.name)
                 
         raise ValueError(
             f"All models in the chain exhausted retries: {', '.join(failed_models)}. "
-            "Check the logs above for validation errors or increase max_retries in config.yaml."
+            "Check the log file for validation errors or increase max_retries in config.yaml."
         )
 
     @staticmethod
@@ -334,6 +345,8 @@ class LLMManager(Manager):
         max_attempts: int = 1,
         history: Sequence[Dict[str, str]] = (),
         failed_attempts: Optional[List[Tuple[str, ValidationResult]]] = None,
+        first_attempt: int = 1,
+        total_attempts: Optional[int] = None,
     ) -> Optional[ValidationResult]:
         """
         Try to generate and validate a response with retries for this model.
@@ -341,6 +354,8 @@ class LLMManager(Manager):
         Args:
             prompt: The prompt rendered for this model.
             failed_attempts: ``(response, validation_result)`` of earlier failed attempts, shared across the model chain and appended to on each validation failure. Each call renders them for this model as user/assistant turns after *history* and *prompt*.
+            first_attempt: Chain-wide number of this model's first attempt, used in log messages.
+            total_attempts: Chain-wide attempt budget, used in log messages. Defaults to *max_attempts*.
 
         Returns:
             ValidationResult if successful, None if all retries exhausted
@@ -350,16 +365,19 @@ class LLMManager(Manager):
         """
         if failed_attempts is None:
             failed_attempts = []
+        if total_attempts is None:
+            total_attempts = max_attempts
         attempts = 0
         while attempts < max_attempts:
             attempts += 1
+            attempt_label = f"{first_attempt + attempts - 1}/{total_attempts}"
 
             turns = [{"role": "user", "content": prompt}]
             for response_text, failed_result in failed_attempts:
                 turns.append({"role": "assistant", "content": response_text})
                 turns.append({"role": "user", "content": self._build_retry_prompt(failed_result)})
             
-            logger.info(f"[Lamia][Ask][Attempt {attempts}] Prompt sent to model '{model.name}'")
+            logger.info(f"[Lamia][Ask][Attempt {attempt_label}] Prompt sent to model '{model.name}'")
             logger.debug(f"Current prompt: {turns[-1]['content']}")
             response_model = self._extract_response_model(validator)
             try:
@@ -376,12 +394,12 @@ class LLMManager(Manager):
                         response_model=response_model,
                     )
             except ExternalOperationError as e:
-                logger.warning(
-                    f"Model '{model.name}' API call failed: {e}. "
+                logger.info(
+                    f"Attempt {attempt_label} failed with model '{model.name}': API call failed: {e}. "
                     "Trying next model in chain."
                 )
                 return None
-            logger.info(f"[Lamia][Answer][Attempt {attempts}] Received response from model '{model.name}'")
+            logger.info(f"[Lamia][Answer][Attempt {attempt_label}] Received response from model '{model.name}'")
             logger.debug(f"Response: {response.text}")
             
             # Apply post_llm hooks before validation (context already set by facade)
@@ -417,11 +435,11 @@ class LLMManager(Manager):
                     execution_context=execution_context
                 )
             
-            logger.warning(
-                f"Model '{model.name}' attempt {attempts} validation failed: "
+            logger.info(
+                f"Attempt {attempt_label} failed validation with model '{model.name}': "
                 f"{validation_result.error_message}"
             )
-            logger.debug(f"[Lamia][FailedResponse][Attempt {attempts}] {response.text[:500]}")
+            logger.debug(f"[Lamia][FailedResponse][Attempt {attempt_label}] {response.text[:500]}")
 
             failed_attempts.append((response.text, validation_result))
 
