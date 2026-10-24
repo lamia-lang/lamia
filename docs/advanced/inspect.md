@@ -8,6 +8,7 @@
 lamia inspect script.lm
 lamia inspect script.lm --json
 lamia inspect *.lm
+lamia inspect prompt.hu
 ```
 
 Single file output:
@@ -49,11 +50,13 @@ Batch JSON returns `{"results": {"path": {...}, ...}}`.
 
 ## What inspect checks
 
-Inspect runs three analysis passes:
+`.hu` files are prompt templates, not code. They are checked only with the [.hu rules](#hu-rules), are never parsed as Lamia code, and always report `executable: false`.
+
+`.lm` files go through three analysis passes:
 
 1. **Syntax** -- Parses via the Lamia parser pipeline, reports syntax errors with line numbers mapped back to the original source.
 2. **Semantic** -- Validates function calls against `.hu` definitions, flags duplicate functions, checks cross-file name collisions, validates inline template placeholders.
-3. **Lint** -- Applies all lint rules (listed below) for style, conventions, and common mistakes.
+3. **Lint** -- Applies the [.lm rules](#lm-rules) for style, conventions, and common mistakes.
 
 ## Executable vs definitions-only
 

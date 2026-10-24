@@ -5,6 +5,9 @@ Uses the same Lamia parser pipeline as the debugger to determine whether
 a .lm file has top-level executable statements (as opposed to only
 definitions/imports).
 
+.hu files are prompt templates, not code: they are checked with the .hu
+linter and are never executable.
+
 Pipeline: HybridSyntaxParser.transform_with_source_map() → AST analysis.
 Files with invalid syntax are reported as non-executable.
 """
@@ -31,6 +34,7 @@ from lamia.lint.lm_linter import (
     _check_hu_wrapper_defs,
 )
 from lamia.lint.base import Severity
+from lamia.lint.hu_linter import HuLinter
 
 
 _NON_EXEC_TYPES = (
@@ -128,6 +132,35 @@ def _analyze(source: str, file_path: Optional[str] = None) -> InspectResult:
     ))
 
     return InspectResult(len(deduped) > 0, deduped, diagnostics)
+
+
+def _analyze_hu(source: str, file_path: Optional[str] = None) -> InspectResult:
+    """Lint a .hu prompt template; .hu files have no executable steps."""
+    cwd = None
+    if file_path:
+        start_dir = Path(file_path).resolve().parent
+        cwd = str(_find_project_root(start_dir) or start_dir)
+    result = HuLinter().lint(source, cwd=cwd, filepath=file_path)
+    diagnostics = _lint_violations_to_diagnostics(result.violations)
+    for d in diagnostics:
+        d["line"] = max(1, d["line"])
+    return InspectResult(False, [], diagnostics)
+
+
+def _analyze_file(source: str, file_path: str) -> InspectResult:
+    """Dispatch to the .hu linter or the .lm analyzer by file extension."""
+    if file_path.endswith(".hu"):
+        return _analyze_hu(source, file_path)
+    if file_path.endswith(".lm"):
+        return _analyze(source, file_path)
+    ext = Path(file_path).suffix or "(none)"
+    return InspectResult(False, [], [{
+        "severity": "error",
+        "message": f"unsupported file type '{ext}': inspect accepts .lm and .hu files",
+        "line": 1,
+        "col": 0,
+        "source": "lamia-inspect",
+    }])
 
 
 _SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv", ".tox", "dist", "build"}
@@ -516,9 +549,9 @@ def handle_inspect():
     """
     arg_parser = argparse.ArgumentParser(
         prog="lamia inspect",
-        description="Inspect .lm files for IDE integration",
+        description="Inspect .lm and .hu files for IDE integration",
     )
-    arg_parser.add_argument("files", nargs="+", help="Lamia .lm file(s) to inspect")
+    arg_parser.add_argument("files", nargs="+", help="Lamia .lm or .hu file(s) to inspect")
     arg_parser.add_argument("--json", action="store_true", help="JSON output")
     args = arg_parser.parse_args(sys.argv[2:])
 
@@ -539,7 +572,7 @@ def _inspect_single(file_path: str, as_json: bool) -> None:
     with open(file_path, "r") as f:
         source = f.read()
 
-    result = _analyze(source, file_path)
+    result = _analyze_file(source, file_path)
 
     if as_json:
         out: dict = {
@@ -566,7 +599,7 @@ def _inspect_batch(file_paths: List[str], as_json: bool) -> None:
             continue
         with open(file_path, "r") as f:
             source = f.read()
-        result = _analyze(source, file_path)
+        result = _analyze_file(source, file_path)
         entry: dict = {"executable": result.executable, "steps": result.steps}
         if result.diagnostics:
             entry["diagnostics"] = result.diagnostics

@@ -6,6 +6,8 @@ from lamia.cli.inspect_cli import (
     has_top_level_steps,
     get_executable_lines,
     _analyze,
+    _analyze_file,
+    _analyze_hu,
     _check_duplicate_functions,
     _check_cross_file_duplicates,
 )
@@ -744,3 +746,71 @@ class TestDuplicateFunctionDetection:
 
         diags = _check_cross_file_duplicates(source, str(current))
         assert len(diags) == 0
+
+
+class TestHuFileInspection:
+    """.hu files are linted as prompt templates, not parsed as .lm code."""
+
+    HU_SOURCE = "\n".join([
+        "Clean and standardize this contact record: {raw_row}",
+        "",
+        "Fix typos, standardize formatting, and fill obvious gaps from context.",
+        "Use the sample contact dataset provided in context for duplicate and naming patterns.",
+        "",
+        "Rules:",
+        "- If a field cannot be inferred reliably, use your best judgment from surrounding rows",
+        "",
+        "Return a single cleaned contact record.",
+        "",
+    ])
+
+    def test_lm_parser_rejects_plain_prompt_text(self):
+        result = _analyze(self.HU_SOURCE)
+        assert any(d["source"].startswith("lamia-parser") or d["source"] == "lamia-ast" for d in result.diagnostics)
+
+    def test_hu_file_has_no_syntax_errors(self, tmp_path):
+        hu_file = tmp_path / "clean_contact.hu"
+        hu_file.write_text(self.HU_SOURCE)
+        result = _analyze_file(self.HU_SOURCE, str(hu_file))
+        assert result.executable is False
+        assert result.steps == []
+        assert not any(d["source"] in ("lamia-parser", "lamia-ast") for d in result.diagnostics)
+        assert not any(d["severity"] == "error" for d in result.diagnostics)
+
+    def test_hu_lint_violation_reported(self, tmp_path):
+        source = "# Title\nSummarize {text}\n"
+        hu_file = tmp_path / "summarize.hu"
+        hu_file.write_text(source)
+        result = _analyze_file(source, str(hu_file))
+        assert any("HUW002" in d["message"] and d["line"] == 1 for d in result.diagnostics)
+        assert all(d["source"] == "lamia-lint" for d in result.diagnostics)
+
+    def test_hu_yaml_front_matter_is_error(self):
+        source = "---\nname: x\n---\nSummarize {text}\n"
+        result = _analyze_hu(source)
+        assert any(d["severity"] == "error" and "HUE001" in d["message"] for d in result.diagnostics)
+
+    def test_hu_file_level_violation_maps_to_line_one(self, tmp_path):
+        hu_file = tmp_path / "BadName.hu"
+        hu_file.write_text("Summarize {text}\n")
+        result = _analyze_file("Summarize {text}\n", str(hu_file))
+        naming = [d for d in result.diagnostics if "HUC025" in d["message"]]
+        assert naming and naming[0]["line"] == 1
+
+    def test_lm_file_still_uses_lm_parser(self, tmp_path):
+        lm_file = tmp_path / "broken.lm"
+        source = "def foo(\n"
+        lm_file.write_text(source)
+        result = _analyze_file(source, str(lm_file))
+        assert any(d["severity"] == "error" for d in result.diagnostics)
+
+    def test_other_extension_reported_as_unsupported(self, tmp_path):
+        py_file = tmp_path / "script.py"
+        source = "import os\n"
+        py_file.write_text(source)
+        result = _analyze_file(source, str(py_file))
+        assert result.executable is False
+        assert len(result.diagnostics) == 1
+        assert result.diagnostics[0]["source"] == "lamia-inspect"
+        assert "unsupported file type '.py'" in result.diagnostics[0]["message"]
+
