@@ -38,15 +38,32 @@ _NON_EXEC_TYPES = (
     ast.ImportFrom,
 )
 
+_SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv", ".tox", "dist", "build"}
 
-def has_top_level_steps(source: str) -> bool:
-    """Public API: does this source have executable steps?"""
-    return _analyze(source).executable
+_SKIP_NAMES = frozenset([
+    # Python builtins
+    "print", "len", "range", "str", "int", "float", "list", "dict", "set",
+    "tuple", "type", "isinstance", "open", "super", "enumerate", "zip", "map",
+    "filter", "sorted", "reversed", "any", "all", "min", "max", "sum", "abs",
+    "round", "getattr", "setattr", "delattr", "vars", "dir", "id", "hash",
+    "input", "format", "repr", "bool", "bytes", "bytearray", "memoryview",
+    "object", "staticmethod", "classmethod", "property",
+    # Pydantic (auto-imported in Lamia)
+    "BaseModel", "Field", "validator", "field_validator", "model_validator",
+    "ConfigDict", "computed_field", "PrivateAttr",
+    # Lamia context managers and builtins
+    "files", "session", "File", "capture_files_context",
+    # Lamia validation types
+    "JSON", "YAML", "XML", "HTML", "CSV", "Markdown", "TEXT", "TXT",
+    # Markdown element types (auto-imported)
+    "Heading1", "Heading2", "Heading3", "Heading4", "Heading5", "Heading6",
+    "Paragraph", "Blockquote", "OrderedList", "UnorderedList", "ListItem",
+    "CodeBlock", "FencedCode", "IndentedCode", "Table", "HorizontalRule",
+    # Python stdlib commonly used in .lm files
+    "asyncio",
+])
 
-
-def get_executable_lines(source: str) -> List[int]:
-    """Public API: which original source lines are executable steps?"""
-    return _analyze(source).steps
+_CALL_RE = re.compile(r'(?:^|\s)(?:\w+\s*=\s*)?(\w+)\(([^)]*)\)')
 
 
 class InspectResult:
@@ -61,6 +78,124 @@ class InspectResult:
         self.executable = executable
         self.steps = steps
         self.diagnostics = diagnostics
+
+
+def handle_inspect():
+    """Handle ``lamia inspect <file...> [--json] [--stdin]``.
+
+    Supports single or multiple files.  When multiple files are given with
+    --json, returns ``{"results": {"path": {"executable": ..., "steps": [...]}, ...}}``.
+    Files that don't exist or have syntax errors are individually marked
+    non-executable — they never abort the whole batch.
+    """
+    arg_parser = argparse.ArgumentParser(
+        prog="lamia inspect",
+        description="Check .lm and .hu files and report diagnostics",
+    )
+    arg_parser.add_argument("files", nargs="+", help="Lamia .lm or .hu file(s) to inspect")
+    arg_parser.add_argument("--json", action="store_true", help="JSON output")
+    arg_parser.add_argument(
+        "--stdin",
+        action="store_true",
+        help="Read the source of the single given file from stdin (unsaved editor content)",
+    )
+    args = arg_parser.parse_args(sys.argv[2:])
+
+    if args.stdin:
+        if len(args.files) != 1:
+            arg_parser.error("--stdin requires exactly one file")
+        _print_single(args.files[0], sys.stdin.read(), args.json)
+    elif len(args.files) == 1:
+        _inspect_single(args.files[0], args.json)
+    else:
+        _inspect_batch(args.files, args.json)
+
+
+def has_top_level_steps(source: str) -> bool:
+    """Public API: does this source have executable steps?"""
+    return _analyze(source).executable
+
+
+def get_executable_lines(source: str) -> List[int]:
+    """Public API: which original source lines are executable steps?"""
+    return _analyze(source).steps
+
+
+def _inspect_single(file_path: str, as_json: bool) -> None:
+    if not os.path.isfile(file_path):
+        if as_json:
+            print(json.dumps({"error": f"file not found: {file_path}"}))
+        else:
+            print(f"Error: file not found: {file_path}", file=sys.stderr)
+        sys.exit(1)
+
+    with open(file_path, "r") as f:
+        source = f.read()
+
+    _print_single(file_path, source, as_json)
+
+
+def _inspect_batch(file_paths: List[str], as_json: bool) -> None:
+    results: dict = {}
+    for file_path in file_paths:
+        if not os.path.isfile(file_path):
+            results[file_path] = {"executable": False, "steps": [], "error": "file not found"}
+            continue
+        with open(file_path, "r") as f:
+            source = f.read()
+        result = _analyze_file(source, file_path)
+        entry: dict = {"executable": result.executable, "steps": result.steps}
+        if result.diagnostics:
+            entry["diagnostics"] = result.diagnostics
+        results[file_path] = entry
+
+    if as_json:
+        print(json.dumps({"results": results}))
+    else:
+        for fpath, info in results.items():
+            status = "executable" if info["executable"] else "definitions only"
+            err = info.get("error")
+            if err:
+                status = f"ERROR: {err}"
+            print(f"{fpath}: {status}")
+            for d in info.get("diagnostics", []):
+                print(f"  {d['severity']}: line {d['line']}: {d['message']}")
+
+
+def _print_single(file_path: str, source: str, as_json: bool) -> None:
+    result = _analyze_file(source, file_path)
+
+    if as_json:
+        out: dict = {
+            "executable": result.executable,
+            "steps": result.steps,
+        }
+        if result.diagnostics:
+            out["diagnostics"] = result.diagnostics
+        print(json.dumps(out))
+    else:
+        status = "executable" if result.executable else "definitions only"
+        print(f"{os.path.basename(file_path)}: {status}")
+        if result.steps:
+            print(f"  steps at lines: {result.steps}")
+        for d in result.diagnostics:
+            print(f"  {d['severity']}: line {d['line']}: {d['message']}")
+
+
+def _analyze_file(source: str, file_path: str) -> InspectResult:
+    """Dispatch to the .hu linter or the .lm analyzer by file extension."""
+    if file_path.endswith(".hu"):
+        return _analyze_hu(source, file_path)
+    if file_path.endswith(".lm"):
+        return _analyze(source, file_path)
+    ext = Path(file_path).suffix or "(none)"
+    return InspectResult(False, [], [{
+        "severity": "error",
+        "message": f"unsupported file type '{ext}': inspect accepts .lm and .hu files",
+        "line": 1,
+        "col": 0,
+        "source": "lamia-inspect",
+    }])
 
 
 def _analyze(source: str, file_path: Optional[str] = None) -> InspectResult:
@@ -140,116 +275,14 @@ def _analyze_hu(source: str, file_path: Optional[str] = None) -> InspectResult:
     return InspectResult(False, [], diagnostics)
 
 
-def _analyze_file(source: str, file_path: str) -> InspectResult:
-    """Dispatch to the .hu linter or the .lm analyzer by file extension."""
-    if file_path.endswith(".hu"):
-        return _analyze_hu(source, file_path)
-    if file_path.endswith(".lm"):
-        return _analyze(source, file_path)
-    ext = Path(file_path).suffix or "(none)"
-    return InspectResult(False, [], [{
+def _syntax_error_to_diagnostic(e: SyntaxError, source_label: str) -> dict:
+    return {
         "severity": "error",
-        "message": f"unsupported file type '{ext}': inspect accepts .lm and .hu files",
-        "line": 1,
-        "col": 0,
-        "source": "lamia-inspect",
-    }])
-
-
-_SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv", ".tox", "dist", "build"}
-
-
-def _discover_hu_functions(file_path: str) -> Dict[str, HuFunction]:
-    """Scan for .hu files in the project containing the inspected file."""
-    start_dir = Path(file_path).resolve().parent
-    registry: Dict[str, HuFunction] = {}
-
-    project_root = _find_project_root(start_dir)
-    if not project_root:
-        project_root = start_dir
-
-    for hu_path in project_root.rglob("*.hu"):
-        if any(part in _SKIP_DIRS for part in hu_path.parts):
-            continue
-        try:
-            fn = parse_hu_file(str(hu_path))
-            if fn.name not in registry:
-                registry[fn.name] = fn
-        except (OSError, ValueError):
-            continue
-
-    return registry
-
-
-def _find_project_root(start: Path) -> Optional[Path]:
-    """Walk up to find .git or pyproject.toml — capped at 5 levels."""
-    current = start
-    for _ in range(5):
-        if (current / ".git").exists() or (current / "pyproject.toml").exists():
-            return current
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-    return None
-
-
-def _collect_local_defs(tree: ast.AST) -> Set[str]:
-    """Collect function names defined in the file."""
-    names: Set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            names.add(node.name)
-    return names
-
-
-def _collect_inline_def_issues(source: str) -> Dict[str, Set[str]]:
-    """Collect inline-function placeholder/signature mismatches."""
-    missing_by_fn: Dict[str, Set[str]] = {}
-
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return missing_by_fn
-
-    for node in tree.body:
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-
-        func_name = node.name
-        all_args = (
-            list(node.args.posonlyargs)
-            + list(node.args.args)
-            + list(node.args.kwonlyargs)
-        )
-        if node.args.vararg is not None:
-            all_args.append(node.args.vararg)
-        if node.args.kwarg is not None:
-            all_args.append(node.args.kwarg)
-
-        sig_params = {arg.arg for arg in all_args}
-        typed_params = {arg.arg for arg in all_args if arg.annotation is not None}
-        template_text = None
-        if (
-            node.body
-            and isinstance(node.body[0], ast.Expr)
-            and isinstance(node.body[0].value, ast.Constant)
-            and isinstance(node.body[0].value.value, str)
-        ):
-            template_text = node.body[0].value.value
-
-        if template_text is None:
-            continue
-
-        issues = analyze_inline_template(
-            template_text,
-            signature_params=sig_params,
-            typed_signature_params=typed_params,
-        )
-        if issues.missing_placeholders:
-            missing_by_fn[func_name] = issues.missing_placeholders
-
-    return missing_by_fn
+        "message": e.msg if e.msg else str(e),
+        "line": e.lineno if e.lineno else 1,
+        "col": (e.offset - 1) if e.offset else 0,
+        "source": source_label,
+    }
 
 
 def _lint_violations_to_diagnostics(violations: list) -> List[dict]:
@@ -268,99 +301,6 @@ def _lint_violations_to_diagnostics(violations: list) -> List[dict]:
             "line": v.line,
             "col": v.col,
             "source": "lamia-lint",
-        })
-    return diagnostics
-
-
-_CALL_RE = re.compile(r'(?:^|\s)(?:\w+\s*=\s*)?(\w+)\(([^)]*)\)')
-
-
-def _check_duplicate_functions(source: str) -> List[dict]:
-    """Flag duplicate top-level function definitions within a single file."""
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return []
-
-    seen: Dict[str, int] = {}
-    diagnostics: List[dict] = []
-    for node in tree.body:
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        name = node.name
-        if name in seen:
-            diagnostics.append({
-                "severity": "error",
-                "message": (
-                    f"Duplicate function '{name}' — "
-                    f"already defined on line {seen[name]}; last definition wins"
-                ),
-                "line": node.lineno,
-                "col": node.col_offset,
-                "source": "lamia-semantic",
-            })
-        else:
-            seen[name] = node.lineno
-    return diagnostics
-
-
-def _discover_lm_functions(file_path: str) -> Dict[str, List[str]]:
-    """Scan sibling .lm files and return {func_name: [file_paths]}."""
-    current = Path(file_path).resolve()
-    project_root = _find_project_root(current.parent)
-    if not project_root:
-        project_root = current.parent
-
-    registry: Dict[str, List[str]] = {}
-    for lm_path in project_root.rglob("*.lm"):
-        if any(part in _SKIP_DIRS for part in lm_path.parts):
-            continue
-        resolved = lm_path.resolve()
-        if resolved == current:
-            continue
-        try:
-            src = resolved.read_text(encoding="utf-8")
-            lm_tree = ast.parse(src)
-        except (OSError, SyntaxError):
-            continue
-        for node in lm_tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                registry.setdefault(node.name, []).append(str(resolved))
-    return registry
-
-
-def _check_cross_file_duplicates(source: str, file_path: str) -> List[dict]:
-    """Flag functions in this file that collide with definitions in other .lm files."""
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return []
-
-    local_funcs: Dict[str, int] = {}
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name not in local_funcs:
-                local_funcs[node.name] = node.lineno
-
-    if not local_funcs:
-        return []
-
-    external = _discover_lm_functions(file_path)
-    diagnostics: List[dict] = []
-    for name, lineno in local_funcs.items():
-        if name not in external:
-            continue
-        other_files = external[name]
-        short_paths = [str(Path(p).name) for p in other_files]
-        diagnostics.append({
-            "severity": "warning",
-            "message": (
-                f"Function '{name}' also defined in {', '.join(short_paths)} — "
-                f"the version that runs depends on which file loads first"
-            ),
-            "line": lineno,
-            "col": 0,
-            "source": "lamia-semantic",
         })
     return diagnostics
 
@@ -509,127 +449,184 @@ def _kwarg_name(arg: str) -> Optional[str]:
     return None
 
 
-_SKIP_NAMES = frozenset([
-    # Python builtins
-    "print", "len", "range", "str", "int", "float", "list", "dict", "set",
-    "tuple", "type", "isinstance", "open", "super", "enumerate", "zip", "map",
-    "filter", "sorted", "reversed", "any", "all", "min", "max", "sum", "abs",
-    "round", "getattr", "setattr", "delattr", "vars", "dir", "id", "hash",
-    "input", "format", "repr", "bool", "bytes", "bytearray", "memoryview",
-    "object", "staticmethod", "classmethod", "property",
-    # Pydantic (auto-imported in Lamia)
-    "BaseModel", "Field", "validator", "field_validator", "model_validator",
-    "ConfigDict", "computed_field", "PrivateAttr",
-    # Lamia context managers and builtins
-    "files", "session", "File", "capture_files_context",
-    # Lamia validation types
-    "JSON", "YAML", "XML", "HTML", "CSV", "Markdown", "TEXT", "TXT",
-    # Markdown element types (auto-imported)
-    "Heading1", "Heading2", "Heading3", "Heading4", "Heading5", "Heading6",
-    "Paragraph", "Blockquote", "OrderedList", "UnorderedList", "ListItem",
-    "CodeBlock", "FencedCode", "IndentedCode", "Table", "HorizontalRule",
-    # Python stdlib commonly used in .lm files
-    "asyncio",
-])
+def _check_duplicate_functions(source: str) -> List[dict]:
+    """Flag duplicate top-level function definitions within a single file."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
 
-
-def _syntax_error_to_diagnostic(e: SyntaxError, source_label: str) -> dict:
-    return {
-        "severity": "error",
-        "message": e.msg if e.msg else str(e),
-        "line": e.lineno if e.lineno else 1,
-        "col": (e.offset - 1) if e.offset else 0,
-        "source": source_label,
-    }
-
-
-def handle_inspect():
-    """Handle ``lamia inspect <file...> [--json] [--stdin]``.
-
-    Supports single or multiple files.  When multiple files are given with
-    --json, returns ``{"results": {"path": {"executable": ..., "steps": [...]}, ...}}``.
-    Files that don't exist or have syntax errors are individually marked
-    non-executable — they never abort the whole batch.
-    """
-    arg_parser = argparse.ArgumentParser(
-        prog="lamia inspect",
-        description="Check .lm and .hu files and report diagnostics",
-    )
-    arg_parser.add_argument("files", nargs="+", help="Lamia .lm or .hu file(s) to inspect")
-    arg_parser.add_argument("--json", action="store_true", help="JSON output")
-    arg_parser.add_argument(
-        "--stdin",
-        action="store_true",
-        help="Read the source of the single given file from stdin (unsaved editor content)",
-    )
-    args = arg_parser.parse_args(sys.argv[2:])
-
-    if args.stdin:
-        if len(args.files) != 1:
-            arg_parser.error("--stdin requires exactly one file")
-        _print_single(args.files[0], sys.stdin.read(), args.json)
-    elif len(args.files) == 1:
-        _inspect_single(args.files[0], args.json)
-    else:
-        _inspect_batch(args.files, args.json)
-
-
-def _inspect_single(file_path: str, as_json: bool) -> None:
-    if not os.path.isfile(file_path):
-        if as_json:
-            print(json.dumps({"error": f"file not found: {file_path}"}))
-        else:
-            print(f"Error: file not found: {file_path}", file=sys.stderr)
-        sys.exit(1)
-
-    with open(file_path, "r") as f:
-        source = f.read()
-
-    _print_single(file_path, source, as_json)
-
-
-def _print_single(file_path: str, source: str, as_json: bool) -> None:
-    result = _analyze_file(source, file_path)
-
-    if as_json:
-        out: dict = {
-            "executable": result.executable,
-            "steps": result.steps,
-        }
-        if result.diagnostics:
-            out["diagnostics"] = result.diagnostics
-        print(json.dumps(out))
-    else:
-        status = "executable" if result.executable else "definitions only"
-        print(f"{os.path.basename(file_path)}: {status}")
-        if result.steps:
-            print(f"  steps at lines: {result.steps}")
-        for d in result.diagnostics:
-            print(f"  {d['severity']}: line {d['line']}: {d['message']}")
-
-
-def _inspect_batch(file_paths: List[str], as_json: bool) -> None:
-    results: dict = {}
-    for file_path in file_paths:
-        if not os.path.isfile(file_path):
-            results[file_path] = {"executable": False, "steps": [], "error": "file not found"}
+    seen: Dict[str, int] = {}
+    diagnostics: List[dict] = []
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        with open(file_path, "r") as f:
-            source = f.read()
-        result = _analyze_file(source, file_path)
-        entry: dict = {"executable": result.executable, "steps": result.steps}
-        if result.diagnostics:
-            entry["diagnostics"] = result.diagnostics
-        results[file_path] = entry
+        name = node.name
+        if name in seen:
+            diagnostics.append({
+                "severity": "error",
+                "message": (
+                    f"Duplicate function '{name}' — "
+                    f"already defined on line {seen[name]}; last definition wins"
+                ),
+                "line": node.lineno,
+                "col": node.col_offset,
+                "source": "lamia-semantic",
+            })
+        else:
+            seen[name] = node.lineno
+    return diagnostics
 
-    if as_json:
-        print(json.dumps({"results": results}))
-    else:
-        for fpath, info in results.items():
-            status = "executable" if info["executable"] else "definitions only"
-            err = info.get("error")
-            if err:
-                status = f"ERROR: {err}"
-            print(f"{fpath}: {status}")
-            for d in info.get("diagnostics", []):
-                print(f"  {d['severity']}: line {d['line']}: {d['message']}")
+
+def _check_cross_file_duplicates(source: str, file_path: str) -> List[dict]:
+    """Flag functions in this file that collide with definitions in other .lm files."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    local_funcs: Dict[str, int] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name not in local_funcs:
+                local_funcs[node.name] = node.lineno
+
+    if not local_funcs:
+        return []
+
+    external = _discover_lm_functions(file_path)
+    diagnostics: List[dict] = []
+    for name, lineno in local_funcs.items():
+        if name not in external:
+            continue
+        other_files = external[name]
+        short_paths = [str(Path(p).name) for p in other_files]
+        diagnostics.append({
+            "severity": "warning",
+            "message": (
+                f"Function '{name}' also defined in {', '.join(short_paths)} — "
+                f"the version that runs depends on which file loads first"
+            ),
+            "line": lineno,
+            "col": 0,
+            "source": "lamia-semantic",
+        })
+    return diagnostics
+
+
+def _collect_local_defs(tree: ast.AST) -> Set[str]:
+    """Collect function names defined in the file."""
+    names: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            names.add(node.name)
+    return names
+
+
+def _collect_inline_def_issues(source: str) -> Dict[str, Set[str]]:
+    """Collect inline-function placeholder/signature mismatches."""
+    missing_by_fn: Dict[str, Set[str]] = {}
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return missing_by_fn
+
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        func_name = node.name
+        all_args = (
+            list(node.args.posonlyargs)
+            + list(node.args.args)
+            + list(node.args.kwonlyargs)
+        )
+        if node.args.vararg is not None:
+            all_args.append(node.args.vararg)
+        if node.args.kwarg is not None:
+            all_args.append(node.args.kwarg)
+
+        sig_params = {arg.arg for arg in all_args}
+        typed_params = {arg.arg for arg in all_args if arg.annotation is not None}
+        template_text = None
+        if (
+            node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        ):
+            template_text = node.body[0].value.value
+
+        if template_text is None:
+            continue
+
+        issues = analyze_inline_template(
+            template_text,
+            signature_params=sig_params,
+            typed_signature_params=typed_params,
+        )
+        if issues.missing_placeholders:
+            missing_by_fn[func_name] = issues.missing_placeholders
+
+    return missing_by_fn
+
+
+def _discover_hu_functions(file_path: str) -> Dict[str, HuFunction]:
+    """Scan for .hu files in the project containing the inspected file."""
+    start_dir = Path(file_path).resolve().parent
+    registry: Dict[str, HuFunction] = {}
+
+    project_root = _find_project_root(start_dir)
+    if not project_root:
+        project_root = start_dir
+
+    for hu_path in project_root.rglob("*.hu"):
+        if any(part in _SKIP_DIRS for part in hu_path.parts):
+            continue
+        try:
+            fn = parse_hu_file(str(hu_path))
+            if fn.name not in registry:
+                registry[fn.name] = fn
+        except (OSError, ValueError):
+            continue
+
+    return registry
+
+
+def _discover_lm_functions(file_path: str) -> Dict[str, List[str]]:
+    """Scan sibling .lm files and return {func_name: [file_paths]}."""
+    current = Path(file_path).resolve()
+    project_root = _find_project_root(current.parent)
+    if not project_root:
+        project_root = current.parent
+
+    registry: Dict[str, List[str]] = {}
+    for lm_path in project_root.rglob("*.lm"):
+        if any(part in _SKIP_DIRS for part in lm_path.parts):
+            continue
+        resolved = lm_path.resolve()
+        if resolved == current:
+            continue
+        try:
+            src = resolved.read_text(encoding="utf-8")
+            lm_tree = ast.parse(src)
+        except (OSError, SyntaxError):
+            continue
+        for node in lm_tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                registry.setdefault(node.name, []).append(str(resolved))
+    return registry
+
+
+def _find_project_root(start: Path) -> Optional[Path]:
+    """Walk up to find .git or pyproject.toml — capped at 5 levels."""
+    current = start
+    for _ in range(5):
+        if (current / ".git").exists() or (current / "pyproject.toml").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return None
