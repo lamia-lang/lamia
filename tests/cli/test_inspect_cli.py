@@ -1,8 +1,12 @@
 """Tests for lamia inspect CLI — executable step detection."""
 
+import io
+import json
+
 import pytest
 
 from lamia.cli.inspect_cli import (
+    handle_inspect,
     has_top_level_steps,
     get_executable_lines,
     _analyze,
@@ -547,6 +551,50 @@ class TestSemanticDiagnostics:
         errors = [d for d in result.diagnostics if d["severity"] == "error"]
         assert len(errors) == 0
 
+    def test_positional_arg_flagged_as_keyword_only(self, tmp_path):
+        (tmp_path / "clean.hu").write_text("Clean this contact record: {raw_row}")
+        lm_file = tmp_path / "caller.lm"
+        source = 'clean("./input/crm/hubspot_export.csv") -> File(CSV[USContact], "./output/crm_cleaned.csv")\n'
+        lm_file.write_text(source)
+
+        result = _analyze(source, str(lm_file))
+
+        errors = [d for d in result.diagnostics if d["severity"] == "error"]
+        assert len(errors) == 1
+        assert errors[0]["message"] == "clean() accepts only keyword arguments: use clean(raw_row=...)"
+
+    def test_kwarg_call_with_return_type_no_error(self, tmp_path):
+        (tmp_path / "clean.hu").write_text("Clean this contact record: {raw_row}")
+        lm_file = tmp_path / "caller.lm"
+        source = 'clean(raw_row="./input/crm/hubspot_export.csv") -> File(CSV[USContact], "./output/crm_cleaned.csv")\n'
+        lm_file.write_text(source)
+
+        result = _analyze(source, str(lm_file))
+
+        assert [d for d in result.diagnostics if d["severity"] == "error"] == []
+
+    def test_kwarg_unpacking_not_checked(self, tmp_path):
+        (tmp_path / "clean.hu").write_text("Clean this contact record: {raw_row}")
+        lm_file = tmp_path / "caller.lm"
+        source = 'clean(**params)\n'
+        lm_file.write_text(source)
+
+        result = _analyze(source, str(lm_file))
+
+        assert [d for d in result.diagnostics if d["severity"] == "error"] == []
+
+    def test_comparison_arg_is_positional(self, tmp_path):
+        (tmp_path / "greet.hu").write_text("Hello {name}")
+        lm_file = tmp_path / "caller.lm"
+        source = 'greet(name == "Alice")\n'
+        lm_file.write_text(source)
+
+        result = _analyze(source, str(lm_file))
+
+        errors = [d for d in result.diagnostics if d["severity"] == "error"]
+        assert len(errors) == 1
+        assert "accepts only keyword arguments" in errors[0]["message"]
+
     def test_unresolved_function_flagged(self, tmp_path):
         lm_file = tmp_path / "caller.lm"
         lm_file.write_text('nonexistent_func(x="1")\n')
@@ -813,4 +861,47 @@ class TestHuFileInspection:
         assert len(result.diagnostics) == 1
         assert result.diagnostics[0]["source"] == "lamia-inspect"
         assert "unsupported file type '.py'" in result.diagnostics[0]["message"]
+
+
+class TestStdinSource:
+    """--stdin inspects unsaved editor content instead of the file on disk."""
+
+    def test_stdin_source_overrides_disk(self, tmp_path, monkeypatch, capsys):
+        (tmp_path / "clean.hu").write_text("Clean this contact record: {raw_row}")
+        lm_file = tmp_path / "caller.lm"
+        lm_file.write_text('clean("./input.csv")\n')
+
+        monkeypatch.setattr("sys.argv", ["lamia", "inspect", str(lm_file), "--json", "--stdin"])
+        monkeypatch.setattr("sys.stdin", io.StringIO('clean(raw_row="./input.csv")\n'))
+        handle_inspect()
+
+        out = json.loads(capsys.readouterr().out)
+        assert "diagnostics" not in out
+
+    def test_without_stdin_reads_disk(self, tmp_path, monkeypatch, capsys):
+        (tmp_path / "clean.hu").write_text("Clean this contact record: {raw_row}")
+        lm_file = tmp_path / "caller.lm"
+        lm_file.write_text('clean("./input.csv")\n')
+
+        monkeypatch.setattr("sys.argv", ["lamia", "inspect", str(lm_file), "--json"])
+        handle_inspect()
+
+        out = json.loads(capsys.readouterr().out)
+        assert "accepts only keyword arguments" in out["diagnostics"][0]["message"]
+
+    def test_stdin_with_hu_file_uses_hu_linter(self, tmp_path, monkeypatch, capsys):
+        hu_file = tmp_path / "summarize.hu"
+        hu_file.write_text("Summarize {text}\n")
+
+        monkeypatch.setattr("sys.argv", ["lamia", "inspect", str(hu_file), "--json", "--stdin"])
+        monkeypatch.setattr("sys.stdin", io.StringIO("# Title\nSummarize {text}\n"))
+        handle_inspect()
+
+        out = json.loads(capsys.readouterr().out)
+        assert any("HUW002" in d["message"] for d in out["diagnostics"])
+
+    def test_stdin_requires_single_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["lamia", "inspect", "a.lm", "b.lm", "--stdin"])
+        with pytest.raises(SystemExit):
+            handle_inspect()
 

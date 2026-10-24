@@ -1,15 +1,8 @@
 """
-``lamia inspect <file>`` — lightweight file analysis for IDE integration.
+``lamia inspect <file...>`` — check .lm and .hu files and report diagnostics.
 
-Uses the same Lamia parser pipeline as the debugger to determine whether
-a .lm file has top-level executable statements (as opposed to only
-definitions/imports).
-
-.hu files are prompt templates, not code: they are checked with the .hu
-linter and are never executable.
-
-Pipeline: HybridSyntaxParser.transform_with_source_map() → AST analysis.
-Files with invalid syntax are reported as non-executable.
+.lm files get syntax, semantic and lint checks, plus their executable steps.
+.hu files get the .hu lint rules only and have no executable steps.
 """
 
 import argparse
@@ -441,7 +434,26 @@ def _check_call_integrity(
             continue
 
         hu_fn = hu_registry[func_name]
-        provided_kwargs = _extract_kwarg_names(m.group(2))
+        call_args = _split_call_args(m.group(2))
+        if any(a.strip().startswith("**") for a in call_args):
+            continue
+        positional = [a for a in call_args if not _kwarg_name(a)]
+        if positional:
+            col = line.find(func_name)
+            params = ", ".join(f"{p}=..." for p in sorted(hu_fn.params))
+            diagnostics.append({
+                "severity": "error",
+                "message": (
+                    f"{func_name}() accepts only keyword arguments: "
+                    f"use {func_name}({params})"
+                ),
+                "line": i + 1,
+                "col": max(0, col),
+                "source": "lamia-semantic",
+            })
+            continue
+
+        provided_kwargs = {name for name in map(_kwarg_name, call_args) if name}
         required = hu_fn.params - frozenset(hu_fn.defaults.keys())
         missing = required - provided_kwargs
         if missing:
@@ -461,11 +473,9 @@ def _check_call_integrity(
     return diagnostics
 
 
-def _extract_kwarg_names(args_str: str) -> Set[str]:
-    """Extract keyword argument names from a function call args string."""
-    names: Set[str] = set()
-    if not args_str.strip():
-        return names
+def _split_call_args(args_str: str) -> List[str]:
+    """Split a call's argument string on top-level commas."""
+    parts: List[str] = []
     depth = 0
     current = ""
     in_str: Optional[str] = None
@@ -477,32 +487,26 @@ def _extract_kwarg_names(args_str: str) -> Set[str]:
             continue
         if ch in ('"', "'"):
             in_str = ch
-            current += ch
-            continue
-        if ch in ("(", "[", "{"):
+        elif ch in ("(", "[", "{"):
             depth += 1
-            current += ch
-            continue
-        if ch in (")", "]", "}"):
+        elif ch in (")", "]", "}"):
             depth -= 1
-            current += ch
-            continue
-        if ch == "," and depth == 0:
-            _add_kwarg(current, names)
+        elif ch == "," and depth == 0:
+            parts.append(current)
             current = ""
             continue
         current += ch
     if current.strip():
-        _add_kwarg(current, names)
-    return names
+        parts.append(current)
+    return [p for p in parts if p.strip()]
 
 
-def _add_kwarg(part: str, names: Set[str]) -> None:
-    eq_idx = part.find("=")
-    if eq_idx > 0:
-        key = part[:eq_idx].strip()
-        if key.isidentifier():
-            names.add(key)
+def _kwarg_name(arg: str) -> Optional[str]:
+    """Return the keyword of a ``name=value`` argument, or None for a positional one."""
+    m = re.match(r"\s*(\w+)\s*=(?!=)", arg)
+    if m and m.group(1).isidentifier():
+        return m.group(1)
+    return None
 
 
 _SKIP_NAMES = frozenset([
@@ -540,7 +544,7 @@ def _syntax_error_to_diagnostic(e: SyntaxError, source_label: str) -> dict:
 
 
 def handle_inspect():
-    """Handle ``lamia inspect <file...> [--json]``.
+    """Handle ``lamia inspect <file...> [--json] [--stdin]``.
 
     Supports single or multiple files.  When multiple files are given with
     --json, returns ``{"results": {"path": {"executable": ..., "steps": [...]}, ...}}``.
@@ -549,13 +553,22 @@ def handle_inspect():
     """
     arg_parser = argparse.ArgumentParser(
         prog="lamia inspect",
-        description="Inspect .lm and .hu files for IDE integration",
+        description="Check .lm and .hu files and report diagnostics",
     )
     arg_parser.add_argument("files", nargs="+", help="Lamia .lm or .hu file(s) to inspect")
     arg_parser.add_argument("--json", action="store_true", help="JSON output")
+    arg_parser.add_argument(
+        "--stdin",
+        action="store_true",
+        help="Read the source of the single given file from stdin (unsaved editor content)",
+    )
     args = arg_parser.parse_args(sys.argv[2:])
 
-    if len(args.files) == 1:
+    if args.stdin:
+        if len(args.files) != 1:
+            arg_parser.error("--stdin requires exactly one file")
+        _print_single(args.files[0], sys.stdin.read(), args.json)
+    elif len(args.files) == 1:
         _inspect_single(args.files[0], args.json)
     else:
         _inspect_batch(args.files, args.json)
@@ -572,6 +585,10 @@ def _inspect_single(file_path: str, as_json: bool) -> None:
     with open(file_path, "r") as f:
         source = f.read()
 
+    _print_single(file_path, source, as_json)
+
+
+def _print_single(file_path: str, source: str, as_json: bool) -> None:
     result = _analyze_file(source, file_path)
 
     if as_json:
