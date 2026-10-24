@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/lamia_favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -1964,6 +1964,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>lamia<span class="w"> </span>inspect<span class="w"> </span>script.lm
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>lamia<span class="w"> </span>inspect<span class="w"> </span>script.lm<span class="w"> </span>--json
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>lamia<span class="w"> </span>inspect<span class="w"> </span>*.lm
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>lamia<span class="w"> </span>inspect<span class="w"> </span>prompt.hu
 </span></code></pre></div>
 <p>Single file output:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>daily_report.lm: executable
@@ -1992,11 +1993,12 @@
 </span></code></pre></div>
 <p>Batch JSON returns <code>{"results": {"path": {...}, ...}}</code>.</p>
 <h2 id="what-inspect-checks">What inspect checks<a class="headerlink" href="#what-inspect-checks" title="Permanent link">&para;</a></h2>
-<p>Inspect runs three analysis passes:</p>
+<p><code>.hu</code> files are prompt templates, not code. They are checked only with the <a href="#hu-rules">.hu rules</a>, are never parsed as Lamia code, and always report <code>executable: false</code>.</p>
+<p><code>.lm</code> files go through three analysis passes:</p>
 <ol>
 <li><strong>Syntax</strong> -- Parses via the Lamia parser pipeline, reports syntax errors with line numbers mapped back to the original source.</li>
 <li><strong>Semantic</strong> -- Validates function calls against <code>.hu</code> definitions, flags duplicate functions, checks cross-file name collisions, validates inline template placeholders.</li>
-<li><strong>Lint</strong> -- Applies all lint rules (listed below) for style, conventions, and common mistakes.</li>
+<li><strong>Lint</strong> -- Applies the <a href="#lm-rules">.lm rules</a> for style, conventions, and common mistakes.</li>
 </ol>
 <h2 id="executable-vs-definitions-only">Executable vs definitions-only<a class="headerlink" href="#executable-vs-definitions-only" title="Permanent link">&para;</a></h2>
 <p>Inspect reports whether a file has top-level executable statements (steps) or only contains definitions and imports. This distinction matters for IDE run buttons and scheduling -- a file with no steps has nothing to execute on its own.</p>
@@ -2458,10 +2460,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "search.highlight", "search.share", "toc.follow", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "search.highlight", "search.share", "toc.follow", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>
