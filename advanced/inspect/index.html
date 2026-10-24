@@ -1965,7 +1965,9 @@
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>lamia<span class="w"> </span>inspect<span class="w"> </span>script.lm<span class="w"> </span>--json
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>lamia<span class="w"> </span>inspect<span class="w"> </span>*.lm
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>lamia<span class="w"> </span>inspect<span class="w"> </span>prompt.hu
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>lamia<span class="w"> </span>inspect<span class="w"> </span>script.lm<span class="w"> </span>--json<span class="w"> </span>--stdin<span class="w"> </span>&lt;<span class="w"> </span>script.lm
 </span></code></pre></div>
+<p><code>--stdin</code> reads the source of the single given file from stdin instead of disk. The path is still used to find the project, sibling <code>.hu</code> files, and to pick the <code>.lm</code> or <code>.hu</code> checker.</p>
 <p>Single file output:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>daily_report.lm: executable
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>  steps at lines: [3, 7, 12]
@@ -1997,7 +1999,7 @@
 <p><code>.lm</code> files go through three analysis passes:</p>
 <ol>
 <li><strong>Syntax</strong> -- Parses via the Lamia parser pipeline, reports syntax errors with line numbers mapped back to the original source.</li>
-<li><strong>Semantic</strong> -- Validates function calls against <code>.hu</code> definitions, flags duplicate functions, checks cross-file name collisions, validates inline template placeholders.</li>
+<li><strong>Semantic</strong> -- Validates function calls against <code>.hu</code> definitions (<code>.hu</code> functions accept only keyword arguments: <code>clean(raw_row=...)</code>, not <code>clean(...)</code> with a positional value), flags duplicate functions, checks cross-file name collisions, validates inline template placeholders.</li>
 <li><strong>Lint</strong> -- Applies the <a href="#lm-rules">.lm rules</a> for style, conventions, and common mistakes.</li>
 </ol>
 <h2 id="executable-vs-definitions-only">Executable vs definitions-only<a class="headerlink" href="#executable-vs-definitions-only" title="Permanent link">&para;</a></h2>
@@ -2393,7 +2395,7 @@
 </span></code></pre></div>
 <p>Non-zero exit code on syntax errors makes it usable as a gate.</p>
 <h2 id="ide-integration">IDE integration<a class="headerlink" href="#ide-integration" title="Permanent link">&para;</a></h2>
-<p>The Lamia IDE extension calls <code>lamia inspect &lt;file&gt; --json</code> on save and maps diagnostics to editor squiggles. No configuration needed -- the extension discovers <code>lamia</code> from <code>PATH</code> or the active virtual environment.</p>
+<p>The Lamia IDE extension calls <code>lamia inspect &lt;file&gt; --json</code> on open, edit and save, passing unsaved editor content with <code>--stdin</code>, and maps diagnostics to editor squiggles. No configuration needed -- the extension discovers <code>lamia</code> from <code>PATH</code> or the active virtual environment.</p>
 
 
 

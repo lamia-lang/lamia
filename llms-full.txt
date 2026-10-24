@@ -5017,7 +5017,10 @@ lamia inspect script.lm
 lamia inspect script.lm --json
 lamia inspect *.lm
 lamia inspect prompt.hu
+lamia inspect script.lm --json --stdin < script.lm
 ```
+
+`--stdin` reads the source of the single given file from stdin instead of disk. The path is still used to find the project, sibling `.hu` files, and to pick the `.lm` or `.hu` checker.
 
 Single file output:
 
@@ -5063,7 +5066,7 @@ Batch JSON returns `{"results": {"path": {...}, ...}}`.
 `.lm` files go through three analysis passes:
 
 1. **Syntax** -- Parses via the Lamia parser pipeline, reports syntax errors with line numbers mapped back to the original source.
-2. **Semantic** -- Validates function calls against `.hu` definitions, flags duplicate functions, checks cross-file name collisions, validates inline template placeholders.
+2. **Semantic** -- Validates function calls against `.hu` definitions (`.hu` functions accept only keyword arguments: `clean(raw_row=...)`, not `clean(...)` with a positional value), flags duplicate functions, checks cross-file name collisions, validates inline template placeholders.
 3. **Lint** -- Applies the [.lm rules](#lm-rules) for style, conventions, and common mistakes.
 
 ## Executable vs definitions-only
@@ -5196,7 +5199,7 @@ Non-zero exit code on syntax errors makes it usable as a gate.
 
 ## IDE integration
 
-The Lamia IDE extension calls `lamia inspect <file> --json` on save and maps diagnostics to editor squiggles. No configuration needed -- the extension discovers `lamia` from `PATH` or the active virtual environment.
+The Lamia IDE extension calls `lamia inspect <file> --json` on open, edit and save, passing unsaved editor content with `--stdin`, and maps diagnostics to editor squiggles. No configuration needed -- the extension discovers `lamia` from `PATH` or the active virtual environment.
 
 ---
 Source: advanced/lamia-cloud.md
