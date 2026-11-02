@@ -120,7 +120,7 @@ TOPIC_TO_FILE = {
 }
 
 
-_HU_FILE_HINT = (
+HU_FILE_HINT = (
     "IMPORTANT for .hu files: use PLAIN TEXT only (no markdown -- "
     "no **bold**, *italic*, # headers, `backticks`, or HTML), "
     "parameters use single braces {param}, NOT double {{param}} which makes them literals, "
@@ -128,15 +128,12 @@ _HU_FILE_HINT = (
     ".hu files are output agnostic and the caller specifies the return type."
 )
 
-_DOCS_TOPICS = ", ".join(sorted(set(TOPIC_TO_FILE.keys())))
-
-
 # ── Full IDE tool definitions ────────────────────────────────────────────────
 
 TOOL_DEFINITIONS = [
     {
         "name": ToolName.GET_DOCS.value,
-        "description": f"Retrieve Lamia language documentation by topic. Topics: {_DOCS_TOPICS}.",
+        "description": "Retrieve Lamia language documentation by topic. Pass an empty topic to list topics.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -164,11 +161,13 @@ TOOL_DEFINITIONS = [
                 },
                 "offset": {
                     "type": "integer",
-                    "description": "Character offset to start reading from. Defaults to 0.",
+                    "default": 0,
+                    "description": "Character offset to start reading from.",
                 },
                 "chunk_size": {
                     "type": "integer",
-                    "description": f"Max characters to read. Defaults to and capped at {MAX_READ_CHUNK_CHARS}.",
+                    "default": MAX_READ_CHUNK_CHARS,
+                    "description": f"Max characters to read, capped at {MAX_READ_CHUNK_CHARS}.",
                 },
             },
             "required": ["path"],
@@ -182,16 +181,15 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "directory": {
                     "type": "string",
-                    "description": "Directory path to list (default: current directory)",
+                    "default": ".",
+                    "description": "Directory path to list",
                 }
             },
         },
     },
     {
         "name": ToolName.WRITE_FILE.value,
-        "description": (
-            "Create or overwrite a file with the given content. " + _HU_FILE_HINT
-        ),
+        "description": "Create or overwrite a file with the given content.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -211,8 +209,7 @@ TOOL_DEFINITIONS = [
         "name": ToolName.PATCH_FILE.value,
         "description": (
             "Edit an existing file by replacing old_text with new_text. "
-            "Preferred over write_file for modifications -- only express the change, not the whole file. "
-            + _HU_FILE_HINT
+            "Preferred over write_file for modifications -- only express the change, not the whole file."
         ),
         "parameters": {
             "type": "object",
@@ -332,10 +329,12 @@ TOOL_DEFINITIONS = [
                 },
                 "directory": {
                     "type": "string",
-                    "description": "Directory to search in (default: current directory)",
+                    "default": ".",
+                    "description": "Directory to search in",
                 },
                 "include": {
                     "type": "string",
+                    "default": "",
                     "description": "Glob pattern to filter files (e.g. '*.py', '*.lm')",
                 },
             },
@@ -357,7 +356,8 @@ TOOL_DEFINITIONS = [
                 },
                 "directory": {
                     "type": "string",
-                    "description": "Directory to search in (default: current directory)",
+                    "default": ".",
+                    "description": "Directory to search in",
                 },
             },
             "required": ["pattern"],
@@ -434,7 +434,8 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "selector": {
                     "type": "string",
-                    "description": "CSS selector to get text from (default: body — entire page)",
+                    "default": "body",
+                    "description": "CSS selector to get text from (body is the entire page)",
                 },
             },
         },
@@ -447,7 +448,8 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "File path to save screenshot (default: screenshot.png in cwd)",
+                    "default": "screenshot.png",
+                    "description": "File path to save screenshot, relative to cwd",
                 },
             },
         },
@@ -464,7 +466,8 @@ TOOL_DEFINITIONS = [
                 },
                 "timeout": {
                     "type": "number",
-                    "description": "Timeout in seconds (default: 10)",
+                    "default": 10,
+                    "description": "Timeout in seconds",
                 },
             },
             "required": ["selector"],
@@ -483,7 +486,7 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "depth": {
                     "type": "integer",
-                    "description": "Max tree depth (default: no limit). Use 3-5 for large pages.",
+                    "description": "Max tree depth, omit for no limit. Use 3-5 for large pages.",
                 },
             },
         },

@@ -31,7 +31,9 @@ from lamia.tools.definitions import (
     TOOL_DEFINITIONS,
     TOPIC_TO_FILE,
     MAX_READ_CHUNK_CHARS,
+    HU_FILE_HINT,
 )
+from lamia.tools.signature import render_signature
 
 
 class FileAction(enum.Enum):
@@ -202,6 +204,8 @@ def _execute_tool(
 
 def _get_docs(topic: str) -> str:
     topic_lower = topic.strip().lower()
+    if not topic_lower:
+        return "Available topics: " + ", ".join(sorted(TOPIC_TO_FILE))
     filename = TOPIC_TO_FILE.get(topic_lower)
 
     if not filename:
@@ -1117,14 +1121,16 @@ def get_tools_system_prompt(allowed_tools: Optional[set] = None) -> str:
     for t in TOOL_DEFINITIONS:
         if allowed_tools is not None and t["name"] not in allowed_tools:
             continue
-        params = ", ".join(
-            f"{p}" for p in t["parameters"].get("properties", {}).keys()
-        )
-        tool_desc.append(f"- {t['name']}({params}): {t['description']}")
+        tool_desc.append(f"- {render_signature(t['name'], t['parameters'])}: {t['description']}")
 
-    return (
+    prompt = (
         "You have the following tools available. To use a tool, respond with a JSON object "
         "on its own line in this exact format: {\"tool\": \"tool_name\", \"args\": {\"param\": \"value\"}}\n"
+        "Parameters without '=' are required; pass args as JSON.\n"
         "After receiving the tool result, continue your response.\n\n"
         "Available tools:\n" + "\n".join(tool_desc)
     )
+    writes_files = allowed_tools is None or {ToolName.WRITE_FILE, ToolName.PATCH_FILE} & set(allowed_tools)
+    if writes_files:
+        prompt += "\n\n" + HU_FILE_HINT  # shared by write_file and patch_file
+    return prompt
