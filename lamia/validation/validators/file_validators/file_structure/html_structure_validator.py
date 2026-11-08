@@ -77,7 +77,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             else:
                 return base_hint
         else:
-            return "Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text."
+            return "Please return only the HTML code, starting with <html> and ending with </html>."
 
     def extract_payload(self, response: str) -> str:
         # This regex matches optional doctype, comments, whitespace, and the <html>...</html> block

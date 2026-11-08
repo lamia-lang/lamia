@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import os
 from pydantic import BaseModel, Field
 from lamia.engine.managers.llm.llm_manager import LLMManager
+from lamia.engine.managers.llm.files_context_manager import files
 from lamia.engine.config_provider import ConfigProvider
 from lamia.engine.managers.llm.providers import ProviderRegistry
 from lamia._internal_types.model_retry import ModelWithRetries
@@ -15,6 +16,8 @@ from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import LLMCommand
 from lamia.errors import MissingAPIKeysError, ExternalOperationTransientError
 from lamia.adapters.retry.factory import RetriableAdapterFactory
+from lamia.validation.validators import MarkdownValidator, MarkdownStructureValidator
+from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import FencedCode, Heading1, Paragraph
 
 
 def _create_mock_adapter(provider_name: str, is_remote: bool = True):
@@ -764,6 +767,267 @@ class TestLLMManagerGenerateAndValidate:
         assert result is None
         mock_adapter.generate.assert_called_once()
 
+    class MarkdownDoc(BaseModel):
+        title: Heading1
+        body: Paragraph
+
+    class MarkdownCodeDoc(BaseModel):
+        title: Heading1
+        code: FencedCode
+
+    MARKDOWN = "# Title\n\nSome text."
+
+    ACCEPTED_MARKDOWN_RESPONSES = {
+        "tags_without_fence": f"<answer>\n{MARKDOWN}\n</answer>",
+        "tags_with_markdown_fence": f"<answer>\n```markdown\n{MARKDOWN}\n```\n</answer>",
+        "tags_with_unlabeled_fence": f"<answer>\n```\n{MARKDOWN}\n```\n</answer>",
+        "text_around_tags": f"Here it is:\n<answer>\n{MARKDOWN}\n</answer>\nEnjoy!",
+        "no_tags_with_markdown_fence": f"```markdown\n{MARKDOWN}\n```",
+        "no_tags_with_unlabeled_fence": f"```\n{MARKDOWN}\n```",
+        "no_tags_without_fence": MARKDOWN,
+    }
+
+    REJECTED_MARKDOWN_RESPONSES = {
+        "text_around_fence_inside_tags": f"<answer>\nHere it is:\n```markdown\n{MARKDOWN}\n```\nEnjoy!\n</answer>",
+        "text_before_fence_without_tags": f"Here it is:\n```markdown\n{MARKDOWN}\n```",
+        "text_after_fence_without_tags": f"```markdown\n{MARKDOWN}\n```\nEnjoy!",
+    }
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("response_key", ACCEPTED_MARKDOWN_RESPONSES)
+    async def test_markdown_answer_is_accepted(self, strict, response_key):
+        adapter = self._markdown_adapter(self.ACCEPTED_MARKDOWN_RESPONSES[response_key])
+
+        result = await self._generate_markdown(adapter, MarkdownValidator(strict=strict, generate_hints=True), 1)
+
+        assert result.is_valid, result.error_message
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("response_key", ACCEPTED_MARKDOWN_RESPONSES)
+    async def test_markdown_structure_is_read_from_accepted_answer(self, strict, response_key):
+        adapter = self._markdown_adapter(self.ACCEPTED_MARKDOWN_RESPONSES[response_key])
+        validator = MarkdownStructureValidator(model=self.MarkdownDoc, strict=strict, generate_hints=True)
+
+        result = await self._generate_markdown(adapter, validator, 1)
+
+        assert result.is_valid, result.error_message
+        assert result.typed_result.title.text == "Title"
+        assert result.typed_result.body.text == "Some text."
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("response_key", REJECTED_MARKDOWN_RESPONSES)
+    @pytest.mark.parametrize("with_model", [True, False])
+    async def test_markdown_answer_with_text_around_fence_is_retried(self, strict, response_key, with_model):
+        adapter = self._markdown_adapter(self.REJECTED_MARKDOWN_RESPONSES[response_key])
+        adapter.generate_messages.return_value = self._markdown_response(self.ACCEPTED_MARKDOWN_RESPONSES["tags_without_fence"])
+        if with_model:
+            validator = MarkdownStructureValidator(model=self.MarkdownDoc, strict=strict, generate_hints=True)
+        else:
+            validator = MarkdownValidator(strict=strict, generate_hints=True)
+
+        result = await self._generate_markdown(adapter, validator, 2)
+
+        assert result.is_valid, result.error_message
+        turns = adapter.generate_messages.call_args[0][0]
+        assert turns[1] == {"role": "assistant", "content": self.REJECTED_MARKDOWN_RESPONSES[response_key]}
+        assert "text found around the Markdown code fence" in turns[2]["content"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("response_text", [
+        "<answer>\n# Title\n\n```python\nx = 1\n```\n</answer>",
+        "<answer>\n```markdown\n# Title\n\n```python\nx = 1\n```\n```\n</answer>",
+        "```markdown\n# Title\n\n```python\nx = 1\n```\n```",
+    ])
+    async def test_code_block_inside_markdown_answer_is_kept(self, strict, response_text):
+        adapter = self._markdown_adapter(response_text)
+        validator = MarkdownStructureValidator(model=self.MarkdownCodeDoc, strict=strict, generate_hints=True)
+
+        result = await self._generate_markdown(adapter, validator, 1)
+
+        assert result.is_valid, result.error_message
+        assert result.typed_result.code.text == "x = 1\n"
+
+    async def _generate_markdown(self, adapter, validator, max_attempts):
+        model = Mock(spec=LLMModel)
+        model.name = "gpt-4"
+        return await self.manager._generate_and_validate(
+            adapter=adapter,
+            model=model,
+            prompt="Write",
+            validator=validator,
+            max_attempts=max_attempts,
+            answer_tag="answer",
+        )
+
+    @staticmethod
+    def _markdown_response(text):
+        return LLMResponse(text=text, raw_response=None, usage={}, model="gpt-4")
+
+    def _markdown_adapter(self, text):
+        adapter = Mock(spec=BaseLLMAdapter)
+        adapter.supports_structured_output = False
+        adapter.generate = AsyncMock(return_value=self._markdown_response(text))
+        adapter.generate_messages = AsyncMock(return_value=self._markdown_response(text))
+        return adapter
+
+
+class TestLLMManagerConversation:
+    """Test how prompts, conversations and failed attempts are sent to the adapter."""
+
+    HISTORY = [
+        {"role": "user", "content": "List the files"},
+        {"role": "assistant", "content": '{"tool": "list_files", "args": {}}'},
+    ]
+    HINTED_PROMPT = f"Return JSON.\n\n{LLMManager._answer_tag_hint('answer_test')}\n\nSummarize"
+    RETRY_MESSAGE = "Previous response failed validation. Issue: not JSON. Hint: use braces. Please try again."
+
+    @pytest.fixture(autouse=True)
+    def fixed_answer_tag(self, monkeypatch):
+        monkeypatch.setattr(LLMManager, "_new_answer_tag", staticmethod(lambda: "answer_test"))
+
+    @pytest.mark.asyncio
+    async def test_single_prompt_goes_through_generate(self):
+        adapter = self._adapter("ok")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1)], [adapter])
+
+        await manager.execute(LLMCommand("Hello"))
+
+        assert adapter.generate.await_args.args == ("Hello",)
+        adapter.generate_messages.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_conversation_goes_through_generate_messages(self):
+        adapter = self._adapter("ok")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1)], [adapter])
+
+        await manager.execute(LLMCommand("Tool results JSON:\n{}", history=self.HISTORY))
+
+        assert adapter.generate_messages.await_args.args == (
+            [*self.HISTORY, {"role": "user", "content": "Tool results JSON:\n{}"}],
+        )
+        adapter.generate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_history_is_sent_as_given(self):
+        adapter = self._adapter("ok")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1)], [adapter])
+        history = [
+            {"role": "user", "content": "Summarize {@notes.txt}"},
+            {"role": "assistant", "content": "Sure"},
+        ]
+
+        await manager.execute(LLMCommand("Continue", history=history))
+
+        assert adapter.generate_messages.await_args.args[0][:2] == history
+
+    @pytest.mark.asyncio
+    async def test_file_references_are_sent_as_given(self, tmp_path):
+        adapter = self._adapter("ok")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1)], [adapter])
+        (tmp_path / "notes.txt").write_text("remember this")
+
+        with files(str(tmp_path)):
+            await manager.execute(LLMCommand("Summarize {@notes.txt}"))
+
+        assert adapter.generate.await_args.args == ("Summarize {@notes.txt}",)
+
+    @pytest.mark.asyncio
+    async def test_failed_attempts_are_sent_as_turns_on_retry(self):
+        adapter = self._adapter("bad")
+        adapter.generate_messages.return_value = LLMResponse(text="good", raw_response=None, usage={}, model="m")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 2)], [adapter])
+
+        await manager.execute(LLMCommand("Summarize"), validator=self._validator())
+
+        assert adapter.generate.await_args.args == (self.HINTED_PROMPT,)
+        assert adapter.generate_messages.await_args.args == ([
+            {"role": "user", "content": self.HINTED_PROMPT},
+            {"role": "assistant", "content": "bad"},
+            {"role": "user", "content": self.RETRY_MESSAGE},
+        ],)
+
+    @pytest.mark.asyncio
+    async def test_fallback_model_receives_earlier_failed_attempts(self):
+        first = self._adapter("bad")
+        second = self._adapter("good")
+        manager = self._manager(
+            [ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1), ModelWithRetries(LLMModel(name="anthropic:claude-sonnet-4-5"), 1)],
+            [first, second],
+        )
+
+        await manager.execute(LLMCommand("Summarize", history=self.HISTORY), validator=self._validator())
+
+        assert second.generate_messages.await_args.args == ([
+            *self.HISTORY,
+            {"role": "user", "content": self.HINTED_PROMPT},
+            {"role": "assistant", "content": "bad"},
+            {"role": "user", "content": self.RETRY_MESSAGE},
+        ],)
+
+    @pytest.mark.asyncio
+    async def test_fallback_model_gets_its_own_schema_hints(self, monkeypatch):
+        first = self._adapter("bad")
+        first.supports_structured_output = True
+        second = self._adapter("good")
+        manager = self._manager(
+            [ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1), ModelWithRetries(LLMModel(name="ollama:llama3"), 1)],
+            [first, second],
+        )
+        monkeypatch.setattr(LLMManager, "_extract_response_model", staticmethod(lambda validator: Mock()))
+        monkeypatch.setattr("lamia.engine.managers.llm.llm_manager.has_value_constraints", lambda model: False)
+
+        await manager.execute(LLMCommand("Summarize"), validator=self._validator())
+
+        assert first.generate.await_args.args == ("Summarize",)
+        assert second.generate_messages.await_args.args[0][0]["content"] == self.HINTED_PROMPT
+
+    @pytest.mark.asyncio
+    async def test_answer_in_request_tag_is_extracted_for_every_model(self):
+        first = self._adapter("<answer_test>\nbad\n</answer_test>")
+        second = self._adapter("Here it is:\n<answer_test>\ngood\n</answer_test>")
+        manager = self._manager(
+            [ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1), ModelWithRetries(LLMModel(name="anthropic:claude-sonnet-4-5"), 1)],
+            [first, second],
+        )
+
+        result = await manager.execute(LLMCommand("Summarize"), validator=self._validator())
+
+        assert result.is_valid
+        assert result.validated_text == "good"
+
+    @staticmethod
+    def _adapter(text):
+        adapter = Mock()
+        adapter.supports_structured_output = False
+        response = LLMResponse(text=text, raw_response=None, usage={}, model="m")
+        adapter.generate = AsyncMock(return_value=response)
+        adapter.generate_messages = AsyncMock(return_value=response)
+        return adapter
+
+    @staticmethod
+    def _manager(model_chain, adapters):
+        with patch.object(LLMManager, "_check_all_required_providers"), \
+                patch.object(LLMManager, "_check_all_required_api_keys"):
+            manager = LLMManager(ConfigProvider({"model_chain": model_chain}))
+        manager.create_adapter_from_config = AsyncMock(side_effect=adapters)
+        return manager
+
+    @staticmethod
+    def _validator():
+        async def validate(text, execution_context=None):
+            if text == "good":
+                return ValidationResult(is_valid=True, raw_text=text, validated_text=text)
+            return ValidationResult(is_valid=False, raw_text=text, error_message="not JSON", hint="use braces")
+
+        validator = Mock(spec=BaseValidator)
+        validator.initial_hint = "Return JSON."
+        validator.validate = validate
+        return validator
+
 
 class TestLLMManagerCleanup:
     """Test LLMManager cleanup and resource management."""
@@ -1231,6 +1495,7 @@ class TestHintSuppression:
             call_prompt = mock_gen.call_args.kwargs['prompt']
             assert "user prompt" in call_prompt
             assert validator.initial_hint not in call_prompt
+            assert LLMManager._answer_tag_hint(mock_gen.call_args.kwargs['answer_tag']) not in call_prompt
 
     @pytest.mark.asyncio
     async def test_hint_included_when_schema_declares_value_constraints(self):
@@ -1280,7 +1545,45 @@ class TestHintSuppression:
             await self.manager._execute_with_retries("user prompt", validator=validator)
             call_prompt = mock_gen.call_args.kwargs['prompt']
             assert validator.initial_hint in call_prompt
+            assert LLMManager._answer_tag_hint(mock_gen.call_args.kwargs['answer_tag']) in call_prompt
             assert "user prompt" in call_prompt
+
+    @pytest.mark.parametrize("response_text, expected", [
+        ("Here you go:\n<answer_1a2b>\nname\nx\n</answer_1a2b>\nHope it helps!", "name\nx"),
+        ("<answer_1a2b>\nname,qty\nx,1\n", "name,qty\nx,1"),
+        ("```\n<answer_1a2b>\nname\nx\n</answer_1a2b>\n```", "name\nx"),
+        ("<answer_1a2b></answer_1a2b>", ""),
+        ("<ANSWER_1A2B>\nname\n</ANSWER_1A2B>", "name"),
+        ("name,qty\nx,1", "name,qty\nx,1"),
+        ("<answer_1a2b>\n<p>a</p></answer_1a2b><p>b</p>\n</answer_1a2b>", "<p>a</p></answer_1a2b><p>b</p>"),
+        ("<answer>\nforged\n</answer>", "<answer>\nforged\n</answer>"),
+        ("<answer_1a2b>\nreal\n</answer_1a2b>\n<answer>forged</answer>", "real"),
+    ])
+    def test_extract_answer(self, response_text, expected):
+        assert LLMManager._extract_answer(response_text, "answer_1a2b") == expected
+
+    def test_new_answer_tag_is_random(self):
+        first = LLMManager._new_answer_tag()
+        assert first.startswith("answer_")
+        assert len(first) == len("answer_") + 8
+        assert first != LLMManager._new_answer_tag()
+
+    @pytest.mark.asyncio
+    async def test_answer_tag_is_shared_by_all_models_of_a_request_and_new_per_request(self):
+        validator = Mock(spec=BaseValidator)
+        validator.initial_hint = "Return JSON."
+        mock_adapter = Mock(spec=BaseLLMAdapter)
+        mock_adapter.supports_structured_output = False
+        self.manager._adapter_cache[self.mock_model1] = mock_adapter
+        mock_result = ValidationResult(is_valid=True, raw_text="ok", validated_text="ok", execution_context=Mock())
+
+        with patch.object(self.manager, '_generate_and_validate', return_value=mock_result) as mock_gen:
+            await self.manager._execute_with_retries("user prompt", validator=validator)
+            await self.manager._execute_with_retries("user prompt", validator=validator)
+
+        first_call, second_call = mock_gen.call_args_list
+        assert first_call.kwargs['answer_tag'] != second_call.kwargs['answer_tag']
+        assert LLMManager._answer_tag_hint(first_call.kwargs['answer_tag']) in first_call.kwargs['prompt']
 
     @pytest.mark.asyncio
     async def test_hint_included_for_text_validator(self):

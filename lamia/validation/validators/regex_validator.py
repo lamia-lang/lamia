@@ -9,7 +9,7 @@ class RegexValidator(BaseValidator):
 
     @property
     def initial_hint(self) -> str:
-        return f"Please ensure the response matches the required pattern: {self.pattern.pattern}, with no explanation or extra text."
+        return f"Please ensure the response matches the required pattern: {self.pattern.pattern}."
 
     @classmethod
     def name(cls) -> str:

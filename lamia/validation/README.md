@@ -451,7 +451,7 @@ class CodeValidator(BaseValidator):
 
     @property
     def initial_hint(self) -> str:
-        return "Please return only valid Python code, with no explanation or extra text."
+        return "Please return only valid Python code."
 
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         try:

@@ -155,6 +155,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 self._validate_no_raw_ordered_dict_patterns(arg, context)
 
     def parse(self, response: str) -> Any:
+        # TODO: when an LLM answer came inside answer tags, strip fences and load the whole content for every format instead of searching it for the document with extract_payload.
+        # TODO: strip markdown fences only for LLM answers, not for file and web content.
         stripped = self.strip_markdown_fences(response.strip())
         if self.strict:
             payload = stripped
@@ -315,7 +317,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
             else:
                 return base_hint
         else:
-            return f"Please return only valid {self.file_type()}, with no explanation or extra text."
+            return f"Please return only valid {self.file_type()}."
 
     def _get_model_schema_hint(self) -> str:
         """Generate the JSON schema hint for this model."""

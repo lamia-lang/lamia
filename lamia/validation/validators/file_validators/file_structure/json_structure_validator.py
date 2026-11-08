@@ -34,7 +34,7 @@ class JSONStructureValidator(DocumentStructureValidator):
     def initial_hint(self) -> str:
         # Handle case where no model is provided (regular JSON validation)
         if self.model is None:
-            return "Please return only valid json, with no explanation or extra text."
+            return "Please return only valid json."
         
         # Generate clean JSON structure with proper object formatting
         structure_lines = self._describe_structure(self.model, strict_mode=self.strict)

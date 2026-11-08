@@ -242,12 +242,12 @@ MODEL_CLASSES = {
 
 # --- Test Payloads ---
 INITIAL_HINTS = {
-    "html": "Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text.",
-    "json": "Please return only valid json, with no explanation or extra text.",
-    "xml": "Please return only valid XML, with no explanation or extra text.",
-    "yaml": "Please return only valid yaml, with no explanation or extra text.",
-    "csv": "Put the CSV table between <csv> and </csv> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.",
-    "markdown": "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```) and ensure it is well-formed.",
+    "html": "Please return only the HTML code, starting with <html> and ending with </html>.",
+    "json": "Please return only valid json.",
+    "xml": "Please return only valid XML.",
+    "yaml": "Please return only valid yaml.",
+    "csv": "Please return only the CSV table, starting with the header row and ending with the last row, without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.",
+    "markdown": "Please provide well-formed Markdown content.",
     "html_structure": { 
         'strict': '''
 Please ensure the HTML matches the required structure exactly.
@@ -348,7 +348,7 @@ mybool: bool
 Expected target pydantic type in JSON format:
 {"properties":{"mystr":{"title":"Mystr","type":"string"},"myint":{"title":"Myint","type":"integer"},"myfloat":{"title":"Myfloat","type":"number"},"mybool":{"title":"Mybool","type":"boolean"}},"required":["mystr","myint","myfloat","mybool"],"title":"CSVModel","type":"object"}
 
-Put the CSV table between <csv> and </csv> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
+Please return only the CSV table, starting with the header row and ending with the last row, without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
 ''',
         "permissive": '''
 Please ensure the CSV matches the required structure exactly.
@@ -362,12 +362,11 @@ mybool: bool
 Expected target pydantic type in JSON format:
 {"properties":{"mystr":{"title":"Mystr","type":"string"},"myint":{"title":"Myint","type":"integer"},"myfloat":{"title":"Myfloat","type":"number"},"mybool":{"title":"Mybool","type":"boolean"}},"required":["mystr","myint","myfloat","mybool"],"title":"CSVModel","type":"object"}
 
-Put the CSV table between <csv> and </csv> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
+Please return only the CSV table, starting with the header row and ending with the last row, without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.
 '''
     }, 
     "markdown_structure": {
         'strict': '''
-Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).
 Ensure the Markdown matches the required structure exactly.
 Expected structure:
 title: # Level 1 heading (starts with single #)
@@ -377,7 +376,6 @@ Expected target pydantic type in JSON format:
 {"properties":{"title":{"title":"Title","type":"string"},"content":{"title":"Content","type":"string"}},"required":["title","content"],"title":"MarkdownModel","type":"object"}
 ''',
         "permissive": '''
-Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).
 Ensure the Markdown contains the required fields with the correct types.
 The fields can be nested within other Markdown structures.
 Required fields that must be present:

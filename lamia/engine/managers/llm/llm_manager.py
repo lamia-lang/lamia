@@ -17,6 +17,7 @@ from lamia.validation.validators.object_validator import ObjectValidator
 from lamia.hooks import POST_LLM
 import json
 import logging
+import secrets
 
 logger = logging.getLogger(__name__)
 
@@ -231,6 +232,7 @@ class LLMManager(Manager):
 
         failed_models = []
         failed_attempts: List[Tuple[str, ValidationResult]] = []
+        answer_tag = self._new_answer_tag()
         total_attempts = sum(m.retries for m in model_chain)
         first_attempt = 1
 
@@ -248,7 +250,7 @@ class LLMManager(Manager):
             # adapter actually implements provider-native structured output.
             if validator is not None:
                 response_model = self._extract_response_model(validator)
-                if response_model is not None and adapter.supports_structured_output:
+                if self._uses_structured_output(response_model, adapter):
                     # Providers accept the JSON structure schema but some
                     # silently ignore value-constraint keywords (minimum,
                     # maxLength, etc.) at decoding time, and Anthropic
@@ -261,7 +263,7 @@ class LLMManager(Manager):
                     else:
                         current_prompt = prompt
                 else:
-                    initial_hints = validator.initial_hint
+                    initial_hints = f"{validator.initial_hint}\n\n{self._answer_tag_hint(answer_tag)}"
                     current_prompt = f"{initial_hints}\n\n{prompt}"
             else:
                 current_prompt = prompt
@@ -280,6 +282,7 @@ class LLMManager(Manager):
                 max_attempts=model_and_retries.retries,
                 history=history,
                 failed_attempts=failed_attempts,
+                answer_tag=answer_tag,
                 first_attempt=first_attempt,
                 total_attempts=total_attempts,
             )
@@ -345,6 +348,7 @@ class LLMManager(Manager):
         max_attempts: int = 1,
         history: Sequence[Dict[str, str]] = (),
         failed_attempts: Optional[List[Tuple[str, ValidationResult]]] = None,
+        answer_tag: Optional[str] = None,
         first_attempt: int = 1,
         total_attempts: Optional[int] = None,
     ) -> Optional[ValidationResult]:
@@ -354,6 +358,7 @@ class LLMManager(Manager):
         Args:
             prompt: The prompt rendered for this model.
             failed_attempts: ``(response, validation_result)`` of earlier failed attempts, shared across the model chain and appended to on each validation failure. Each call renders them for this model as user/assistant turns after *history* and *prompt*.
+            answer_tag: Name of the tags the prompt asks the answer to be placed in; the response is validated as is when None.
             first_attempt: Chain-wide number of this model's first attempt, used in log messages.
             total_attempts: Chain-wide attempt budget, used in log messages. Defaults to *max_attempts*.
 
@@ -407,6 +412,9 @@ class LLMManager(Manager):
 
             # Validate the response
             if validator is not None:
+                if answer_tag is not None and not self._uses_structured_output(response_model, adapter):
+                    response_text = self._extract_answer(response_text, answer_tag)
+
                 # Create execution context for tracking
                 tracking_context = TrackingContext(
                     data_provider_name=model.name,
@@ -451,6 +459,33 @@ class LLMManager(Manager):
         for adapter in self._adapter_cache.values():
             await adapter.close()
         self._adapter_cache.clear()
+
+    @staticmethod
+    def _uses_structured_output(response_model: Optional[Type[BaseModel]], adapter: BaseLLMAdapter) -> bool:
+        return response_model is not None and adapter.supports_structured_output
+
+    @staticmethod
+    def _new_answer_tag() -> str:
+        """Return a random tag name that text inlined into the prompt cannot know in advance."""
+        return f"answer_{secrets.token_hex(4)}"
+
+    @staticmethod
+    def _answer_tag_hint(answer_tag: str) -> str:
+        return f"Put the whole answer between <{answer_tag}> and </{answer_tag}> tags, with no other text inside the tags."
+
+    @staticmethod
+    def _extract_answer(response_text: str, answer_tag: str) -> str:
+        """Return the text from the first opening tag to the last closing tag, to the end when the closing tag is missing, or the whole response when the opening tag is absent."""
+        lowered = response_text.lower()
+        opening = f"<{answer_tag.lower()}>"
+        start = lowered.find(opening)
+        if start == -1:
+            return response_text
+        start += len(opening)
+        end = lowered.rfind(f"</{answer_tag.lower()}>")
+        if end < start:
+            end = len(response_text)
+        return response_text[start:end].strip()
 
     @staticmethod
     def _build_retry_prompt(validation_result: ValidationResult) -> str:
