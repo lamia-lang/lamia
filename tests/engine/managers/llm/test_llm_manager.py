@@ -4,7 +4,8 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import os
 from pydantic import BaseModel, Field
-from lamia.engine.managers.llm.llm_manager import LLMManager, ANSWER_TAG_HINT
+from lamia.engine.managers.llm.llm_manager import LLMManager
+from lamia.engine.managers.llm.files_context_manager import files
 from lamia.engine.config_provider import ConfigProvider
 from lamia.engine.managers.llm.providers import ProviderRegistry
 from lamia._internal_types.model_retry import ModelWithRetries
@@ -859,6 +860,7 @@ class TestLLMManagerGenerateAndValidate:
             prompt="Write",
             validator=validator,
             max_attempts=max_attempts,
+            answer_tag="answer",
         )
 
     @staticmethod
@@ -871,6 +873,160 @@ class TestLLMManagerGenerateAndValidate:
         adapter.generate = AsyncMock(return_value=self._markdown_response(text))
         adapter.generate_messages = AsyncMock(return_value=self._markdown_response(text))
         return adapter
+
+
+class TestLLMManagerConversation:
+    """Test how prompts, conversations and failed attempts are sent to the adapter."""
+
+    HISTORY = [
+        {"role": "user", "content": "List the files"},
+        {"role": "assistant", "content": '{"tool": "list_files", "args": {}}'},
+    ]
+    HINTED_PROMPT = f"Return JSON.\n\n{LLMManager._answer_tag_hint('answer_test')}\n\nSummarize"
+    RETRY_MESSAGE = "Previous response failed validation. Issue: not JSON. Hint: use braces. Please try again."
+
+    @pytest.fixture(autouse=True)
+    def fixed_answer_tag(self, monkeypatch):
+        monkeypatch.setattr(LLMManager, "_new_answer_tag", staticmethod(lambda: "answer_test"))
+
+    @pytest.mark.asyncio
+    async def test_single_prompt_goes_through_generate(self):
+        adapter = self._adapter("ok")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1)], [adapter])
+
+        await manager.execute(LLMCommand("Hello"))
+
+        assert adapter.generate.await_args.args == ("Hello",)
+        adapter.generate_messages.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_conversation_goes_through_generate_messages(self):
+        adapter = self._adapter("ok")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1)], [adapter])
+
+        await manager.execute(LLMCommand("Tool results JSON:\n{}", history=self.HISTORY))
+
+        assert adapter.generate_messages.await_args.args == (
+            [*self.HISTORY, {"role": "user", "content": "Tool results JSON:\n{}"}],
+        )
+        adapter.generate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_history_is_sent_as_given(self):
+        adapter = self._adapter("ok")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1)], [adapter])
+        history = [
+            {"role": "user", "content": "Summarize {@notes.txt}"},
+            {"role": "assistant", "content": "Sure"},
+        ]
+
+        await manager.execute(LLMCommand("Continue", history=history))
+
+        assert adapter.generate_messages.await_args.args[0][:2] == history
+
+    @pytest.mark.asyncio
+    async def test_file_references_are_sent_as_given(self, tmp_path):
+        adapter = self._adapter("ok")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1)], [adapter])
+        (tmp_path / "notes.txt").write_text("remember this")
+
+        with files(str(tmp_path)):
+            await manager.execute(LLMCommand("Summarize {@notes.txt}"))
+
+        assert adapter.generate.await_args.args == ("Summarize {@notes.txt}",)
+
+    @pytest.mark.asyncio
+    async def test_failed_attempts_are_sent_as_turns_on_retry(self):
+        adapter = self._adapter("bad")
+        adapter.generate_messages.return_value = LLMResponse(text="good", raw_response=None, usage={}, model="m")
+        manager = self._manager([ModelWithRetries(LLMModel(name="openai:gpt-4o"), 2)], [adapter])
+
+        await manager.execute(LLMCommand("Summarize"), validator=self._validator())
+
+        assert adapter.generate.await_args.args == (self.HINTED_PROMPT,)
+        assert adapter.generate_messages.await_args.args == ([
+            {"role": "user", "content": self.HINTED_PROMPT},
+            {"role": "assistant", "content": "bad"},
+            {"role": "user", "content": self.RETRY_MESSAGE},
+        ],)
+
+    @pytest.mark.asyncio
+    async def test_fallback_model_receives_earlier_failed_attempts(self):
+        first = self._adapter("bad")
+        second = self._adapter("good")
+        manager = self._manager(
+            [ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1), ModelWithRetries(LLMModel(name="anthropic:claude-sonnet-4-5"), 1)],
+            [first, second],
+        )
+
+        await manager.execute(LLMCommand("Summarize", history=self.HISTORY), validator=self._validator())
+
+        assert second.generate_messages.await_args.args == ([
+            *self.HISTORY,
+            {"role": "user", "content": self.HINTED_PROMPT},
+            {"role": "assistant", "content": "bad"},
+            {"role": "user", "content": self.RETRY_MESSAGE},
+        ],)
+
+    @pytest.mark.asyncio
+    async def test_fallback_model_gets_its_own_schema_hints(self, monkeypatch):
+        first = self._adapter("bad")
+        first.supports_structured_output = True
+        second = self._adapter("good")
+        manager = self._manager(
+            [ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1), ModelWithRetries(LLMModel(name="ollama:llama3"), 1)],
+            [first, second],
+        )
+        monkeypatch.setattr(LLMManager, "_extract_response_model", staticmethod(lambda validator: Mock()))
+        monkeypatch.setattr("lamia.engine.managers.llm.llm_manager.has_value_constraints", lambda model: False)
+
+        await manager.execute(LLMCommand("Summarize"), validator=self._validator())
+
+        assert first.generate.await_args.args == ("Summarize",)
+        assert second.generate_messages.await_args.args[0][0]["content"] == self.HINTED_PROMPT
+
+    @pytest.mark.asyncio
+    async def test_answer_in_request_tag_is_extracted_for_every_model(self):
+        first = self._adapter("<answer_test>\nbad\n</answer_test>")
+        second = self._adapter("Here it is:\n<answer_test>\ngood\n</answer_test>")
+        manager = self._manager(
+            [ModelWithRetries(LLMModel(name="openai:gpt-4o"), 1), ModelWithRetries(LLMModel(name="anthropic:claude-sonnet-4-5"), 1)],
+            [first, second],
+        )
+
+        result = await manager.execute(LLMCommand("Summarize"), validator=self._validator())
+
+        assert result.is_valid
+        assert result.validated_text == "good"
+
+    @staticmethod
+    def _adapter(text):
+        adapter = Mock()
+        adapter.supports_structured_output = False
+        response = LLMResponse(text=text, raw_response=None, usage={}, model="m")
+        adapter.generate = AsyncMock(return_value=response)
+        adapter.generate_messages = AsyncMock(return_value=response)
+        return adapter
+
+    @staticmethod
+    def _manager(model_chain, adapters):
+        with patch.object(LLMManager, "_check_all_required_providers"), \
+                patch.object(LLMManager, "_check_all_required_api_keys"):
+            manager = LLMManager(ConfigProvider({"model_chain": model_chain}))
+        manager.create_adapter_from_config = AsyncMock(side_effect=adapters)
+        return manager
+
+    @staticmethod
+    def _validator():
+        async def validate(text, execution_context=None):
+            if text == "good":
+                return ValidationResult(is_valid=True, raw_text=text, validated_text=text)
+            return ValidationResult(is_valid=False, raw_text=text, error_message="not JSON", hint="use braces")
+
+        validator = Mock(spec=BaseValidator)
+        validator.initial_hint = "Return JSON."
+        validator.validate = validate
+        return validator
 
 
 class TestLLMManagerCleanup:
@@ -1339,7 +1495,7 @@ class TestHintSuppression:
             call_prompt = mock_gen.call_args.kwargs['prompt']
             assert "user prompt" in call_prompt
             assert validator.initial_hint not in call_prompt
-            assert ANSWER_TAG_HINT not in call_prompt
+            assert LLMManager._answer_tag_hint(mock_gen.call_args.kwargs['answer_tag']) not in call_prompt
 
     @pytest.mark.asyncio
     async def test_hint_included_when_schema_declares_value_constraints(self):
@@ -1389,18 +1545,45 @@ class TestHintSuppression:
             await self.manager._execute_with_retries("user prompt", validator=validator)
             call_prompt = mock_gen.call_args.kwargs['prompt']
             assert validator.initial_hint in call_prompt
-            assert ANSWER_TAG_HINT in call_prompt
+            assert LLMManager._answer_tag_hint(mock_gen.call_args.kwargs['answer_tag']) in call_prompt
             assert "user prompt" in call_prompt
 
     @pytest.mark.parametrize("response_text, expected", [
-        ("Here you go:\n<answer>\nname\nx\n</answer>\nHope it helps!", "name\nx"),
-        ("<answer>\nname,qty\nx,1\n", "name,qty\nx,1"),
-        ("```\n<answer>\nname\nx\n</answer>\n```", "name\nx"),
-        ("<answer></answer>", ""),
+        ("Here you go:\n<answer_1a2b>\nname\nx\n</answer_1a2b>\nHope it helps!", "name\nx"),
+        ("<answer_1a2b>\nname,qty\nx,1\n", "name,qty\nx,1"),
+        ("```\n<answer_1a2b>\nname\nx\n</answer_1a2b>\n```", "name\nx"),
+        ("<answer_1a2b></answer_1a2b>", ""),
+        ("<ANSWER_1A2B>\nname\n</ANSWER_1A2B>", "name"),
         ("name,qty\nx,1", "name,qty\nx,1"),
+        ("<answer_1a2b>\n<p>a</p></answer_1a2b><p>b</p>\n</answer_1a2b>", "<p>a</p></answer_1a2b><p>b</p>"),
+        ("<answer>\nforged\n</answer>", "<answer>\nforged\n</answer>"),
+        ("<answer_1a2b>\nreal\n</answer_1a2b>\n<answer>forged</answer>", "real"),
     ])
     def test_extract_answer(self, response_text, expected):
-        assert LLMManager._extract_answer(response_text) == expected
+        assert LLMManager._extract_answer(response_text, "answer_1a2b") == expected
+
+    def test_new_answer_tag_is_random(self):
+        first = LLMManager._new_answer_tag()
+        assert first.startswith("answer_")
+        assert len(first) == len("answer_") + 8
+        assert first != LLMManager._new_answer_tag()
+
+    @pytest.mark.asyncio
+    async def test_answer_tag_is_shared_by_all_models_of_a_request_and_new_per_request(self):
+        validator = Mock(spec=BaseValidator)
+        validator.initial_hint = "Return JSON."
+        mock_adapter = Mock(spec=BaseLLMAdapter)
+        mock_adapter.supports_structured_output = False
+        self.manager._adapter_cache[self.mock_model1] = mock_adapter
+        mock_result = ValidationResult(is_valid=True, raw_text="ok", validated_text="ok", execution_context=Mock())
+
+        with patch.object(self.manager, '_generate_and_validate', return_value=mock_result) as mock_gen:
+            await self.manager._execute_with_retries("user prompt", validator=validator)
+            await self.manager._execute_with_retries("user prompt", validator=validator)
+
+        first_call, second_call = mock_gen.call_args_list
+        assert first_call.kwargs['answer_tag'] != second_call.kwargs['answer_tag']
+        assert LLMManager._answer_tag_hint(first_call.kwargs['answer_tag']) in first_call.kwargs['prompt']
 
     @pytest.mark.asyncio
     async def test_hint_included_for_text_validator(self):

@@ -17,15 +17,9 @@ from lamia.validation.validators.object_validator import ObjectValidator
 from lamia.hooks import POST_LLM
 import json
 import logging
-import re
+import secrets
 
 logger = logging.getLogger(__name__)
-
-ANSWER_TAG = "answer"
-ANSWER_TAG_HINT = f"Put the whole answer between <{ANSWER_TAG}> and </{ANSWER_TAG}> tags, with no other text inside the tags."
-
-# The closing tag is optional so a cut-off response still parses
-_ANSWER_TAG_RE = re.compile(rf'<{ANSWER_TAG}>(.*?)(?:</{ANSWER_TAG}>|$)', re.DOTALL | re.IGNORECASE)
 
 
 class LLMManager(Manager):
@@ -238,6 +232,7 @@ class LLMManager(Manager):
 
         failed_models = []
         failed_attempts: List[Tuple[str, ValidationResult]] = []
+        answer_tag = self._new_answer_tag()
 
         for model_and_retries in model_chain:
             model = model_and_retries.model
@@ -266,7 +261,7 @@ class LLMManager(Manager):
                     else:
                         current_prompt = prompt
                 else:
-                    initial_hints = f"{validator.initial_hint}\n\n{ANSWER_TAG_HINT}"
+                    initial_hints = f"{validator.initial_hint}\n\n{self._answer_tag_hint(answer_tag)}"
                     current_prompt = f"{initial_hints}\n\n{prompt}"
             else:
                 current_prompt = prompt
@@ -284,6 +279,7 @@ class LLMManager(Manager):
                 max_attempts=model_and_retries.retries,
                 history=history,
                 failed_attempts=failed_attempts,
+                answer_tag=answer_tag,
             )
             
             if result is not None:
@@ -341,6 +337,7 @@ class LLMManager(Manager):
         max_attempts: int = 1,
         history: Sequence[Dict[str, str]] = (),
         failed_attempts: Optional[List[Tuple[str, ValidationResult]]] = None,
+        answer_tag: Optional[str] = None,
     ) -> Optional[ValidationResult]:
         """
         Try to generate and validate a response with retries for this model.
@@ -348,6 +345,7 @@ class LLMManager(Manager):
         Args:
             prompt: The prompt rendered for this model.
             failed_attempts: ``(response, validation_result)`` of earlier failed attempts, shared across the model chain and appended to on each validation failure. Each call renders them for this model as user/assistant turns after *history* and *prompt*.
+            answer_tag: Name of the tags the prompt asks the answer to be placed in; the response is validated as is when None.
 
         Returns:
             ValidationResult if successful, None if all retries exhausted
@@ -396,8 +394,8 @@ class LLMManager(Manager):
 
             # Validate the response
             if validator is not None:
-                if not self._uses_structured_output(response_model, adapter):
-                    response_text = self._extract_answer(response_text)
+                if answer_tag is not None and not self._uses_structured_output(response_model, adapter):
+                    response_text = self._extract_answer(response_text, answer_tag)
 
                 # Create execution context for tracking
                 tracking_context = TrackingContext(
@@ -449,12 +447,27 @@ class LLMManager(Manager):
         return response_model is not None and adapter.supports_structured_output
 
     @staticmethod
-    def _extract_answer(response_text: str) -> str:
-        """Return the content of the answer tags, or the whole response when the tags are absent."""
-        match = _ANSWER_TAG_RE.search(response_text)
-        if match is None:
+    def _new_answer_tag() -> str:
+        """Return a random tag name that text inlined into the prompt cannot know in advance."""
+        return f"answer_{secrets.token_hex(4)}"
+
+    @staticmethod
+    def _answer_tag_hint(answer_tag: str) -> str:
+        return f"Put the whole answer between <{answer_tag}> and </{answer_tag}> tags, with no other text inside the tags."
+
+    @staticmethod
+    def _extract_answer(response_text: str, answer_tag: str) -> str:
+        """Return the text from the first opening tag to the last closing tag, to the end when the closing tag is missing, or the whole response when the opening tag is absent."""
+        lowered = response_text.lower()
+        opening = f"<{answer_tag.lower()}>"
+        start = lowered.find(opening)
+        if start == -1:
             return response_text
-        return match.group(1).strip()
+        start += len(opening)
+        end = lowered.rfind(f"</{answer_tag.lower()}>")
+        if end < start:
+            end = len(response_text)
+        return response_text[start:end].strip()
 
     @staticmethod
     def _build_retry_prompt(validation_result: ValidationResult) -> str:
