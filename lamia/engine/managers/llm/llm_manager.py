@@ -17,8 +17,15 @@ from lamia.validation.validators.object_validator import ObjectValidator
 from lamia.hooks import POST_LLM
 import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+ANSWER_TAG = "answer"
+ANSWER_TAG_HINT = f"Put the whole answer between <{ANSWER_TAG}> and </{ANSWER_TAG}> tags, with no other text inside the tags."
+
+# The closing tag is optional so a cut-off response still parses
+_ANSWER_TAG_RE = re.compile(rf'<{ANSWER_TAG}>(.*?)(?:</{ANSWER_TAG}>|$)', re.DOTALL | re.IGNORECASE)
 
 
 class LLMManager(Manager):
@@ -246,7 +253,7 @@ class LLMManager(Manager):
             # adapter actually implements provider-native structured output.
             if validator is not None:
                 response_model = self._extract_response_model(validator)
-                if response_model is not None and adapter.supports_structured_output:
+                if self._uses_structured_output(response_model, adapter):
                     # Providers accept the JSON structure schema but some
                     # silently ignore value-constraint keywords (minimum,
                     # maxLength, etc.) at decoding time, and Anthropic
@@ -259,7 +266,7 @@ class LLMManager(Manager):
                     else:
                         current_prompt = prompt
                 else:
-                    initial_hints = validator.initial_hint
+                    initial_hints = f"{validator.initial_hint}\n\n{ANSWER_TAG_HINT}"
                     current_prompt = f"{initial_hints}\n\n{prompt}"
             else:
                 current_prompt = prompt
@@ -389,6 +396,9 @@ class LLMManager(Manager):
 
             # Validate the response
             if validator is not None:
+                if not self._uses_structured_output(response_model, adapter):
+                    response_text = self._extract_answer(response_text)
+
                 # Create execution context for tracking
                 tracking_context = TrackingContext(
                     data_provider_name=model.name,
@@ -433,6 +443,18 @@ class LLMManager(Manager):
         for adapter in self._adapter_cache.values():
             await adapter.close()
         self._adapter_cache.clear()
+
+    @staticmethod
+    def _uses_structured_output(response_model: Optional[Type[BaseModel]], adapter: BaseLLMAdapter) -> bool:
+        return response_model is not None and adapter.supports_structured_output
+
+    @staticmethod
+    def _extract_answer(response_text: str) -> str:
+        """Return the content of the answer tags, or the whole response when the tags are absent."""
+        match = _ANSWER_TAG_RE.search(response_text)
+        if match is None:
+            return response_text
+        return match.group(1).strip()
 
     @staticmethod
     def _build_retry_prompt(validation_result: ValidationResult) -> str:

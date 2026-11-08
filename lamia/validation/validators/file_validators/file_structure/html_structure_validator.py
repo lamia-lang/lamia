@@ -1,7 +1,7 @@
 from pydantic import BaseModel, create_model
 from bs4 import BeautifulSoup
 import re
-from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError, ANSWER_TAG
+from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from ....base import ValidationResult
 from .utils import import_model_from_path
 from typing import Any, Optional, Type
@@ -77,7 +77,7 @@ class HTMLStructureValidator(DocumentStructureValidator):
             else:
                 return base_hint
         else:
-            return f"Put the HTML code between <{ANSWER_TAG}> and </{ANSWER_TAG}> tags, starting with <html> and ending with </html>, with no other text inside the tags."
+            return "Please return only the HTML code, starting with <html> and ending with </html>, with no explanation or extra text."
 
     def extract_payload(self, response: str) -> str:
         # This regex matches optional doctype, comments, whitespace, and the <html>...</html> block

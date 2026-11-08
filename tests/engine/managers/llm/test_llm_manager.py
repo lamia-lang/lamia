@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import os
 from pydantic import BaseModel, Field
-from lamia.engine.managers.llm.llm_manager import LLMManager
+from lamia.engine.managers.llm.llm_manager import LLMManager, ANSWER_TAG_HINT
 from lamia.engine.config_provider import ConfigProvider
 from lamia.engine.managers.llm.providers import ProviderRegistry
 from lamia._internal_types.model_retry import ModelWithRetries
@@ -1231,6 +1231,7 @@ class TestHintSuppression:
             call_prompt = mock_gen.call_args.kwargs['prompt']
             assert "user prompt" in call_prompt
             assert validator.initial_hint not in call_prompt
+            assert ANSWER_TAG_HINT not in call_prompt
 
     @pytest.mark.asyncio
     async def test_hint_included_when_schema_declares_value_constraints(self):
@@ -1280,7 +1281,18 @@ class TestHintSuppression:
             await self.manager._execute_with_retries("user prompt", validator=validator)
             call_prompt = mock_gen.call_args.kwargs['prompt']
             assert validator.initial_hint in call_prompt
+            assert ANSWER_TAG_HINT in call_prompt
             assert "user prompt" in call_prompt
+
+    @pytest.mark.parametrize("response_text, expected", [
+        ("Here you go:\n<answer>\nname\nx\n</answer>\nHope it helps!", "name\nx"),
+        ("<answer>\nname,qty\nx,1\n", "name,qty\nx,1"),
+        ("```\n<answer>\nname\nx\n</answer>\n```", "name\nx"),
+        ("<answer></answer>", ""),
+        ("name,qty\nx,1", "name,qty\nx,1"),
+    ])
+    def test_extract_answer(self, response_text, expected):
+        assert LLMManager._extract_answer(response_text) == expected
 
     @pytest.mark.asyncio
     async def test_hint_included_for_text_validator(self):

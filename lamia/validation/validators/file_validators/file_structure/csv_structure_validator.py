@@ -4,7 +4,7 @@ from collections import Counter, OrderedDict
 from enum import Enum
 from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator, BaseValidationError, ANSWER_TAG
+from .document_structure_validator import DocumentStructureValidator, BaseValidationError
 from ....base import ValidationResult       
 from .utils import import_model_from_path
 from typing import Any, Optional, Type
@@ -184,7 +184,7 @@ class CSVStructureValidator(DocumentStructureValidator):
             
             hint += "\n"
         
-        hint += f"Put the CSV table between <{ANSWER_TAG}> and </{ANSWER_TAG}> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows."
+        hint += "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows."
         hint += " Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes."
 
         return hint

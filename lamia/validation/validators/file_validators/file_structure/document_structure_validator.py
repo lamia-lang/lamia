@@ -19,11 +19,6 @@ SHOULD_GENERATE_JSON_SCHEMA = True
 
 logger = logging.getLogger(__name__)
 
-ANSWER_TAG = "answer"
-
-# The closing tag is optional so a cut-off response still parses
-_ANSWER_TAG_RE = re.compile(rf'<{ANSWER_TAG}>(.*?)(?:</{ANSWER_TAG}>|$)', re.DOTALL | re.IGNORECASE)
-
 class BaseValidationError(ValueError):
     """Base exception for validation errors with hint support."""
     def __init__(self, message: str, hint: str = None, original_exception: Exception = None):
@@ -160,17 +155,8 @@ class DocumentStructureValidator(BaseValidator, ABC):
                 self._validate_no_raw_ordered_dict_patterns(arg, context)
 
     def parse(self, response: str) -> Any:
-        """Parse the content of ``<answer>`` tags when present, ignoring any text outside them; otherwise parse the whole response."""
         stripped = self.strip_markdown_fences(response.strip())
-        match = _ANSWER_TAG_RE.search(stripped)
-        if match is not None:
-            payload = self.strip_markdown_fences(match.group(1).strip())
-            if not payload:
-                raise InvalidPayloadError(
-                    expected_file_format=self.file_type(),
-                    text=response,
-                )
-        elif self.strict:
+        if self.strict:
             payload = stripped
 
             if self.generate_hints:
@@ -329,7 +315,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
             else:
                 return base_hint
         else:
-            return f"Put the {self.file_type()} between <{ANSWER_TAG}> and </{ANSWER_TAG}> tags, with no other text inside the tags."
+            return f"Please return only valid {self.file_type()}, with no explanation or extra text."
 
     def _get_model_schema_hint(self) -> str:
         """Generate the JSON schema hint for this model."""

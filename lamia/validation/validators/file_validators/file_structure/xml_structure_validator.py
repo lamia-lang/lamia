@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from pydantic import BaseModel, create_model
 import re
 from typing import Any
-from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError, ANSWER_TAG
+from .document_structure_validator import DocumentStructureValidator, TextAroundPayloadError
 from .utils import import_model_from_path
 
 class XMLStructureValidator(DocumentStructureValidator):
@@ -68,7 +68,7 @@ class XMLStructureValidator(DocumentStructureValidator):
             else:
                 return base_hint
         else:
-            return f"Put the XML between <{ANSWER_TAG}> and </{ANSWER_TAG}> tags, with no other text inside the tags."
+            return "Please return only valid XML, with no explanation or extra text."
     
     def extract_payload(self, response: str) -> str:
         markdown_match = re.search(r'```(?:xml)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
