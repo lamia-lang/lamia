@@ -4,16 +4,13 @@ from collections import Counter, OrderedDict
 from enum import Enum
 from typing import get_origin, get_args, Union
 from pydantic import BaseModel, create_model
-from .document_structure_validator import DocumentStructureValidator, BaseValidationError, InvalidPayloadError
+from .document_structure_validator import DocumentStructureValidator, BaseValidationError, ANSWER_TAG
 from ....base import ValidationResult       
 from .utils import import_model_from_path
 from typing import Any, Optional, Type
 import re
 from typing import Callable
 from ....utils.pydantic_utils import get_ordered_dict_fields, get_pydantic_json_schema
-
-# The closing tag is optional so a cut-off response still parses
-_CSV_TAG_RE = re.compile(r'<csv>(.*?)(?:</csv>|$)', re.DOTALL | re.IGNORECASE)
 
 class DuplicateHeaderError(BaseValidationError):
     """Exception for duplicate headers in structured data."""
@@ -187,7 +184,7 @@ class CSVStructureValidator(DocumentStructureValidator):
             
             hint += "\n"
         
-        hint += "Put the CSV table between <csv> and </csv> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows."
+        hint += f"Put the CSV table between <{ANSWER_TAG}> and </{ANSWER_TAG}> tags, starting with the header row and ending with the last row, with no other text inside the tags and no extra whitespace in the header and content rows."
         hint += " Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes."
 
         return hint
@@ -334,16 +331,6 @@ class CSVStructureValidator(DocumentStructureValidator):
             return True
         except Exception:
             return False
-
-    def parse(self, response: str) -> Any:
-        """Parse the content of ``<csv>`` tags when present, ignoring any text outside them; otherwise parse the whole response."""
-        match = _CSV_TAG_RE.search(self.strip_markdown_fences(response.strip()))
-        if match is None:
-            return super().parse(response)
-        content = match.group(1).strip()
-        if not content:
-            raise InvalidPayloadError(expected_file_format=self.file_type(), text=response)
-        return self.load_payload(content)
 
     def load_payload(self, payload: str) -> Any:
         # Returns a tuple: (header, list of row dicts)

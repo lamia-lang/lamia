@@ -373,7 +373,7 @@ async def test_csv_single_column_model_rejects_prose():
 @pytest.mark.asyncio
 async def test_csv_tags_allow_single_column_without_model(strict):
     validator = CSVStructureValidator(strict=strict, generate_hints=True)
-    result = await validator.validate("<csv>\nname\nx\ny\n</csv>")
+    result = await validator.validate("<answer>\nname\nx\ny\n</answer>")
     assert result.is_valid, result.error_message
     assert result.typed_result == (["name"], [{"name": "x"}, {"name": "y"}])
     assert result.validated_text == "name\nx\ny"
@@ -383,7 +383,7 @@ async def test_csv_tags_allow_single_column_without_model(strict):
 @pytest.mark.asyncio
 async def test_csv_tags_text_outside_ignored(strict):
     validator = CSVStructureValidator(model=SingleColumnModel, strict=strict, generate_hints=True)
-    result = await validator.validate("Here you go:\n<csv>\nname\nx\n</csv>\nHope it helps!")
+    result = await validator.validate("Here you go:\n<answer>\nname\nx\n</answer>\nHope it helps!")
     assert result.is_valid, result.error_message
     assert result.typed_result == [SingleColumnModel(name="x")]
 
@@ -391,7 +391,7 @@ async def test_csv_tags_text_outside_ignored(strict):
 @pytest.mark.asyncio
 async def test_csv_tags_inside_markdown_fence():
     validator = CSVStructureValidator(strict=True, generate_hints=True)
-    result = await validator.validate("```\n<csv>\nname\nx\n</csv>\n```")
+    result = await validator.validate("```\n<answer>\nname\nx\n</answer>\n```")
     assert result.is_valid, result.error_message
     assert result.typed_result == (["name"], [{"name": "x"}])
 
@@ -399,7 +399,7 @@ async def test_csv_tags_inside_markdown_fence():
 @pytest.mark.asyncio
 async def test_csv_tags_without_closing_tag():
     validator = CSVStructureValidator(strict=False, generate_hints=True)
-    result = await validator.validate("<csv>\nname,qty\nx,1\n")
+    result = await validator.validate("<answer>\nname,qty\nx,1\n")
     assert result.is_valid, result.error_message
     assert result.typed_result == (["name", "qty"], [{"name": "x", "qty": "1"}])
 
@@ -407,7 +407,7 @@ async def test_csv_tags_without_closing_tag():
 @pytest.mark.asyncio
 async def test_csv_empty_tags_rejected():
     validator = CSVStructureValidator(strict=False, generate_hints=True)
-    result = await validator.validate("<csv></csv>")
+    result = await validator.validate("<answer></answer>")
     assert not result.is_valid
 
 
