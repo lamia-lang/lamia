@@ -9,7 +9,7 @@ from lamia._internal_types.model_retry import ModelWithRetries
 from lamia.adapters.llm.base import LLMResponse
 from lamia.engine.config_provider import ConfigProvider
 from lamia.engine.managers.llm.files_context_manager import files
-from lamia.engine.managers.llm.llm_manager import LLMManager
+from lamia.engine.managers.llm.llm_manager import LLMManager, ANSWER_TAG_HINT
 from lamia.interpreter.commands import LLMCommand
 from lamia.validation.base import BaseValidator, ValidationResult
 
@@ -17,6 +17,8 @@ HISTORY = [
     {"role": "user", "content": "List the files"},
     {"role": "assistant", "content": '{"tool": "list_files", "args": {}}'},
 ]
+
+HINTED_PROMPT = f"Return JSON.\n\n{ANSWER_TAG_HINT}\n\nSummarize"
 
 
 @pytest.fixture
@@ -81,9 +83,9 @@ async def test_failed_attempts_are_sent_as_turns_on_retry(adapter):
 
     await manager.execute(LLMCommand("Summarize"), validator=_validator())
 
-    assert adapter.generate.await_args.args == ("Return JSON.\n\nSummarize",)
+    assert adapter.generate.await_args.args == (HINTED_PROMPT,)
     assert adapter.generate_messages.await_args.args == ([
-        {"role": "user", "content": "Return JSON.\n\nSummarize"},
+        {"role": "user", "content": HINTED_PROMPT},
         {"role": "assistant", "content": "bad"},
         {"role": "user", "content": RETRY_MESSAGE},
     ],)
@@ -101,7 +103,7 @@ async def test_fallback_model_receives_earlier_failed_attempts():
 
     assert second.generate_messages.await_args.args == ([
         *HISTORY,
-        {"role": "user", "content": "Return JSON.\n\nSummarize"},
+        {"role": "user", "content": HINTED_PROMPT},
         {"role": "assistant", "content": "bad"},
         {"role": "user", "content": RETRY_MESSAGE},
     ],)
@@ -121,7 +123,7 @@ async def test_fallback_model_gets_its_own_schema_hints(monkeypatch):
     await manager.execute(LLMCommand("Summarize"), validator=_validator())
 
     assert first.generate.await_args.args == ("Summarize",)
-    assert second.generate_messages.await_args.args[0][0]["content"] == "Return JSON.\n\nSummarize"
+    assert second.generate_messages.await_args.args[0][0]["content"] == HINTED_PROMPT
 
 
 RETRY_MESSAGE = "Previous response failed validation. Issue: not JSON. Hint: use braces. Please try again."

@@ -305,7 +305,13 @@ class CSVStructureValidator(DocumentStructureValidator):
             extracted_csv = '\n'.join(csv_lines)
             if self._is_valid_csv(extracted_csv):
                 return extracted_csv
-        
+            return None
+
+        # Text without commas is read as a single-column table ending at the first empty line
+        single_column = re.split(r'\n\s*\n', response.strip(), maxsplit=1)[0].strip()
+        if self._is_valid_csv(single_column):
+            return single_column
+
         return None
 
     def _is_valid_csv(self, csv_text: str) -> bool:

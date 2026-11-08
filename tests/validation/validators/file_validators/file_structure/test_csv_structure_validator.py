@@ -362,6 +362,16 @@ async def test_csv_single_column_with_model(strict, csv_text):
     assert result.typed_result == [SingleColumnModel(name="x"), SingleColumnModel(name="y")]
 
 
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.asyncio
+async def test_csv_single_column_without_pydantic_model(strict):
+    validator = CSVStructureValidator(strict=strict, generate_hints=True)
+    result = await validator.validate("name\nx\ny\n")
+    assert result.is_valid, result.error_message
+    assert result.typed_result == (["name"], [{"name": "x"}, {"name": "y"}])
+    assert result.validated_text == "name\nx\ny"
+
+
 @pytest.mark.asyncio
 async def test_csv_single_column_model_rejects_prose():
     validator = CSVStructureValidator(model=SingleColumnModel, strict=False)
