@@ -300,3 +300,42 @@ def test_markdown_hint_includes_pydantic_schema():
     assert "title" in hint
     assert "body" in hint
 
+
+
+
+@pytest.mark.parametrize("response, expected", [
+    ("# Title", "# Title"),
+    ("```\n# Title\n```", "# Title"),
+    ("```markdown\n# Title\n```", "# Title"),
+    ("```MD\n# Title\n```", "# Title"),
+    ("```markdown\n# Title\n\n```python\nx = 1\n```\n```", "# Title\n\n```python\nx = 1\n```"),
+    ("```\n# Title\n\n```python\nx = 1\n```\n\nText\n```", "# Title\n\n```python\nx = 1\n```\n\nText"),
+    ("```python\nx = 1\n```", "```python\nx = 1\n```"),
+    ("# Title\n\n```python\nx = 1\n```", "# Title\n\n```python\nx = 1\n```"),
+    ("```python\na = 1\n```\n\ntext\n\n```python\nb = 2\n```", "```python\na = 1\n```\n\ntext\n\n```python\nb = 2\n```"),
+])
+def test_llm_markdown_first_and_last_fence_lines_are_removed(response, expected):
+    validator = MarkdownStructureValidator(generate_hints=True)
+    assert validator.extract_payload(response) == expected
+
+
+@pytest.mark.parametrize("response", [
+    "Here it is:\n\n```markdown\n# Title\n```",
+    "```markdown\n# Title\n```\n\nHope it helps!",
+    "Here it is:\n\n```markdown\n# Title\n```\n\nHope it helps!",
+    "```\n# Title\n```\n\nHope it helps!",
+    "```md\n# Title",
+])
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.asyncio
+async def test_llm_markdown_with_text_around_fence_is_rejected(response, strict):
+    validator = MarkdownStructureValidator(strict=strict, generate_hints=True)
+    result = await validator.validate(response)
+    assert result.is_valid is False
+    assert result.error_message == "Invalid Response: text found around the Markdown code fence"
+    assert "text found around the Markdown code fence" in result.hint
+
+
+def test_file_content_fence_is_kept():
+    validator = MarkdownStructureValidator(generate_hints=False)
+    assert validator.extract_payload("```\n# Title\n```") == "```\n# Title\n```"

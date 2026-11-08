@@ -247,7 +247,7 @@ INITIAL_HINTS = {
     "xml": "Please return only valid XML.",
     "yaml": "Please return only valid yaml.",
     "csv": "Please return only the CSV table, starting with the header row and ending with the last row, without extra whitespaces in the header and content rows. Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes.",
-    "markdown": "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```) and ensure it is well-formed.",
+    "markdown": "Please provide well-formed Markdown content.",
     "html_structure": { 
         'strict': '''
 Please ensure the HTML matches the required structure exactly.
@@ -367,7 +367,6 @@ Please return only the CSV table, starting with the header row and ending with t
     }, 
     "markdown_structure": {
         'strict': '''
-Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).
 Ensure the Markdown matches the required structure exactly.
 Expected structure:
 title: # Level 1 heading (starts with single #)
@@ -377,7 +376,6 @@ Expected target pydantic type in JSON format:
 {"properties":{"title":{"title":"Title","type":"string"},"content":{"title":"Content","type":"string"}},"required":["title","content"],"title":"MarkdownModel","type":"object"}
 ''',
         "permissive": '''
-Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).
 Ensure the Markdown contains the required fields with the correct types.
 The fields can be nested within other Markdown structures.
 Required fields that must be present:

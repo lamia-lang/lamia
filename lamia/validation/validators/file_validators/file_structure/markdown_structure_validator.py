@@ -96,6 +96,9 @@ MARKDOWN_TYPE_MAPPING = OrderedDict({
 # - Table rows and cells (mistune doesn't separate them)
 class MarkdownStructureValidator(DocumentStructureValidator):
     """Validates if the Markdown matches a given Pydantic model structure, or just checks for well-formed Markdown if no model/schema is provided."""
+
+    _OPENING_FENCE_RE = re.compile(r'^```(?:markdown|md)?[ \t]*\n', re.IGNORECASE)
+    _MARKDOWN_FENCE_LINE_RE = re.compile(r'^[ \t]*```(?:markdown|md)[ \t]*$', re.IGNORECASE | re.MULTILINE)
     
     # Constructor
     def __init__(self, model: Optional[Type[BaseModel]] = None, model_name: Optional[str] = None, schema: Optional[dict] = None, strict: bool = True, model_module: str = "models", generate_hints: bool = False):
@@ -157,7 +160,6 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             schema = get_pydantic_json_schema(self.model)
             if self.strict:
                 base_hint = (
-                    "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).\n"
                     "Ensure the Markdown matches the required structure exactly.\n"
                     "Expected structure:\n"
                     + '\n'.join(structure_lines) + "\n\n"
@@ -166,7 +168,6 @@ class MarkdownStructureValidator(DocumentStructureValidator):
                 )
             else:
                 base_hint = (
-                    "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```).\n"
                     "Ensure the Markdown contains the required fields with the correct types.\n"
                     "The fields can be nested within other Markdown structures.\n"
                     "Required fields that must be present:\n"
@@ -181,19 +182,13 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             else:
                 return base_hint
         else:
-            return "Please provide your Markdown content wrapped in triple backticks (``` ... ``` or ```markdown ... ```) and ensure it is well-formed."
+            return "Please provide well-formed Markdown content."
 
     # Public methods
     def extract_payload(self, response: str) -> str:
         if self.generate_hints:
-            # LLM mode - expect backticks
-            markdown_match = re.search(r'```(?:markdown)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)
-            if markdown_match:
-                return markdown_match.group(1).strip()
-            return None
-        else:
-            # File mode - accept raw markdown
-            return response
+            return self._extract_llm_markdown(response)
+        return response
 
     def load_payload(self, payload: str) -> any:
         # Parse markdown into an AST using mistune 3.x
@@ -292,13 +287,11 @@ class MarkdownStructureValidator(DocumentStructureValidator):
 
     # Overrides the base class method because unlike other file structure validators, 
     # Markdown works with it's own predefined classes like Heading1, Paragraph, etc.
-    # Also, even in strict mode, we want to wait for a marddown wrapped in ```-s.
     async def validate_strict(self, response: str, **kwargs) -> ValidationResult:
         return await self._validate_common(response, strict=True, **kwargs)
 
     # Overrides the base class method because unlike other file structure validators, 
     # Markdown works with it's own predefined classes like Heading1, Paragraph, etc.
-    # Also, even in strict mode, we want to wait for a marddown wrapped in ```-s.
     async def validate_permissive(self, response: str, **kwargs) -> ValidationResult:
         return await self._validate_common(response, strict=False, **kwargs)
 
@@ -452,12 +445,7 @@ class MarkdownStructureValidator(DocumentStructureValidator):
         """Shared validation logic for both strict and permissive modes."""
         payload = self.extract_payload(response)
         if payload is None:
-            if self.generate_hints:
-                # LLM mode - expected backticks but didn't find them
-                error_msg = f"Invalid Response: the markdown is not wrapped in triple backticks"
-            else:
-                # File mode - this shouldn't happen since extract_payload returns the raw response
-                error_msg = f"Invalid Response: empty or invalid markdown content"
+            error_msg = "Invalid Response: text found around the Markdown code fence"
             return ValidationResult(is_valid=False, error_message=error_msg, hint=self.get_retry_hint(retry_hint=error_msg))
 
         ast = self.load_payload(payload)  # Parse Markdown string into AST
@@ -643,3 +631,15 @@ class MarkdownStructureValidator(DocumentStructureValidator):
             # Add more types as needed
         
         return order
+
+    def _extract_llm_markdown(self, response: str) -> Optional[str]:
+        """Return the response without its first and last fence lines when it opens with a markdown or unlabeled fence, None when text surrounds that fence, otherwise the response."""
+        stripped = response.strip()
+        opening = self._OPENING_FENCE_RE.match(stripped)
+        if opening is not None:
+            if not stripped.endswith("```"):
+                return None
+            return stripped[opening.end():-3].strip()
+        if self._MARKDOWN_FENCE_LINE_RE.search(stripped):
+            return None
+        return response

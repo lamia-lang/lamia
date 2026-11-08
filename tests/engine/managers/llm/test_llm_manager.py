@@ -15,6 +15,8 @@ from lamia.interpreter.command_types import CommandType
 from lamia.interpreter.commands import LLMCommand
 from lamia.errors import MissingAPIKeysError, ExternalOperationTransientError
 from lamia.adapters.retry.factory import RetriableAdapterFactory
+from lamia.validation.validators import MarkdownValidator, MarkdownStructureValidator
+from lamia.validation.validators.file_validators.file_structure.markdown_structure_validator import FencedCode, Heading1, Paragraph
 
 
 def _create_mock_adapter(provider_name: str, is_remote: bool = True):
@@ -763,6 +765,112 @@ class TestLLMManagerGenerateAndValidate:
 
         assert result is None
         mock_adapter.generate.assert_called_once()
+
+    class MarkdownDoc(BaseModel):
+        title: Heading1
+        body: Paragraph
+
+    class MarkdownCodeDoc(BaseModel):
+        title: Heading1
+        code: FencedCode
+
+    MARKDOWN = "# Title\n\nSome text."
+
+    ACCEPTED_MARKDOWN_RESPONSES = {
+        "tags_without_fence": f"<answer>\n{MARKDOWN}\n</answer>",
+        "tags_with_markdown_fence": f"<answer>\n```markdown\n{MARKDOWN}\n```\n</answer>",
+        "tags_with_unlabeled_fence": f"<answer>\n```\n{MARKDOWN}\n```\n</answer>",
+        "text_around_tags": f"Here it is:\n<answer>\n{MARKDOWN}\n</answer>\nEnjoy!",
+        "no_tags_with_markdown_fence": f"```markdown\n{MARKDOWN}\n```",
+        "no_tags_with_unlabeled_fence": f"```\n{MARKDOWN}\n```",
+        "no_tags_without_fence": MARKDOWN,
+    }
+
+    REJECTED_MARKDOWN_RESPONSES = {
+        "text_around_fence_inside_tags": f"<answer>\nHere it is:\n```markdown\n{MARKDOWN}\n```\nEnjoy!\n</answer>",
+        "text_before_fence_without_tags": f"Here it is:\n```markdown\n{MARKDOWN}\n```",
+        "text_after_fence_without_tags": f"```markdown\n{MARKDOWN}\n```\nEnjoy!",
+    }
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("response_key", ACCEPTED_MARKDOWN_RESPONSES)
+    async def test_markdown_answer_is_accepted(self, strict, response_key):
+        adapter = self._markdown_adapter(self.ACCEPTED_MARKDOWN_RESPONSES[response_key])
+
+        result = await self._generate_markdown(adapter, MarkdownValidator(strict=strict, generate_hints=True), 1)
+
+        assert result.is_valid, result.error_message
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("response_key", ACCEPTED_MARKDOWN_RESPONSES)
+    async def test_markdown_structure_is_read_from_accepted_answer(self, strict, response_key):
+        adapter = self._markdown_adapter(self.ACCEPTED_MARKDOWN_RESPONSES[response_key])
+        validator = MarkdownStructureValidator(model=self.MarkdownDoc, strict=strict, generate_hints=True)
+
+        result = await self._generate_markdown(adapter, validator, 1)
+
+        assert result.is_valid, result.error_message
+        assert result.typed_result.title.text == "Title"
+        assert result.typed_result.body.text == "Some text."
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("response_key", REJECTED_MARKDOWN_RESPONSES)
+    @pytest.mark.parametrize("with_model", [True, False])
+    async def test_markdown_answer_with_text_around_fence_is_retried(self, strict, response_key, with_model):
+        adapter = self._markdown_adapter(self.REJECTED_MARKDOWN_RESPONSES[response_key])
+        adapter.generate_messages.return_value = self._markdown_response(self.ACCEPTED_MARKDOWN_RESPONSES["tags_without_fence"])
+        if with_model:
+            validator = MarkdownStructureValidator(model=self.MarkdownDoc, strict=strict, generate_hints=True)
+        else:
+            validator = MarkdownValidator(strict=strict, generate_hints=True)
+
+        result = await self._generate_markdown(adapter, validator, 2)
+
+        assert result.is_valid, result.error_message
+        turns = adapter.generate_messages.call_args[0][0]
+        assert turns[1] == {"role": "assistant", "content": self.REJECTED_MARKDOWN_RESPONSES[response_key]}
+        assert "text found around the Markdown code fence" in turns[2]["content"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("response_text", [
+        "<answer>\n# Title\n\n```python\nx = 1\n```\n</answer>",
+        "<answer>\n```markdown\n# Title\n\n```python\nx = 1\n```\n```\n</answer>",
+        "```markdown\n# Title\n\n```python\nx = 1\n```\n```",
+    ])
+    async def test_code_block_inside_markdown_answer_is_kept(self, strict, response_text):
+        adapter = self._markdown_adapter(response_text)
+        validator = MarkdownStructureValidator(model=self.MarkdownCodeDoc, strict=strict, generate_hints=True)
+
+        result = await self._generate_markdown(adapter, validator, 1)
+
+        assert result.is_valid, result.error_message
+        assert result.typed_result.code.text == "x = 1\n"
+
+    async def _generate_markdown(self, adapter, validator, max_attempts):
+        model = Mock(spec=LLMModel)
+        model.name = "gpt-4"
+        return await self.manager._generate_and_validate(
+            adapter=adapter,
+            model=model,
+            prompt="Write",
+            validator=validator,
+            max_attempts=max_attempts,
+        )
+
+    @staticmethod
+    def _markdown_response(text):
+        return LLMResponse(text=text, raw_response=None, usage={}, model="gpt-4")
+
+    def _markdown_adapter(self, text):
+        adapter = Mock(spec=BaseLLMAdapter)
+        adapter.supports_structured_output = False
+        adapter.generate = AsyncMock(return_value=self._markdown_response(text))
+        adapter.generate_messages = AsyncMock(return_value=self._markdown_response(text))
+        return adapter
 
 
 class TestLLMManagerCleanup:
