@@ -117,7 +117,6 @@ def test_object_validator_initial_hint_contains_schema():
     
     # Check that the hint contains the base message
     assert "Please ensure the response is a valid JSON object matching the required schema" in hint
-    assert "with no explanation or extra text" in hint
     assert "Schema:" in hint
     
     # Check that the hint contains JSON schema
@@ -140,7 +139,6 @@ def test_object_validator_initial_hint_contains_schema_pydantic():
     
     # Check that the hint contains the base message
     assert "Please ensure the response is a valid JSON object matching the required schema" in hint
-    assert "with no explanation or extra text" in hint
     assert "Schema:" in hint
     
     # Check that the hint contains JSON schema

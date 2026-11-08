@@ -68,7 +68,7 @@ class XMLStructureValidator(DocumentStructureValidator):
             else:
                 return base_hint
         else:
-            return "Please return only valid XML, with no explanation or extra text."
+            return "Please return only valid XML."
     
     def extract_payload(self, response: str) -> str:
         markdown_match = re.search(r'```(?:xml)?\s*\n?(.*?)\n?```', response, re.DOTALL | re.IGNORECASE)

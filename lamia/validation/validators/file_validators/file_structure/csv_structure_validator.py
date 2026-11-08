@@ -184,7 +184,7 @@ class CSVStructureValidator(DocumentStructureValidator):
             
             hint += "\n"
         
-        hint += "Please return only the CSV table, starting with the header row and ending with the last row, with no explanation or extra text and without extra whitespaces in the header and content rows."
+        hint += "Please return only the CSV table, starting with the header row and ending with the last row, without extra whitespaces in the header and content rows."
         hint += " Please use commas as separators. If any of the cells of a string type contains a comma, please surround the cell with double quotes."
 
         return hint

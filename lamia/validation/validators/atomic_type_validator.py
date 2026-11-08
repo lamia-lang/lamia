@@ -17,7 +17,7 @@ class AtomicTypeValidator(BaseValidator):
 
     @property
     def initial_hint(self) -> str:
-        return f"Please ensure the response is a valid {self.atomic_type}, with no explanation or extra text."
+        return f"Please ensure the response is a valid {self.atomic_type}."
 
     def _validate_type(self, response: str):
         t = self._type_map.get(self.atomic_type)

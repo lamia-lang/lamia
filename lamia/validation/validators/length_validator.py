@@ -16,8 +16,8 @@ class LengthValidator(BaseValidator):
         if self.max_length:
             parts.append(f"no more than {self.max_length} characters long")
         if parts:
-            return f"Please ensure the response is {' and '.join(parts)}, with no explanation or extra text."
-        return "Please ensure the response meets the required length constraints, with no explanation or extra text."
+            return f"Please ensure the response is {' and '.join(parts)}."
+        return "Please ensure the response meets the required length constraints."
 
     @classmethod
     def name(cls) -> str:

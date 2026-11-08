@@ -315,7 +315,7 @@ class DocumentStructureValidator(BaseValidator, ABC):
             else:
                 return base_hint
         else:
-            return f"Please return only valid {self.file_type()}, with no explanation or extra text."
+            return f"Please return only valid {self.file_type()}."
 
     def _get_model_schema_hint(self) -> str:
         """Generate the JSON schema hint for this model."""
